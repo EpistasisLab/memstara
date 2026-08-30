@@ -31,7 +31,8 @@ Usage::
 
  main() 이 확인하는 것, 순서대로:
 
-   ⓪ 질문 은행에 질문을 담는다 — 태그 없는 것은 거절되고, 같은 것은 한 번만 담긴다
+   ⓪ 질문 은행에 질문을 담는다 — 태그 없는 것은 거절되고, 같은 것은 한 번만 담긴다.
+     **말만 바꾼 것도 막힌다** — 옆 질문과 다른 갈래는 그대로 통과시키면서
    ① 대기 중인 일 8개를 만든다 (⓪ 에서 담은 질문 번호를 달고)
    ② **관문** — 12명이 동시에 집으러 달려들었을 때 겹치지 않는가
    ③ 집어 간 일에 앞 단계가 남긴 것(결과변수·컬럼)이 실려 있는가
@@ -39,6 +40,7 @@ Usage::
    ⑤ 안 집고 써넣으려 하면 막히는가
    ⑥ 다 끝난 것이 결과 표에 쌓이는가, 남은 개수를 정확히 세는가
    ⑦ 성적이 질문 은행으로 되먹여지는가, 판을 치워도 은행이 남는가
+   ⑧ 세 번 쓴 질문이 은퇴해 열린 목록에서 빠지는가 — 기록과 재탕 차단은 남긴 채
 
  놓치기 쉬운 것:
 
@@ -138,6 +140,32 @@ async def main() -> int:
     results.append(ok(not p2.get("added") and len(p2.get("duplicates", [])) == 1,
                       "이미 물어본 질문은 다시 담기지 않는다 (대소문자·공백 무시)",
                       f"담김 {len(p2.get('added', []))} · 중복 {len(p2.get('duplicates', []))}"))
+
+    # ---- ⭐ 관문: 말만 바꾼 질문을 알아보는가 ---------------------------
+    #
+    # 위의 검사는 **글자가 같은 것**만 잡는다. 그런데 질문 담당이 겹침을 만드는
+    # 실제 방식은 같은 문장을 두 번 내는 게 아니라 **같은 것을 다르게 적는 것**이다.
+    # 그러면 시행 비용은 그대로 나가고 얻는 것은 없다.
+    #
+    # 셋을 한 번에 던진다. 각각이 지켜야 할 것이 다르다:
+    #   ① 말만 바꾼 것         → 막힌다. 어느 질문의 재탕인지(duplicate_of)까지 알려 준다
+    #   ② 태그는 같고 내용이 다른 것 → 담긴다. 옆 질문까지 막으면 은행이 한 갈래에서 멈춘다
+    #   ③ 문장은 비슷하고 태그가 다른 것 → 담긴다. 갈래가 다르면 다른 질문이다
+    p3 = json.loads(await bb.propose_questions(json.dumps([
+        {"text": f"from a comorbid psychiatric illness perspective ({RUN_TAG})",
+         "okf_tags": QTAGS, "rationale": "말만 바꾼 것"},
+        {"text": f"from a substance-use-disorder perspective ({RUN_TAG})",
+         "okf_tags": QTAGS, "rationale": "같은 갈래의 다른 질문"},
+        {"text": f"from a psychiatric comorbidity perspective ({RUN_TAG})",
+         "okf_tags": ["metapath"], "rationale": "문장은 비슷하나 갈래가 다르다"},
+    ], ensure_ascii=False), origin_run=RUN_TAG, origin_wave=1))
+    reword = (p3.get("skipped") or [{}])[0]
+    results.append(ok(len(p3.get("skipped", [])) == 1
+                      and reword.get("duplicate_of") == QID
+                      and len(p3.get("added", [])) == 2,
+                      "말만 바꾼 질문은 막고, 옆 질문과 다른 갈래는 통과시킨다",
+                      f"막힘 {len(p3.get('skipped', []))} (#{reword.get('duplicate_of')} "
+                      f"유사도 {reword.get('similarity')}) · 담김 {len(p3.get('added', []))}"))
 
     # 낸 것이 그대로 돌아오는가. 태그와 근거가 왕복하지 못하면 질문 담당은 다음
     # 파도에서 "무엇을 근거로 물었는지" 를 못 보고, 되먹임이 거기서 끊긴다.
@@ -373,6 +401,52 @@ async def main() -> int:
                       "판을 치워도 질문 은행과 그 연결은 남는다",
                       f"은행 {'있음' if bank_after else '없음'} · "
                       f"결과표 question_id={after.get('question_id')}"))
+
+    # ---- ⭐ 관문: 다 쓴 질문이 은퇴하는가 -------------------------------
+    #
+    # `status` 칸과 그 두 값('open' | 'exhausted')은 은행을 만들 때부터 스키마에
+    # 있었는데, 2026-08-30 까지 **'exhausted' 를 쓰는 코드가 하나도 없었다.** 그래서
+    # 열린 목록은 늘기만 했고, 세 번 써 본 질문이 아직 아무도 안 물어본 질문과
+    # 똑같은 얼굴로 질문 담당 앞에 계속 돌아왔다.
+    #
+    # 판은 위에서 통째로 지웠으므로 여기서 새로 두 개를 만들어 끝까지 밟는다.
+    # QID 는 결과가 하나 있으므로 이걸로 셋이 되고, 그 순간 은퇴해야 한다.
+    for i in range(N, N + 2):
+        await bb.create_task(RUN_TAG, i, f"관점 {i}", f"가설 {i}",
+                             COLUMNS, "HIV_DETECTABLE",
+                             okf_concept_ids=OKF_IDS, question_id=QID)
+        c = json.loads(await bb.claim_task("data"))
+        await bb.submit_result(c["task_id"], subset_path="outputs/sub_x.csv",
+                               columns_used=COLUMNS)
+        c = json.loads(await bb.claim_task("ml"))
+        await bb.submit_result(c["task_id"], auc=0.5)
+        c = json.loads(await bb.claim_task("interpret"))
+        await bb.submit_result(c["task_id"], interpretation="지지 안 됨")
+
+    fed2 = json.loads(await bb.record_question_outcomes(RUN_TAG))
+    open_now = json.loads(await bb.read_questions(status="open", limit=500))["questions"]
+    retired_now = json.loads(await bb.read_questions(status="exhausted", limit=500))["questions"]
+    gone = next((q for q in retired_now if q.get("question_id") == QID), None)
+    results.append(ok(fed2.get("questions_retired", 0) >= 1
+                      and not any(q.get("question_id") == QID for q in open_now)
+                      and gone is not None
+                      and gone.get("times_used") == 3
+                      # 은퇴는 삭제가 아니다. 최고 성적은 그대로 남아야 한다.
+                      and gone.get("best_auc") == 0.71,
+                      "세 번 쓴 질문은 은퇴해 다음 파도의 목록에서 빠진다 (기록은 남는다)",
+                      f"은퇴 {fed2.get('questions_retired')}개 · "
+                      f"쓰인 횟수 {(gone or {}).get('times_used')} · "
+                      f"최고 AUC {(gone or {}).get('best_auc')}"))
+
+    # 은퇴시켰다고 그 질문의 재탕까지 통과시키면 안 된다. 다 써서 치운 질문을
+    # 말만 바꿔 다시 묻는 것은, 열린 질문을 재탕하는 것과 똑같이 낭비다.
+    p4 = json.loads(await bb.propose_questions(json.dumps([
+        {"text": f"from a comorbid psychiatric illness perspective ({RUN_TAG})",
+         "okf_tags": QTAGS, "rationale": "은퇴한 질문의 재탕"},
+    ], ensure_ascii=False), origin_run=RUN_TAG, origin_wave=2))
+    results.append(ok(not p4.get("added") and len(p4.get("skipped", [])) == 1,
+                      "은퇴한 질문도 재탕을 막는다",
+                      f"담김 {len(p4.get('added', []))} · 막힘 {len(p4.get('skipped', []))}"))
 
     # 검사가 만든 것은 남기지 않는다.
     await cleanup()

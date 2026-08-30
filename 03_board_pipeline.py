@@ -85,6 +85,12 @@ Run::
  `--report-only` 로 돌리면 ④⑤를 건너뛰고 **⑥만** 한다. 이미 끝나 있는 실행의
  결과를 모아 정리하는 것이라 사람을 한 명만 부른다 — 그래서 값이 싸다.
 
+ `--waves` 는 **상한이지 목표가 아니다.** 지식원은 유한하므로 질문은 언젠가 마르고,
+ 그때 이 프로그램은 은행에 있던 질문을 다시 돌리기 시작한다. 연속 `--stop-after-dry`
+ 번(기본 2) 새 질문이 안 나오면 남은 파도를 시작하지 않고 그 자리에서 멈추고 말한다.
+ `--stop-after-dry 0` 이면 안 멈춘다. 이것이 없던 동안에는 마른 실행이 진전 중인
+ 실행과 화면에서 구별되지 않았다 — 둘 다 그냥 계속 돌았다.
+
 
  ■ 놓치기 쉬운 것 하나
 
@@ -910,7 +916,7 @@ async def questions_for_wave(
     run_tag: str,
     wave: int,
     want: int,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], bool]:
     """Ask the curator for this wave's questions, then read back what it banked.
 
     ↑ **이번 파도에 무엇을 물을지 정한다.**
@@ -924,8 +930,12 @@ async def questions_for_wave(
       habit that produced questions nothing could answer.
 
     Returns:
-        Bank rows, newest first, at most `want`. An empty list means the caller should
-        fall back to the built-in perspective list.
+        ``(rows, recycled)``. `rows` is bank entries, newest first, at most `want`; an
+        empty list means the caller should fall back to the built-in perspective list.
+        `recycled` is True when the curator produced nothing new and this wave is about
+        to re-run questions the bank already had — the caller decides what that means.
+        It is returned rather than only printed because the run is otherwise unable to
+        tell "investigated something new" from "investigated the same thing again".
     """
     before = await call_board_tool(registry, "read_questions", {"status": "open", "limit": 200})
     known = {q["question_id"] for q in (before or {}).get("questions", [])}
@@ -947,7 +957,9 @@ async def questions_for_wave(
         )
     except Exception as e:  # noqa: BLE001 - the fallback below is the point
         note(f"(질문 담당이 실패했다: {type(e).__name__} — 기본 관점 목록으로 간다)")
-        return []
+        # Not recycling: a curator that crashed says nothing about whether the corpus
+        # still has questions in it. Those are different situations with different fixes.
+        return [], False
 
     after = await call_board_tool(registry, "read_questions", {"status": "open", "limit": 200})
     rows = (after or {}).get("questions", [])
@@ -956,10 +968,15 @@ async def questions_for_wave(
     # Falling back to already-banked questions when the curator only produced duplicates
     # keeps the wave running, and a repeat of a known question is still grounded in the
     # corpus — which the built-in list is not.
+    #
+    # But it is reported upward as well as printed. Silently recycling is how a run that
+    # has nothing left to ask keeps spending money looking exactly like a run that is
+    # still making progress. ↑ 조용히 재탕하면 "마른 실행" 과 "진전 중인 실행" 이 구별되지
+    # 않는다. 그래서 화면에만 찍지 않고 호출한 쪽에도 알린다.
     if not fresh:
         note("(새 질문이 없다 — 은행에 있던 것을 다시 쓴다)")
-        fresh = rows
-    return fresh[:want]
+        return rows[:want], True
+    return fresh[:want], False
 
 
 def summarise(tasks: list[dict]) -> tuple[dict[str, int], list[tuple[int, int]]]:
@@ -1094,6 +1111,14 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         # 씨뿌렸는데 판에 아무것도 안 남긴 시행 번호. 파도를 넘어 쌓이고, 마지막에
         # 보고 담당에게도 넘어간다.
         missing_trials: list[int] = []
+        # 새 질문이 안 나온 파도가 연속 몇 번이었나. `--stop-after-dry` 에 닿으면 멈춘다.
+        #
+        # The corpus is finite — 333 documents across 37 tags — so the bank runs dry by
+        # construction, not by accident. `--waves N` is a count, and a count cannot know
+        # when there is nothing left to ask; this is the part that can.
+        dry_streak = 0
+        waves_run = 0        # 실제로 씨를 뿌린 파도 수. 일찍 멈추면 args.waves 와 다르다
+        seeded_total = 0     # 실제로 부른 가설 담당 수. 보고 담당에게 이 수를 준다
         for wave in range(args.waves):
             base = wave * args.trials          # 시행 번호는 파도를 넘어 이어진다
             if args.waves > 1:
@@ -1101,25 +1126,49 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
 
             # -- ③′ 무엇을 물을지 정한다 --------------------------------
             questions: list[dict] = []
+            recycled = False
             if not args.no_curator:
                 step("③′", "무엇을 물을지 정한다",
                      f"질문 담당이 코퍼스"
                      + ("" if wave == 0 else "와 앞 파도의 결과")
                      + f"를 보고 질문 {args.trials}개를 만든다")
-                questions = await questions_for_wave(
+                questions, recycled = await questions_for_wave(
                     registry, agents, by_stage,
                     run_tag=args.run_tag, wave=wave, want=args.trials,
                 )
                 for q in questions:
                     note(f"질문 #{q['question_id']} {q['text']}"
                          f"  [{'·'.join(q.get('okf_tags') or []) or '태그없음'}]")
-                done("③′", f"질문 {len(questions)}개")
+                done("③′", f"질문 {len(questions)}개"
+                     + (" · 전부 은행에 있던 것" if recycled else ""))
+
+            # -- 마르면 멈춘다 -------------------------------------------
+            #
+            # Two consecutive dry waves, not one. A curator LLM can come back
+            # empty-handed once by mistake, and that is not the same thing as a corpus
+            # with nothing left in it. The break happens *before* seeding, so a run that
+            # has run dry pays for one more curator call and not for a whole wave of
+            # trials it has already done.
+            #
+            # ↑ 한 번이 아니라 **연속 두 번**인 이유: 질문 담당이 한 번 실수로 빈손일 수
+            #   있고, 그것과 진짜 고갈은 다르다. 씨뿌리기 **전에** 멈추므로, 마른 실행이
+            #   더 무는 비용은 질문 담당 한 번뿐이고 시행 전체가 아니다.
+            dry_streak = dry_streak + 1 if recycled else 0
+            if args.stop_after_dry and dry_streak >= args.stop_after_dry:
+                note(f"질문이 말랐다 — 연속 {dry_streak}번 새 질문이 나오지 않았다. "
+                     f"파도 {wave + 1}/{args.waves} 를 시작하지 않고 멈춘다")
+                break
+            waves_run += 1
 
             # 질문 담당을 껐거나 실패했으면 코드에 박힌 관점 목록으로 되돌아간다.
             # 코퍼스와 어긋나는 목록이지만, 실행이 멈추는 것보다는 낫다.
             if not questions:
                 questions = [{"question_id": 0, "text": perspective_for(base + k)}
                              for k in range(args.trials)]
+            # Counted here rather than as waves × trials: the curator is allowed to
+            # ground fewer questions than asked for, and the loop above is allowed to
+            # stop early. Both make the multiplication a number no run actually seeded.
+            seeded_total += len(questions)
 
             # -- seed -------------------------------------------------------
             # -- ④ 첫 지시서를 게시판에 붙인다 -------------------------------
@@ -1279,7 +1328,9 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 folded = await call_board_tool(
                     registry, "record_question_outcomes", {"run_tag": args.run_tag})
                 if folded.get("questions_updated"):
-                    note(f"질문 {folded['questions_updated']}개에 이번 성적을 적었다")
+                    note(f"질문 {folded['questions_updated']}개에 이번 성적을 적었다"
+                         + (f" · {folded['questions_retired']}개는 다 써서 은퇴시켰다"
+                            if folded.get("questions_retired") else ""))
             except Exception as e:  # noqa: BLE001 - bookkeeping must not fail the run
                 note(f"(질문 은행에 성적을 못 적었다: {type(e).__name__})")
 
@@ -1298,7 +1349,6 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         # ↑ **몇 개를 뿌렸는지는 결과표가 말해 주지 못한다.** read_results 는 있는 행만
         #   돌려주므로 create_task 전에 죽은 시행은 거기 없다. 3개를 뿌린 전부인 양
         #   적는 보고서는 틀린 보고서다. 그래서 뿌린 수를 여기서 알려 준다.
-        seeded_total = args.waves * args.trials
         lost_note = (
             f" Trials {', '.join(str(i) for i in missing_trials)} produced no result at all "
             f"(the hypothesis agent never called create_task); they will be absent from "
@@ -1308,8 +1358,10 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         text = await call_agent(
             agents["report"],
             f"Write the report for run '{args.run_tag}'. Call read_results with that run_tag. "
-            f"{seeded_total} trials were seeded across {args.waves} wave(s). "
-            f"State how many of those {seeded_total} produced a result.{lost_note}",
+            f"{seeded_total} trials were seeded across {waves_run} wave(s)"
+            + (f" (of {args.waves} requested; the run stopped early because the question "
+               f"bank ran dry)" if waves_run < args.waves else "")
+            + f". State how many of those {seeded_total} produced a result.{lost_note}",
             tools=by_stage["report"], registry=registry, stage="report",
         )
         (run_dir / "report.md").write_text(text, encoding="utf-8")
@@ -1421,7 +1473,12 @@ async def main() -> int:
     ap.add_argument("--trials", type=int, default=3, help="how many hypotheses to seed per wave")
     ap.add_argument("--waves", type=int, default=1,
                     help="how many question-then-investigate rounds; wave 2 onward reads "
-                         "the results of the one before it")
+                         "the results of the one before it. This is a ceiling, not a "
+                         "target — see --stop-after-dry")
+    ap.add_argument("--stop-after-dry", type=int, default=2,
+                    help="stop early after this many consecutive waves in which the "
+                         "curator produced no new question, so the wave would only "
+                         "re-run ones already banked. 0 never stops early (default 2)")
     ap.add_argument("--no-curator", action="store_true",
                     help="skip question generation and use the built-in perspective list")
     ap.add_argument("--y-column", default="outcome")

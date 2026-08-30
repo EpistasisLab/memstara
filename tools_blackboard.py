@@ -66,6 +66,7 @@ Environment::
 
 from __future__ import annotations
 
+import difflib
 import json
 import os
 import re
@@ -604,8 +605,48 @@ def _question_key(text: str) -> str:
     return " ".join(text.lower().split())
 
 
+#: How similar two questions may be before the second is treated as a reword of the
+#: first rather than a new question. The key above only catches a literal repeat: it
+#: sees "Does naltrexone raise transaminases?" twice, and does not see that "Is
+#: naltrexone associated with elevated liver enzymes?" buys the same trial. Until
+#: 2026-08-30 nothing else did either — the curator was merely *asked* not to reword,
+#: which is a request and not a check.
+#:
+#: 0.75 was set by hand against the questions already banked. It is deliberately not a
+#: tunable knob: a threshold a person can read, argue with, and reproduce is worth more
+#: here than a better one they cannot.
+_NEAR_DUPLICATE_RATIO = 0.75
+
+
+def _near_duplicate(
+    text: str,
+    tags: list[str],
+    banked: list[tuple[int, str, list[str]]],
+) -> tuple[int, float] | None:
+    """Which banked question this one rewords, and how closely. None if it is new.
+
+    Two guards, and both must fire. **The tag sets have to match exactly first.** A
+    question grounded in different corpus branches is a different question however
+    similar the sentence, and collapsing those would quietly cost the bank a branch
+    nobody can see was lost. Only within one branch is the wording compared.
+
+    ``difflib`` rather than an embedding on purpose. The matcher's embeddings are built
+    for column names, not for English questions, and borrowing them here would make the
+    bank depend on a cache built for something else.
+    """
+    key = _question_key(text)
+    want = set(tags)
+    for qid, other_text, other_tags in banked:
+        if set(other_tags) != want:
+            continue
+        ratio = difflib.SequenceMatcher(None, key, _question_key(other_text)).ratio()
+        if ratio >= _NEAR_DUPLICATE_RATIO:
+            return qid, ratio
+    return None
+
+
 @mcp.tool()
-async def read_questions(status: str = "open", limit: int = 50) -> str:
+async def read_questions(status: str = "open", limit: int = 200) -> str:
     """What this project has already thought to ask. Read this before proposing more.
 
     The question bank spans runs. That is the point of reading it: without it every run
@@ -615,7 +656,11 @@ async def read_questions(status: str = "open", limit: int = 50) -> str:
     Args:
         status: "open" for questions still worth using, "exhausted" for ones retired,
             or "" for both.
-        limit: how many to return, newest first.
+        limit: how many to return, newest first. The default is high enough to be the
+            whole open bank in practice — a caller that sees only the newest slice
+            proposes against a partial memory and re-asks what fell off the end, which
+            is the failure this tool exists to prevent. ``record_question_outcomes``
+            retires used-up questions, so the open list does not grow without bound.
 
     Returns:
         JSON list. Each entry carries the question ``text``, the ``okf_tags`` it was
@@ -671,10 +716,13 @@ async def propose_questions(questions: str, origin_run: str = "", origin_wave: i
         origin_wave: which wave within that run.
 
     Returns:
-        ``{"added": [...], "duplicates": [...], "rejected": [...]}``. Duplicates are
-        questions already in the bank and are not an error — they mean the generator
-        converged on something already known, which is worth seeing. ``rejected`` is
-        questions dropped for having no tags, with the reason.
+        ``{"added": [...], "duplicates": [...], "skipped": [...], "rejected": [...]}``.
+        ``duplicates`` are word-for-word repeats. ``skipped`` are questions on the same
+        tags whose wording is a reword of one already banked; each carries
+        ``duplicate_of`` and ``similarity`` so the caller can see *which* question it
+        collided with and go somewhere else instead of guessing. Neither is an error —
+        both mean the generator converged on something already known, which is worth
+        seeing. ``rejected`` is questions dropped for having no tags, with the reason.
     """
     try:
         parsed = json.loads(questions or "[]")
@@ -685,10 +733,20 @@ async def propose_questions(questions: str, origin_run: str = "", origin_wave: i
 
     added: list[dict] = []
     duplicates: list[str] = []
+    skipped: list[dict] = []
     rejected: list[dict] = []
     try:
         conn = await asyncpg.connect(_dsn())
         try:
+            # Retired questions are included on purpose. A reword of a question this
+            # project has already worked through and set aside is the same wasted trial
+            # as a reword of an open one.
+            banked: list[tuple[int, str, list[str]]] = [
+                (r["question_id"], r["text"],
+                 json.loads(r["okf_tags"]) if r["okf_tags"] else [])
+                for r in await conn.fetch(
+                    "SELECT question_id, text, okf_tags FROM memstara_questions")
+            ]
             for item in parsed:
                 if not isinstance(item, dict):
                     rejected.append({"item": str(item), "why": "not an object"})
@@ -703,6 +761,28 @@ async def propose_questions(questions: str, origin_run: str = "", origin_wave: i
                         "text": text,
                         "why": "no okf_tags — a question the corpus cannot answer forces "
                                "the hypothesis stage to invent its citations",
+                    })
+                    continue
+                # The literal check runs first so that "duplicates" keeps meaning what
+                # it always meant — word-for-word repeat — and does not quietly turn
+                # into a subset of the reword check below. The unique index is still the
+                # backstop; this is only what decides which bucket the caller is told.
+                key = _question_key(text)
+                if any(_question_key(t) == key for _, t, _ in banked):
+                    duplicates.append(text)
+                    continue
+                # Checked before the insert, not after: the unique index below is a
+                # string comparison and would let this one through.
+                near = _near_duplicate(text, tags, banked)
+                if near is not None:
+                    near_qid, ratio = near
+                    skipped.append({
+                        "text": text,
+                        "duplicate_of": near_qid,
+                        "similarity": round(ratio, 3),
+                        "why": "same okf_tags and near-identical wording — this is a "
+                               "reword of a banked question, not a new one. Ask about "
+                               "a neighbouring mechanism instead.",
                     })
                     continue
                 # ON CONFLICT DO NOTHING returns no row, which is how a duplicate is
@@ -726,20 +806,24 @@ async def propose_questions(questions: str, origin_run: str = "", origin_wave: i
                     duplicates.append(text)
                 else:
                     added.append({"question_id": qid, "text": text, "okf_tags": tags})
+                    # So that two rewords of each other inside one batch cannot both
+                    # land — neither is in the table yet when the other is checked.
+                    banked.append((qid, text, tags))
         finally:
             await conn.close()
     except Exception as e:  # noqa: BLE001
         return _err(e)
 
     return json.dumps(
-        {"added": added, "duplicates": duplicates, "rejected": rejected},
+        {"added": added, "duplicates": duplicates,
+         "skipped": skipped, "rejected": rejected},
         ensure_ascii=False,
     )
 
 
 @mcp.tool()
-async def record_question_outcomes(run_tag: str) -> str:
-    """Fold a finished run's scores back into the question bank.
+async def record_question_outcomes(run_tag: str, retire_after: int = 3) -> str:
+    """Fold a finished run's scores back into the question bank, and retire used-up ones.
 
     The driver calls this, not an agent — it is bookkeeping about a wave that has ended,
     and no agent is in a position to know a wave has ended. It is also why the bank can
@@ -749,11 +833,21 @@ async def record_question_outcomes(run_tag: str) -> str:
     Safe to call twice for the same run: ``times_used`` is recomputed from the results
     table rather than incremented, so a repeat lands on the same number.
 
+    This is also where ``status`` finally gets written. The column and its two values
+    have been in the schema since the bank was built, and until 2026-08-30 nothing ever
+    set ``'exhausted'`` — so the open list only ever grew, and a question that had been
+    tried three times came back to the curator looking exactly as untouched as one
+    nobody had asked yet.
+
     Args:
         run_tag: the run whose results should be folded in.
+        retire_after: how many results a question may accumulate before it is retired
+            out of the open list. Pass 0 to retire nothing. Retiring is not deletion —
+            ``read_questions(status="exhausted")`` still returns it, and it still blocks
+            a reword in ``propose_questions``.
 
     Returns:
-        ``{"ok": true, "questions_updated": N}``.
+        ``{"ok": true, "questions_updated": N, "questions_retired": M}``.
     """
     try:
         conn = await asyncpg.connect(_dsn())
@@ -762,7 +856,9 @@ async def record_question_outcomes(run_tag: str) -> str:
                 """
                 UPDATE memstara_questions q
                    SET times_used = s.n,
-                       best_auc   = GREATEST(q.best_auc, s.mx)
+                       best_auc   = GREATEST(q.best_auc, s.mx),
+                       status     = CASE WHEN $2 > 0 AND s.n >= $2
+                                         THEN 'exhausted' ELSE q.status END
                   FROM (SELECT question_id, count(*) AS n, max(auc) AS mx
                           FROM memstara_results
                          WHERE question_id IS NOT NULL
@@ -771,15 +867,18 @@ async def record_question_outcomes(run_tag: str) -> str:
                    AND EXISTS (SELECT 1 FROM memstara_results r
                                 WHERE r.question_id = q.question_id
                                   AND ($1 = '' OR r.run_tag = $1))
-                RETURNING q.question_id
+                RETURNING q.question_id, q.status
                 """,
                 run_tag,
+                max(0, int(retire_after)),
             )
         finally:
             await conn.close()
     except Exception as e:  # noqa: BLE001
         return _err(e)
-    return json.dumps({"ok": True, "questions_updated": len(updated)})
+    retired = sum(1 for r in updated if r["status"] == "exhausted")
+    return json.dumps(
+        {"ok": True, "questions_updated": len(updated), "questions_retired": retired})
 
 
 if __name__ == "__main__":

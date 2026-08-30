@@ -756,7 +756,8 @@ async def provision_board_agents(
             "   Therefore: every question you propose MUST carry okf_tags naming branches "
             "   the corpus actually has. propose_questions rejects one that does not.\n\n"
             "2) ASKING THE SAME THING TWICE. The bank spans runs, so a question answered "
-            "   last week is still answered.\n\n"
+            "   last week is still answered. Rewording does not make it a new question, "
+            "   and propose_questions now checks for that as well as for exact repeats.\n\n"
             "Work in this order:\n"
             "1) Call okf_list_domains. This is the ground truth for what can be asked. "
             "   Note the tags and how many documents sit under each — a branch with three "
@@ -779,8 +780,15 @@ async def provision_board_agents(
             "You cannot see the dataset and must not guess at it — finding the columns is "
             "the next stage's job, and it has a matcher for exactly that.\n\n"
             "Duplicates coming back from propose_questions are information, not failure: "
-            "they mean you converged on something the bank already had. Propose different "
-            "ones rather than rewording the same one to slip past the check."
+            "they mean you converged on something the bank already had. So is 'skipped', "
+            "which means a question carried the same okf_tags as a banked one and said it "
+            "in different words; each entry names the question_id it collided with, so "
+            "read that question and move to a neighbouring mechanism instead of trying "
+            "another phrasing. Both are worth reporting plainly.\n\n"
+            "If everything you can think of comes back as a duplicate or a skip, SAY SO "
+            "and propose nothing rather than padding. The bank running dry is a real "
+            "finding about a finite corpus, and the run is built to notice it and stop — "
+            "but only if you do not disguise it with rewordings."
         ),
         model_config=mc,
         pattern_config=react,
