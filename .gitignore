@@ -1,0 +1,49 @@
+# ---------------------------------------------------------------------------
+# Secrets. Never tracked. `.env.example` is the template that IS tracked.
+# ---------------------------------------------------------------------------
+.env
+.env.local
+*.pem
+*.key
+
+# ---------------------------------------------------------------------------
+# Patient data and everything derived from it.
+#
+# `outputs/` is a scratch directory: the cohort CSV, every sub-CSV the data
+# stage cuts from it, the matcher's column catalogue (all 1,394 names), and one
+# folder per run. None of it belongs in a repository, and all of it is
+# regenerable — see prep_hiv_dataset.py, make_sample_data.py, prep_nhanes.py and
+# scripts/build_matcher_cache.py.
+#
+# The two entries below are the exceptions: the README explaining the folder,
+# and the .gitkeep that keeps the empty folder present after a clone.
+# ---------------------------------------------------------------------------
+outputs/*
+!outputs/.gitkeep
+!outputs/README.md
+
+# ---------------------------------------------------------------------------
+# Knowledge-graph dumps. AlzKB and AddictionKB are published elsewhere; these
+# are 1GB of exports and their SQLite builds. The scripts that produce and read
+# them are tracked, the payloads are not.
+# ---------------------------------------------------------------------------
+kg/**/*.db
+kg/**/*.cypherl
+
+# ---------------------------------------------------------------------------
+# Reinstallable
+# ---------------------------------------------------------------------------
+.venv
+.venv/
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ---------------------------------------------------------------------------
+# macOS and Office leavings
+# ---------------------------------------------------------------------------
+.DS_Store
+~$*

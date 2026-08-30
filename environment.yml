@@ -1,0 +1,53 @@
+# Memstara 샌드박스를 돌리는 conda 환경.
+#
+#     conda env create -f environment.yml
+#     conda activate memstara
+#
+# 이미 있으면:
+#
+#     conda env update -f environment.yml --prune
+#
+# 왜 대부분이 pip 인가
+# --------------------
+# conda 로는 python 만 받고 나머지는 pip 로 넣는다. `agentic-core` 가 로컬 소스이고
+# (conda 채널에 있을 수 없다), 그것이 litellm·mcp·sentence-transformers 를 끌고
+# 오는데 이들도 conda-forge 보다 PyPI 쪽이 최신이라 버전이 갈리면 맞추기 어렵다.
+# 한 곳에서 풀게 두는 편이 재현이 쉽다.
+#
+# `-e ../agentic-core` 는 editable 이다 — core 소스를 고치면 다시 설치하지 않아도
+# 바로 반영된다. 상대경로라서 **이 파일이 있는 폴더에서** 실행해야 한다.
+#
+# 무게: torch 가 약 489MB 라 환경 전체가 1GB 안팎이 된다. sentence-transformers 가
+# agentic-core 의 직접 의존성이고, 그것이 torch 를 끈다. 원격 모델만 쓰더라도 디스크는
+# 차지한다 — core 의 pyproject 주석이 그 점을 이미 적어 두고 있다.
+
+name: memstara
+
+channels:
+  - conda-forge
+
+dependencies:
+  # 3.12 — agentic-core 의 .venv 와 같은 계열로 맞춘다.
+  - python=3.12
+  - pip
+
+  - pip:
+      # 로컬 소스. 이것 하나가 pydantic·sqlalchemy·asyncpg·alembic·redis·pgvector·
+      # sentence-transformers·litellm·instructor·tenacity 를 함께 끌고 온다.
+      - -e ../agentic-core
+
+      # 샌드박스가 직접 쓰는데 core 의존성에는 없는 것들.
+      - pandas
+      - scikit-learn
+      - numpy
+      - python-dotenv
+      - mcp
+
+      # 디버깅용. 도구 서버는 자식 프로세스라, 거기에 붙으려면 필요하다.
+
+      - debugpy
+
+      # The test suite. Listed here because the matcher's claim to be a faithful
+      # port of afc-forge rests on 31 upstream tests running unmodified — an
+      # environment file that cannot run them does not preserve that evidence.
+      - pytest
