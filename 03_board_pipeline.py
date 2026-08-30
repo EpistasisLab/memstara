@@ -1496,7 +1496,18 @@ async def main() -> int:
 
     # 준비물이 없으면 **아무것도 하지 않고** 끝낸다. 반쯤 하다 죽는 것보다
     # 시작 전에 멈추는 편이 게시판을 깨끗하게 남긴다.
-    problems = await check_environment(provider=args.provider, y_column=args.y_column)
+    #
+    # `--report-only` 는 결과변수를 안 쓴다. 이미 끝난 것을 읽어 정리할 뿐이라
+    # 데이터셋을 열지도 않는다. 그런데도 결과변수를 검사하면, **중단된 실행을
+    # 수습하려고 부르는 바로 그 길**이 기본값 `outcome` 때문에 막힌다 — 수습 수단이
+    # 수습이 필요한 상황에서만 안 되는 셈이다.
+    #
+    # ↑ report-only reads finished results and never opens the dataset, so checking the
+    #   outcome column there blocks the one path meant for rescuing an interrupted run.
+    problems = await check_environment(
+        provider=args.provider,
+        y_column="" if args.report_only else args.y_column,
+    )
     if problems:
         print("Environment is not ready:", file=sys.stderr)
         for p in problems:
