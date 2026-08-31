@@ -103,7 +103,7 @@ export default function Scene() {
     return live;
   }, [scene]);
 
-  if (!scene) return <div className="p-8 text-ink-faint">장면을 불러오는 중…</div>;
+  if (!scene) return <div className="p-8 text-ink-faint">Loading the scene…</div>;
 
   return (
     <div className="h-[calc(100vh-9.5rem)] w-full">

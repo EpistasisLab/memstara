@@ -40,7 +40,7 @@ export function PlaceNode({ data }: NodeProps) {
 
       {count !== undefined && (
         <div className="mt-2 border-t border-paper-line pt-2 text-[11px] text-ink-soft">
-          {count}건
+          {count} items
         </div>
       )}
     </div>

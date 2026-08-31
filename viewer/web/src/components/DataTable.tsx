@@ -86,7 +86,7 @@ export default function DataTable<T>({
           {data.length === 0 && (
             <tr>
               <td colSpan={columns.length} className="px-3 py-8 text-center text-ink-faint">
-                내용 없음
+                Nothing here
               </td>
             </tr>
           )}

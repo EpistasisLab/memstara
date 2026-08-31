@@ -20,7 +20,7 @@ const col = createColumnHelper<AccessRow>();
 
 const COLUMNS = [
   col.accessor("agent_label", {
-    header: "에이전트",
+    header: "Agent",
     cell: (c) => (
       <span className="inline-flex items-center gap-2 font-bold">
         <span
@@ -31,10 +31,10 @@ const COLUMNS = [
       </span>
     ),
   }),
-  col.accessor("tool", { header: "창구·도구", cell: (c) => <span className="font-mono text-xs">{c.getValue()}</span> }),
-  col.accessor("server", { header: "서버", cell: (c) => <span className="font-mono text-xs text-ink-faint">{c.getValue()}</span> }),
-  col.accessor("store", { header: "저장소", cell: (c) => STORE_LABEL[c.getValue()] }),
-  col.accessor("calls", { header: "호출", meta: { align: "right" }, cell: (c) => <span className="font-bold">{c.getValue()}</span> }),
+  col.accessor("tool", { header: "Window / tool", cell: (c) => <span className="font-mono text-xs">{c.getValue()}</span> }),
+  col.accessor("server", { header: "Server", cell: (c) => <span className="font-mono text-xs text-ink-faint">{c.getValue()}</span> }),
+  col.accessor("store", { header: "Store", cell: (c) => STORE_LABEL[c.getValue()] }),
+  col.accessor("calls", { header: "Calls", meta: { align: "right" }, cell: (c) => <span className="font-bold">{c.getValue()}</span> }),
 ];
 
 export default function AccessTab() {
@@ -48,7 +48,7 @@ export default function AccessTab() {
       .sort((a, b) => b.calls - a.calls);
   }, [access]);
 
-  if (!access) return <div className="p-8 text-ink-faint">불러오는 중…</div>;
+  if (!access) return <div className="p-8 text-ink-faint">Loading…</div>;
 
   const board = access.rows.filter((r) => r.path === "board");
   const supervisor = access.rows.filter((r) => r.path === "supervisor");
@@ -57,7 +57,7 @@ export default function AccessTab() {
     <div className="space-y-8 p-6">
       <section className="grid grid-cols-3 gap-6">
         <div className="col-span-2">
-          <h2 className="mb-3 text-sm font-bold">판의 창구 여섯 — 누가 쓰나</h2>
+          <h2 className="mb-3 text-sm font-bold">The board&apos;s six windows — who uses them</h2>
           <div className="grid grid-cols-2 gap-2">
             {access.windows.map((w) => (
               <div
@@ -78,7 +78,7 @@ export default function AccessTab() {
                   {w.holder} <ArrowRight className="h-3 w-3" /> {STORE_LABEL[w.store]}
                 </div>
                 {!w.called_by_agent && (
-                  <div className="mt-1 text-[11px] text-ink-faint">에이전트가 부르지 않는다 — 정상</div>
+                  <div className="mt-1 text-[11px] text-ink-faint">no agent calls this — correct</div>
                 )}
               </div>
             ))}
@@ -86,13 +86,13 @@ export default function AccessTab() {
         </div>
 
         <div>
-          <h2 className="mb-3 text-sm font-bold">저장소별 접근</h2>
+          <h2 className="mb-3 text-sm font-bold">Access by store</h2>
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={byStore} layout="vertical" margin={{ left: 8, right: 24 }}>
               <XAxis type="number" hide />
               <YAxis type="category" dataKey="label" width={64} tickLine={false} axisLine={false}
                      tick={{ fontSize: 12 }} />
-              <Tooltip formatter={(v) => [`${Number(v)}회`, "호출"]} />
+              <Tooltip formatter={(v) => [`${Number(v)} calls`, "Calls"]} />
               <Bar dataKey="calls" radius={[0, 4, 4, 0]} isAnimationActive={false}>
                 {byStore.map((d) => (
                   <Cell key={d.store} fill={d.store === "board" ? "#2f6b47" : d.store === "results" ? "#8f2f4f" : "#8a8880"} />
@@ -104,14 +104,14 @@ export default function AccessTab() {
       </section>
 
       {[
-        { rows: board, title: "판 경로", sub: "03_board_pipeline.py" },
-        { rows: supervisor, title: "감독자 경로", sub: "02_mvp_pipeline.py" },
+        { rows: board, title: "Board path", sub: "03_board_pipeline.py" },
+        { rows: supervisor, title: "Supervisor path", sub: "02_mvp_pipeline.py" },
       ].map((g) => (
         <section key={g.title}>
           <h2 className="mb-3 flex items-baseline gap-2 text-sm font-bold">
             {g.title}
             <span className="font-mono text-xs font-normal text-ink-faint">{g.sub}</span>
-            <span className="font-normal text-ink-soft">{g.rows.reduce((n, r) => n + r.calls, 0)}회</span>
+            <span className="font-normal text-ink-soft">{g.rows.reduce((n, r) => n + r.calls, 0)} calls</span>
           </h2>
           <DataTable columns={COLUMNS} data={g.rows} initialSorting={[{ id: "calls", desc: true }]} />
         </section>
