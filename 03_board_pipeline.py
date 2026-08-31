@@ -16,12 +16,15 @@ has to look at the board and call whoever is needed. That something is determini
 and cheap, which is what the 2026-08-12 alignment concluded ("this doesn't have to be
 an agent, it could be just a deterministic script").
 
-A task whose agent dies goes back to waiting and is retried, without limit. **That
-means a task that always fails keeps the board from draining, and the report never
-runs.** It is the chosen behaviour, so this script makes the retry count visible on
-every round — a person cannot decide to stop what they cannot see — and leaves the
-board consistent when interrupted. `--report-only` writes the report from whatever has
-accumulated, for exactly that case.
+A task whose agent dies goes back to waiting and is retried. Retries used to be
+unlimited, which meant a task that always failed kept the board from draining and the
+report never ran — the only thing that could end such a run was a person watching the
+console. `--max-attempts` (default 5) now closes a task that keeps coming back, marks
+it failed, and lets the rest of the run finish; the trial it belonged to is reported as
+lost rather than quietly dropped. `--max-attempts 0` restores the old behaviour. The
+retry count is still printed every round, because the cap ends a stuck run without
+explaining it. `--report-only` writes the report from whatever has accumulated, for
+when a run is interrupted.
 
 Setup is the same as 02, plus the board::
 
@@ -90,6 +93,20 @@ Run::
  번(기본 2) 새 질문이 안 나오면 남은 파도를 시작하지 않고 그 자리에서 멈추고 말한다.
  `--stop-after-dry 0` 이면 안 멈춘다. 이것이 없던 동안에는 마른 실행이 진전 중인
  실행과 화면에서 구별되지 않았다 — 둘 다 그냥 계속 돌았다.
+
+ **사람 없이 이어 돌리기.** 이 프로그램에는 데몬도 cron 도 없다. 유한한 지식원에
+ 무한 루프는 답이 아니고, 여러 번 돌리고 싶으면 셸 반복문이 더 안전하다(중간에 죽어도
+ 상태가 DB 에 남는다). 대신 **실행 하나가 끝난 자리가 다음 실행에 깨끗하게 넘어가도록**
+ 세 가지를 이 파일과 창구가 지킨다:
+
+   · `claim_task` 에 `run_tag` 를 실어 보낸다 — 남의 실행이 남긴 과제를 집지 않는다.
+     이게 없으면 오래된 것부터 집으므로, 죽은 실행의 과제가 **가장 먼저** 걸린다.
+   · 시작할 때 자기 태그의 멈춘 과제를 한 번 되찾는다 — 같은 `--run-tag` 로 다시
+     돌리면 "이어서 하기" 가 된다.
+   · `--max-attempts` 로 끝내 안 되는 과제를 닫는다 — 사람이 안 보고 있어도 끝난다.
+
+ 이미 남아 있는 남의 고아를 치우는 것은 `blackboard.py --orphans / --reclaim / --close`
+ 가 한다. 이 파일은 자기 실행분만 본다.
 
 
  ■ 놓치기 쉬운 것 하나
@@ -1111,6 +1128,23 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         # 씨뿌렸는데 판에 아무것도 안 남긴 시행 번호. 파도를 넘어 쌓이고, 마지막에
         # 보고 담당에게도 넘어간다.
         missing_trials: list[int] = []
+
+        # Before the first wave, take back anything this tag left in_progress last time.
+        # `reclaim_stalled` is also called inside the work loop, but only once that loop
+        # has decided it has nothing to do — so re-running a tag that died mid-wave would
+        # seed a whole new wave before noticing the old task was still there. Calling it
+        # here is what makes "same --run-tag again" mean "carry on where it stopped".
+        # stale_after still applies: a run that is genuinely still alive holds the
+        # advisory lock above, so we cannot get here while one is.
+        #
+        # ↑ 첫 파도 전에, 이 태그가 지난번에 '하는 중' 으로 남긴 것을 되찾는다. 같은 함수가
+        #   일 루프 안에서도 불리지만 그건 **할 일이 없다고 판단한 뒤**라, 중간에 죽은 태그로
+        #   다시 실행하면 새 파도를 통째로 뿌린 다음에야 옛 과제를 발견한다. 여기서 한 번
+        #   부르는 것이 "같은 --run-tag 로 다시 = 이어서 하기" 를 성립시킨다.
+        recovered = await reclaim_stalled(registry, args.run_tag, args.stale_after)
+        if recovered:
+            note(f"지난 실행이 남긴 과제 {recovered}개를 대기열로 되돌렸다 — 이어서 한다")
+
         # 새 질문이 안 나온 파도가 연속 몇 번이었나. `--stop-after-dry` 에 닿으면 멈춘다.
         #
         # The corpus is finite — 333 documents across 37 tags — so the bank runs dry by
@@ -1237,12 +1271,16 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             # -- work it down ----------------------------------------------
             # -- ⑤ 게시판이 빌 때까지 돌린다 ---------------------------------
             #
-            # Retries are unlimited by decision, so this loop has no cap. It prints what it
-            # sees every round precisely because the person watching is the only thing that
-            # ends it if a task can never succeed.
+            # This loop's only exit is an empty board, so something has to close a task
+            # that can never succeed. `--max-attempts` does, below. It still prints what
+            # it sees every round: the cap ends a stuck run, it does not explain it, and
+            # the person reading is the one who decides whether the cap was the right
+            # answer or the stage needs fixing.
             #
-            # ↑ 재시도에 상한이 없으므로 이 루프에도 상한이 없다. 매 바퀴 현황을 찍는 이유가
-            #   그것이다 — 끝내 성공하지 못할 과제를 멈출 수 있는 것은 **보고 있는 사람뿐**이다.
+            # ↑ 이 루프의 유일한 탈출구가 "판이 비었다" 라, 끝내 성공 못 할 과제는 누군가
+            #   닫아 줘야 한다. 그걸 아래 `--max-attempts` 가 한다. 그래도 매 바퀴 현황을
+            #   계속 찍는다 — 상한은 막힌 실행을 **끝낼** 뿐 **설명하지는** 못하고, 그게
+            #   맞는 답이었는지 아니면 그 단계를 고쳐야 하는지는 읽는 사람이 판단한다.
             lost_here = [i for i in missing_trials if base <= i < base + len(questions)]
             done("④", f"게시판에 종이 {state['count']}장"
                  + (f" · 시행 {len(questions)}개 중 {len(lost_here)}개가 빈손으로 끝났다 "
@@ -1275,6 +1313,26 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                     stuck = "  ← 되돌아온 일: " + ", ".join(f"#{tid} {n}회" for tid, n in worst)
                 print(f"   [{rounds:>3}바퀴] {desc}{stuck}")
 
+                # Give up on tasks that keep coming back. `retried` already counts the
+                # extra claims, so this is a decision on a number that was being printed
+                # and otherwise acted on by nobody. Closing one task does not stop the
+                # run — the others keep going, and the trial is recorded as lost so the
+                # report says so rather than quietly describing fewer results as all.
+                #
+                # ↑ 자꾸 되돌아오는 과제를 포기한다. `retried` 는 이미 여분 횟수를 세고
+                #   있었고, 여태 그 숫자를 보고 판단하는 것은 사람뿐이었다. 한 과제를
+                #   닫아도 실행은 멈추지 않는다 — 나머지는 계속 가고, 그 시행은 '빈손'
+                #   으로 기록돼 보고서가 그 사실을 말하게 된다.
+                if args.max_attempts:
+                    doomed = [tid for tid, n in retried if n >= args.max_attempts]
+                    if doomed:
+                        lost = await give_up_on(doomed)
+                        missing_trials.extend(t for t in lost if t not in missing_trials)
+                        note(f"과제 {', '.join(f'#{t}' for t in doomed)} 를 포기했다 — "
+                             f"{args.max_attempts}번 넘게 되돌아왔다. 해당 시행은 빈손으로 남는다")
+                        # 닫은 것이 현황에서 빠지도록 다음 바퀴로 넘긴다.
+                        continue
+
                 # 이번 바퀴에 누구라도 불렀는가. 아무도 안 불렀으면 아래로 간다.
                 worked = False
                 for stage in CLAIMING_STAGES:                 # data → ml → interpreter 순
@@ -1291,9 +1349,19 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                     #   과제에 적어 뒀고, 과제는 자기 단계에 필요한 것을 다 들고 있어야 한다.
                     #   여기서도 말하면 한 사실의 출처가 둘이 되는데, 프롬프트 쪽은 기록에
                     #   안 남는다 — 나중에 어긋나도 확인할 방법이 없다.
+                    #
+                    # The run_tag is the exception, and not a contradiction of the rule
+                    # above: it does not describe the task, it decides *which* task to
+                    # pick. That has to come from the prompt because the agent is choosing
+                    # before it holds a task to read it from.
+                    #
+                    # ↑ run_tag 만은 예외인데, 위 원칙과 어긋나지 않는다. 이건 과제의
+                    #   **내용**이 아니라 **어느 과제를 고를지**를 정하는 값이다. 아직
+                    #   과제를 손에 쥐기 전에 정해야 하므로 프롬프트로 올 수밖에 없다.
                     await call_agent(
                         agents[stage],
-                        f"Claim a '{STAGE_TASK_TYPE[stage]}' task and do your part.",
+                        f"Claim a '{STAGE_TASK_TYPE[stage]}' task from run_tag "
+                        f"'{args.run_tag}' and do your part.",
                         tools=by_stage[stage], registry=registry, stage=stage,
                     )
                     worked = True
@@ -1446,6 +1514,56 @@ async def reclaim_stalled(registry: MCPServerRegistry, run_tag: str, stale_after
     return int(n)
 
 
+async def give_up_on(task_ids: list[int]) -> list[int]:
+    """Close tasks that will not succeed, so the board can drain.
+
+    Retries were unlimited, which is defensible for a stage that fails on a hiccup and
+    indefensible for one that fails on the same thing every time: the work loop's only
+    exit is an empty board, so one such task keeps a run from ever reaching its report.
+    Somebody has to decide "this will not work", and before this it was the person
+    watching the console — which means an unattended run had no end.
+
+    Failed, not deleted. The row is the only record of what was attempted, and the trial
+    it belongs to is returned so the caller can report it as lost rather than let a
+    shorter results table pass for a complete one.
+
+    Args:
+        task_ids: the board rows to close.
+
+    Returns:
+        The trial numbers those rows belonged to.
+
+    ↑ **끝내 안 될 과제를 닫는다.** 재시도가 무제한이었는데, 딸꾹질로 실패하는 단계에는
+      그게 맞지만 **매번 같은 이유로** 실패하는 단계에는 틀리다. 일 루프의 유일한 탈출구가
+      "판이 비었다" 라서, 그런 과제 하나가 실행 전체를 보고서까지 못 가게 붙잡는다.
+      누군가는 "이건 안 된다" 고 판단해야 하는데 여태 그건 화면을 보는 사람이었고,
+      그 말은 **사람이 없는 실행에는 끝이 없었다**는 뜻이다.
+
+      지우지 않고 failed 로 둔다. 그 행이 무엇을 시도했는지에 대한 유일한 기록이고,
+      어느 시행이었는지를 돌려주므로 보고서가 짧아진 결과표를 완전한 것처럼 말하지 않는다.
+    """
+    # reclaim_stalled 와 같은 이유로 창구를 안 거친다 — 관리자의 일이라 에이전트에게
+    # 줄 버튼이 아니다.
+    conn = await asyncpg.connect(dsn())
+    try:
+        rows = await conn.fetch(
+            """
+            UPDATE memstara_blackboard
+               SET status = 'failed',
+                   error  = CASE WHEN error = '' THEN 'gave up: too many retries'
+                                 ELSE error END,
+                   updated_at = now()
+             WHERE task_id = ANY($1::bigint[])
+               AND status IN ('ready', 'in_progress')
+         RETURNING trial
+            """,
+            task_ids,
+        )
+    finally:
+        await conn.close()
+    return [r["trial"] for r in rows]
+
+
 async def main() -> int:
     """명령줄에서 들어오는 문. 인자를 읽고, 검사하고, 잠금을 잡고 run() 을 부른다."""
     # 이 프로젝트는 `.env` 가 **둘**이고, 서로 다른 것을 담는다.
@@ -1489,6 +1607,12 @@ async def main() -> int:
     ap.add_argument(
         "--stale-after", type=int, default=600,
         help="seconds a task may sit in_progress before it is presumed abandoned (default 600)",
+    )
+    ap.add_argument(
+        "--max-attempts", type=int, default=5,
+        help="give up on a task once it has come back this many extra times, mark it "
+             "failed and go on without it. 0 retries forever, which means only a person "
+             "watching can end a run whose task can never succeed (default 5)",
     )
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--run-dir", default=None)

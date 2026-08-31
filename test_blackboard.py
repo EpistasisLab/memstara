@@ -94,6 +94,22 @@ async def cleanup() -> None:
         await conn.close()
 
 
+async def cleanup_tag(run_tag: str) -> None:
+    """`cleanup()` 과 같은 일을 아무 태그에나 한다.
+
+    실행끼리 서로의 일을 안 집는지 보려면 태그가 **둘** 있어야 한다. 두 번째 태그는
+    RUN_TAG 가 아니므로 위 cleanup() 이 안 지운다.
+    """
+    import asyncpg
+
+    conn = await asyncpg.connect(bb._dsn())
+    try:
+        await conn.execute("DELETE FROM memstara_results WHERE run_tag = $1", run_tag)
+        await conn.execute("DELETE FROM memstara_blackboard WHERE run_tag = $1", run_tag)
+    finally:
+        await conn.close()
+
+
 def ok(passed: bool, label: str, detail: str = "") -> bool:
     """한 항목의 결과를 한 줄로 찍고, 그 통과 여부를 그대로 돌려준다.
 
@@ -109,6 +125,7 @@ async def main() -> int:
     """검사 본체. 위 「이 파일을 읽는 법」의 ①~⑥ 이 여기 순서대로 있다."""
     results: list[bool] = []   # 항목별 통과 여부를 쌓아 둔다
     await cleanup()            # 앞선 검사의 찌꺼기를 먼저 치운다
+    await cleanup_tag(f"{RUN_TAG}_other")   # ⑦ 이 쓰는 두 번째 태그도 같이
 
     # ---- 질문 은행에 먼저 담는다 ---------------------------------------
     #
@@ -209,7 +226,13 @@ async def main() -> int:
     #
     #   asyncio.gather 는 12번의 집기를 **동시에** 띄운다. 하나씩 차례로 부르면
     #   경합 자체가 일어나지 않아 이 검사는 아무것도 확인하지 못한다.
-    claims = await asyncio.gather(*[bb.claim_task("data") for _ in range(N + 4)])
+    #
+    #   RUN_TAG 를 실어 보내는 것이 중요하다. 안 그러면 판 **전체**에서 가장 오래된
+    #   대기 행을 집는데, 다른 실행이 중단되며 남긴 과제가 있으면 그게 먼저 걸린다.
+    #   실제로 그런 일이 있었다: 이 줄에 태그가 없던 동안 아래 학습 단계 검사가
+    #   `dry-stop` 실행이 남긴 과제를 집어, 검사용 가짜 숫자를 그 실행의 결과표에 적었다.
+    claims = await asyncio.gather(
+        *[bb.claim_task("data", RUN_TAG) for _ in range(N + 4)])
     got = [json.loads(c) for c in claims]
     ids = [g["task_id"] for g in got if g.get("task_id") is not None]   # 집힌 것
     empty = [g for g in got if g.get("task_id") is None]                # 빈 손
@@ -280,9 +303,9 @@ async def main() -> int:
     #
     # 남은 두 단계를 그대로 밟아 본다. 값(auc 0.71 등)은 아무 숫자여도 된다.
     # 확인하는 것은 마지막 단계가 끝났을 때 상태가 "done" 이 되는가이다.
-    c = json.loads(await bb.claim_task("ml"))
+    c = json.loads(await bb.claim_task("ml", RUN_TAG))
     await bb.submit_result(c["task_id"], auc=0.71, feature_importance='{"CURRENT_AGE": 0.4}')
-    c = json.loads(await bb.claim_task("interpret"))
+    c = json.loads(await bb.claim_task("interpret", RUN_TAG))
     r3 = json.loads(await bb.submit_result(c["task_id"], interpretation="지지됨"))
     results.append(ok(r3.get("status") == "done", "해석까지 끝나면 완료가 된다", str(r3.get("status"))))
 
@@ -352,7 +375,12 @@ async def main() -> int:
     # 8개 중 1개만 끝까지 갔고, 나머지 7개는 아까 집힌 채 그대로 있다. 그래서
     # 대기 0 · 진행 중 7(= N-1) 이 맞는 답이다. 이 숫자가 어긋나면 어딘가에서
     # 상태가 두 번 바뀌었다는 뜻이다.
-    cnt = json.loads(await bb.count_waiting())
+    #
+    # RUN_TAG 로 좁혀서 센다. count_waiting 은 안 주면 **판 전체**를 세는데, 그러면
+    # 다른 실행이 남긴 과제가 이 숫자에 섞인다 — 실제로 `dry-stop` 이 남긴 학습 과제
+    # 하나 때문에 진행중이 8로 나와 이 항목이 틀렸다. 세는 대상이 "이 검사가 만든 것"
+    # 이므로 좁히는 쪽이 맞다.
+    cnt = json.loads(await bb.count_waiting(run_tag=RUN_TAG))
     results.append(ok(cnt["ready"] == 0 and cnt["in_progress"] == N - 1,
                       "남은 것을 정확히 센다", f"대기 {cnt['ready']} · 진행중 {cnt['in_progress']}"))
     results.append(ok(board["count"] == N, "판 전체를 읽는다", f"{board['count']}개"))
@@ -415,12 +443,12 @@ async def main() -> int:
         await bb.create_task(RUN_TAG, i, f"관점 {i}", f"가설 {i}",
                              COLUMNS, "HIV_DETECTABLE",
                              okf_concept_ids=OKF_IDS, question_id=QID)
-        c = json.loads(await bb.claim_task("data"))
+        c = json.loads(await bb.claim_task("data", RUN_TAG))
         await bb.submit_result(c["task_id"], subset_path="outputs/sub_x.csv",
                                columns_used=COLUMNS)
-        c = json.loads(await bb.claim_task("ml"))
+        c = json.loads(await bb.claim_task("ml", RUN_TAG))
         await bb.submit_result(c["task_id"], auc=0.5)
-        c = json.loads(await bb.claim_task("interpret"))
+        c = json.loads(await bb.claim_task("interpret", RUN_TAG))
         await bb.submit_result(c["task_id"], interpretation="지지 안 됨")
 
     fed2 = json.loads(await bb.record_question_outcomes(RUN_TAG))
@@ -448,8 +476,74 @@ async def main() -> int:
                       "은퇴한 질문도 재탕을 막는다",
                       f"담김 {len(p4.get('added', []))} · 막힘 {len(p4.get('skipped', []))}"))
 
-    # 검사가 만든 것은 남기지 않는다.
+    # ---- ⑦ 실행끼리 서로의 일을 집지 않는가 ------------------------------
+    #
+    # `claim_task` 는 오랫동안 run_tag 를 안 봤다. 판 전체에서 `ORDER BY task_id` 로
+    # 가장 오래된 대기 행을 집었으므로, **죽은 실행이 남긴 과제가 다음 실행이 가장
+    # 먼저 집는 것**이었다. 그 실행의 돈으로 남의 일을 하고, 결과는 죽은 실행의
+    # 태그로 적힌다. run_lock() 은 이걸 못 막는다 — 그건 같은 태그만 본다.
+    #
+    # 이건 상상이 아니다. 2026-08-31, 위 학습 단계 검사에 태그가 없던 동안 이 검사가
+    # `dry-stop` 실행이 남긴 과제를 집어, 검사용 가짜 숫자(auc 0.71, "지지됨")를
+    # 그 실행의 결과표에 적었다.
+    #
+    # 두 태그를 만들어 **나중 것**을 지목해 집는다. 좁히기가 없으면 오래된 A 가
+    # 나오므로, 이 검사는 조건이 빠지는 순간 실패한다.
+    other_tag = f"{RUN_TAG}_other"
+    await bb.create_task(other_tag, 90, "관점 A", "가설 A", COLUMNS, "HIV_DETECTABLE")
+    await bb.create_task(RUN_TAG, 91, "관점 B", "가설 B", COLUMNS, "HIV_DETECTABLE")
+    picked = json.loads(await bb.claim_task("data", RUN_TAG))
+    results.append(ok(picked.get("run_tag") == RUN_TAG,
+                      "run_tag 를 주면 자기 실행의 일만 집는다 (남의 것이 더 오래돼도)",
+                      f"집힌 것의 태그 {picked.get('run_tag')}"))
+
+    # 빈 문자열이면 예전처럼 판 전체를 본다. 기존 호출이 안 깨져야 하고, 그 사실
+    # 자체를 검사가 붙들고 있어야 나중에 조용히 바뀌지 않는다.
+    #
+    # 다만 이 한 줄은 **판 전체**를 건드리므로, 남의 실행이 남긴 대기 행이 있으면
+    # 그걸 집어 in_progress 로 만들어 버린다. 이 검사가 고치려는 바로 그 사고다.
+    # 그래서 먼저 확인하고, 남의 것이 있으면 집지 않고 건너뛴다.
+    board_all = json.loads(await bb.read_board())["tasks"]
+    strays = [t for t in board_all
+              if t["task_type"] == "data" and t["status"] == "ready"
+              and t["run_tag"] not in (RUN_TAG, other_tag)]
+    if strays:
+        results.append(ok(True, "태그 없는 집기 검사는 건너뛴다 — 판에 남의 대기 행이 있다",
+                          f"{len(strays)}개 ({strays[0]['run_tag']} 등)"))
+    else:
+        picked2 = json.loads(await bb.claim_task("data"))
+        results.append(ok(picked2.get("run_tag") == other_tag,
+                          "태그를 안 주면 예전처럼 판 전체에서 가장 오래된 것을 집는다",
+                          f"집힌 것의 태그 {picked2.get('run_tag')}"))
+
+    # ---- ⑧ 남은 과제를 되돌리고 닫을 수 있는가 ---------------------------
+    #
+    # 위 두 줄은 지금 in_progress 다. 실행이 여기서 죽으면 아무도 안 치운다 —
+    # 드라이버의 reclaim_stalled 는 자기 태그만, 그것도 일 루프 안에서만 보기 때문이다.
+    # blackboard.py 의 세 명령이 그 자리를 메운다.
+    import blackboard as bbm
+
+    # 남의 태그가 지금 어떤 상태인지 먼저 적어 둔다. --reclaim 뒤에도 **그대로**여야
+    # 한다는 것이 이 항목의 절반이다.
+    other_before = [t["status"] for t in json.loads(await bb.read_board(other_tag))["tasks"]]
+    back = await bbm.reclaim(RUN_TAG)
+    after = json.loads(await bb.read_board(RUN_TAG))["tasks"]
+    mine_ready = [t for t in after if t["status"] == "ready" and t["trial"] == 91]
+    other_after = [t["status"] for t in json.loads(await bb.read_board(other_tag))["tasks"]]
+    results.append(ok(back == 1 and len(mine_ready) == 1 and other_after == other_before,
+                      "--reclaim 은 그 실행만 대기열로 되돌리고 남의 태그는 안 건드린다",
+                      f"되돌림 {back}개 · 남의 태그 {other_before} → {other_after}"))
+
+    closed = await bbm.close_run(RUN_TAG)
+    left = json.loads(await bb.read_board(RUN_TAG))["tasks"]
+    failed = [t for t in left if t["status"] == "failed"]
+    results.append(ok(closed >= 1 and len(failed) == closed,
+                      "--close 는 failed 로 닫을 뿐 행을 지우지 않는다 (왜 결과가 없는지 남는다)",
+                      f"닫힘 {closed}개 · 남은 failed 행 {len(failed)}개"))
+
+    # 검사가 만든 것은 남기지 않는다. 위에서 만든 두 번째 태그도 같이 지운다.
     await cleanup()
+    await cleanup_tag(other_tag)
     # sum(results) — True 는 1, False 는 0 이라 그대로 더하면 통과 개수가 된다.
     print(f"\n  {sum(results)}/{len(results)} 통과")
     # 하나라도 실패하면 0 이 아닌 값으로 끝낸다. CI 나 셸이 실패를 알아챌 수 있게.

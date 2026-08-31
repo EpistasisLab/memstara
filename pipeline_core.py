@@ -558,8 +558,11 @@ BOARD_SERVERS = {
 # 에이전트가 없는 일을 지어내거나 남의 종류를 집는다.
 _CLAIM_PREAMBLE = (
     "Your work comes from a shared board, not from this message.\n\n"
-    "1) Call claim_task with your own type. It hands you one task and marks it taken so "
-    "   nobody else picks it up.\n"
+    "1) Call claim_task with your own type **and the run_tag you were given in this "
+    "   message**. It hands you one task from that run and marks it taken so nobody "
+    "   else picks it up. Passing the run_tag matters: without it you may be handed a "
+    "   task left behind by an unrelated run, and the work you do will be filed under "
+    "   that run instead of this one.\n"
     "2) If it answers with a null task_id, there is nothing for you. **Stop there.** Do "
     "   not invent work, and do not claim a task of another type — that is somebody "
     "   else's job and taking it breaks the arrangement.\n"

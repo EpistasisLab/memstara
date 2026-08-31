@@ -187,11 +187,16 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
 
 
 @mcp.tool()
-async def claim_task(task_type: str) -> str:
+async def claim_task(task_type: str, run_tag: str = "") -> str:
     """Take one waiting task of your type, so nobody else can take it.
 
     Args:
         task_type: one of "data", "ml", "interpret" — the stage you are.
+        run_tag: the run you are working. Pass the one you were told to work and you
+            will only ever be handed tasks from it. Leaving it empty takes the oldest
+            waiting task of your type from *any* run — which is how a task abandoned
+            by some earlier, unrelated run ends up being done, and paid for, by this
+            one. Do not leave it empty when you were given a run tag.
 
     Returns:
         JSON with the task and everything earlier stages left on it, including
@@ -217,6 +222,19 @@ async def claim_task(task_type: str) -> str:
             #
             #   브레이크포인트로는 이 동작이 안 보인다 — 멈춰 있는 동안엔 경쟁이
             #   없기 때문이다. 보려면 psql 두 창을 띄워야 한다.
+            #
+            # The run_tag condition is what keeps one run out of another's work. Without
+            # it this picks the oldest ready row of the type from the whole board, and
+            # ORDER BY task_id means *oldest* — so a task abandoned by a run that died
+            # weeks ago is the first thing the next run reaches for. It then does that
+            # work, on that run's money, and files the result under the dead run's tag.
+            # run_lock() does not cover this: it only stops two drivers on the *same* tag.
+            #
+            # ↑ 이 run_tag 조건이 **실행끼리 서로의 일을 뺏지 않게** 막는 부분이다.
+            #   이게 없으면 판 전체에서 가장 오래된 대기 행을 집는데, ORDER BY task_id 라
+            #   **오래된 것부터**다. 즉 예전에 죽은 실행이 남긴 과제가 다음 실행이 가장
+            #   먼저 집는 것이 된다. 그 실행의 돈으로 남의 일을 하고, 결과는 죽은 실행의
+            #   태그로 적힌다. run_lock() 은 이걸 못 막는다 — 그건 **같은 태그**만 본다.
             async with conn.transaction():
                 row = await conn.fetchrow(
                     """
@@ -228,6 +246,8 @@ async def claim_task(task_type: str) -> str:
                     WHERE task_id = (
                         SELECT task_id FROM memstara_blackboard
                         WHERE task_type = $1 AND status = 'ready'
+                          -- 빈 문자열이면 예전처럼 판 전체를 본다(하위 호환).
+                          AND ($2 = '' OR run_tag = $2)
                         ORDER BY task_id
                         FOR UPDATE SKIP LOCKED
                         LIMIT 1
@@ -236,7 +256,7 @@ async def claim_task(task_type: str) -> str:
                               columns, y_column, okf_concept_ids, subset_path,
                               columns_used, auc, feature_importance
                     """,
-                    task_type,
+                    task_type, run_tag,
                 )
         finally:
             await conn.close()
@@ -393,15 +413,16 @@ async def submit_result(task_id: int, subset_path: str = "",
 
 
 @mcp.tool()
-async def count_waiting(task_type: str = "") -> str:
+async def count_waiting(task_type: str = "", run_tag: str = "") -> str:
     """How many tasks are waiting, and how many are being worked on.
 
     Args:
         task_type: restrict to one stage; "" counts every stage.
+        run_tag: restrict to one run; "" counts the whole board — including tasks left
+            behind by runs that ended, which is almost never the number you want.
 
     Returns:
-        JSON with counts per stage. The driving script uses this to decide who to
-        call next, and to know when everything is finished.
+        JSON with counts per stage.
     """
     try:
         conn = await asyncpg.connect(_dsn())
@@ -410,9 +431,10 @@ async def count_waiting(task_type: str = "") -> str:
                 """
                 SELECT task_type, status, count(*) AS n FROM memstara_blackboard
                 WHERE ($1 = '' OR task_type = $1)
+                  AND ($2 = '' OR run_tag = $2)
                 GROUP BY task_type, status
                 """,
-                task_type,
+                task_type, run_tag,
             )
         finally:
             await conn.close()

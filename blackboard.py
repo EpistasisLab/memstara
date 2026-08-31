@@ -62,6 +62,15 @@ Usage::
     python blackboard.py --drop-questions
                                      질문 은행을 지운다. --drop 은 이걸 건드리지 않는다.
 
+ 아래 셋은 판 전체가 아니라 **한 실행분만** 다룬다. 중단되거나 죽은 실행이 판에
+ 남긴 과제를 치우는 용도다.
+
+    python blackboard.py --orphans   안 끝난 과제가 어느 실행에 몇 개 남았는지 본다.
+    python blackboard.py --reclaim TAG
+                                     그 실행의 '하는 중' 을 대기열로 되돌린다.
+    python blackboard.py --close TAG 그 실행의 안 끝난 과제를 failed 로 닫는다.
+                                     **행은 지우지 않는다** — 왜 결과가 없는지 남긴다.
+
 ==============================================================================
  이 파일을 읽는 법
 ==============================================================================
@@ -78,7 +87,9 @@ Usage::
  BoardBusy              같은 run_tag 를 다른 실행이 이미 쥐고 있을 때 나는 예외.
  run_lock(run_tag)      한 run_tag 는 한 번에 한 실행만 — 자문 잠금(advisory lock).
  create / drop / show   표 만들기 / 지우기 / 현황 보기.
- main()                 명령줄 인자를 읽어 위 셋 중 하나를 부른다.
+ orphans()              끝나지 않은 채 판에 남은 과제를 태그별로 센다. 읽기만 한다.
+ reclaim / close_run    한 실행분만 되돌리거나 닫는다. 다른 태그는 건드리지 않는다.
+ main()                 명령줄 인자를 읽어 위 중 하나를 부른다.
 
  놓치기 쉬운 것
  --------------
@@ -597,16 +608,134 @@ async def show() -> None:
         await conn.close()
 
 
+async def orphans() -> int:
+    """실행이 끝났는데 판에 남아 있는 과제를 태그별로 세어 보여 준다. 읽기만 한다.
+
+    A run that is killed, or that dies before its board drains, leaves rows behind.
+    Nothing removes them: the driver's `reclaim_stalled` only looks at its own run_tag
+    and only runs inside the work loop, so a fresh run with a fresh tag never sees them.
+    Until `claim_task` was scoped by run_tag those leftovers were also the *first* thing
+    the next run would claim.
+
+    Returns:
+        How many leftover tasks there are, so the caller can use it as an exit code.
+
+    ↑ 죽거나 중단된 실행이 판에 남긴 종이를 보여 준다. 아무도 자동으로 치우지 않는다 —
+      드라이버의 `reclaim_stalled` 는 자기 태그만, 그것도 일 루프 안에서만 보기 때문이다.
+    """
+    conn = await asyncpg.connect(dsn())
+    try:
+        # ready 와 in_progress 만. done 은 끝난 것이고 failed 는 **이미 닫힌 것**이라
+        # 둘 다 아무도 안 기다린다. failed 를 여기 세면 --close 로 치운 뒤에도 목록이
+        # 안 비어서, "판이 깨끗하다" 를 이 명령으로 확인할 수 없게 된다.
+        rows = await conn.fetch(
+            "SELECT run_tag, task_type, status, count(*) AS n, "
+            "       max(updated_at) AS last "
+            "  FROM memstara_blackboard WHERE status IN ('ready', 'in_progress') "
+            " GROUP BY run_tag, task_type, status "
+            " ORDER BY run_tag, task_type, status"
+        )
+    finally:
+        await conn.close()
+
+    if not rows:
+        print("남은 과제 없음 — 판이 깨끗하다")
+        return 0
+    total = sum(r["n"] for r in rows)
+    print(f"끝나지 않은 과제 {total}개")
+    for r in rows:
+        print(f"   {r['run_tag']:<22} {r['task_type']:<10} {r['status']:<12} "
+              f"{r['n']:>3}개   마지막 {r['last']:%Y-%m-%d %H:%M}")
+    print("\n   --reclaim TAG 로 대기열에 되돌리거나, --close TAG 로 닫는다")
+    return total
+
+
+async def reclaim(run_tag: str) -> int:
+    """한 태그의 `in_progress` 를 전부 `ready` 로 되돌린다.
+
+    `03_board_pipeline.py` 의 `reclaim_stalled` 와 같은 UPDATE 지만 **시간 조건이 없다.**
+    거기서는 지금 일하는 중인 과제를 뺏지 않으려고 stale_after 초를 기다리는데, 여기서는
+    사람이 "그 실행은 끝났다" 를 알고 부르는 것이므로 기다릴 이유가 없다.
+
+    Args:
+        run_tag: 되돌릴 실행의 태그. 다른 태그는 건드리지 않는다.
+
+    Returns:
+        되돌린 개수.
+    """
+    conn = await asyncpg.connect(dsn())
+    try:
+        return await conn.fetchval(
+            """
+            WITH returned AS (
+                UPDATE memstara_blackboard
+                   SET status = 'ready', claimed_at = NULL, updated_at = now()
+                 WHERE run_tag = $1 AND status = 'in_progress'
+             RETURNING 1
+            ) SELECT count(*) FROM returned
+            """,
+            run_tag,
+        )
+    finally:
+        await conn.close()
+
+
+async def close_run(run_tag: str) -> int:
+    """한 태그의 안 끝난 과제를 `failed` 로 닫는다. **지우지는 않는다.**
+
+    The row stays so that "why is there no result for trial 3" is answerable later. A
+    DELETE would make the board look clean and the results look complete, which is the
+    same lie by omission the run report is built to avoid.
+
+    Args:
+        run_tag: 닫을 실행의 태그. 다른 태그는 건드리지 않는다.
+
+    Returns:
+        닫은 개수.
+
+    ↑ 행을 남기는 이유 — 나중에 "3번 시행은 왜 결과가 없나" 를 물었을 때 답할 수 있어야
+      한다. 지워 버리면 판은 깨끗해 보이고 결과는 완전해 보이는데, 그건 거짓말이다.
+    """
+    conn = await asyncpg.connect(dsn())
+    try:
+        return await conn.fetchval(
+            """
+            WITH closed AS (
+                UPDATE memstara_blackboard
+                   SET status = 'failed',
+                       error  = CASE WHEN error = '' THEN 'closed by blackboard.py --close'
+                                     ELSE error END,
+                       updated_at = now()
+                 -- 이미 failed 인 것은 다시 안 센다. 두 번 부르면 "2개 닫았다" 가
+                 -- 나오는데, 실제로 새로 닫힌 것은 없으므로 그건 거짓 보고다.
+                 WHERE run_tag = $1 AND status IN ('ready', 'in_progress')
+             RETURNING 1
+            ) SELECT count(*) FROM closed
+            """,
+            run_tag,
+        )
+    finally:
+        await conn.close()
+
+
 def main() -> int:
     """명령줄에서 부를 때의 입구. 0을 돌려주면 정상, 1이면 취소된 것이다."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    # 셋 중 **하나만** 골라야 한다. 하나도 안 고르는 것도 안 된다.
+    # 이 중 **하나만** 골라야 한다. 하나도 안 고르는 것도 안 된다.
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--create", action="store_true", help="create the tables (idempotent)")
     g.add_argument("--drop", action="store_true", help="drop them — asks first")
     g.add_argument("--show", action="store_true", help="what exists and what is on the board")
     g.add_argument("--drop-questions", action="store_true",
                    help="empty the question bank — separate from --drop on purpose")
+    # 아래 셋은 판 전체가 아니라 **한 실행분만** 다룬다. --drop 계열과 달리
+    # 다른 태그의 행에는 손대지 않는다.
+    g.add_argument("--orphans", action="store_true",
+                   help="list tasks left unfinished by runs that ended, per run_tag")
+    g.add_argument("--reclaim", metavar="TAG",
+                   help="put that run's in_progress tasks back in the queue")
+    g.add_argument("--close", metavar="TAG",
+                   help="mark that run's unfinished tasks failed — the rows stay")
     ap.add_argument("--yes", action="store_true", help="skip the question on --drop")
     args = ap.parse_args()
 
@@ -634,6 +763,23 @@ def main() -> int:
                 return 1
         asyncio.run(drop_questions())
         print("dropped questions")
+    elif args.orphans:
+        # 읽기만 하므로 묻지 않는다.
+        asyncio.run(orphans())
+    elif args.reclaim:
+        # 되돌리기는 되돌릴 수 있는 일이라(다시 집어 가면 그만이다) 묻지 않는다.
+        n = asyncio.run(reclaim(args.reclaim))
+        print(f"'{args.reclaim}' 의 과제 {n}개를 대기열로 되돌렸다")
+    elif args.close:
+        # 닫기는 그 실행을 끝난 것으로 만든다. 행은 남지만 다시 처리되지는 않으므로
+        # --drop 과 같은 방식으로 한 번 묻는다.
+        if not args.yes:
+            print(f"'{args.close}' 의 안 끝난 과제를 전부 failed 로 닫습니다 (행은 남습니다).")
+            if input("정말 닫을까요? (yes) ").strip() != "yes":
+                print("취소")
+                return 1
+        n = asyncio.run(close_run(args.close))
+        print(f"'{args.close}' 의 과제 {n}개를 failed 로 닫았다")
     else:
         asyncio.run(show())
     return 0
