@@ -37,145 +37,152 @@ Run::
 
 
 ==============================================================================
- 이 파일을 읽는 법
+ How to read this file
 ==============================================================================
 
- ■ 연구실 하나라고 생각하면 쉽다
+ - Think of it as one laboratory
 
- 사람이 다섯 명 있고, 벽에 게시판이 하나 있다.
+ There are five people, and one board on the wall.
 
-   가설 담당    논문을 읽고 "이 변수들이 답일 것 같다" 고 제안한다
-   데이터 담당  그 변수들만 원본에서 오려낸다
-   학습 담당    오려낸 것으로 모델을 돌려 점수를 낸다
-   해석 담당    나온 점수를 말로 푼다
-   보고 담당    전부 모아 한 장으로 정리한다
+   hypothesis    reads the papers and proposes "these variables look like the answer"
+   data          cuts just those variables out of the original
+   ml            runs a model on what was cut and produces a score
+   interpreter   puts the score that came out into words
+   reporter      gathers it all and writes it up on one page
 
- **아무도 다음 사람에게 직접 건네주지 않는다.** 일을 게시판에 붙여 두면 다음
- 사람이 알아서 떼어 간다. 종이 한 장에 "다음은 누구 차례" 가 적혀 있어서,
- 각자는 자기 종류만 알면 된다.
+ **Nobody hands anything to the next person directly.** Work is pinned to the board and
+ the next person takes it down themselves. Each sheet says "whose turn is next", so each
+ person only has to know their own type.
 
- 그렇게 만든 이유는 셋이다.
-   · 누가 무엇을 했는지 **종이에 남는다**
-   · 한 명이 죽어도 그 종이는 게시판에 그대로 있다 — 다시 시작하면 이어서 한다
-   · 나중에 사람을 늘리기 쉽다
-
-
- ■ 이 파일을 켜면 벌어지는 일
-
-   ① 다섯 사람을 부른다        provision_board_agents()
-      각자가 무슨 일을 하는 사람인지 적힌 역할 설명서를 꺼내 온다.
-      처음이면 새로 쓴다.
-
-   ② 장비 네 대를 켠다          setup_tools()
-      사람은 맨손으로 일을 못 한다. 논문 창고 · 데이터 기계 · 학습 기계 ·
-      게시판 창구 — 이 넷을 켠다.
-
-   ③ 누가 어느 버튼을 쓸지 정한다   tools_for()
-      가설 담당에게는 「오려내기」 버튼을 **안 준다.** 주면 자기가 다 해 버리고,
-      그러면 나중에 결과가 누구 판단이었는지 알 수 없어진다.
-
-   ④ 첫 지시서를 게시판에 붙인다     (씨뿌리기)
-      가설 담당을 불러 "이런 관점에서 생각해 보고 게시판에 붙여 주세요" 라고
-      시킨다. 시행 수만큼 반복한다.
-
-   ⑤ 게시판이 빌 때까지 돌린다      (작업 루프)
-      게시판을 보고 → 할 사람이 있으면 부르고 → 없으면 잠깐 기다린다.
-      이걸 게시판이 빌 때까지 반복한다.
-
-   ⑥ 마지막에 정리한다              (보고)
-      보고 담당이 완료된 것들을 모아 한 장으로 쓴다.
-
- `--report-only` 로 돌리면 ④⑤를 건너뛰고 **⑥만** 한다. 이미 끝나 있는 실행의
- 결과를 모아 정리하는 것이라 사람을 한 명만 부른다 — 그래서 값이 싸다.
-
- `--waves` 는 **상한이지 목표가 아니다.** 지식원은 유한하므로 질문은 언젠가 마르고,
- 그때 이 프로그램은 은행에 있던 질문을 다시 돌리기 시작한다. 연속 `--stop-after-dry`
- 번(기본 2) 새 질문이 안 나오면 남은 파도를 시작하지 않고 그 자리에서 멈추고 말한다.
- `--stop-after-dry 0` 이면 안 멈춘다. 이것이 없던 동안에는 마른 실행이 진전 중인
- 실행과 화면에서 구별되지 않았다 — 둘 다 그냥 계속 돌았다.
-
- **사람 없이 이어 돌리기.** 이 프로그램에는 데몬도 cron 도 없다. 유한한 지식원에
- 무한 루프는 답이 아니고, 여러 번 돌리고 싶으면 셸 반복문이 더 안전하다(중간에 죽어도
- 상태가 DB 에 남는다). 대신 **실행 하나가 끝난 자리가 다음 실행에 깨끗하게 넘어가도록**
- 세 가지를 이 파일과 창구가 지킨다:
-
-   · `claim_task` 에 `run_tag` 를 실어 보낸다 — 남의 실행이 남긴 과제를 집지 않는다.
-     이게 없으면 오래된 것부터 집으므로, 죽은 실행의 과제가 **가장 먼저** 걸린다.
-   · 시작할 때 자기 태그의 멈춘 과제를 한 번 되찾는다 — 같은 `--run-tag` 로 다시
-     돌리면 "이어서 하기" 가 된다.
-   · `--max-attempts` 로 끝내 안 되는 과제를 닫는다 — 사람이 안 보고 있어도 끝난다.
-
- 이미 남아 있는 남의 고아를 치우는 것은 `blackboard.py --orphans / --reclaim / --close`
- 가 한다. 이 파일은 자기 실행분만 본다.
+ There are three reasons it was built that way.
+   · what each person did **stays on paper**
+   · if one of them dies the sheet is still on the board — restart and it carries on
+   · adding more people later is easy
 
 
- ■ 놓치기 쉬운 것 하나
+ - What happens when this file is started
 
- **프로그램이 다섯 개 돈다.** 이 파일이 하나이고, ②에서 켜는 장비 네 대가 각각
- 별개의 프로그램이다. 그래서 이 파일에 디버거를 붙여도 `tools_*.py` 안에서는
- 멈추지 않는다 — 남의 프로그램이기 때문이다.
+   (1) call the five people          provision_board_agents()
+       fetch the role description that says what kind of work each of them does.
+       If it is the first time, write it fresh.
 
- 그 안에서 멈추려면 두 가지 길이 있다:
-   · `python debug_harness.py data`  — 장비를 이 프로그램 안으로 불러들여 쓴다
-   · `MEMSTARA_DEBUGPY=data` 로 켜고 디버거를 그 장비에 따로 붙인다
+   (2) switch on the four machines   setup_tools()
+       people cannot work bare-handed. The paper store, the data machine, the learning
+       machine, the board window — these four go on.
+
+   (3) decide who gets which button  tools_for()
+       the hypothesis person is **not given** the "cut it out" button. Give it to them
+       and they will do the whole thing themselves, and then whose judgement produced
+       the result can no longer be told.
+
+   (4) pin the first instruction to the board     (seeding)
+       call the hypothesis person and say "think about it from this perspective and pin
+       it to the board". Repeat once per trial.
+
+   (5) run until the board is empty               (the work loop)
+       look at the board -> if there is somebody to do it, call them -> if not, wait a
+       moment. Repeat until the board is empty.
+
+   (6) wrap up at the end                          (the report)
+       the reporter gathers what finished and writes it on one page.
+
+ Run with `--report-only` and it skips (4) and (5) and does **only (6)**. It is
+ gathering the results of a run that already finished, so it calls only one person —
+ which is why it is cheap.
+
+ `--waves` is **a ceiling, not a target.** The knowledge source is finite, so the
+ questions dry up eventually, and at that point the program starts recycling questions
+ out of the bank. If no new question comes out for `--stop-after-dry` rounds in a row
+ (default 2) it does not start the remaining waves; it stops right there and says so.
+ `--stop-after-dry 0` never stops. While this was absent, a dried-out run was
+ indistinguishable on screen from a run making progress — both just kept going.
+
+ **Carrying on without a person.** This program has no daemon and no cron. An infinite
+ loop is not the answer for a finite knowledge source, and if you want to run it several
+ times a shell loop is safer (state stays in the DB even if it dies mid-way). What this
+ file and the window do instead is keep three things so that **the place one run left
+ off passes cleanly to the next**:
+
+   · `run_tag` is sent along with `claim_task` — a task another run left behind is never
+     picked up. Without it the oldest is picked first, so a dead run's tasks catch
+     **first of all**.
+   · at startup it reclaims its own tag's stalled tasks once — running again with the
+     same `--run-tag` becomes "carry on".
+   · `--max-attempts` closes a task that never comes right — it ends with nobody watching.
+
+ Clearing up somebody else's orphans that are already there is what
+ `blackboard.py --orphans / --reclaim / --close` does. This file looks only at its own run.
+
+
+ - One thing that is easy to miss
+
+ **Five programs are running.** This file is one, and the four machines switched on in
+ (2) are each a separate program. So attaching a debugger to this file will not stop
+ inside `tools_*.py` — those are somebody else's program.
+
+ There are two ways to stop in there:
+   · `python debug_harness.py data`  — pull the machine into this program and use it here
+   · turn on `MEMSTARA_DEBUGPY=data` and attach a debugger to that machine separately
 
 
 
 
- ■ 코드 구조
+ - Code structure
 
-   main()             인자를 읽고, 환경을 검사하고, 잠금을 잡고 run() 을 부른다
-     └ run()          위 ①~⑥ 이 순서대로 들어 있다
+   main()             reads the arguments, checks the environment, takes the lock,
+                      calls run()
+     └ run()          holds (1) through (6) above, in that order
 """
 
 from __future__ import annotations
 
-# ---- 표준 라이브러리 --------------------------------------------------------
-import argparse   # 명령줄 인자 (--trials 3 같은 것)
-import asyncio    # 비동기 실행. 이 파일의 함수 대부분이 async 다
-import csv        # 데이터셋의 첫 줄(컬럼 이름)만 읽는 데 쓴다
-import json       # 도구가 돌려주는 JSON 문자열을 파이썬 값으로
-import os         # 환경변수 읽기
-import re         # 비밀번호 가리기 정규식 하나에만 쓴다
-import sys        # sys.executable (지금 이 파이썬의 경로) 과 stderr 출력
-import time       # 단계마다 걸린 시간을 재는 데만 쓴다
-import uuid       # 추적 파일을 쓸 때 run_id 문자열을 UUID 로 되돌린다
+# ---- standard library -------------------------------------------------------
+import argparse   # command-line arguments (things like --trials 3)
+import asyncio    # async execution. Most functions in this file are async
+import csv        # used to read only the dataset's first line (the column names)
+import json       # the JSON strings the tools return, turned into Python values
+import os         # reading environment variables
+import re         # used for exactly one password-masking regex
+import sys        # sys.executable (the path of this Python) and stderr output
+import time       # used only to measure how long each stage took
+import uuid       # turns the run_id string back into a UUID when writing trace files
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-# ---- 바깥 패키지 ------------------------------------------------------------
-import asyncpg    # PostgreSQL 비동기 드라이버. 판을 직접 조회할 때만 쓴다
+# ---- outside packages -------------------------------------------------------
+import asyncpg    # PostgreSQL async driver. Used only to query the board directly
 
-# ---- 이 폴더의 다른 파일들 --------------------------------------------------
-# bootstrap 을 **가장 먼저** 불러온다. 그 안에서 LITELLM_LOG 을 설정하는데, litellm 은
-# import 되는 순간 그 값을 읽는다. 아래 pipeline_core 가 litellm 을 끌고 오므로,
-# 순서가 뒤바뀌면 LLM 요청 본문이 한 건도 안 남는다 — 아무 오류 없이.
-import bootstrap  # noqa: F401  (import 자체가 목적이다)
+# ---- the other files in this folder -----------------------------------------
+# bootstrap is imported **first of all**. It sets LITELLM_LOG, and litellm reads that
+# value the moment it is imported. pipeline_core below drags litellm in, so with the
+# order reversed not one LLM request body is kept — and with no error at all.
+import bootstrap  # noqa: F401  (the import itself is the point)
 
-# blackboard.py — 판 테이블의 정의와 접속 정보
+# blackboard.py — the board table's definition and connection details
 from blackboard import BoardBusy, dsn, run_lock
-# logging_setup.py — 실행마다 폴더를 만들고 로그를 파일로도 남긴다
+# logging_setup.py — makes a directory per run and also keeps the log in a file
 from logging_setup import drain_llm_requests, new_run_dir, setup_logging, tee_console
-# pipeline_core.py — 두 파이프라인(02, 03)이 공유하는 부분
+# pipeline_core.py — the part the two pipelines (02, 03) share
 from pipeline_core import (
-    BOARD_SERVERS,           # 단계별로 접근이 허용된 도구 서버
-    BOARD_TOOLS,             # 단계별로 허용된 개별 도구 이름
-    PERSPECTIVES,            # 시행마다 다르게 주는 관점 문구
-    perspective_for,         # 시행 번호 → 관점 문구
-    provision_board_agents,  # 에이전트 다섯을 만들거나 찾아온다
-    temperature_for,         # 시행 번호 → 온도
-    tools_for,               # 레지스트리에서 쓸 도구만 골라낸다
+    BOARD_SERVERS,           # the tool servers each stage is allowed to reach
+    BOARD_TOOLS,             # the individual tool names each stage is allowed
+    PERSPECTIVES,            # the perspective wording given differently per trial
+    perspective_for,         # trial number -> perspective wording
+    provision_board_agents,  # creates or fetches the five agents
+    temperature_for,         # trial number -> temperature
+    tools_for,               # picks out of the registry only the tools to be used
 )
-from settings import Settings   # .env 를 읽어 core 에 넘길 설정 객체
+from settings import Settings   # the settings object that reads .env and hands it to core
 
-# .env 가 둘이라 프로그램이 직접 읽는다 — main() 의 주석 참고.
+# There are two .env files, so the program reads them itself — see the comment in main().
 from dotenv import load_dotenv
-# 실행 하나를 사람이 읽을 수 있게 풀어 쓰는 함수. dump_all 이 아니라 render 를 쓴다 —
-# dump_all 은 02 경로의 todo_rows.json 모양을 전제하기 때문이다. write_traces() 참고.
+# The function that writes one run out in a form a person can read. render is used
+# rather than dump_all — dump_all presumes the todo_rows.json shape of the 02 path.
+# See write_traces().
 from trace_run import render
 
-# ---- agentic-core (옆 저장소, editable 설치) --------------------------------
+# ---- agentic-core (the repo next door, installed editable) ------------------
 from agentic_core import configure
 from agentic_core.mcp.registry import MCPServerRegistry
 from agentic_core.runner import create_run, execute_run
@@ -186,84 +193,84 @@ from agentic_core.services.mcp_service import (
     update_server,
 )
 
-# 이 파일이 있는 폴더. 도구 서버의 경로를 만들 때 쓴다.
+# The folder this file is in. Used to build the paths of the tool servers.
 HERE = Path(__file__).parent
 OUT_DIR = HERE / "outputs"
 
 # The stages that take work off the board, in the order a task passes through them.
 #
-# ↑ 게시판에서 **일을 떼어 가는** 사람들.
 #
-#   사람은 다섯인데 여기는 셋뿐이다. 빠진 둘은 이유가 **서로 다르다.**
+# There are five people but only three here. The two that are missing are missing for
+# **different reasons.**
 #
-#   ┌ 가설 담당이 빠진 이유
-#   │   그 사람은 일을 떼어 가는 게 아니라 **붙이는** 사람이다. 게시판이 비어
-#   │   있을 때 첫 종이를 만들어 붙인다. 그러니 "떼어 갈 게 있나" 를 물을 이유가
-#   │   없다 — 물어봐야 언제나 없다.
+#   ┌ why the hypothesis person is missing
+#   │   they do not take work off, they **put it on.** When the board is empty they
+#   │   make the first sheet and pin it up. So there is no reason to ask them "is there
+#   │   anything to take" — ask and the answer is always no.
 #   │
-#   │   그리고 붙이는 시점도 다르다. 가설 담당은 아래 ④ 에서 **미리 정해진 횟수만큼**
-#   │   불린다(시행 3회면 세 번). 반면 이 셋은 ⑤ 에서 **게시판 상태를 보고** 필요할
-#   │   때만 불린다.
+#   │   the timing of the pinning is different too. The hypothesis person is called in
+#   │   (4) below **a fixed number of times** (three trials, three calls). These three,
+#   │   by contrast, are called in (5) only when needed, **after looking at the board.**
 #   │
-#   └ 보고 담당이 빠진 이유
-#       그 사람은 게시판을 아예 안 본다. **완료 서랍**(끝난 것만 모인 곳)을 읽는다.
-#       게시판에 종이가 남아 있든 말든 상관없고, 그래서 맨 마지막에 딱 한 번 불린다.
-#       ⑤ 루프가 끝난 뒤 ⑥ 에서 부른다.
+#   └ why the reporter is missing
+#       they do not look at the board at all. They read the **finished drawer** (where
+#       only the completed ones collect). Whether sheets are left on the board makes no
+#       difference to them, which is why they are called exactly once, at the very end,
+#       in (6) after the (5) loop finishes.
 #
-#   순서도 그냥 나열이 아니다. 종이 한 장이 실제로 지나가는 순서이고, ⑤ 의 루프가
-#   **매 바퀴 이 순서대로** 훑는다. 그래서 운이 좋으면 한 바퀴에 종이 한 장이
-#   데이터 → 학습 → 해석까지 내리 지나갈 수 있다. 순서를 뒤집으면 그런 일이
-#   안 생기고 바퀴 수만 늘어난다.
+#   The order is not just a listing either. It is the order one sheet actually travels
+#   in, and the loop in (5) sweeps **in this order every lap.** So with luck, in one lap
+#   a single sheet can pass straight through data -> ml -> interpretation. Reverse the
+#   order and that never happens; only the lap count goes up.
 CLAIMING_STAGES = ("data", "ml", "interpreter")
 
 # How long to wait when every remaining task is in progress and none is stale yet.
-#
-# ↑ 게시판에 남은 것이 전부 "누군가 하고 있는 중" 일 때 **몇 초 쉴까**.
-#   쉬지 않고 계속 게시판만 들여다보면 아무 소득 없이 컴퓨터만 바쁘다.
+# Staring at the board without a pause keeps the computer busy for no gain.
 POLL_SECONDS = 15
 
-# ↑ **사람 이름 → 종이에 적히는 이름.**
+# **The person's name -> the name written on the sheet.**
 #
-#   왜 이런 표가 필요한가 — 두 이름이 항상 같지는 않기 때문이다.
+#   Why such a table is needed — the two names are not always the same.
 #
-#       사람 이름        종이에 적히는 이름
-#       data          →  data          같다
-#       ml            →  ml            같다
-#       interpreter   →  interpret     **다르다**  ← 이것 하나 때문에 표가 있다
+#       person's name      name on the sheet
+#       data          ->   data          same
+#       ml            ->   ml            same
+#       interpreter   ->   interpret     **different**  <- the table exists for this one
 #
-#   마지막 하나만 다르다. 그런데 그 하나 때문에 `counts["interpreter/ready"]` 를
-#   찾으면 언제나 0 이 나오고, 해석 담당이 영영 안 불린다. 아무 오류도 없이.
-#   그래서 헷갈릴 여지를 없애려고 표로 못박아 둔다.
+#   Only the last one differs. But because of that one, looking up
+#   `counts["interpreter/ready"]` always gives 0 and the interpreter is never called.
+#   With no error at all. So it is nailed down in a table to leave no room for confusion.
 #
-#   여기도 셋뿐인 이유는 위 CLAIMING_STAGES 와 같다 — 가설 담당과 보고 담당은
-#   게시판에서 종이를 떼어 가지 않으므로 찾아볼 일이 없다.
+#   There are only three here for the same reason as CLAIMING_STAGES above — the
+#   hypothesis person and the reporter do not take sheets off the board, so there is
+#   never anything to look up for them.
 #
-#   참고로 게시판의 종이에 적힐 수 있는 이름은 넷이다
-#   (blackboard.py 의 TASK_TYPES: hypothesis · data · ml · interpret).
-#   `hypothesis` 는 종이의 **첫 상태**로만 쓰이고 곧바로 `data` 로 넘어간다.
+#   For reference, four names can appear on a sheet on the board (TASK_TYPES in
+#   blackboard.py: hypothesis · data · ml · interpret). `hypothesis` is used only as a
+#   sheet's **first state** and moves straight on to `data`.
 STAGE_TASK_TYPE = {"data": "data", "ml": "ml", "interpreter": "interpret"}
 
 
 # --------------------------------------------------------------------------- #
-#  화면에 단계를 표시하는 것들
+#  The things that show the stages on screen
 # --------------------------------------------------------------------------- #
 #
-# 왜 필요한가 — 디버거로 따라갈 때 화면이 로그로 가득 차서, 지금 어느 단계인지
-# 눈으로 찾기가 어렵다. 맨 위 「이 파일을 읽는 법」 의 ①~⑥ 이 화면에도 그대로
-# 보이게 한다.
+# Why they are needed — following along in a debugger, the screen fills with logs and
+# finding by eye which stage it is in is hard. These make (1) through (6) of "How to
+# read this file" at the top visible on the screen as well.
 #
-# stdout 으로 나간다. 이건 부모 프로세스이므로 상관없다 — MCP 프로토콜이 지나가는
-# 것은 자식들의 stdout 이다.
+# They go out on stdout. That is fine because this is the parent process — what the MCP
+# protocol travels over is the children's stdout.
 
 _STEP_STARTED: dict[str, float] = {}
 
 
 def step(number: str, title: str, detail: str = "") -> None:
-    """한 단계의 시작을 굵게 표시한다.
+    """Mark the start of a stage boldly.
 
-    예)
+    e.g.
         ══════════════════════════════════════════════════════════
-         ② 장비 네 대를 켠다
+         (2) switch on the four machines
         ══════════════════════════════════════════════════════════
     """
     print()
@@ -274,32 +281,34 @@ def step(number: str, title: str, detail: str = "") -> None:
 
 
 def done(number: str, result: str = "") -> None:
-    """방금 끝난 단계의 결과와 걸린 시간을 한 줄로.
+    """The result of the stage just finished and how long it took, on one line.
 
-    시간을 같이 찍는 이유 — 어디서 오래 걸리는지가 눈에 보여야 한다. 대개
-    LLM 을 부르는 단계가 나머지 전부를 합친 것보다 오래 걸린다.
+    Why the time is printed with it — where the time goes has to be visible. Usually the
+    stage that calls the LLM takes longer than all the rest put together.
     """
     took = time.monotonic() - _STEP_STARTED.get(number, time.monotonic())
-    print(f"   ✓ {result}" + f"   ({took:.1f}초)" if result else f"   ✓ ({took:.1f}초)")
+    print(f"   ✓ {result}" + f"   ({took:.1f}s)" if result else f"   ✓ ({took:.1f}s)")
 
 
 def note(text: str) -> None:
-    """단계 안에서 진행 상황을 한 줄 알린다. 들여쓰기로 단계에 속함을 보인다."""
+    """Report progress within a stage on one line. The indent shows it belongs to the stage."""
     print(f"   · {text}")
 
 
 def _redacted_dsn() -> str:
     """The board's address with the password removed, safe to print in an error."""
-    # postgresql://사용자:비밀번호@호스트/디비  →  postgresql://사용자:***@호스트/디비
-    # 오류 메시지에 접속 주소를 찍어야 하는데 비밀번호까지 찍히면 안 되기 때문이다.
+    # postgresql://user:password@host/db  ->  postgresql://user:***@host/db
+    # The connection address has to appear in the error message, but the password
+    # must not go with it.
     return re.sub(r"://([^:/@]+):[^@]*@", r"://\1:***@", dsn())
 
 
-# provider 마다 있어야 하는 자격증명. `--provider` 로 고른 것만 검사한다.
+# The credentials each provider needs. Only the one chosen with `--provider` is checked.
 #
-# 이 표가 없던 동안은 자격증명이 비어도 **첫 LLM 호출까지 가서야** 터졌다. 그때는
-# 이미 씨뿌리기 한 번을 쓴 뒤이고, 판에도 줄이 남는다. 시작 전에 멈추는 편이
-# 낫다 — 판이 깨끗하게 남고, 무엇을 채워야 하는지도 그 자리에서 알 수 있다.
+# While this table was absent, empty credentials did not blow up **until the first LLM
+# call.** By then one seeding had already been spent and a row was left on the board.
+# Stopping before anything starts is better — the board stays clean, and what has to be
+# filled in is known right there.
 _PROVIDER_KEYS = {
     "azure_foundry": ("ANTHROPIC_FOUNDRY_API_KEY", "ANTHROPIC_FOUNDRY_RESOURCE"),
     "anthropic": ("ANTHROPIC_API_KEY",),
@@ -310,45 +319,42 @@ _PROVIDER_KEYS = {
 async def check_environment(provider: str = "", y_column: str = "") -> list[str]:
     """Everything missing, reported at once, before anything starts.
 
-    ↑ **시작하기 전에 준비물을 전부 확인한다.**
+    What is missing is collected **all together** rather than reported one at a time.
+    Fix one, run again, find another one missing — that is what this removes.
 
-      빠진 것을 하나씩 알려 주지 않고 **한꺼번에** 모아 준다. 하나 고치고 다시
-      돌렸더니 또 하나가 없더라 — 이걸 없애려는 것이다.
-
-      빈 목록이 돌아오면 "준비 끝" 이라는 뜻이다.
+    An empty list coming back means "ready".
 
     Args:
-        provider: `--provider` 로 고른 값. 그것에 맞는 자격증명만 검사한다.
-            빈 문자열이면 자격증명 검사를 건너뛴다.
-        y_column: `--y-column` 으로 고른 결과변수. 데이터셋에 그 이름이 실제로
-            있는지 확인한다. 빈 문자열이면 건너뛴다.
+        provider: the value chosen with `--provider`. Only the credentials matching it
+            are checked. An empty string skips the credential check.
+        y_column: the outcome variable chosen with `--y-column`. Checks that the name
+            really is in the dataset. An empty string skips it.
     """
-    problems: list[str] = []   # 여기 담긴 게 하나라도 있으면 실행하지 않는다
+    problems: list[str] = []   # if there is even one thing in here, it does not run
 
     # Two databases, and they are not interchangeable. core keeps its agents and run
     # history in AGENTIC_DATABASE_URL; the board and the results table live in Memstara's
     # own server (MEMSTARA_DATABASE_URL, docker-compose.yml). Only the first is required
     # here — the second has a working default pointing at the compose container.
     #
-    # ↑ DB 가 둘이고 서로 바꿔 쓸 수 없다는 뜻이다.
-    #   AGENTIC_DATABASE_URL  : core 의 것 — 사람들의 역할 설명서와 실행 이력  (5453)
-    #   MEMSTARA_DATABASE_URL : 우리 것   — 게시판과 완료 서랍              (5463)
+    #   AGENTIC_DATABASE_URL  : core's  — the people's role descriptions and run history (5453)
+    #   MEMSTARA_DATABASE_URL : ours    — the board and the finished drawer              (5463)
     for name, hint in (
         ("AGENTIC_OKF_BUNDLE_DIR", "the knowledge source folder"),
         ("MEMSTARA_DATASET_PATH", "the dataset csv"),
         ("MEMSTARA_OUTPUT_DIR", "where sub-datasets go"),
         ("AGENTIC_DATABASE_URL", "core's own database — agents and run history"),
     ):
-        value = os.environ.get(name, "").strip()   # 없으면 빈 문자열
+        value = os.environ.get(name, "").strip()   # empty string if unset
         if not value:
             problems.append(f"{name} is not set — {hint}")
 
-    # LLM 자격증명. 이것이 비면 첫 에이전트 호출에서
-    # "Azure Anthropic requests require an api_base" 로 죽는다 — 씨뿌리기 한 번을
-    # 이미 쓴 뒤다. 여기서 잡으면 아무것도 안 쓰고 멈춘다.
+    # LLM credentials. Empty, and the first agent call dies with "Azure Anthropic
+    # requests require an api_base" — after one seeding has already been spent. Caught
+    # here, it stops without spending anything.
     #
-    # 이 값들은 `agentic-core/.env` 에 있다. main() 이 그 파일을 읽어 주므로
-    # 여기까지 왔는데도 비어 있다면 그 파일에 진짜로 없는 것이다.
+    # These values live in `agentic-core/.env`. main() reads that file, so if they are
+    # still empty by the time execution gets here, they really are not in it.
     for name in _PROVIDER_KEYS.get(provider, ()):
         if not os.environ.get(name, "").strip():
             problems.append(
@@ -357,11 +363,8 @@ async def check_environment(provider: str = "", y_column: str = "") -> list[str]
             )
 
     # Reachability, not just presence. An unreachable board fails later as an opaque
-    # tool error inside an agent, which reads like a prompt problem.
-    #
-    # ↑ 주소가 적혀 있는지만 보는 게 아니라 **실제로 붙어 보는** 이유다. 안 붙으면
-    #   나중에 사람이 일하는 도중에 알 수 없는 오류로 터지는데, 그러면 지시문이
-    #   잘못된 것처럼 보인다 — 엉뚱한 곳을 고치게 된다.
+    # tool error inside an agent, which reads like a prompt problem — and then the wrong
+    # place gets fixed.
     try:
         conn = await asyncpg.connect(dsn())
         await conn.close()
@@ -376,16 +379,10 @@ async def check_environment(provider: str = "", y_column: str = "") -> list[str]
     # after every hypothesis agent had already been paid for — and the run still ended
     # "successfully" and wrote a report full of nulls. The default is `outcome`, which
     # is not a column in this cohort, so the default path always went that way.
-    #
-    # ↑ **결과변수가 데이터에 실제로 있는지 여기서 본다.** 지금까지 아무도 안 봤다.
-    #   이름이 틀리면 데이터 단계 한복판에서야 걸리는데, 그때는 가설 담당을 이미
-    #   다 부른 뒤다. 그러고도 실행은 "성공" 으로 끝나고 빈 보고서를 쓴다.
-    #   기본값 `outcome` 은 이 코호트에 없는 이름이라 기본으로 돌리면 반드시 이 길이다.
     dataset = os.environ.get("MEMSTARA_DATASET_PATH", "").strip()
     if y_column and dataset:
         try:
             # Only the header row is read. The file is large and the answer is on line 1.
-            # ↑ 첫 줄만 읽는다. 파일이 크고 답은 첫 줄에 있다.
             with open(dataset, newline="", encoding="utf-8") as fh:
                 header = next(csv.reader(fh))
         except Exception as e:  # noqa: BLE001 - unreadable and absent are the same problem here
@@ -398,8 +395,6 @@ async def check_environment(provider: str = "", y_column: str = "") -> list[str]
                 # outcome column from its error for a reason (an agent that learns the
                 # name can use it as a feature); a console message is safer but the same
                 # restraint keeps 1,393 names out of the terminal.
-                #
-                # ↑ 비슷한 이름 몇 개만 준다. 컬럼 1,393개를 다 찍지 않는다.
                 near = [c for c in header if y_column.upper() in c.upper()][:5]
                 hint = f" Did you mean: {', '.join(near)}?" if near else ""
                 problems.append(
@@ -413,29 +408,32 @@ async def check_environment(provider: str = "", y_column: str = "") -> list[str]
 async def setup_tools() -> MCPServerRegistry:
     """Connect the five tool servers, including the board.
 
-    ↑ **장비 다섯 대를 켠다.** 여기서 프로그램이 여섯 개가 된다.
+    This is where there come to be six programs. Each of the five lines below starts a
+    separate program. They talk to each other by passing characters — not down anything
+    like a phone line, just one side writing and the other reading.
 
-      아래 다섯 줄이 각각 별개의 프로그램을 띄운다. 서로 글자를 주고받으며 대화한다
-      — 전화선 같은 것이 아니라, 그냥 한쪽이 쓰면 다른 쪽이 읽는 방식이다.
-
-      **그래서 이 파일에 디버거를 붙여도 저 안에서는 안 멈춘다.** 남의 프로그램이다.
+    **Which is why attaching a debugger to this file will not stop inside them.** They
+    are somebody else's program.
     """
-    # 디버거로 돌릴 때 자식마다 나오는 이 경고를 끈다:
+    # Turns off the warning each child emits when running under a debugger:
     #
     #     Debugger warning: It seems that frozen modules are being used ...
     #
-    # **여기서 정해야 한다.** debugpy 는 자식 파이썬이 시작하는 순간 검사하므로,
-    # 자식 코드 안에서 끄면 이미 늦다. 부모가 미리 넣어 두고 `settings.py` 의
-    # 허용 목록에 있어야 자식에게 도착한다.
+    # **It has to be set here.** debugpy checks the moment the child Python starts, so
+    # turning it off inside the child's code is already too late. The parent has to put
+    # it in beforehand, and it has to be on the allowlist in `settings.py` to reach the
+    # child at all.
     #
-    # 경고 내용 자체는 표준 라이브러리 **안쪽** 얘기라 우리 코드와 무관하다.
+    # The warning itself is about the **inside** of the standard library and has nothing
+    # to do with our code.
     os.environ.setdefault("PYDEVD_DISABLE_FILE_VALIDATION", "1")
 
-    registry = MCPServerRegistry()   # 연결된 서버와 그 도구 목록을 들고 있는 그릇
+    registry = MCPServerRegistry()   # the vessel holding the connected servers and their tools
 
-    # ↑ `sys.executable` 은 **지금 이 파일을 돌리고 있는 파이썬 그 자체**를 가리킨다.
-    #   그래서 이 파일을 어느 환경에서 띄우든 장비 다섯도 **같은 환경**으로 뜬다.
-    #   경로를 손으로 적어 두면 환경을 바꿀 때마다 여기도 고쳐야 한다.
+    # `sys.executable` points at **the very Python running this file.** So whatever
+    # environment this file is started in, the five machines come up in the **same**
+    # environment. Write the path by hand and it has to be edited here every time the
+    # environment changes.
     servers = [
         ("okf", f"{sys.executable} {HERE / 'tools_okf.py'}"),
         ("memstara-data", f"{sys.executable} {HERE / 'tools_data.py'}"),
@@ -449,34 +447,37 @@ async def setup_tools() -> MCPServerRegistry:
         ("semantic-matcher", f"{sys.executable} {HERE / 'tools_matcher.py'}"),
     ]
     for name, command in servers:
-        existing = await get_server_by_name(name)   # core DB 에 이미 등록돼 있나
+        existing = await get_server_by_name(name)   # already registered in core's DB?
         if existing is None:
-            # 처음 보는 서버 — 새로 등록한다
+            # A server never seen before — register it
             await register_server(name=name, transport="stdio", command=command, registry=registry)
         elif existing.command != command:
-            # ↑ 이미 등록돼 있는데 **띄우는 명령이 달라졌다** (예: 파이썬 경로가 바뀜).
-            #   갱신해 준다. 이 한 줄 덕분에 환경을 바꿔도 알아서 따라온다.
+            # Already registered, but **the command that starts it has changed** (the
+            # Python path moved, say). It gets updated. This one line is why changing
+            # environments is followed automatically.
             await update_server(existing.id, command=command, registry=registry)
 
-    # 등록된 서버들에 실제로 접속하고 도구 목록을 받아 온다.
+    # Actually connect to the registered servers and fetch their tool lists.
     failed = await hydrate_registry(registry=registry)
     if failed:
-        # 하나라도 못 붙으면 알린다. 여기서 멈추지는 않는다 — 나머지로 갈 수 있는
-        # 만큼은 가 보는 편이 무엇이 고장났는지 알기에 낫다.
+        # Say so if even one would not attach. It does not stop here — going as far as
+        # the rest allow is better for finding out what is broken.
         print(f"!! MCP reconnect failed: {failed}", file=sys.stderr)
     return registry
 
 
-# 이 실행에서 부른 에이전트를 부른 순서대로 모은다.
+# Collects the agents called in this run, in the order they were called.
 #
-# 왜 목록이고 왜 시행별이 아닌가 — 02 경로는 한 시행이 네 단계를 차례로 지나므로
-# `TodoRow.run_ids[stage]` 로 묶인다(pipeline_core.py:664). 판 경로는 다르다.
-# `call_agent(data, ...)` 한 번이 **어느 과제를 집을지는 그 시점의 판이 정한다.**
-# 그래서 시행으로 묶을 수가 없고, 부른 순서 그대로 남기는 것이 사실에 맞다.
+# Why a list and why not per trial — on the 02 path one trial passes through the four
+# stages in turn, so it groups by `TodoRow.run_ids[stage]` (pipeline_core.py:664). The
+# board path is different. **Which task a single `call_agent(data, ...)` picks up is
+# decided by the board at that moment.** So it cannot be grouped by trial, and keeping
+# the order they were called in is what matches the facts.
 #
-# 여기 모인 run_id 로 실행이 끝날 때 추적 파일을 쓴다. 그 파일에는 에이전트가 도구에
-# 무엇을 물었고 무엇이 돌아왔는지가 그대로 들어 있다 — 디버거로는 볼 수 없는 것이다.
-# 이걸 안 모으면 core DB 에 기록이 남아도 **어느 실행이 어느 단계였는지 알 수 없다.**
+# The run_ids collected here are what the trace files are written from at the end of the
+# run. Those files hold exactly what the agent asked each tool and what came back — which
+# a debugger cannot show. Without collecting them, the records stay in core's DB but
+# **which run was which stage cannot be told.**
 _CALLS: list[dict[str, Any]] = []
 
 
@@ -491,24 +492,25 @@ async def call_agent(
 ) -> str:
     """Run one agent once and return its text, or "" if the run did not complete.
 
-    ↑ **사람 한 명을 불러 일을 시키고, 그 사람이 한 말을 받아 온다.**
+    Call one person, set them to work, and take back what they said.
 
-      이 파일에서 **모델을 부르는 곳은 여기 하나뿐**이다. 돈과 시간이 드는 자리도
-      여기뿐이다. 나머지는 전부 게시판을 보거나 파일을 쓰는 일이라 공짜다.
+    **This is the only place in this file that calls a model.** It is the only place
+    that costs money and time. Everything else is looking at the board or writing files,
+    which is free.
 
     Args:
-        stage: 추적 파일 이름에 쓸 딱지 ("hypothesis" · "data" · "report" …).
-            비워 두면 순번만 붙는다.
+        stage: the label used in the trace file's name ("hypothesis" · "data" ·
+            "report" …). Left empty, only the sequence number is used.
     """
-    # 온도를 준 경우에만 덮어쓴다. None 이면 에이전트에 설정된 기본값을 쓴다.
+    # Overridden only if a temperature was given. None uses the agent's own default.
     overrides = {"temperature": temperature} if temperature is not None else None
 
-    # core 는 "실행(run)" 을 먼저 만들고 그 다음 실행한다. 두 단계로 나뉘어 있어서
-    # 실행 기록이 DB 에 남고, 나중에 trace_run.py 로 되짚어 볼 수 있다.
+    # core creates a "run" first and executes it afterwards. Being split in two is what
+    # leaves the record in the DB, so it can be retraced later with trace_run.py.
     run = await create_run(agent_id=agent_id, user_input=prompt, model_config_overrides=overrides)
 
-    # **실행 전에** 적는다. 실행 도중에 죽어도 그 run_id 는 남아야 하기 때문이다 —
-    # 죽은 실행이야말로 되짚어 봐야 하는 것이다.
+    # Written down **before** executing. The run_id has to survive even if it dies
+    # mid-execution — a run that died is exactly the one worth retracing.
     _CALLS.append(
         {
             "seq": len(_CALLS),
@@ -519,71 +521,75 @@ async def call_agent(
         }
     )
 
-    # ── 여기가 LLM 이 도는 곳이다 ───────────────────────────────────────────
-    # `execute_run` 은 agentic-core 의 함수다. 안에서 생각(reason) → 도구 호출(act)
-    # → 관찰을 반복한다. **그 안으로는 들어가지 않는다** — launch.json 의
-    # `justMyCode: true` 가 F11 을 여기서 넘겨 준다. 우리가 보는 것은 결과뿐이다.
+    # ── this is where the LLM runs ─────────────────────────────────────────
+    # `execute_run` is a function of agentic-core. Inside, it repeats reason -> act
+    # (calling a tool) -> observe. **We do not go inside it** — `justMyCode: true` in
+    # launch.json steps F11 over it here. What we see is only the result.
     #
-    # 안에서 무슨 일이 있었는지는 아래 _trace_one() 이 파일로 뽑아 준다.
+    # What happened inside is what _trace_one() below pulls out into a file.
     result = await execute_run(run_id=run.id, registry=registry, available_tools=tools)
     _CALLS[-1]["status"] = getattr(result.status, "value", str(result.status))
     if result.error:
         _CALLS[-1]["error"] = str(result.error)
 
-    # 실행이 끝나자마자 **이 한 건의** 추적 파일을 쓴다.
+    # The trace file for **this one call** is written the moment the run finishes.
     #
-    # 왜 여기서 쓰나 — 끝에 한꺼번에 쓰면 디버깅 중에는 아무 쓸모가 없다. 파일이
-    # 실행이 다 끝나야 생기기 때문이다. 여기서 쓰면 `await call_agent(...)` 다음 줄의
-    # 브레이크포인트에 멈춘 그 순간 `trace/00_hypothesis0.txt` 를 열어 방금 무슨
-    # 일이 있었는지 읽을 수 있다 — 어떤 도구를 어떤 인자로 불렀고 무엇이 돌아왔는지.
+    # Why write it here — writing them all at the end is useless while debugging,
+    # because the file does not exist until the whole run is over. Written here, the
+    # instant you stop at a breakpoint on the line after `await call_agent(...)` you can
+    # open `trace/00_hypothesis0.txt` and read what just happened — which tool was
+    # called with which arguments and what came back.
     await _trace_one(_CALLS[-1])
 
-    # 방금 그 사람이 실제로 무엇을 했는지 화면에 풀어 준다. 자르지 않은 판은
-    # trace/ 안의 파일에 있다.
+    # Spell out on screen what that person actually did. The untruncated version is in
+    # the file under trace/.
     await show_what_agent_did(_CALLS[-1])
 
-    # 실패했으면 빈 문자열. 부르는 쪽은 대개 결과를 판에서 다시 읽으므로,
-    # 여기서 예외를 던지기보다 조용히 비우고 다음 바퀴에 맡긴다.
+    # An empty string on failure. The caller usually re-reads the result off the board,
+    # so rather than throwing here it quietly empties out and leaves it to the next lap.
     if result.error or result.status != "completed":
         return ""
 
-    # 에이전트 출력은 보통 {"result": "..."} 모양의 JSON 이다. 아니면 원문 그대로.
+    # Agent output is usually JSON shaped like {"result": "..."}. Failing that, the raw text.
     try:
         return str(json.loads(result.output or "").get("result", ""))
     except (json.JSONDecodeError, TypeError, AttributeError):
         return result.output or ""
 
 
-# 추적 파일이 나갈 폴더. run() 이 시작할 때 정해 준다.
+# The folder the trace files go to. run() sets it when it starts.
 #
-# 전역인 이유 — `call_agent` 는 실행 폴더를 모른다. 인자로 넘기면 부르는 쪽 네 군데가
-# 전부 그것을 들고 다녀야 하는데, 그건 이 파일이 하려는 일과 상관없는 짐이다.
+# Why it is global — `call_agent` does not know the run directory. Passed as an
+# argument, all four call sites would have to carry it around, and that is baggage
+# unrelated to what this file is trying to do.
 _TRACE_DIR: Path | None = None
 
 
 def _short(value: Any, width: int = 88) -> str:
-    """값 하나를 한 줄로 줄인다. 줄바꿈은 공백으로 눕힌다."""
+    """Shorten one value to a single line. Line breaks are laid flat into spaces."""
     s = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
     s = " ".join(s.split())
     return s if len(s) <= width else s[:width] + " …"
 
 
 async def show_what_agent_did(call: dict[str, Any]) -> None:
-    """방금 부른 사람이 **실제로 무엇을 했는지** 화면에 풀어 준다.
+    """Spell out on screen **what the person just called actually did.**
 
-    왜 이게 필요한가 — 화면에 "보고 담당을 불렀다" 만 나오면, 그 사람이 어떤 도구를
-    어떤 값으로 부르고 무엇을 받았는지가 안 보인다. 그건 전부 core 안에서 일어나고,
-    디버거로도 안 보인다(core 는 블랙박스로 두기로 했다).
+    Why this is needed — if the screen says only "called the reporter", which tool that
+    person called with which values and what they got back is invisible. All of it
+    happens inside core, and a debugger does not show it either (core was left as a
+    black box on purpose).
 
-    core 가 `run_steps` 에 남긴 것을 읽어 사람이 읽을 수 있게 줄인다. 같은 내용의
-    **자르지 않은 판**은 `trace/NN_단계.txt` 에 따로 쓰인다 — 여기는 훑어보는 용도다.
+    It reads what core left in `run_steps` and shortens it into something readable. The
+    **untruncated version** of the same content is written separately to
+    `trace/NN_stage.txt` — this one is for skimming.
 
-    한 사람의 차례는 이렇게 생겼다:
+    One person's turn looks like this:
 
-        sense    받은 지시
-        reason   생각 —— "무엇을 하겠다"
-        act      행동 —— 도구를 부르거나, 최종 답을 낸다
-        reason   다시 생각 (도구 결과를 보고)
+        sense    the instruction received
+        reason   thinking —— "here is what I will do"
+        act      acting —— call a tool, or give the final answer
+        reason   thinking again (having seen the tool's result)
         act      ...
     """
     from agentic_core.runner import get_run, get_run_steps
@@ -592,64 +598,66 @@ async def show_what_agent_did(call: dict[str, Any]) -> None:
         rid = uuid.UUID(call["run_id"])
         run = await get_run(rid)
         steps = await get_run_steps(rid)
-    except Exception as e:  # noqa: BLE001 - 화면 표시가 실행을 막으면 안 된다
-        note(f"(무엇을 했는지 못 읽었다: {type(e).__name__})")
+    except Exception as e:  # noqa: BLE001 - showing it must not block the run
+        note(f"(could not read what it did: {type(e).__name__})")
         return
 
     tokens = (getattr(run, "token_usage", None) or {}) if run else {}
     cost = float(getattr(run, "cost_estimate", 0) or 0) if run else 0.0
-    print(f"   ┌─ {call['stage']} 가 한 일 "
-          f"(단계 {len(steps)}개 · 토큰 {tokens.get('prompt_tokens', 0)}/"
+    print(f"   ┌─ what {call['stage']} did "
+          f"({len(steps)} steps · tokens {tokens.get('prompt_tokens', 0)}/"
           f"{tokens.get('completion_tokens', 0)} · ${cost:.4f})")
 
     for s in steps:
         phase = getattr(s.phase, "value", str(s.phase))
-        # 필드 이름은 `output` 이다. DB 컬럼은 `output_data` 인데 파이썬 쪽은
-        # `output` 으로 노출된다 — 컬럼 이름을 보고 그대로 쓰면 AttributeError 다.
+        # The field is called `output`. The DB column is `output_data` but the Python
+        # side exposes it as `output` — go by the column name and it is an AttributeError.
         out = s.output or {}
 
         if phase == "reason":
-            # 무엇을 하겠다고 마음먹었나.
+            # What it made up its mind to do.
             thought = out.get("thought") if isinstance(out, dict) else None
             if thought:
-                print(f"   │  생각  {_short(thought)}")
+                print(f"   │  think   {_short(thought)}")
 
         elif phase == "act":
-            # 도구를 실제로 불렀으면 그 인자와 결과를 보여 준다. 이것이 핵심이다.
+            # If a tool was actually called, show its arguments and result. This is the
+            # important part.
             tc = s.tool_call
             for one in _flatten_calls(tc):
                 server = one.get("server", "?")
                 tool = one.get("tool", "?")
                 args = one.get("arguments", {})
                 result = one.get("result", "")
-                print(f"   │  도구  {server}.{tool}({_short(args, 70)})")
-                print(f"   │        → {_short(result, 86)}")
-            # 도구 없이 최종 답만 낸 차례.
+                print(f"   │  tool    {server}.{tool}({_short(args, 70)})")
+                print(f"   │          → {_short(result, 86)}")
+            # A turn that gave only a final answer, with no tool.
             if not _flatten_calls(tc) and isinstance(out, dict):
                 for r in (out.get("results") or []):
                     if r.get("action") == "final_answer":
-                        print(f"   │  답    {_short(r.get('result', ''), 86)}")
+                        print(f"   │  answer  {_short(r.get('result', ''), 86)}")
 
-    # 모델에 보낸 요청은 **개수와 크기만** 화면에 낸다. 한 요청이 수만 자라
-    # 원문을 여기 찍으면 화면이 못 쓰게 된다 — 원문은 trace 파일에 있다.
+    # For the requests sent to the model, **only the count and size** go on screen. One
+    # request runs to tens of thousands of characters, and printing the raw text here
+    # would make the screen unusable — the raw text is in the trace file.
     n_req = call.get("llm_requests", 0)
     if n_req:
-        print(f"   │  요청  LLM {n_req}회 — 보낸 원문은 "
-              f"trace/{call['seq']:02d}_{call['stage']}.llm.txt 에 있다")
+        print(f"   │  req     {n_req} LLM calls — what was sent is in "
+              f"trace/{call['seq']:02d}_{call['stage']}.llm.txt")
     print("   └─")
 
 
 def _flatten_calls(tool_call: Any) -> list[dict[str, Any]]:
-    """`tool_call` 이 올 수 있는 **세 가지 모양**을 하나로 편다.
+    """Flatten the **three shapes** `tool_call` can arrive in into one.
 
-    core 는 한 차례에 도구를 몇 개 부를 수도 있어서 모양이 갈린다:
+    core may call several tools in one turn, so the shape splits:
 
-        None 또는 JSON 의 null   부른 도구가 없다
-        {"server":…, "tool":…}   하나만 불렀다
-        {"calls":[{…},{…}]}      여러 개를 불렀다
+        None or JSON's null      no tool was called
+        {"server":…, "tool":…}   one was called
+        {"calls":[{…},{…}]}      several were called
 
-    이걸 안 맞추면 묶음으로 부른 차례가 통째로 안 보이거나, 반대로 빈 것을
-    한 건으로 세게 된다.
+    Fail to reconcile this and a turn that called them in a batch is invisible
+    altogether, or, the other way, an empty one gets counted as a call.
     """
     if not tool_call or tool_call == "null":
         return []
@@ -666,20 +674,21 @@ def _flatten_calls(tool_call: Any) -> list[dict[str, Any]]:
 
 
 async def _trace_one(call: dict[str, Any]) -> None:
-    """실행 한 건의 추적 파일을 쓴다. 실패해도 파이프라인을 멈추지 않는다.
+    """Write the trace file for one run. A failure here does not stop the pipeline.
 
-    파일에 들어가는 것: 상태 · 토큰 · 비용 · 단계마다의 생각과 행동 · **도구 호출의
-    인자와 결과**. 마지막 것이 핵심이다 — agentic-core 안에서 일어난 일이라
-    브레이크포인트로는 볼 수 없다.
+    What goes in the file: status · tokens · cost · the thinking and acting of each step
+    · **the arguments and results of the tool calls.** The last one is the point — it
+    happens inside agentic-core, so a breakpoint cannot show it.
     """
     if _TRACE_DIR is None:
         return
 
-    # **이미 쓴 것은 다시 쓰지 않는다.**
+    # **What has already been written is not written again.**
     #
-    # 끝의 그물(write_traces)이 모든 호출을 한 번 더 훑는데, 그때 다시 쓰면 파일이
-    # 새로 만들어지면서 **LLM 요청이 사라진다** — 요청은 꺼내면서 비우는 방식이라
-    # 두 번째에는 0건이기 때문이다. 실제로 그렇게 날려 먹고 찾았다.
+    # The net at the end (write_traces) sweeps every call once more, and writing again
+    # then creates the file afresh and **the LLM requests disappear** — requests are
+    # drained as they are taken, so the second time there are 0 of them. That is how it
+    # was actually lost and then found.
     if call.get("traced"):
         return
 
@@ -688,47 +697,53 @@ async def _trace_one(call: dict[str, Any]) -> None:
     llm_path = _TRACE_DIR / f"{stem}.llm.txt"
     try:
         with path.open("w", encoding="utf-8") as fh:
-            # readable=True — 사람이 읽으라고 찍는다. 자르지는 않는다.
-            # 빠지는 것은 **다른 줄이 이미 말한 것**뿐이다(trace_run.render 설명 참고).
+            # readable=True — it is printed for a person to read. Nothing is truncated.
+            # The only thing left out is **what another line already said** (see the
+            # explanation of trace_run.render).
             await render(call["stage"], uuid.UUID(call["run_id"]),
                          full=True, summary=False, stream=fh, readable=True)
 
-        # 모델에 **보낸 요청**. core 는 이것을 저장하지 않으므로 litellm 의 로그에서
-        # 가로챈 것이다(logging_setup 참고). 꺼내면서 비우므로 그 에이전트가 부른
-        # 만큼만 들어간다 — 다음 사람 것과 안 섞인다.
+        # The requests that were **sent to the model.** core does not store these, so
+        # they are intercepted from litellm's log (see logging_setup). Draining empties
+        # as it takes, so only what that agent called goes in — it does not get mixed up
+        # with the next person's.
         #
-        # **왜 옆 파일로 빼나** — 요청은 부를 때마다 그때까지의 대화를 통째로 다시
-        # 담는다. 그래서 6번 부르면 같은 내용이 여섯 겹으로 쌓인다(실측 261KB).
-        # 위 추적 파일에 이어 붙이면, 정작 읽으려던 본문이 그 뒤에 묻힌다.
+        # **Why a file off to the side** — every call carries the whole conversation so
+        # far all over again. Call it 6 times and the same content is stacked six deep
+        # (261KB, measured). Appended to the trace file above, the body you actually
+        # came to read would be buried underneath it.
         requests = drain_llm_requests()
         call["llm_requests"] = len(requests)
         if requests:
             with llm_path.open("w", encoding="utf-8") as lf:
                 print("=" * 100, file=lf)
-                print(f"{call['stage']} 가 모델에 보낸 요청 {len(requests)}건", file=lf)
-                print("뒤로 갈수록 앞의 대화가 다시 담긴다 — 마지막 것이 가장 크다.", file=lf)
+                print(f"{len(requests)} requests {call['stage']} sent to the model", file=lf)
+                print("the later ones carry the earlier conversation again — "
+                      "the last is the biggest.", file=lf)
                 print("=" * 100, file=lf)
                 for i, body in enumerate(requests, 1):
                     print(f"\n[{i}/{len(requests)}] " + "-" * 88, file=lf)
                     print(body, file=lf)
         call["traced"] = True
-    except Exception as e:  # noqa: BLE001 - 기록 실패가 실행을 망기면 안 된다
-        print(f"  추적 실패 {call['seq']:02d} {call['stage']}: {type(e).__name__}: {e}",
+    except Exception as e:  # noqa: BLE001 - a failure to record must not wreck the run
+        print(f"  trace failed {call['seq']:02d} {call['stage']}: {type(e).__name__}: {e}",
               file=sys.stderr)
 
 
 async def write_traces(run_dir: Path) -> int:
-    """끝에 한 번 더 훑는 그물. 쓴 개수를 돌려준다.
+    """The net that sweeps once more at the end. Returns how many were written.
 
-    평소에는 `_trace_one` 이 호출마다 이미 썼고, 이미 쓴 것은 **건너뛴다.**
-    남겨 두는 이유는 **중간에 죽은 경우**다 — 실행 중에 예외가 나거나 Ctrl-C 가
-    들어오면 마지막 한 건은 `_trace_one` 까지 못 갔을 수 있다.
+    Normally `_trace_one` has already written each call as it happened, and what is
+    already written is **skipped.** The reason this is kept is the **died halfway**
+    case — if an exception is raised mid-run or Ctrl-C comes in, the last one may not
+    have reached `_trace_one`.
 
-    건너뛰지 않으면 파일을 새로 쓰면서 LLM 요청이 사라진다(위 주석 참고).
+    Without the skip, the file is written afresh and the LLM requests disappear (see
+    the comment above).
 
-    `trace_run.dump_all` 을 쓰지 않는 이유 — 그 함수는 `todo_rows.json` 의
-    시행별 `run_ids` 모양을 전제한다(trace_run.py:161). 판 경로는 그 모양이 아니므로
-    한 층 아래인 `render()` 를 직접 부른다.
+    Why `trace_run.dump_all` is not used — that function assumes the per-trial
+    `run_ids` shape of `todo_rows.json` (trace_run.py:161). The board path is not that
+    shape, so `render()`, one layer below, is called directly.
     """
     if not _CALLS:
         return 0
@@ -736,7 +751,8 @@ async def write_traces(run_dir: Path) -> int:
     out_dir = run_dir / "trace"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # 목록 자체도 남긴다. 나중에 trace_board.py 나 손으로 되짚을 때 쓴다.
+    # The list itself is left behind too. It is what trace_board.py, or a person
+    # retracing by hand, reads later.
     (run_dir / "runs.json").write_text(
         json.dumps(_CALLS, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -749,22 +765,21 @@ async def write_traces(run_dir: Path) -> int:
 async def board_state(registry: MCPServerRegistry, run_tag: str) -> dict:
     """What is on the board right now, straight from the tool the agents use.
 
-    ↑ **게시판을 지금 찍어 본다.**
-
-      데이터베이스를 직접 뒤지지 않고, **사람들이 쓰는 것과 똑같은 창구**로 본다.
-      그래야 내가 화면에서 보는 게시판과 그들이 보는 게시판이 어긋나지 않는다.
+    The database is not searched directly; the board is read through **the same window
+    the people use.** That way the board on my screen cannot drift out of step with the
+    board they see.
     """
     server = await get_server_by_name("memstara-blackboard")
     from agentic_core.services.mcp_service import call_server_tool
 
     raw = await call_server_tool(server.id, "read_board", {"run_tag": run_tag}, registry=registry)
-    # 반환이 (메타, 본문) 튜플일 때도 있고 본문만 올 때도 있다.
+    # Sometimes the return is a (metadata, body) tuple, sometimes only the body.
     text = raw[1] if isinstance(raw, tuple) else raw
     try:
         return json.loads(text)
     except (json.JSONDecodeError, TypeError):
-        # 못 읽으면 "판이 비었다"로 취급한다. 루프가 이 값을 보고 끝내므로,
-        # 읽기에 실패해 무한히 도는 것보다 낫다.
+        # If it cannot be read, treat it as "the board is empty". The loop ends on this
+        # value, which is better than spinning forever because a read failed.
         return {"count": 0, "tasks": []}
 
 
@@ -776,24 +791,17 @@ _MATCHER_TOOLS = ("match_concepts", "match_concept")
 def _matcher_call_failed(result: Any) -> bool:
     """Did this matcher call actually answer, or did it come back an error?
 
-    ↑ **이 매처 호출이 진짜 답을 받았는가, 오류를 받았는가.**
-
-      This has to be asked before anything is filed as evidence. The 2026-08-30 run
-      filed 27 calls into the results table whose every result was "Not authorized:
-      Tool 'match_concepts' is not in this run's allowed tool set" — a dead server
-      registration meant the matcher never ran, and the durable table recorded the
-      refusals as if they were candidate lists.
-
-      ↑ 8/30 실행이 실패 27건을 후보 목록처럼 결과표에 적었다. 매처 서버 등록이
-        죽어 있어 한 번도 실제로 돌지 않았는데, 남는 표에는 그 거절들이 근거로
-        남았다. 그것을 막는 판정이다.
+    This has to be asked before anything is filed as evidence. The 2026-08-30 run
+    filed 27 calls into the results table whose every result was "Not authorized:
+    Tool 'match_concepts' is not in this run's allowed tool set" — a dead server
+    registration meant the matcher never ran, and the durable table recorded the
+    refusals as if they were candidate lists. This is the check that stops that.
     """
     if isinstance(result, dict):
         return "error" in result
     if isinstance(result, str):
         # Core refuses a tool outside the run's allowed set with a plain sentence,
         # not JSON — so it survives the parse above untouched and has to be read here.
-        # ↑ core 는 허용목록 밖 도구를 JSON 이 아니라 문장으로 거절한다.
         text = result.strip()
         return text.startswith("Not authorized") or "is not in this run's allowed tool set" in text
     return False
@@ -804,33 +812,26 @@ async def harvest_match_trace(
 ) -> tuple[int, int]:
     """Lift one agent run's matcher calls out of the trace and file them on the board.
 
-    ↑ **매처가 무엇을 보고 무엇을 골랐는지를 판에 옮겨 적는다.**
+    The matcher answers inside the hypothesis agent's turn and writes nothing down.
+    Only the chosen columns reach the board, so the candidates that lost — and the
+    scores that made them lose — existed nowhere except this run's trace, which is
+    deleted whenever the run directory is. That is the gap this closes.
 
-      The matcher answers inside the hypothesis agent's turn and writes nothing down.
-      Only the chosen columns reach the board, so the candidates that lost — and the
-      scores that made them lose — existed nowhere except this run's trace, which is
-      deleted whenever the run directory is. That is the gap this closes.
+    Why the driver does it rather than the agent or the matcher: the agent would
+    have to hand-copy hundreds of candidate rows with nothing checking the copy,
+    and the matcher would need board access it is deliberately built without. The
+    trace already holds every call verbatim, so nobody has to be trusted.
 
-      Why the driver does it rather than the agent or the matcher: the agent would
-      have to hand-copy hundreds of candidate rows with nothing checking the copy,
-      and the matcher would need board access it is deliberately built without. The
-      trace already holds every call verbatim, so nobody has to be trusted.
+    Both halves come out of the same run. The matcher calls are the ones worth
+    keeping; the ``create_task`` calls in the same turn say which task they belong
+    to, because the agent matched and then filed in one continuous turn.
 
-      Both halves come out of the same run. The matcher calls are the ones worth
-      keeping; the ``create_task`` calls in the same turn say which task they belong
-      to, because the agent matched and then filed in one continuous turn.
-
-      **Only calls that answered are filed.** `match_trace` is a record of candidates
-      the matcher actually returned, never a count of attempts — a refused call proves
-      nothing about the cohort and must not sit in the results table looking like it
-      does. Refusals are counted and reported instead, because silently dropping them
-      would make "the matcher was never called" and "every call was refused" look
-      identical, and those need entirely different fixes.
-
-      ↑ **답을 받은 호출만 적는다.** `match_trace` 는 매처가 실제로 돌려준 후보의
-        기록이지 시도 횟수가 아니다. 거절된 호출은 코호트에 대해 아무것도 증명하지
-        않는다. 그렇다고 조용히 버리지도 않는다 — 버리면 "매처를 안 불렀다" 와
-        "부른 것이 전부 거절됐다" 가 똑같이 보이는데, 이 둘은 고칠 곳이 다르다.
+    **Only calls that answered are filed.** `match_trace` is a record of candidates
+    the matcher actually returned, never a count of attempts — a refused call proves
+    nothing about the cohort and must not sit in the results table looking like it
+    does. Refusals are counted and reported instead, because silently dropping them
+    would make "the matcher was never called" and "every call was refused" look
+    identical, and those need entirely different fixes.
 
     Args:
         registry: the live server registry, used to reach the board tool.
@@ -849,12 +850,12 @@ async def harvest_match_trace(
     try:
         steps = await get_run_steps(uuid.UUID(call["run_id"]))
     except Exception as e:  # noqa: BLE001 - bookkeeping must not fail the run
-        note(f"(매처 기록을 못 읽었다: {type(e).__name__})")
+        note(f"(could not read the matcher record: {type(e).__name__})")
         return 0, 0
 
     matcher_calls: list[dict[str, Any]] = []
     task_ids: list[int] = []
-    refused = 0                    # 오류로 돌아와 근거에서 뺀 호출 수
+    refused = 0                    # calls that came back an error and were left out
 
     for s in steps:
         for one in _flatten_calls(s.tool_call):
@@ -901,7 +902,7 @@ async def harvest_match_trace(
             )
             written += 1
         except Exception as e:  # noqa: BLE001 - same reason as above
-            note(f"(과제 {tid} 에 매처 기록을 못 붙였다: {type(e).__name__})")
+            note(f"(could not attach the matcher record to task {tid}: {type(e).__name__})")
     return written, refused
 
 
@@ -916,8 +917,8 @@ async def call_board_tool(registry: MCPServerRegistry, tool: str, args: dict[str
 
     server = await get_server_by_name("memstara-blackboard")
     raw = await call_server_tool(server.id, tool, args, registry=registry)
-    # 반환이 (오류인가, 본문) 튜플일 때도 있고 본문만 올 때도 있다 — read_board_via_tool
-    # 이 이미 같은 자리에서 같은 처리를 한다.
+    # Sometimes the return is an (is-it-an-error, body) tuple, sometimes only the body —
+    # read_board_via_tool already does the same thing in the same place.
     text = raw[1] if isinstance(raw, tuple) else raw
     try:
         return json.loads(text)
@@ -936,15 +937,13 @@ async def questions_for_wave(
 ) -> tuple[list[dict[str, Any]], bool]:
     """Ask the curator for this wave's questions, then read back what it banked.
 
-    ↑ **이번 파도에 무엇을 물을지 정한다.**
+    Read back rather than trust the return value: the curator answers in prose, and
+    what matters is what actually landed in the bank. propose_questions is also the
+    only thing that can reject a question, so its verdict is the one to read.
 
-      Read back rather than trust the return value: the curator answers in prose, and
-      what matters is what actually landed in the bank. propose_questions is also the
-      only thing that can reject a question, so its verdict is the one to read.
-
-      Returns fewer than `want` without complaint. A curator that can only ground three
-      questions in the corpus should propose three; padding to a target is exactly the
-      habit that produced questions nothing could answer.
+    Returns fewer than `want` without complaint. A curator that can only ground three
+    questions in the corpus should propose three; padding to a target is exactly the
+    habit that produced questions nothing could answer.
 
     Returns:
         ``(rows, recycled)``. `rows` is bank entries, newest first, at most `want`; an
@@ -973,7 +972,8 @@ async def questions_for_wave(
             tools=by_stage["curator"], registry=registry, stage=f"curator{wave}",
         )
     except Exception as e:  # noqa: BLE001 - the fallback below is the point
-        note(f"(질문 담당이 실패했다: {type(e).__name__} — 기본 관점 목록으로 간다)")
+        note(f"(the curator failed: {type(e).__name__} — going with the built-in "
+             "perspective list)")
         # Not recycling: a curator that crashed says nothing about whether the corpus
         # still has questions in it. Those are different situations with different fixes.
         return [], False
@@ -988,10 +988,9 @@ async def questions_for_wave(
     #
     # But it is reported upward as well as printed. Silently recycling is how a run that
     # has nothing left to ask keeps spending money looking exactly like a run that is
-    # still making progress. ↑ 조용히 재탕하면 "마른 실행" 과 "진전 중인 실행" 이 구별되지
-    # 않는다. 그래서 화면에만 찍지 않고 호출한 쪽에도 알린다.
+    # still making progress.
     if not fresh:
-        note("(새 질문이 없다 — 은행에 있던 것을 다시 쓴다)")
+        note("(no new questions — reusing what was already in the bank)")
         return rows[:want], True
     return fresh[:want], False
 
@@ -1001,8 +1000,8 @@ def summarise(tasks: list[dict]) -> tuple[dict[str, int], list[tuple[int, int]]]
 
     `attempts` counts *claims*, not failures. A task that goes data -> ml -> interpret
     is claimed three times and finishes with attempts=3, having failed nothing. Reading
-    that number as a retry count made a clean run print "재시도 최대 3회", which is the
-    opposite of the truth.
+    that number as a retry count made a clean run print "retried up to 3 times", which is
+    the opposite of the truth.
 
     That matters more here than it would elsewhere: retries are unlimited by decision,
     so this display is the only thing telling a person whether to stop. A false alarm
@@ -1012,14 +1011,15 @@ def summarise(tasks: list[dict]) -> tuple[dict[str, int], list[tuple[int, int]]]
     passed through. `stage_index` gives how many claims a healthy task would have had
     by now.
 
-    ↑ **게시판을 한눈에 요약한다.** 돌려주는 것 둘:
+    Two things come back:
 
-        counts   {"data/ready": 2, ...}   누가 몇 장 기다리고 있나 — 화면에 찍는다
-        retried  [(종이번호, 여분), ...]   **되돌아온 종이만.** 막힌 것이 있나 보려고
+        counts   {"data/ready": 2, ...}   who has how many sheets waiting — this is printed
+        retried  [(sheet number, extra), ...]   **only the sheets that came back.** To see
+                                                whether anything is stuck
     """
-    # 정상적인 과제가 이 단계까지 왔다면 몇 번 집혔어야 하는가.
-    # 정상적으로 여기까지 온 종이라면 **몇 번 떼어졌어야 하는가**.
-    # 데이터 담당이 한 번, 학습 담당이 또 한 번, 해석 담당이 또 한 번.
+    # If a sheet had come this far normally, **how many times should it have been torn
+    # off?** Once by the data person, once more by the ml person, once more by the
+    # interpreter.
     stage_index = {"data": 1, "ml": 2, "interpret": 3}
     counts: dict[str, int] = {}
     retried: list[tuple[int, int]] = []
@@ -1027,14 +1027,14 @@ def summarise(tasks: list[dict]) -> tuple[dict[str, int], list[tuple[int, int]]]
     for t in tasks:
         status, ttype = t["status"], t["task_type"]
 
-        # 아직 안 끝난 것만 센다. 끝난 것은 현황에 안 넣는다.
+        # Only what is not finished is counted. What is done stays out of the status line.
         if status in ("ready", "in_progress"):
             counts[f"{ttype}/{status}"] = counts.get(f"{ttype}/{status}", 0) + 1
 
-        # 'ready' 는 아직 그 사람이 떼어 가기 **전**이므로 한 번 뺀다.
+        # 'ready' means that person has not torn it off **yet**, so one is subtracted.
         expected = stage_index.get(ttype, 0) - (1 if status == "ready" else 0)
-        # 실제 떼어진 횟수 - 정상이라면 떼어졌을 횟수 = 여분.
-        # 0 보다 크면 **누군가 하다가 실패해 되돌아온** 종이다.
+        # times actually torn off - times it would have been if all went well = extra.
+        # Greater than 0 means the sheet **came back because someone tried and failed.**
         extra = (t.get("attempts") or 0) - max(expected, 0)
         if extra > 0:
             retried.append((t["task_id"], extra))
@@ -1043,90 +1043,97 @@ def summarise(tasks: list[dict]) -> tuple[dict[str, int], list[tuple[int, int]]]
 
 
 async def run(args: argparse.Namespace, run_dir: Path) -> int:
-    """실행의 본체. 맨 위 「이 파일을 읽는 법」의 ①~⑥ 이 여기 순서대로 있다."""
-    configure(Settings())   # .env 를 읽어 core 에 넘긴다 (DB 주소, API 키 등)
+    """The body of the run. (1) through (6) of "How to read this file" at the top are
+    here, in that order."""
+    configure(Settings())   # read .env and hand it to core (DB address, API keys, ...)
     log_path = setup_logging(level="DEBUG" if args.verbose else "INFO", log_file=run_dir / "run.jsonl")
 
-    # 추적 파일이 나갈 곳을 먼저 정한다. 첫 에이전트를 부르기 **전에** 만들어 둬야
-    # 그 호출이 끝나는 즉시 파일이 나온다 — 디버깅 중에 읽을 수 있는 이유다.
+    # Decide where the trace files go first. It has to be made **before** the first agent
+    # is called, so a file appears the moment that call ends — that is why it can be read
+    # while debugging.
     global _TRACE_DIR
     _TRACE_DIR = run_dir / "trace"
     _TRACE_DIR.mkdir(parents=True, exist_ok=True)
     print()
     print("=" * 74)
-    print(f" 판 파이프라인 — 실행 이름 '{args.run_tag}'")
+    print(f" board pipeline — run named '{args.run_tag}'")
     print("=" * 74)
-    print(f"   시행 수     {args.trials if not args.report_only else '(보고만)'}")
-    print(f"   결과변수    {args.y_column}")
-    print(f"   데이터      {os.environ.get('MEMSTARA_DATASET_PATH','(없음)')}")
-    print(f"   지식원      {os.environ.get('AGENTIC_OKF_BUNDLE_DIR','(없음)')}")
-    print(f"   기록 폴더   {run_dir}")
-    print(f"   추적 파일   {_TRACE_DIR.name}/  (사람을 부를 때마다 한 개씩 쌓인다)")
+    print(f"   trials      {args.trials if not args.report_only else '(report only)'}")
+    print(f"   outcome     {args.y_column}")
+    print(f"   data        {os.environ.get('MEMSTARA_DATASET_PATH','(none)')}")
+    print(f"   knowledge   {os.environ.get('AGENTIC_OKF_BUNDLE_DIR','(none)')}")
+    print(f"   record dir  {run_dir}")
+    print(f"   trace files {_TRACE_DIR.name}/  (one more each time a person is called)")
 
-    # -- ① 다섯 사람을 부른다 --------------------------------------------
+    # -- (1) call the five people ----------------------------------------
     #
-    # 각자가 무슨 일을 하는 사람인지 적힌 역할 설명서를 꺼내 온다. 처음이면 새로
-    # 쓴다. 여러 번 돌려도 같은 사람을 다시 찾아올 뿐 늘어나지 않는다.
-    step("①", "다섯 사람을 부른다", "역할 설명서를 꺼내 온다")
+    # Fetch the role description that says what each of them does. If this is the first
+    # time, write it. Running it again and again only finds the same people back; it
+    # does not multiply them.
+    step("(1)", "call the five people", "fetch the role descriptions")
     agents = await provision_board_agents(provider=args.provider, model=args.model)
-    done("①", f"{len(agents)}명 준비됨 — {' · '.join(agents)}")
+    done("(1)", f"{len(agents)} ready — {' · '.join(agents)}")
 
-    # -- ② 장비 네 대를 켠다 ---------------------------------------------
+    # -- (2) switch on the four machines ---------------------------------
     #
-    # 여기서 프로그램이 다섯 개가 된다. 이 파일 하나 + 장비 넷.
-    step("②", "장비 네 대를 켠다", "여기서 프로그램이 다섯 개가 된다")
+    # This is where there come to be five programs. This one file + four machines.
+    step("(2)", "switch on the four machines", "this is where there come to be five programs")
     registry = await setup_tools()
-    done("②", "논문 창고 · 데이터 기계 · 학습 기계 · 게시판 창구")
+    done("(2)", "paper store · data machine · learning machine · board window")
     try:
-        # -- ③ 누가 어느 버튼을 쓸지 정한다 ------------------------------
+        # -- (3) decide who gets which button ----------------------------
         #
-        # 사람마다 **쓸 수 있는 버튼만** 골라 준다. 전부 주면 남의 일까지 해 버리고,
-        # 그러면 나중에 결과가 누구 판단이었는지 알 수 없어진다.
+        # Each person is handed **only the buttons they may use.** Give them all of them
+        # and they do other people's work too, and then there is no telling afterwards
+        # whose judgement a result was.
         by_stage = {
             stage: tools_for(registry, BOARD_SERVERS[stage], only=BOARD_TOOLS[stage])
             for stage in BOARD_TOOLS
         }
-        # 누구에게 무엇이 갔는지 화면에 찍어 둔다. 나중에 로그만 봐도 확인된다.
-        step("③", "누가 어느 버튼을 쓸지 정한다", "남의 일을 못 하게 자른다")
-        _KO = {"hypothesis": "가설 담당", "data": "데이터 담당", "ml": "학습 담당",
-               "interpreter": "해석 담당", "report": "보고 담당"}
+        # Print who got what. Later it can be confirmed from the log alone.
+        step("(3)", "decide who gets which button", "cut them off from other people's work")
+        _ROLE = {"hypothesis": "hypothesis agent", "data": "data agent", "ml": "ml agent",
+                 "interpreter": "interpreter agent", "report": "report agent"}
         for stage, ts in by_stage.items():
             names = sorted(x["tool_name"] for x in ts)
-            print(f"   {_KO.get(stage, stage):<10} {len(names)}개  {' · '.join(names)}")
-        done("③", f"{len(by_stage)}명에게 배분")
+            print(f"   {_ROLE.get(stage, stage):<18} {len(names)}  {' · '.join(names)}")
+        done("(3)", f"handed out to {len(by_stage)}")
 
         # -- report only ------------------------------------------------
-        # -- ⑥ 만 하는 길 (--report-only) --------------------------------
+        # -- the path that does only (6) (--report-only) ------------------
         #
-        # ④⑤ 를 건너뛰고 **정리만** 한다. 이미 끝나 있는 실행의 결과를 모아 한 장으로
-        # 쓴다. 사람을 한 명(보고 담당)만 부르므로 값이 싸다.
+        # (4) and (5) are skipped and it **only wraps up.** It gathers the results of a
+        # run that already finished and writes them as one page. Only one person (the
+        # report agent) is called, so it is cheap.
         #
-        # 중단됐거나 일부만 끝난 실행에서도, 그때까지 쌓인 것으로 보고서를 만든다.
+        # It also makes a report for a run that was interrupted or only partly finished,
+        # out of whatever had piled up by then.
         if args.report_only:
-            step("⑥", "마지막에 정리한다",
-                 f"'{args.run_tag}' 의 완료 서랍을 읽는다 — ④⑤ 는 건너뛴다")
-            note("보고 담당을 한 번 부른다 (이 실행의 유일한 LLM 호출)")
+            step("(6)", "wrap up at the end",
+                 f"read the finished drawer of '{args.run_tag}' — (4) and (5) are skipped")
+            note("call the report agent once (the only LLM call of this run)")
             text = await call_agent(
                 agents["report"],
                 f"Write the report for run '{args.run_tag}'. Call read_results with that run_tag.",
                 tools=by_stage["report"], registry=registry, stage="report",
             )
             (run_dir / "report.md").write_text(text, encoding="utf-8")
-            done("⑥", f"보고서 {len(text.splitlines())}줄 → report.md")
+            done("(6)", f"report {len(text.splitlines())} lines → report.md")
             print()
             print(text)
             return 0
 
         # -- waves ------------------------------------------------------
-        # ④ 와 ⑤ 를 **파도**로 감싼다. 한 파도 = 질문 만들기 → 씨뿌리기 → 다 처리하기.
+        # (4) and (5) are wrapped in **waves.** One wave = make the questions → seed the
+        # board → work it all off.
         #
         # The wave boundary is what makes feedback possible at all. Seeding every trial
         # up front means the questions are all written before a single result exists,
         # so nothing any trial finds can affect what gets asked. A wave ends with
         # results on the table, and the next wave's curator reads them.
         #
-        # 씨뿌렸는데 판에 아무것도 안 남긴 시행 번호. 파도를 넘어 쌓이고, 마지막에
-        # 보고 담당에게도 넘어간다.
+        # Trial numbers that were seeded but left nothing on the board. They accumulate
+        # across waves, and at the end they are handed to the report agent too.
         missing_trials: list[int] = []
 
         # Before the first wave, take back anything this tag left in_progress last time.
@@ -1136,66 +1143,61 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         # here is what makes "same --run-tag again" mean "carry on where it stopped".
         # stale_after still applies: a run that is genuinely still alive holds the
         # advisory lock above, so we cannot get here while one is.
-        #
-        # ↑ 첫 파도 전에, 이 태그가 지난번에 '하는 중' 으로 남긴 것을 되찾는다. 같은 함수가
-        #   일 루프 안에서도 불리지만 그건 **할 일이 없다고 판단한 뒤**라, 중간에 죽은 태그로
-        #   다시 실행하면 새 파도를 통째로 뿌린 다음에야 옛 과제를 발견한다. 여기서 한 번
-        #   부르는 것이 "같은 --run-tag 로 다시 = 이어서 하기" 를 성립시킨다.
         recovered = await reclaim_stalled(registry, args.run_tag, args.stale_after)
         if recovered:
-            note(f"지난 실행이 남긴 과제 {recovered}개를 대기열로 되돌렸다 — 이어서 한다")
+            note(f"returned {recovered} tasks left by the last run to the queue — "
+                 "carrying on")
 
-        # 새 질문이 안 나온 파도가 연속 몇 번이었나. `--stop-after-dry` 에 닿으면 멈춘다.
+        # How many waves in a row produced no new question. It stops when it reaches
+        # `--stop-after-dry`.
         #
         # The corpus is finite — 333 documents across 37 tags — so the bank runs dry by
         # construction, not by accident. `--waves N` is a count, and a count cannot know
         # when there is nothing left to ask; this is the part that can.
         dry_streak = 0
-        waves_run = 0        # 실제로 씨를 뿌린 파도 수. 일찍 멈추면 args.waves 와 다르다
-        seeded_total = 0     # 실제로 부른 가설 담당 수. 보고 담당에게 이 수를 준다
+        waves_run = 0        # waves actually seeded. If it stops early this differs from args.waves
+        seeded_total = 0     # hypothesis agents actually called. This number goes to the report agent
         for wave in range(args.waves):
-            base = wave * args.trials          # 시행 번호는 파도를 넘어 이어진다
+            base = wave * args.trials          # trial numbers carry on across waves
             if args.waves > 1:
-                print(f"\n{'─' * 68}\n 파도 {wave + 1}/{args.waves}\n{'─' * 68}")
+                print(f"\n{'─' * 68}\n wave {wave + 1}/{args.waves}\n{'─' * 68}")
 
-            # -- ③′ 무엇을 물을지 정한다 --------------------------------
+            # -- (3') decide what to ask --------------------------------
             questions: list[dict] = []
             recycled = False
             if not args.no_curator:
-                step("③′", "무엇을 물을지 정한다",
-                     f"질문 담당이 코퍼스"
-                     + ("" if wave == 0 else "와 앞 파도의 결과")
-                     + f"를 보고 질문 {args.trials}개를 만든다")
+                step("(3')", "decide what to ask",
+                     f"the curator reads the corpus"
+                     + ("" if wave == 0 else " and the previous wave's results")
+                     + f" and makes {args.trials} questions")
                 questions, recycled = await questions_for_wave(
                     registry, agents, by_stage,
                     run_tag=args.run_tag, wave=wave, want=args.trials,
                 )
                 for q in questions:
-                    note(f"질문 #{q['question_id']} {q['text']}"
-                         f"  [{'·'.join(q.get('okf_tags') or []) or '태그없음'}]")
-                done("③′", f"질문 {len(questions)}개"
-                     + (" · 전부 은행에 있던 것" if recycled else ""))
+                    note(f"question #{q['question_id']} {q['text']}"
+                         f"  [{'·'.join(q.get('okf_tags') or []) or 'no tags'}]")
+                done("(3')", f"{len(questions)} questions"
+                     + (" · all of them already in the bank" if recycled else ""))
 
-            # -- 마르면 멈춘다 -------------------------------------------
+            # -- stop when it runs dry -----------------------------------
             #
             # Two consecutive dry waves, not one. A curator LLM can come back
             # empty-handed once by mistake, and that is not the same thing as a corpus
             # with nothing left in it. The break happens *before* seeding, so a run that
             # has run dry pays for one more curator call and not for a whole wave of
             # trials it has already done.
-            #
-            # ↑ 한 번이 아니라 **연속 두 번**인 이유: 질문 담당이 한 번 실수로 빈손일 수
-            #   있고, 그것과 진짜 고갈은 다르다. 씨뿌리기 **전에** 멈추므로, 마른 실행이
-            #   더 무는 비용은 질문 담당 한 번뿐이고 시행 전체가 아니다.
             dry_streak = dry_streak + 1 if recycled else 0
             if args.stop_after_dry and dry_streak >= args.stop_after_dry:
-                note(f"질문이 말랐다 — 연속 {dry_streak}번 새 질문이 나오지 않았다. "
-                     f"파도 {wave + 1}/{args.waves} 를 시작하지 않고 멈춘다")
+                note(f"the questions have run dry — {dry_streak} waves in a row produced "
+                     f"no new question. Stopping without starting wave "
+                     f"{wave + 1}/{args.waves}")
                 break
             waves_run += 1
 
-            # 질문 담당을 껐거나 실패했으면 코드에 박힌 관점 목록으로 되돌아간다.
-            # 코퍼스와 어긋나는 목록이지만, 실행이 멈추는 것보다는 낫다.
+            # If the curator was switched off or failed, fall back to the perspective list
+            # hard-coded here. It is a list that does not line up with the corpus, but that
+            # is better than the run stopping.
             if not questions:
                 questions = [{"question_id": 0, "text": perspective_for(base + k)}
                              for k in range(args.trials)]
@@ -1205,27 +1207,25 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             seeded_total += len(questions)
 
             # -- seed -------------------------------------------------------
-            # -- ④ 첫 지시서를 게시판에 붙인다 -------------------------------
+            # -- (4) pin the first instruction to the board -------------------
             #
-            # 시행 수만큼 가설 담당을 부른다. 매번 **다른 관점**을 주고, 답의 폭도 조금씩
-            # 다르게 한다. 같은 답이 세 번 나오면 비교할 것이 없기 때문이다.
+            # The hypothesis agent is called once per trial. Each time it is given a
+            # **different perspective**, and the width of its answer is varied a little
+            # too, because three identical answers leave nothing to compare.
             #
-            # 관점을 흔들어야 겹침이 "다른 각도에서 출발했는데 같은 곳에 모였다" 가 된다.
-            step("④", "첫 지시서를 게시판에 붙인다",
-                 f"가설 담당을 {len(questions)}번 부른다 — 매번 다른 질문으로")
+            # Only by shaking the perspective does an overlap come to mean "they set out
+            # from different angles and arrived at the same place".
+            step("(4)", "pin the first instruction to the board",
+                 f"call the hypothesis agent {len(questions)} times — a different question "
+                 f"each time")
             # A trial that never calls `create_task` leaves nothing behind: no board row,
             # no result, no error. On 2026-08-30 one of four trials spent 31 steps and
             # $1.88 that way and the run ended looking successful — the only thing that
             # noticed was the report agent, in prose, by luck. The count was already
             # being printed below; it was never compared, so nothing could notice.
-            #
-            # ↑ **create_task 를 안 부른 시행은 흔적을 하나도 안 남긴다.** 판에도 결과표에도
-            #   오류에도 없다. 8/30 실행에서 4시행 중 하나가 그렇게 31단계·$1.88 을 쓰고
-            #   사라졌는데 실행은 성공처럼 끝났다. 알아챈 것은 보고 담당이 우연히 산문으로
-            #   적었기 때문이다. 종이 수는 이미 찍고 있었다 — 비교를 안 했을 뿐이다.
             seeded = (await board_state(registry, args.run_tag))["count"]
             for k, q in enumerate(questions):
-                i = base + k                       # 파도를 넘어 이어지는 시행 번호
+                i = base + k                       # trial number, carrying on across waves
                 text = q["text"]
                 # question_id travels with the task so a finished result can be traced
                 # back to what was asked. 0 means the fallback list was used.
@@ -1240,61 +1240,53 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 )
                 # Has to happen here, not at the end of the run. `submit_result` copies a
                 # row from the board to the results table the moment it turns done, so a
-                # trace attached after stage ⑤ would land on a board row whose result had
+                # trace attached after stage (5) would land on a board row whose result had
                 # already been written without it — recorded in the place that gets cleared
                 # and missing from the place that is kept.
-                #
-                # ↑ **여기서 해야 한다.** 판의 줄이 done 이 되는 순간 결과표로 복사되므로,
-                #   ⑤단계 뒤에 붙이면 이미 복사가 끝난 뒤다. 치우는 표에는 남고 남는
-                #   표에는 없는, 정확히 고치려던 그 상태가 된다.
                 attached, refused = await harvest_match_trace(registry, _CALLS[-1])
 
-                # 게시판에 종이가 정말 늘었는지 한 장씩 확인하며 간다.
-                # 안 늘면 그 사람이 실패한 것이다.
+                # Check sheet by sheet that the board really did grow. If it did not, that
+                # person failed.
                 state = await board_state(registry, args.run_tag)
                 extra = ""
                 if attached:
-                    extra += f" · 매처 기록 {attached}장에 붙였다"
+                    extra += f" · attached the matcher record to {attached} sheets"
                 if refused:
                     # Reported, not hidden. All-refused and never-called are different
                     # failures with different fixes, and they look the same if this is
-                    # silent. ↑ 전부 거절된 것과 아예 안 부른 것은 고칠 곳이 다르다.
-                    extra += f" · 매처 호출 {refused}건이 거절돼 근거에서 뺐다"
-                note(f"시행 {i} ({text}) → 게시판에 종이 {state['count']}장" + extra)
+                    # silent.
+                    extra += (f" · {refused} matcher calls were refused and left out of "
+                              f"the evidence")
+                note(f"trial {i} ({text}) → {state['count']} sheets on the board" + extra)
 
                 if state["count"] <= seeded:
-                    note(f"⚠ 시행 {i} 가 판에 아무것도 남기지 못했다 "
-                         f"— create_task 가 불리지 않았다")
+                    note(f"⚠ trial {i} left nothing on the board "
+                         f"— create_task was never called")
                     missing_trials.append(i)
                 seeded = state["count"]
 
             # -- work it down ----------------------------------------------
-            # -- ⑤ 게시판이 빌 때까지 돌린다 ---------------------------------
+            # -- (5) run until the board is empty ----------------------------
             #
             # This loop's only exit is an empty board, so something has to close a task
             # that can never succeed. `--max-attempts` does, below. It still prints what
             # it sees every round: the cap ends a stuck run, it does not explain it, and
             # the person reading is the one who decides whether the cap was the right
             # answer or the stage needs fixing.
-            #
-            # ↑ 이 루프의 유일한 탈출구가 "판이 비었다" 라, 끝내 성공 못 할 과제는 누군가
-            #   닫아 줘야 한다. 그걸 아래 `--max-attempts` 가 한다. 그래도 매 바퀴 현황을
-            #   계속 찍는다 — 상한은 막힌 실행을 **끝낼** 뿐 **설명하지는** 못하고, 그게
-            #   맞는 답이었는지 아니면 그 단계를 고쳐야 하는지는 읽는 사람이 판단한다.
             lost_here = [i for i in missing_trials if base <= i < base + len(questions)]
-            done("④", f"게시판에 종이 {state['count']}장"
-                 + (f" · 시행 {len(questions)}개 중 {len(lost_here)}개가 빈손으로 끝났다 "
+            done("(4)", f"{state['count']} sheets on the board"
+                 + (f" · {len(lost_here)} of {len(questions)} trials ended empty-handed "
                     f"({', '.join(str(i) for i in lost_here)})" if lost_here else ""))
-            step("⑤", "게시판이 빌 때까지 돌린다",
-                 "Ctrl-C 로 멈춰도 게시판은 그대로 남는다")
+            step("(5)", "run until the board is empty",
+                 "stop it with Ctrl-C and the board is still there")
             rounds = 0
             while True:
-                state = await board_state(registry, args.run_tag)      # 게시판을 본다
-                counts, retried = summarise(state["tasks"])            # 현황 · 되돌아온 것
+                state = await board_state(registry, args.run_tag)      # look at the board
+                counts, retried = summarise(state["tasks"])            # status · what came back
 
-                # 게시판에 남은 것이 없으면 끝이다.
+                # If nothing is left on the board, that is the end.
                 if not counts:
-                    done("⑤", f"게시판이 비었다 — {rounds}바퀴 만에")
+                    done("(5)", f"the board is empty — after {rounds} laps")
                     break
 
                 rounds += 1
@@ -1303,61 +1295,47 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 # Named, not aggregated: "somewhere retried 5 times" does not tell a person
                 # which task is stuck, and stuck-ness is what they are deciding about.
                 #
-                # ↑ "어딘가에서 5회 재시도" 로는 어느 과제가 막혔는지 알 수 없다.
-                #   사람이 판단하려는 것이 바로 "무엇이 막혔나" 이므로 번호를 찍는다.
-                # 이름을 `note` 로 두면 위에서 정의한 note() 함수를 가린다.
-                # 그러면 이 루프 안에서 note(...) 를 부르는 순간 TypeError 로 죽는다.
+                # Naming this `note` would shadow the note() function defined above, and
+                # then calling note(...) inside this loop would die with a TypeError.
                 stuck = ""
                 if retried:
-                    worst = sorted(retried, key=lambda p: -p[1])[:3]   # 심한 것 셋만
-                    stuck = "  ← 되돌아온 일: " + ", ".join(f"#{tid} {n}회" for tid, n in worst)
-                print(f"   [{rounds:>3}바퀴] {desc}{stuck}")
+                    worst = sorted(retried, key=lambda p: -p[1])[:3]   # the worst three only
+                    stuck = "  ← came back: " + ", ".join(f"#{tid} ×{n}" for tid, n in worst)
+                print(f"   [lap {rounds:>3}] {desc}{stuck}")
 
                 # Give up on tasks that keep coming back. `retried` already counts the
                 # extra claims, so this is a decision on a number that was being printed
                 # and otherwise acted on by nobody. Closing one task does not stop the
                 # run — the others keep going, and the trial is recorded as lost so the
                 # report says so rather than quietly describing fewer results as all.
-                #
-                # ↑ 자꾸 되돌아오는 과제를 포기한다. `retried` 는 이미 여분 횟수를 세고
-                #   있었고, 여태 그 숫자를 보고 판단하는 것은 사람뿐이었다. 한 과제를
-                #   닫아도 실행은 멈추지 않는다 — 나머지는 계속 가고, 그 시행은 '빈손'
-                #   으로 기록돼 보고서가 그 사실을 말하게 된다.
                 if args.max_attempts:
                     doomed = [tid for tid, n in retried if n >= args.max_attempts]
                     if doomed:
                         lost = await give_up_on(doomed)
                         missing_trials.extend(t for t in lost if t not in missing_trials)
-                        note(f"과제 {', '.join(f'#{t}' for t in doomed)} 를 포기했다 — "
-                             f"{args.max_attempts}번 넘게 되돌아왔다. 해당 시행은 빈손으로 남는다")
-                        # 닫은 것이 현황에서 빠지도록 다음 바퀴로 넘긴다.
+                        note(f"gave up on task {', '.join(f'#{t}' for t in doomed)} — "
+                             f"it came back more than {args.max_attempts} times. That trial "
+                             f"stays empty-handed")
+                        # Go round again so what was closed drops out of the status line.
                         continue
 
-                # 이번 바퀴에 누구라도 불렀는가. 아무도 안 불렀으면 아래로 간다.
+                # Was anyone called at all this lap? If nobody was, fall through below.
                 worked = False
-                for stage in CLAIMING_STAGES:                 # data → ml → interpreter 순
+                for stage in CLAIMING_STAGES:                 # data → ml → interpreter order
                     waiting = counts.get(f"{STAGE_TASK_TYPE[stage]}/ready", 0)
                     if not waiting:
-                        continue                              # 이 사람이 떼어 갈 종이가 없다
+                        continue                              # no sheet for this person to take
 
                     # No outcome column in this message on purpose. It is on the task, put
                     # there by the hypothesis stage, and a task has to carry everything its
                     # stage needs. Saying it here as well would leave two sources for one
-                    # fact — and the one in the prompt is the one that goes unrecorded.
-                    #
-                    # ↑ 이 메시지에 결과변수를 **일부러 안 적는다.** 그 값은 가설 단계가
-                    #   과제에 적어 뒀고, 과제는 자기 단계에 필요한 것을 다 들고 있어야 한다.
-                    #   여기서도 말하면 한 사실의 출처가 둘이 되는데, 프롬프트 쪽은 기록에
-                    #   안 남는다 — 나중에 어긋나도 확인할 방법이 없다.
+                    # fact — and the one in the prompt is the one that goes unrecorded, so
+                    # if the two ever disagree there is no way to check.
                     #
                     # The run_tag is the exception, and not a contradiction of the rule
                     # above: it does not describe the task, it decides *which* task to
                     # pick. That has to come from the prompt because the agent is choosing
                     # before it holds a task to read it from.
-                    #
-                    # ↑ run_tag 만은 예외인데, 위 원칙과 어긋나지 않는다. 이건 과제의
-                    #   **내용**이 아니라 **어느 과제를 고를지**를 정하는 값이다. 아직
-                    #   과제를 손에 쥐기 전에 정해야 하므로 프롬프트로 올 수밖에 없다.
                     await call_agent(
                         agents[stage],
                         f"Claim a '{STAGE_TASK_TYPE[stage]}' task from run_tag "
@@ -1371,24 +1349,18 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                     # Either its agent died without submitting, or it is simply still
                     # running. Only the first kind may be taken back, which is what the
                     # staleness window decides.
-                    #
-                    # ↑ 어느 단계도 집을 게 없다 = 남은 것은 전부 '진행중'이다. 그 중에는
-                    #   ① 에이전트가 제출 없이 죽은 것과 ② 그냥 아직 하고 있는 것이 섞여 있다.
-                    #   ①만 되찾아야 하고, 그 둘을 가르는 것이 시간 창(stale_after)이다.
                     n = await reclaim_stalled(registry, args.run_tag, args.stale_after)
                     if n:
-                        print(f"       {n}개가 {args.stale_after}초 넘게 멈춰 있어 대기로 되돌렸다")
+                        print(f"       {n} had been stuck for more than {args.stale_after}s "
+                              f"and were returned to waiting")
                     else:
                         # Everything still in progress is young enough to be presumed
                         # alive. Waiting is correct; looping without waiting would spin
                         # the CPU and hammer the board for no reason.
-                        #
-                        # ↑ 전부 아직 살아 있다고 볼 만큼 최근이다. 기다리는 게 맞다.
-                        #   안 쉬고 돌면 CPU 만 태우고 판에 조회만 퍼붓는다.
-                        print(f"       진행중인 것을 기다린다 ({POLL_SECONDS}초)")
+                        print(f"       waiting on what is in progress ({POLL_SECONDS}s)")
                         await asyncio.sleep(POLL_SECONDS)
 
-            # -- ⑥′ 이번 파도의 성적을 질문 은행에 적는다 ----------------
+            # -- (6') write this wave's score into the question bank ------
             #
             # Has to be here, not after the last wave: the next wave's curator reads the
             # bank, so a score written after the loop is a score no question ever used.
@@ -1396,27 +1368,24 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 folded = await call_board_tool(
                     registry, "record_question_outcomes", {"run_tag": args.run_tag})
                 if folded.get("questions_updated"):
-                    note(f"질문 {folded['questions_updated']}개에 이번 성적을 적었다"
-                         + (f" · {folded['questions_retired']}개는 다 써서 은퇴시켰다"
+                    note(f"wrote this score onto {folded['questions_updated']} questions"
+                         + (f" · {folded['questions_retired']} were used up and retired"
                             if folded.get("questions_retired") else ""))
             except Exception as e:  # noqa: BLE001 - bookkeeping must not fail the run
-                note(f"(질문 은행에 성적을 못 적었다: {type(e).__name__})")
+                note(f"(could not write the score into the question bank: {type(e).__name__})")
 
 
         # -- report -----------------------------------------------------
-        # -- ⑥ 마지막에 정리한다 ----------------------------------------
+        # -- (6) wrap up at the end -------------------------------------
         #
-        # 보고 담당은 **게시판이 아니라 완료 서랍**을 읽는다. 게시판은 작업대라 치우면
-        # 사라지지만, 완료 서랍은 남는 기록이기 때문이다.
-        step("⑥", "마지막에 정리한다", "보고 담당이 완료 서랍을 읽는다")
+        # The report agent reads **the finished drawer, not the board.** The board is a
+        # workbench and disappears when it is cleared; the finished drawer is the record
+        # that stays.
+        step("(6)", "wrap up at the end", "the report agent reads the finished drawer")
         # How many trials were seeded is told to the reporter, because the results table
         # cannot say it. read_results only returns rows that exist, so a trial that died
         # before create_task is invisible there — and a report that silently describes
         # three results as if three were all that were attempted is a false report.
-        #
-        # ↑ **몇 개를 뿌렸는지는 결과표가 말해 주지 못한다.** read_results 는 있는 행만
-        #   돌려주므로 create_task 전에 죽은 시행은 거기 없다. 3개를 뿌린 전부인 양
-        #   적는 보고서는 틀린 보고서다. 그래서 뿌린 수를 여기서 알려 준다.
         lost_note = (
             f" Trials {', '.join(str(i) for i in missing_trials)} produced no result at all "
             f"(the hypothesis agent never called create_task); they will be absent from "
@@ -1434,7 +1403,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         )
         (run_dir / "report.md").write_text(text, encoding="utf-8")
 
-        # 게시판의 마지막 모습도 통째로 저장해 둔다. 나중에 되짚을 때 쓴다.
+        # The last state of the board is saved whole as well. It is what a later retrace
+        # reads.
         final = await board_state(registry, args.run_tag)
         (run_dir / "board.json").write_text(
             json.dumps(final, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -1447,19 +1417,22 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             print(f"  {log_path.name}")
         return 0
     finally:
-        # 추적 파일을 **finally 안에서** 쓴다. 중간에 죽거나 Ctrl-C 로 끊겨도 그때까지
-        # 부른 실행의 기록은 남아야 하기 때문이다 — 죽은 실행이야말로 되짚어 볼 대상이다.
-        # 도구 서버를 끊기 전에 쓴다: 여기서 읽는 것은 core 의 DB 라 도구 서버와 무관하지만,
-        # 순서를 바꾸면 나중에 누가 도구를 쓰도록 고칠 때 조용히 깨진다.
+        # The trace files are written **inside finally.** Even if it dies partway or is
+        # cut short with Ctrl-C, the record of the runs called up to that point has to
+        # survive — a run that died is precisely the one worth retracing. It is written
+        # before the tool servers are disconnected: what is read here is core's DB and has
+        # nothing to do with the tool servers, but reversing the order would break quietly
+        # the day somebody changes this to use a tool.
         try:
             n = await write_traces(run_dir)
             if n:
-                print(f"  trace/ 에 {n}개 · runs.json — 에이전트가 도구에 무엇을 묻고 "
-                      f"무엇을 받았는지가 여기 있다")
-        except Exception as e:  # noqa: BLE001 - 기록 실패가 실행을 망치면 안 된다
-            print(f"!! 추적 파일을 쓰지 못했다: {type(e).__name__}: {e}", file=sys.stderr)
+                print(f"  {n} files in trace/ · runs.json — what the agents asked the "
+                      f"tools and what they got back is in here")
+        except Exception as e:  # noqa: BLE001 - a failure to record must not wreck the run
+            print(f"!! could not write the trace files: {type(e).__name__}: {e}",
+                  file=sys.stderr)
 
-        # 성공이든 실패든 자식 프로세스 넷을 반드시 정리한다.
+        # Success or failure, the four child processes are always cleaned up.
         await registry.disconnect_all()
 
 
@@ -1481,17 +1454,10 @@ async def reclaim_stalled(registry: MCPServerRegistry, run_tag: str, stale_after
     Returns:
         How many were returned to the queue. Zero means everything still in progress
         is young enough to be presumed alive — the caller should wait, not spin.
-
-    ↑ **아무도 안 하고 있는 종이를 게시판으로 되돌린다.**
-
-      누가 떼어 갔는데 결과를 안 붙이고 사라지면, 그 종이는 영영 "하는 중" 으로
-      남는다. 그런 것을 도로 붙여 다른 사람이 할 수 있게 한다.
-
-      단, **오래 손대지 않은 것만.** 그 조건이 없으면 방금 떼어 간 일까지 뺏어 오고,
-      오래 걸리는 사람이 일하는 도중에 종이를 빼앗긴다.
     """
-    # 이 한 곳만 게시판을 직접 만진다. 창구를 안 거치는 이유는, 이것이 일하는
-    # 사람의 일이 아니라 **관리자의 일**이기 때문이다 — 누구에게도 줄 버튼이 아니다.
+    # This is the one place that touches the board directly. It does not go through the
+    # window because this is not a worker's job but **the caretaker's** — it is not a
+    # button to hand to anybody.
     conn = await asyncpg.connect(dsn())
     try:
         n = await conn.fetchval(
@@ -1501,7 +1467,8 @@ async def reclaim_stalled(registry: MCPServerRegistry, run_tag: str, stale_after
                 SET status = 'ready', claimed_at = NULL, updated_at = now()
                 WHERE run_tag = $1 AND status = 'in_progress'
                   AND claimed_at IS NOT NULL
-                  -- 집어 간 지 stale_after 초가 넘은 것만. 이 줄이 안전장치다.
+                  -- only what was claimed more than stale_after seconds ago. This line
+                  -- is the safeguard.
                   AND claimed_at < now() - make_interval(secs => $2::double precision)
                 RETURNING 1
             ) SELECT count(*) FROM returned
@@ -1532,18 +1499,9 @@ async def give_up_on(task_ids: list[int]) -> list[int]:
 
     Returns:
         The trial numbers those rows belonged to.
-
-    ↑ **끝내 안 될 과제를 닫는다.** 재시도가 무제한이었는데, 딸꾹질로 실패하는 단계에는
-      그게 맞지만 **매번 같은 이유로** 실패하는 단계에는 틀리다. 일 루프의 유일한 탈출구가
-      "판이 비었다" 라서, 그런 과제 하나가 실행 전체를 보고서까지 못 가게 붙잡는다.
-      누군가는 "이건 안 된다" 고 판단해야 하는데 여태 그건 화면을 보는 사람이었고,
-      그 말은 **사람이 없는 실행에는 끝이 없었다**는 뜻이다.
-
-      지우지 않고 failed 로 둔다. 그 행이 무엇을 시도했는지에 대한 유일한 기록이고,
-      어느 시행이었는지를 돌려주므로 보고서가 짧아진 결과표를 완전한 것처럼 말하지 않는다.
     """
-    # reclaim_stalled 와 같은 이유로 창구를 안 거친다 — 관리자의 일이라 에이전트에게
-    # 줄 버튼이 아니다.
+    # It does not go through the window, for the same reason as reclaim_stalled — this is
+    # the caretaker's job, not a button to hand to an agent.
     conn = await asyncpg.connect(dsn())
     try:
         rows = await conn.fetch(
@@ -1565,25 +1523,28 @@ async def give_up_on(task_ids: list[int]) -> list[int]:
 
 
 async def main() -> int:
-    """명령줄에서 들어오는 문. 인자를 읽고, 검사하고, 잠금을 잡고 run() 을 부른다."""
-    # 이 프로젝트는 `.env` 가 **둘**이고, 서로 다른 것을 담는다.
+    """The door in from the command line. Reads the arguments, checks them, takes the
+    lock and calls run()."""
+    # This project has **two** `.env` files, and they hold different things.
     #
-    #     memstara/.env   MEMSTARA_* 경로들
-    #     agentic-core/.env           LLM 자격증명 · AGENTIC_DATABASE_URL
+    #     memstara/.env   the MEMSTARA_* paths
+    #     agentic-core/.env           LLM credentials · AGENTIC_DATABASE_URL
     #
-    # 그런데 `settings.py:27` 의 `env_file=".env"` 는 **현재 폴더 하나만** 읽는다.
-    # 그래서 core 쪽 것을 따로 읽어 주지 않으면 LLM 자격증명이 안 들어오고,
-    # 그 결과가 첫 호출에서 터지는 이 오류다:
+    # But `env_file=".env"` in `settings.py:27` reads **only the current folder.** So
+    # unless core's file is read separately the LLM credentials never arrive, and the
+    # result is this error, which blows up on the first call:
     #
     #     ValueError: Azure Anthropic requests require an api_base.
     #
-    # 셸에서 `source` 둘을 하면 안 걸리지만, VS Code 의 `envFile` 은 파일 하나만
-    # 받으므로 F5 로 띄우면 걸린다. 실행 방법마다 다르게 동작하는 셈이라,
-    # **프로그램이 직접 읽어** 어디서 띄우든 같게 만든다.
+    # `source` both in a shell and it does not happen, but VS Code's `envFile` takes only
+    # one file, so starting with F5 does hit it. That amounts to behaving differently
+    # depending on how it was started, so **the program reads them itself** and comes out
+    # the same wherever it was launched from.
     #
-    # 샌드박스 것을 먼저 읽는다. `load_dotenv` 는 이미 있는 값을 덮지 않으므로
-    # (override=False 가 기본) 먼저 읽은 쪽이 이기고, 셸이나 launch.json 이 준
-    # 값은 둘 다보다 앞선다 — "이 실행에만 다른 번들" 이라는 의도가 유지된다.
+    # The sandbox one is read first. `load_dotenv` does not overwrite a value that is
+    # already there (override=False is the default), so whichever is read first wins, and
+    # a value given by the shell or by launch.json comes ahead of both — which keeps the
+    # intent of "a different bundle for this run only" working.
     load_dotenv(HERE / ".env")
     load_dotenv(HERE / ".." / "agentic-core" / ".env")
 
@@ -1618,16 +1579,13 @@ async def main() -> int:
     ap.add_argument("--run-dir", default=None)
     args = ap.parse_args()
 
-    # 준비물이 없으면 **아무것도 하지 않고** 끝낸다. 반쯤 하다 죽는 것보다
-    # 시작 전에 멈추는 편이 게시판을 깨끗하게 남긴다.
+    # If the prerequisites are missing it ends **without doing anything.** Stopping
+    # before the start leaves the board cleaner than dying halfway through.
     #
-    # `--report-only` 는 결과변수를 안 쓴다. 이미 끝난 것을 읽어 정리할 뿐이라
-    # 데이터셋을 열지도 않는다. 그런데도 결과변수를 검사하면, **중단된 실행을
-    # 수습하려고 부르는 바로 그 길**이 기본값 `outcome` 때문에 막힌다 — 수습 수단이
-    # 수습이 필요한 상황에서만 안 되는 셈이다.
-    #
-    # ↑ report-only reads finished results and never opens the dataset, so checking the
-    #   outcome column there blocks the one path meant for rescuing an interrupted run.
+    # `--report-only` does not use the outcome column. It only reads and tidies what has
+    # already finished, so it never opens the dataset. Check the outcome column anyway
+    # and the default `outcome` blocks **the very path meant for rescuing an interrupted
+    # run** — the means of rescue failing only when rescue is needed.
     problems = await check_environment(
         provider=args.provider,
         y_column="" if args.report_only else args.y_column,
@@ -1639,42 +1597,37 @@ async def main() -> int:
         return 1
 
     started = datetime.now()
-    # 실행 이름을 안 주면 시각으로 만든다. 이 이름으로 게시판의 종이들이 묶인다.
+    # If no run name is given, one is made from the clock. This name is what ties the
+    # sheets on the board together.
     args.run_tag = args.run_tag or started.strftime("board_%Y%m%dT%H%M%S")
     run_dir = Path(args.run_dir) if args.run_dir else new_run_dir(
         f"board_{args.trials}trials", started.strftime("%Y-%m-%dT%H%M%S")
     )
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    # 화면에 찍히는 것을 console.log 에도 그대로 남긴다.
+    # Whatever is printed to the screen is left in console.log as well.
     with tee_console(run_dir / "console.log"):
         try:
             # Refuse to be the second driver on this tag. Held for the whole run and
             # released with the connection, so a killed process leaves nothing behind.
-            #
-            # ↑ **같은 게시판에 두 번째 관리자가 붙는 것을 막는다.** 예전에 둘이 동시에
-            #   돌아 서로의 종이를 뺏어 가며 판이 뒤섞인 적이 있다.
-            #
-            #   데이터베이스가 잡아 주는 잠금이라, 프로그램이 강제로 죽어도 연결이
-            #   끊기는 순간 **자동으로 풀린다** — 찌꺼기가 안 남는다.
+            # Two of them once ran at the same time, taking each other's sheets, and the
+            # board ended up scrambled.
             async with run_lock(args.run_tag):
                 return await run(args, run_dir)
         except BoardBusy as e:
-            # 이미 누가 이 이름으로 돌리고 있다.
+            # Somebody is already running under this name.
             print(f"\n{e}", file=sys.stderr)
             return 2
         except KeyboardInterrupt:
             # The board is a database; whatever was written stays written. Say what to
             # do next rather than leaving a bare traceback.
-            #
-            # ↑ Ctrl-C 로 멈춰도 **게시판은 그대로 남는다.** 그러니 알 수 없는 오류
-            #   덩어리 대신 "다음에 무엇을 하면 되는지" 를 알려 준다.
-            print("\n\n중단됐다. 판은 그대로 남아 있다.")
-            print(f"  상태 보기:  python blackboard.py --show")
-            print(f"  보고만:     python 03_board_pipeline.py --report-only --run-tag {args.run_tag}")
+            print("\n\ninterrupted. the board is still there.")
+            print(f"  see the state:  python blackboard.py --show")
+            print(f"  report only:    python 03_board_pipeline.py --report-only --run-tag {args.run_tag}")
             return 130
 
 
 if __name__ == "__main__":
-    # asyncio.run 이 main() 을 끝까지 돌리고, 그 반환값(0/1/2/130)이 종료 코드가 된다.
+    # asyncio.run drives main() to the end, and its return value (0/1/2/130) becomes the
+    # exit code.
     raise SystemExit(asyncio.run(main()))

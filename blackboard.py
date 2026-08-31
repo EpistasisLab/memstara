@@ -11,21 +11,8 @@ prefix. Everything worked, but the arrangement was wrong: Memstara is meant to b
 application that owns its store, not a guest in core's. Sharing a server means core's
 container going down takes Memstara's results with it, a `docker volume rm` aimed at
 core destroys data that has nothing to do with core, and backing up one backs up the
-other. A prefix is a naming convention, not a boundary.
-
-↑ 왜 데이터베이스를 따로 쓰는가 — 처음에는 이 표들이 core 의 `agentic_core`
-  데이터베이스 안에 있었고, `memstara_` 라는 이름 앞머리로만 구분됐다. 동작에는
-  문제가 없었지만 배치가 틀렸다. Memstara 는 제 저장소를 소유하는 응용이지 core 의
-  셋방살이가 아니다. 서버를 같이 쓰면 이런 일이 생긴다.
-
-    * core 컨테이너가 내려가면 Memstara 의 결과도 같이 못 쓰게 된다.
-    * core 를 정리하려고 `docker volume rm` 을 하면 core 와 아무 상관 없는
-      데이터까지 지워진다.
-    * 하나를 백업하면 다른 하나도 딸려 백업된다.
-
-  이름 앞머리는 **관례**이지 **경계**가 아니다. 그래서 서버·볼륨·계정을 통째로
-  분리했다. 자세한 것은 옆의 `docker-compose.yml` 을 볼 것. core 의 마이그레이션은
-  건드리지 않는다 — 애초에 다른 서버를 향해 도니 건드릴 수도 없다.
+other. A prefix is a naming convention, not a boundary. So the server, the volume and the
+account were separated outright.
 
 **core's migrations are not touched** — they cannot be, since they run against a
 different server entirely.
@@ -39,14 +26,11 @@ Two tables, deliberately separate:
 Keeping them apart means "what is left to do" never gets mixed with "what we have
 found", which is what that separation was for.
 
-↑ 표 두 개를 일부러 갈라 놨다.
-
-    memstara_blackboard  아직 안 끝난 일과 그 상태를 적는 **작업대**. 실행 중에는
-                         쉴 새 없이 바뀌고, 다 쓰면 치워도 되는 것.
-    memstara_results     해석 단계가 만들어 낸 **기록**. 쌓이기만 하고 줄지 않는다.
-
-  이렇게 나눠 두면 "아직 할 일" 과 "우리가 알아낸 것" 이 섞이지 않는다. 그게
-  나눠 놓은 이유의 전부다.
+    memstara_blackboard  the **work surface**, holding work that is not finished and
+                         its state. It changes constantly while a run is going, and
+                         it may be cleared away once it has served its purpose.
+    memstara_results     the **record** the interpretation stage produced. It only
+                         accumulates, never shrinks.
 
 Usage::
 
@@ -55,127 +39,115 @@ Usage::
     python blackboard.py --drop        # asks first
     python blackboard.py --drop-questions   # the bank, which --drop leaves alone
 
-↑ 쓰는 법:
-    python blackboard.py --create    표를 만든다. 이미 있으면 아무 일도 없다.
-    python blackboard.py --show      무엇이 있고 판이 어떤 상태인지 보여 준다.
-    python blackboard.py --drop      판과 결과표를 지운다. 먼저 물어본다.
-    python blackboard.py --drop-questions
-                                     질문 은행을 지운다. --drop 은 이걸 건드리지 않는다.
+ The three below deal with **one run only**, not the whole board. They are for
+ clearing away tasks left on the board by a run that was interrupted or died.
 
- 아래 셋은 판 전체가 아니라 **한 실행분만** 다룬다. 중단되거나 죽은 실행이 판에
- 남긴 과제를 치우는 용도다.
-
-    python blackboard.py --orphans   안 끝난 과제가 어느 실행에 몇 개 남았는지 본다.
+    python blackboard.py --orphans   which run left how many unfinished tasks
     python blackboard.py --reclaim TAG
-                                     그 실행의 '하는 중' 을 대기열로 되돌린다.
-    python blackboard.py --close TAG 그 실행의 안 끝난 과제를 failed 로 닫는다.
-                                     **행은 지우지 않는다** — 왜 결과가 없는지 남긴다.
+                                     put that run's 'in progress' back in the queue
+    python blackboard.py --close TAG close that run's unfinished tasks as failed.
+                                     **The rows are not deleted** — they record why
+                                     there is no result.
 
 ==============================================================================
- 이 파일을 읽는 법
+ How to read this file
 ==============================================================================
 
- 이 파일은 **판(blackboard)과 결과표의 설계도**다. 표를 어떤 칸으로 만들지 적어
- 두고(SQL), 데이터베이스에 접속하는 주소를 정하고, 만들기·보기·지우기를 명령줄에서
- 할 수 있게 한다. 여기서 실제로 일을 하지는 않는다 — 일할 자리를 마련할 뿐이다.
+ This file is **the blueprint for the board and the results table.** It writes down
+ which columns the tables get (in SQL), settles the address the database is reached
+ at, and makes creating, viewing and dropping them possible from the command line.
+ No work actually happens here — it only lays out the place where work happens.
 
- 주요 이름
- ---------
- STATUSES / TASK_TYPES  한 작업이 가질 수 있는 상태 넷과 단계 넷.
- SCHEMA                 두 표의 정의(SQL) 전문. 여러 번 실행해도 안전하게 썼다.
- dsn()                  Memstara 자기 데이터베이스의 주소. core 것이 아니다.
- BoardBusy              같은 run_tag 를 다른 실행이 이미 쥐고 있을 때 나는 예외.
- run_lock(run_tag)      한 run_tag 는 한 번에 한 실행만 — 자문 잠금(advisory lock).
- create / drop / show   표 만들기 / 지우기 / 현황 보기.
- orphans()              끝나지 않은 채 판에 남은 과제를 태그별로 센다. 읽기만 한다.
- reclaim / close_run    한 실행분만 되돌리거나 닫는다. 다른 태그는 건드리지 않는다.
- main()                 명령줄 인자를 읽어 위 중 하나를 부른다.
-
- 놓치기 쉬운 것
+ The main names
  --------------
- 1. 표는 둘이다. `memstara_blackboard` 는 작업대라 **치우면 사라져도 되는 것**이고,
-    `memstara_results` 는 기록이라 **남아야 하는 것**이다.
- 2. 결과표가 판을 가리키는 연결은 `ON DELETE SET NULL` 이다. 즉 **판을 지워도
-    결과는 안 지워진다** — 연결만 끊긴다. 예전에 CASCADE 였을 때는 판을 청소하면
-    결과가 같이 날아갔고, 그러면 표를 둘로 나눈 의미가 사라진다.
- 3. `run_lock` 은 PostgreSQL 의 자문 잠금이라 **연결에 매여 있다.** 프로세스를
-    `kill -9` 해도 연결이 끊기면서 잠금이 같이 풀린다. pid 파일이었다면 죽은
-    프로세스가 남긴 파일이 이후 모든 실행을 막았을 것이다.
+ STATUSES / TASK_TYPES  the four states a task can be in and the four stages.
+ SCHEMA                 the full definition (SQL) of the tables. Written to be safe
+                        to run more than once.
+ dsn()                  the address of Memstara's own database. Not core's.
+ BoardBusy              the exception raised when another run already holds this run_tag.
+ run_lock(run_tag)      one run at a time per run_tag — a Postgres advisory lock.
+ create / drop / show   create the tables / drop them / see what state things are in.
+ orphans()              counts, per tag, the tasks left unfinished on the board. Reads only.
+ reclaim / close_run    reverse or close one run only. Other tags are untouched.
+ main()                 reads the command-line arguments and calls one of the above.
+
+ Easy things to miss
+ -------------------
+ 1. There are two tables. `memstara_blackboard` is a work surface, so **it is fine
+    for it to disappear when cleared**; `memstara_results` is a record, so **it has
+    to stay.**
+ 2. The link from the results table to the board is `ON DELETE SET NULL`. That is,
+    **dropping the board does not delete the results** — only the link is broken.
+    Back when it was CASCADE, cleaning the board took the results with it, which
+    removes the point of having two tables.
+ 3. `run_lock` is a PostgreSQL advisory lock, so **it is tied to the connection.**
+    Even a `kill -9` closes the connection and releases the lock with it. Had it been
+    a pid file, the file a dead process left behind would have blocked every later run.
 """
 
 from __future__ import annotations
 
-import argparse      # 명령줄 인자(--create, --drop, --show)를 읽는다
-import asyncio        # asyncpg 가 비동기라, 명령줄에서는 asyncio.run 으로 감싼다
-import contextlib     # run_lock 을 `with` 로 쓸 수 있게 만든다
-import os             # 환경변수에서 데이터베이스 주소를 읽는다
-import re             # postgresql+asyncpg:// 형태를 다듬는다
+import argparse      # reads the command-line arguments (--create, --drop, --show)
+import asyncio        # asyncpg is async, so the CLI wraps calls in asyncio.run
+import contextlib     # what makes run_lock usable with `with`
+import os             # reads the database address from the environment
+import re             # tidies up the postgresql+asyncpg:// form
 import sys
-import zlib           # run_tag 를 잠금 번호(정수)로 바꾸는 crc32 가 여기 있다
+import zlib           # holds crc32, which turns a run_tag into a lock number (an integer)
 from collections.abc import AsyncIterator
 
-import asyncpg        # PostgreSQL 비동기 드라이버
+import asyncpg        # the async PostgreSQL driver
 
 # Every state a task can be in.
 #
 # `failed` and the `attempts` column below are present but **not yet used by any
 # policy**. What happens to a task whose agent claimed it and then died is still open
-# (see the design document, "정해야 할 다섯" §2) — it might be returned to `ready` for
-# another attempt, or closed as `failed`. Carrying both now means whichever way that
+# (see the 2026-08-17 blackboard design document, §2 "the five to decide") — it might be
+# returned to `ready` for another attempt, or closed as `failed`. Carrying both now
+# means whichever way that
 # lands, the table does not have to be rebuilt. **This is not a decision; it is leaving
 # both doors open.**
 #
-# ↑ 작업 하나가 가질 수 있는 상태 넷:
-#     ready        아직 아무도 안 집었다 — 누구든 가져갈 수 있다
-#     in_progress  누군가 집어 갔고 지금 하고 있다
-#     done         끝났다
-#     failed       실패로 닫혔다
-#
-#   `failed` 와 아래의 `attempts` 칸은 **만들어만 뒀고 아직 아무 규칙도 쓰지 않는다.**
-#   작업을 집어 간 에이전트가 도중에 죽었을 때 어떻게 할지가 아직 안 정해졌다 —
-#   `ready` 로 되돌려 다시 시켜야 할지, `failed` 로 닫아야 할지. 지금 둘 다 갖고
-#   있으면 어느 쪽으로 정해지든 표를 다시 만들 필요가 없다.
-#   **이건 결정이 아니라 문 두 개를 다 열어 둔 것이다.**
+#   ready        nobody has taken it yet — anyone may
+#   in_progress  somebody took it and is working on it now
+#   done         finished
+#   failed       closed as a failure
 STATUSES = ("ready", "in_progress", "done", "failed")
 
-# The four stages. A task carries the stage that should pick it up next, which is how
-# an agent answers "is this mine?" without anyone telling it.
-#
-# ↑ 네 단계: 가설 세우기 → 데이터 추리기 → 학습하기 → 해석하기.
-#   한 작업 행이 "다음에 나를 집어 갈 단계" 를 스스로 달고 있다. 그래서 에이전트가
-#   "이게 내 일인가?" 를 누가 알려 주지 않아도 판만 보고 판단할 수 있다.
+# The four stages: form a hypothesis -> cut the data -> train -> interpret. A task
+# carries the stage that should pick it up next, which is how an agent answers "is this
+# mine?" without anyone telling it — it decides from the board alone.
 TASK_TYPES = ("hypothesis", "data", "ml", "interpret")
 
-# ↑ 아래는 f-문자열이다. {STATUSES} 와 {TASK_TYPES} 자리에 위에서 정한 튜플이
-#   그대로 들어가, SQL 의 IN 목록이 된다. 상태 이름을 파이썬과 SQL 두 군데에
-#   따로 적어 두면 언젠가 어긋나므로, 한 곳에서만 적고 끼워 넣는다.
+# What follows is an f-string. The tuples settled above go straight into the {STATUSES}
+# and {TASK_TYPES} slots and become SQL IN lists. Writing the state names out separately
+# in Python and in SQL would drift apart sooner or later, so they are written once and
+# interpolated.
 SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS memstara_blackboard (
-    -- 판(작업대). 아직 안 끝난 일과 그 상태가 여기 있다. 실행이 끝나면 치워도 되는 표.
-    -- task_id 는 BIGSERIAL — 행을 넣을 때마다 1씩 자동으로 붙는 번호.
+    -- The board (the work surface). Work that is not finished and its state live here.
+    -- A table that may be cleared away once a run is over.
+    -- task_id is BIGSERIAL — a number that increments by 1 with every row inserted.
     task_id            BIGSERIAL PRIMARY KEY,
 
-    -- which pipeline run this row belongs to, and which trial within it
-    -- ↑ 이 행이 어느 실행(run_tag)의, 그 안의 몇 번째 시도(trial)에 속하는지.
-    --   perspective 는 그 시도가 어떤 관점에서 세워진 것인지 적는 칸.
+    -- which pipeline run this row belongs to, and which trial within it.
+    -- perspective records the angle that trial was built from.
     run_tag            TEXT        NOT NULL,
     trial              INTEGER     NOT NULL,
     perspective        TEXT        NOT NULL DEFAULT '',
 
-    -- the two columns that turn a ledger into a board
-    -- ↑ 이 두 칸이 단순한 장부를 "판" 으로 만든다. status 는 지금 어떤 상태인지,
-    --   task_type 은 다음에 누가 집어 가야 하는지를 말한다. 이 둘이 없으면 그냥
-    --   기록만 쌓이는 표이고, 있으면 에이전트들이 스스로 일을 나눠 가질 수 있다.
-    --   CHECK 는 정해진 값 말고는 아예 못 들어가게 막는 장치다.
+    -- The two columns that turn a ledger into a board. status says what state it is in
+    -- now, task_type says who should pick it up next. Without the two this is just a
+    -- table that accumulates records; with them the agents can divide the work up among
+    -- themselves. CHECK is what stops anything but the settled values getting in.
     status             TEXT        NOT NULL
                        CHECK (status IN {STATUSES}),
     task_type          TEXT        NOT NULL
                        CHECK (task_type IN {TASK_TYPES}),
 
-    -- filled by the hypothesis stage
-    -- ↑ 가설 단계가 채우는 칸들. 무엇을 주장하는지(hypothesis), 어떤 열을 쓸
-    --   것인지(columns), 어떤 근거 문서를 봤는지(okf_concept_ids).
-    --   JSONB 는 목록이나 표를 통째로 담는 칸 형식이다.
+    -- Filled by the hypothesis stage: what it claims (hypothesis), which columns it
+    -- means to use (columns), and which evidence documents it read (okf_concept_ids).
+    -- JSONB is the column type that holds a whole list or table.
     hypothesis         TEXT        NOT NULL DEFAULT '',
     columns            JSONB       NOT NULL DEFAULT '[]'::jsonb,
     okf_concept_ids    JSONB       NOT NULL DEFAULT '[]'::jsonb,
@@ -196,60 +168,53 @@ CREATE TABLE IF NOT EXISTS memstara_blackboard (
     -- source of truth it claims to be. Before this, the driving script told each agent
     -- the outcome column in the prompt text, so a finished row recorded an AUC without
     -- recording what it was an AUC *of*.
-    --
-    -- ↑ 고른 열들로 **무엇을 맞히려는지**. 프롬프트가 아니라 판에 적는다. 작업 하나가
-    --   자기 단계에 필요한 것을 전부 지니고 있어야 판이 "믿을 근거" 노릇을 한다.
-    --   이게 없던 때에는 실행 스크립트가 결과 열 이름을 프롬프트 글로 알려 줬고,
-    --   그래서 다 끝난 행에 AUC 는 있는데 **무엇의 AUC 인지**는 없었다.
     y_column           TEXT        NOT NULL DEFAULT '',
 
-    -- filled by the data stage
-    -- ↑ 데이터 단계가 채운다. 잘라 낸 작은 CSV 가 어디 있는지(subset_path),
-    --   실제로 쓴 열과(columns_used) 없어서 못 쓴 열(columns_missing).
-    --   없는 열을 따로 적어 두는 이유는, 가설이 요구한 것과 실제로 쓴 것이 다를 때
-    --   해석 단계가 그 차이를 알고 읽어야 하기 때문이다.
+    -- Filled by the data stage: where the small CSV it cut lives (subset_path), the
+    -- columns it actually used (columns_used) and the ones it could not because they
+    -- were absent (columns_missing). The absent ones are recorded separately because
+    -- when what the hypothesis asked for differs from what was actually used, the
+    -- interpretation stage has to read the result knowing that difference.
     subset_path        TEXT        NOT NULL DEFAULT '',
     columns_used       JSONB       NOT NULL DEFAULT '[]'::jsonb,
     columns_missing    JSONB       NOT NULL DEFAULT '[]'::jsonb,
 
-    -- filled by the ml stage
-    -- ↑ 학습 단계가 채운다. 성능 숫자(auc)와 어느 변수가 얼마나 기여했는지
-    --   (feature_importance). auc 만 NOT NULL 이 아닌데, 아직 학습을 안 했으면
-    --   "0" 이 아니라 "없음" 이어야 맞기 때문이다.
-    --   기본값의 중괄호가 두 겹인 것은 이 SCHEMA 가 f-문자열이기 때문이다.
-    --   두 겹으로 적어야 실제 SQL 에는 한 겹으로 들어가 빈 JSON 객체가 된다.
+    -- Filled by the ml stage: the performance number (auc) and how much each variable
+    -- contributed (feature_importance). auc alone is not NOT NULL, because before
+    -- training has happened the right value is "none", not "0".
+    -- The doubled braces in the default are because this SCHEMA is an f-string; doubled
+    -- here, they arrive in the real SQL singled, as an empty JSON object.
     auc                DOUBLE PRECISION,
     feature_importance JSONB       NOT NULL DEFAULT '{{}}'::jsonb,
 
-    -- filled by the interpretation stage
-    -- ↑ 해석 단계가 채운다. 숫자를 사람 말로 옮긴 글.
+    -- Filled by the interpretation stage: the numbers put into human words.
     interpretation     TEXT        NOT NULL DEFAULT '',
 
-    -- see the note on STATUSES above
-    -- ↑ 위 STATUSES 설명 참고. 몇 번 시도했는지와 마지막 오류. 만들어 뒀을 뿐
-    --   아직 이걸 보고 무언가 결정하는 규칙은 없다.
+    -- See the note on STATUSES above. How many attempts were made and the last error.
+    -- They are only in place; no policy yet decides anything from them.
     attempts           INTEGER     NOT NULL DEFAULT 0,
     error              TEXT        NOT NULL DEFAULT '',
 
-    -- 언제 누가 집어 갔는지 / 언제 만들어졌는지 / 언제 마지막으로 바뀌었는지.
-    -- TIMESTAMPTZ 는 시간대까지 같이 저장하는 형식이다.
+    -- When and by whom it was claimed / when it was created / when it last changed.
+    -- TIMESTAMPTZ is the type that stores the time zone along with the time.
     claimed_at         TIMESTAMPTZ,
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- claim_task() looks for exactly this: the oldest ready row of one type.
--- ↑ 색인(index)은 찾기를 빠르게 하는 목차다. claim_task() 가 던지는 질문이 늘
---   "이 단계의 ready 행 중 가장 오래된 것" 이라, 그 순서 그대로 목차를 만들어 둔다.
+-- An index is a table of contents that makes looking things up fast. claim_task()
+-- always asks for exactly this — the oldest ready row of one type — so the index is
+-- built in that same order.
 CREATE INDEX IF NOT EXISTS memstara_blackboard_claim_idx
     ON memstara_blackboard (task_type, status, task_id);
 
--- 한 실행(run_tag)에 속한 행을 모아 볼 때 쓰는 목차.
+-- The index used when gathering the rows of one run (run_tag).
 CREATE INDEX IF NOT EXISTS memstara_blackboard_run_idx
     ON memstara_blackboard (run_tag);
 
 CREATE TABLE IF NOT EXISTS memstara_results (
-    -- 결과표(기록). 판과 달리 쌓이기만 하고 줄지 않는다. 보고 단계는 **이 표만** 읽는다.
+    -- The results table (the record). Unlike the board it only accumulates and never
+    -- shrinks. The reporting stage reads **this table only.**
     result_id      BIGSERIAL PRIMARY KEY,
     -- Nullable, and SET NULL rather than CASCADE. The whole reason this table is
     -- separate from the board is that the board is a work queue you can clean out
@@ -259,17 +224,7 @@ CREATE TABLE IF NOT EXISTS memstara_results (
     -- A result row describes itself without the id: run_tag, trial, perspective,
     -- hypothesis, columns_used, y_column, auc and the write-up are all here.
     --
-    -- ↑ **여기가 이 파일에서 가장 중요한 한 줄이다.**
-    --   이 칸은 "이 결과가 어느 작업에서 나왔는지" 를 가리키는 연결이다. 비어 있어도
-    --   되고(NULL 허용), 가리키던 작업이 지워지면 **연결만 끊기고 결과 행은 남는다**
-    --   (ON DELETE SET NULL).
-    --
-    --   표를 둘로 나눈 이유가 바로 이것이다. 판은 다 쓰면 치우는 작업대이고, 결과는
-    --   남아야 하는 기록이다. 예전에는 여기가 CASCADE 였는데, 그러면 판을 청소할 때
-    --   결과가 **같이 지워졌다.** 표를 나눈 의미가 조용히 사라진 것이다.
-    --
-    --   연결이 끊겨도 결과 행은 혼자서 자기를 설명한다 — 실행 이름, 시도 번호, 관점,
-    --   가설, 쓴 열, 무엇을 맞히려 했는지, 성능, 해석 글이 전부 이 표 안에 있다.
+    -- **This is the most important line in the file.**
     task_id        BIGINT      REFERENCES memstara_blackboard (task_id)
                    ON DELETE SET NULL,
     run_tag        TEXT        NOT NULL,
@@ -298,10 +253,6 @@ CREATE TABLE IF NOT EXISTS memstara_results (
     -- Carried over from the board. The reporting stage reads only this table, so
     -- without it a report would state an AUC without stating what it is an AUC *of* —
     -- exactly the gap that putting y_column on the board was meant to close.
-    --
-    -- ↑ 판에서 그대로 옮겨 적는다. 보고 단계는 이 표만 읽으므로, 이 칸이 없으면
-    --   보고서에 "AUC 0.78" 은 있는데 **무엇의 0.78 인지**는 없게 된다. 판에
-    --   y_column 을 넣어 막으려던 바로 그 구멍이 결과표에서 다시 열리는 셈이다.
     y_column       TEXT        NOT NULL DEFAULT '',
 
     auc            DOUBLE PRECISION,
@@ -317,7 +268,7 @@ CREATE TABLE IF NOT EXISTS memstara_results (
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 한 실행의 결과를 모아 볼 때 쓰는 목차.
+-- The index used when gathering one run's results.
 CREATE INDEX IF NOT EXISTS memstara_results_run_idx
     ON memstara_results (run_tag);
 
@@ -367,11 +318,6 @@ CREATE INDEX IF NOT EXISTS memstara_questions_status_idx
 -- CREATE TABLE IF NOT EXISTS does nothing to a table that already exists, so a column
 -- added later has to be stated separately. Two tables and one column do not justify a
 -- migration tool; this line is correct both for a fresh database and an existing one.
---
--- ↑ `CREATE TABLE IF NOT EXISTS` 는 표가 **이미 있으면 아무것도 하지 않는다.** 그래서
---   나중에 새로 생긴 칸은 따로 적어 줘야 옛날에 만든 데이터베이스에도 붙는다.
---   표 두 개에 칸 하나 때문에 마이그레이션 도구까지 들일 일은 아니고, 이 줄은
---   새 데이터베이스에서도 기존 데이터베이스에서도 똑같이 맞다.
 ALTER TABLE memstara_blackboard ADD COLUMN IF NOT EXISTS y_column TEXT NOT NULL DEFAULT '';
 ALTER TABLE memstara_results    ADD COLUMN IF NOT EXISTS y_column TEXT NOT NULL DEFAULT '';
 
@@ -397,24 +343,23 @@ ALTER TABLE memstara_results    ADD COLUMN IF NOT EXISTS question_id INTEGER;
 
 -- Same reason as the ADD COLUMN above: an existing table keeps whatever constraint it
 -- was created with, so the change has to be stated for databases made before it.
---
--- ↑ 위와 같은 이유다. 이미 있는 표는 만들어질 때의 제약을 그대로 갖고 있으므로,
---   CASCADE 를 SET NULL 로 바꾼 변경도 옛 데이터베이스를 위해 따로 적어 준다.
---   순서: NOT NULL 을 풀고 → 옛 외래키를 떼고 → SET NULL 짜리로 다시 단다.
+-- The order: drop NOT NULL -> remove the old foreign key -> attach the SET NULL one.
 ALTER TABLE memstara_results ALTER COLUMN task_id DROP NOT NULL;
 ALTER TABLE memstara_results DROP CONSTRAINT IF EXISTS memstara_results_task_id_fkey;
 ALTER TABLE memstara_results ADD CONSTRAINT memstara_results_task_id_fkey
     FOREIGN KEY (task_id) REFERENCES memstara_blackboard (task_id) ON DELETE SET NULL;
 """
 
-#: 이 파일이 책임지는 표 이름들. --drop 이 물어볼 때 이 목록을 보여 준다.
-#: `memstara_questions` 는 일부러 빠져 있다 — `--drop` 이 지우지 않는 표이므로,
-#: 여기 적으면 "지웁니다" 하고 물어본 뒤 안 지우는 거짓말이 된다(→ drop_questions).
+#: The table names this file is responsible for. --drop shows this list when it asks.
+#: `memstara_questions` is deliberately absent — `--drop` does not delete that table, so
+#: listing it here would make the prompt say "dropping these" and then not (see
+#: drop_questions).
 TABLES = ("memstara_blackboard", "memstara_results")
 
 
-#: 아무것도 설정하지 않았을 때 쓸 주소. 옆의 docker-compose.yml 이 띄우는 컨테이너를
-#: 가리킨다. 포트 5463 은 core 의 Postgres(5432 등)와 겹치지 않게 고른 것이다.
+#: The address used when nothing has been configured. It points at the container the
+#: docker-compose.yml beside this file brings up. Port 5463 was chosen so as not to
+#: collide with core's Postgres (5432 and the like).
 MEMSTARA_DATABASE_URL_DEFAULT = "postgresql://memstara:memstara@localhost:5463/memstara"
 
 
@@ -431,17 +376,6 @@ def dsn() -> str:
 
     SQLAlchemy's ``postgresql+asyncpg://`` form is accepted and reduced, because the
     value often gets copied from a core-style .env and asyncpg rejects the ``+driver``.
-
-    ↑ 요약: 접속할 데이터베이스 주소를 정한다. `MEMSTARA_DATABASE_URL` 이 있으면
-      그것을, 없으면 위의 기본값(도커 컨테이너)을 쓴다.
-
-      **일부러 `AGENTIC_DATABASE_URL` 을 읽지 않는다.** 판이 core 의 데이터베이스
-      안에 들어가 앉게 된 것이 바로 그 때문이었다 — 주소가 이미 거기 있었고, 잘
-      돌아갔고, "이 저장소는 누구 것인가" 를 아무도 묻지 않았다.
-
-      마지막 줄은 `postgresql+asyncpg://` 처럼 드라이버 이름이 붙은 주소를
-      `postgresql://` 로 줄인다. core 쪽 .env 에서 값을 복사해 오는 일이 잦은데
-      asyncpg 는 `+드라이버` 가 붙은 형태를 거부하기 때문이다.
     """
     url = os.environ.get("MEMSTARA_DATABASE_URL", "").strip() or MEMSTARA_DATABASE_URL_DEFAULT
     return re.sub(r"^postgresql\+\w+://", "postgresql://", url)
@@ -450,8 +384,7 @@ def dsn() -> str:
 class BoardBusy(RuntimeError):
     """Raised when another driver already holds this run_tag.
 
-    ↑ 같은 run_tag 를 이미 다른 실행이 쥐고 있을 때 나는 예외. 프로그램 오류가
-      아니라 "지금은 안 된다" 는 알림이다.
+    Not a program error but a notice that says "not right now".
     """
 
 
@@ -477,42 +410,19 @@ async def run_lock(run_tag: str) -> AsyncIterator[None]:
     killed process blocks every later run until someone deletes it by hand.
 
     Raises:
-        BoardBusy: another driver holds this run_tag.
-
-    ↑ 요약: 이 `with` 블록이 도는 동안 해당 run_tag 를 혼자 차지한다. 다른 실행이
-      같은 tag 로 들어오면 기다리지 않고 곧바로 BoardBusy 로 튕겨 낸다.
-
-      **왜 필요한가** — 판 자체는 여러 명이 동시에 써도 안전하다. `claim_task` 가
-      `FOR UPDATE SKIP LOCKED` 를 쓰기 때문에 두 사람이 같은 행을 집어 가는 일은
-      없다. 안전하지 않은 쪽은 **실행을 이끄는 쪽(driver)** 이다.
-
-      드라이버는 "기다리는 일이 하나도 없다 → in_progress 로 남은 건 죽은 작업이다"
-      라고 판단하고 그것들을 다시 대기열로 되돌린다. 이 추론은 드라이버가 자기
-      하나뿐일 때만 옳다. 둘이면, 다른 쪽이 일을 다 집어 가서 대기열이 비어 보이는
-      것뿐인데도 **지금 한창 처리 중인 작업을 빼앗아 되돌린다.**
-
-      2026-08-17 에 실제로 일어났다. 죽은 줄 알았던 실행이 살아 있었고, 39초 뒤에
-      같은 tag 로 두 번째 실행이 시작됐다. 무엇도 깨지지는 않았다 — 행 단위 잠금이
-      버텨 줬다 — 하지만 해석 에이전트가 넷, 보고 에이전트가 둘 돌았고 나온 숫자는
-      쓸 수 없었다.
-
-      **왜 pid 파일이 아니라 자문 잠금(advisory lock)인가** — 자문 잠금은 데이터베이스
-      연결에 매여 있다. 프로세스를 `kill -9` 로 죽여도 연결이 끊기면서 잠금이 같이
-      사라진다. pid 파일이었다면 죽은 프로세스가 남긴 파일이, 누가 손으로 지워 줄
-      때까지 이후 모든 실행을 막았을 것이다.
+        BoardBusy: another driver holds this run_tag. It is raised immediately rather
+            than waited on.
     """
     # crc32 gives a stable 32-bit key from the tag. hashtext() would also work but is
     # an internal function with no compatibility promise across versions.
-    #
-    # ↑ 자문 잠금은 이름이 아니라 **숫자**로 건다. crc32 는 같은 글자에 늘 같은
-    #   32비트 숫자를 준다. PostgreSQL 의 hashtext() 로도 되지만 그건 내부 함수라
-    #   버전이 바뀌어도 같은 값을 준다는 약속이 없다.
+    # An advisory lock is taken on a **number**, not on a name.
     key = zlib.crc32(run_tag.encode("utf-8"))
-    # 이 잠금 전용 연결이다. 잠금이 연결에 매여 있으므로, 블록이 끝나거나 프로세스가
-    # 죽어 연결이 닫히는 순간 잠금도 풀린다.
+    # A connection dedicated to this lock. The lock is tied to the connection, so the
+    # moment the block ends — or the process dies and the connection closes — the lock
+    # is released with it.
     conn = await asyncpg.connect(dsn())
     try:
-        # try_ 가 붙은 쪽이라 기다리지 않는다. 이미 누가 쥐고 있으면 곧바로 거짓.
+        # The try_ form, so it does not wait. If somebody already holds it, false at once.
         if not await conn.fetchval("SELECT pg_try_advisory_lock($1)", key):
             raise BoardBusy(
                 f"run_tag '{run_tag}' is already being worked by another process.\n"
@@ -520,44 +430,46 @@ async def run_lock(run_tag: str) -> AsyncIterator[None]:
                 "  Use a different --run-tag, or wait for the other run to finish."
             )
         try:
-            # 여기서 `with` 블록 안의 일이 벌어진다. 잠금은 그동안 계속 잡혀 있다.
+            # This is where the work inside the `with` block happens. The lock is held
+            # throughout.
             yield
         finally:
-            # 안에서 무슨 일이 나든 잠금은 푼다.
+            # Whatever happens inside, the lock is released.
             await conn.execute("SELECT pg_advisory_unlock($1)", key)
     finally:
-        # 연결도 반드시 닫는다. 못 닫더라도 연결이 끊기면 잠금은 어차피 풀린다.
+        # The connection is always closed too. Even if it were not, losing the
+        # connection releases the lock anyway.
         await conn.close()
 
 
 async def create() -> None:
-    """표를 만든다. 이미 있으면 아무 일도 일어나지 않는다(여러 번 실행해도 안전)."""
+    """Create the tables. Nothing happens if they already exist (safe to run repeatedly)."""
     conn = await asyncpg.connect(dsn())
     try:
-        await conn.execute(SCHEMA)   # 위 SCHEMA 를 통째로 실행한다
+        await conn.execute(SCHEMA)   # run the whole SCHEMA above
     finally:
         await conn.close()
 
 
 async def drop() -> None:
-    """두 표를 지운다. 데이터도 같이 사라진다.
+    """Drop the two tables. The data goes with them.
 
-    `memstara_questions` 는 **여기서 지우지 않는다.** 질문 은행은 실행을 넘어 쌓이는
-    것이라, 판을 청소할 때 같이 사라지면 "이 프로젝트가 이미 무엇을 물어봤나" 를
-    매번 잃는다. 은행을 비우려면 `--drop-questions` 를 따로 써야 한다.
+    `memstara_questions` is **not dropped here.** The question bank accumulates across
+    runs, so if it vanished whenever the board was cleaned, "what has this project
+    already asked" would be lost every time. Emptying the bank takes a separate
+    `--drop-questions`.
     """
     conn = await asyncpg.connect(dsn())
     try:
-        # results first — it references the board.
-        # ↑ 결과표를 먼저 적는다. 결과표가 판을 가리키고 있으므로, 가리키는 쪽부터
-        #   치워야 순서가 맞다.
+        # results first — it references the board, so the referring side has to be
+        # cleared away first for the order to be right.
         await conn.execute("DROP TABLE IF EXISTS memstara_results, memstara_blackboard CASCADE;")
     finally:
         await conn.close()
 
 
 async def drop_questions() -> None:
-    """질문 은행을 지운다. `drop()` 과 갈라 둔 이유는 그 docstring 에 적혀 있다."""
+    """Drop the question bank. Why it is kept apart from `drop()` is in that docstring."""
     conn = await asyncpg.connect(dsn())
     try:
         await conn.execute("DROP TABLE IF EXISTS memstara_questions CASCADE;")
@@ -566,15 +478,15 @@ async def drop_questions() -> None:
 
 
 async def show() -> None:
-    """지금 데이터베이스에 무엇이 있고 판이 어떤 상태인지 찍어 본다.
+    """Print what is in the database now and what state the board is in.
 
-    우리 표와 core 표를 갈라서 보여 준다. 실제로는 서버가 아예 다르므로 core 표는
-    보이지 않는 것이 정상이다 — 그래도 갈라 두는 이유는, 혹시 옛날처럼 한 데
-    섞여 있는 데이터베이스를 보게 됐을 때 한눈에 알아채기 위해서다.
+    Our tables and core's are shown apart. In practice the servers are entirely
+    separate, so seeing no core tables is the normal outcome — they are still shown
+    apart so that looking at an old-style mixed database is obvious at a glance.
     """
     conn = await asyncpg.connect(dsn())
     try:
-        # pg_tables 는 PostgreSQL 이 스스로 들고 있는 "표 목록" 표다.
+        # pg_tables is the "list of tables" table PostgreSQL keeps for itself.
         rows = await conn.fetch(
             "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename"
         )
@@ -582,26 +494,26 @@ async def show() -> None:
         ours = [n for n in names if n.startswith("memstara_")]
         theirs = [n for n in names if not n.startswith("memstara_")]
 
-        print(f"우리 테이블 {len(ours)}개")
+        print(f"our tables: {len(ours)}")
         for n in ours:
-            # 표 이름은 값으로 끼워 넣을 수 없어서 문자열로 붙인다. 이름이 위
-            # 목록에서 나온 것이라 바깥 입력이 섞일 여지가 없으므로 안전하다
-            # (noqa 주석이 검사기에 그 사정을 알려 준다).
+            # A table name cannot be passed as a bound value, so it is joined into the
+            # string. It is safe because the name came out of the list above and no
+            # outside input can find its way in (the noqa comment tells the checker so).
             count = await conn.fetchval(f"SELECT count(*) FROM {n}")  # noqa: S608 - fixed names
-            print(f"   {n:24} {count}행")
-        print(f"\ncore 테이블 {len(theirs)}개 — 건드리지 않는다")
+            print(f"   {n:24} {count} rows")
+        print(f"\ncore tables: {len(theirs)} — left alone")
         for n in theirs:
             print(f"   {n}")
 
-        # 판이 있으면 단계×상태로 몇 건씩인지 세어 보여 준다. 실행이 어디까지
-        # 갔는지, 어디서 막혔는지를 한눈에 보는 용도다.
+        # If the board exists, count how many rows there are per stage x status. It is
+        # for seeing at a glance how far a run got and where it is stuck.
         if "memstara_blackboard" in ours:
             by = await conn.fetch(
                 "SELECT task_type, status, count(*) AS n FROM memstara_blackboard "
                 "GROUP BY task_type, status ORDER BY task_type, status"
             )
             if by:
-                print("\n판의 상태")
+                print("\nstate of the board")
                 for r in by:
                     print(f"   {r['task_type']:10} {r['status']:12} {r['n']}")
     finally:
@@ -609,7 +521,7 @@ async def show() -> None:
 
 
 async def orphans() -> int:
-    """실행이 끝났는데 판에 남아 있는 과제를 태그별로 세어 보여 준다. 읽기만 한다.
+    """Count the tasks a finished run left on the board, per tag. Read-only.
 
     A run that is killed, or that dies before its board drains, leaves rows behind.
     Nothing removes them: the driver's `reclaim_stalled` only looks at its own run_tag
@@ -619,15 +531,13 @@ async def orphans() -> int:
 
     Returns:
         How many leftover tasks there are, so the caller can use it as an exit code.
-
-    ↑ 죽거나 중단된 실행이 판에 남긴 종이를 보여 준다. 아무도 자동으로 치우지 않는다 —
-      드라이버의 `reclaim_stalled` 는 자기 태그만, 그것도 일 루프 안에서만 보기 때문이다.
     """
     conn = await asyncpg.connect(dsn())
     try:
-        # ready 와 in_progress 만. done 은 끝난 것이고 failed 는 **이미 닫힌 것**이라
-        # 둘 다 아무도 안 기다린다. failed 를 여기 세면 --close 로 치운 뒤에도 목록이
-        # 안 비어서, "판이 깨끗하다" 를 이 명령으로 확인할 수 없게 된다.
+        # `ready` and `in_progress` only. `done` is finished and `failed` is **already
+        # closed**, so nobody is waiting on either. Counting `failed` here would leave
+        # the list non-empty even after --close cleared it, which would make "the board
+        # is clean" impossible to confirm with this command.
         rows = await conn.fetch(
             "SELECT run_tag, task_type, status, count(*) AS n, "
             "       max(updated_at) AS last "
@@ -639,29 +549,30 @@ async def orphans() -> int:
         await conn.close()
 
     if not rows:
-        print("남은 과제 없음 — 판이 깨끗하다")
+        print("no tasks left over — the board is clean")
         return 0
     total = sum(r["n"] for r in rows)
-    print(f"끝나지 않은 과제 {total}개")
+    print(f"unfinished tasks: {total}")
     for r in rows:
         print(f"   {r['run_tag']:<22} {r['task_type']:<10} {r['status']:<12} "
-              f"{r['n']:>3}개   마지막 {r['last']:%Y-%m-%d %H:%M}")
-    print("\n   --reclaim TAG 로 대기열에 되돌리거나, --close TAG 로 닫는다")
+              f"{r['n']:>3}   last {r['last']:%Y-%m-%d %H:%M}")
+    print("\n   put them back in the queue with --reclaim TAG, or close them with --close TAG")
     return total
 
 
 async def reclaim(run_tag: str) -> int:
-    """한 태그의 `in_progress` 를 전부 `ready` 로 되돌린다.
+    """Return every `in_progress` task of one tag to `ready`.
 
-    `03_board_pipeline.py` 의 `reclaim_stalled` 와 같은 UPDATE 지만 **시간 조건이 없다.**
-    거기서는 지금 일하는 중인 과제를 뺏지 않으려고 stale_after 초를 기다리는데, 여기서는
-    사람이 "그 실행은 끝났다" 를 알고 부르는 것이므로 기다릴 이유가 없다.
+    The same UPDATE as `reclaim_stalled` in `03_board_pipeline.py`, but **with no time
+    condition.** There it waits stale_after seconds so as not to snatch a task somebody
+    is working on right now; here a person is calling it knowing "that run is over", so
+    there is no reason to wait.
 
     Args:
-        run_tag: 되돌릴 실행의 태그. 다른 태그는 건드리지 않는다.
+        run_tag: tag of the run to return. No other tag is touched.
 
     Returns:
-        되돌린 개수.
+        How many were returned.
     """
     conn = await asyncpg.connect(dsn())
     try:
@@ -681,20 +592,17 @@ async def reclaim(run_tag: str) -> int:
 
 
 async def close_run(run_tag: str) -> int:
-    """한 태그의 안 끝난 과제를 `failed` 로 닫는다. **지우지는 않는다.**
+    """Close the unfinished tasks of one tag as `failed`. **They are not deleted.**
 
     The row stays so that "why is there no result for trial 3" is answerable later. A
     DELETE would make the board look clean and the results look complete, which is the
     same lie by omission the run report is built to avoid.
 
     Args:
-        run_tag: 닫을 실행의 태그. 다른 태그는 건드리지 않는다.
+        run_tag: tag of the run to close. No other tag is touched.
 
     Returns:
-        닫은 개수.
-
-    ↑ 행을 남기는 이유 — 나중에 "3번 시행은 왜 결과가 없나" 를 물었을 때 답할 수 있어야
-      한다. 지워 버리면 판은 깨끗해 보이고 결과는 완전해 보이는데, 그건 거짓말이다.
+        How many were closed.
     """
     conn = await asyncpg.connect(dsn())
     try:
@@ -706,8 +614,9 @@ async def close_run(run_tag: str) -> int:
                        error  = CASE WHEN error = '' THEN 'closed by blackboard.py --close'
                                      ELSE error END,
                        updated_at = now()
-                 -- 이미 failed 인 것은 다시 안 센다. 두 번 부르면 "2개 닫았다" 가
-                 -- 나오는데, 실제로 새로 닫힌 것은 없으므로 그건 거짓 보고다.
+                 -- What is already failed is not counted again. Called twice it would
+                 -- say "closed 2" while nothing was newly closed, and that is a false
+                 -- report.
                  WHERE run_tag = $1 AND status IN ('ready', 'in_progress')
              RETURNING 1
             ) SELECT count(*) FROM closed
@@ -719,17 +628,17 @@ async def close_run(run_tag: str) -> int:
 
 
 def main() -> int:
-    """명령줄에서 부를 때의 입구. 0을 돌려주면 정상, 1이면 취소된 것이다."""
+    """The entry point when called from the command line. Returning 0 means fine, 1 means cancelled."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    # 이 중 **하나만** 골라야 한다. 하나도 안 고르는 것도 안 된다.
+    # **Exactly one** of these has to be chosen. Choosing none is not allowed either.
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--create", action="store_true", help="create the tables (idempotent)")
     g.add_argument("--drop", action="store_true", help="drop them — asks first")
     g.add_argument("--show", action="store_true", help="what exists and what is on the board")
     g.add_argument("--drop-questions", action="store_true",
                    help="empty the question bank — separate from --drop on purpose")
-    # 아래 셋은 판 전체가 아니라 **한 실행분만** 다룬다. --drop 계열과 달리
-    # 다른 태그의 행에는 손대지 않는다.
+    # The three below handle **one run's worth only**, not the whole board. Unlike the
+    # --drop family they do not touch rows belonging to another tag.
     g.add_argument("--orphans", action="store_true",
                    help="list tasks left unfinished by runs that ended, per run_tag")
     g.add_argument("--reclaim", metavar="TAG",
@@ -740,51 +649,53 @@ def main() -> int:
     args = ap.parse_args()
 
     if args.create:
-        # 만든 뒤에 곧바로 현황을 보여 준다 — 만들어졌는지 눈으로 확인하라고.
+        # Show the state right after creating — so it can be seen by eye that it worked.
         asyncio.run(create())
         print("created (or already there)")
         asyncio.run(show())
     elif args.drop:
-        # 지우기는 되돌릴 수 없으므로 기본적으로 한 번 물어본다. --yes 를 붙이면
-        # 묻지 않는다(스크립트에서 부를 때 쓴다). "yes" 를 **정확히** 쳐야 한다.
+        # Dropping cannot be undone, so by default it asks once. With --yes it does not
+        # ask (that is for calling from a script). "yes" has to be typed **exactly**.
         if not args.yes:
-            print(f"이 표들을 지웁니다: {', '.join(TABLES)}")
-            if input("정말 지울까요? (yes) ").strip() != "yes":
-                print("취소")
+            print(f"these tables will be dropped: {', '.join(TABLES)}")
+            if input("really drop them? (yes) ").strip() != "yes":
+                print("cancelled")
                 return 1
         asyncio.run(drop())
         print("dropped")
     elif args.drop_questions:
-        # 은행은 실행을 넘어 쌓인 것이라 --drop 보다 잃는 것이 크다. 같은 방식으로 묻는다.
+        # The bank accumulates across runs, so more is lost here than with --drop. It
+        # asks the same way.
         if not args.yes:
-            print("질문 은행(memstara_questions)을 통째로 지웁니다.")
-            if input("정말 지울까요? (yes) ").strip() != "yes":
-                print("취소")
+            print("the whole question bank (memstara_questions) will be dropped.")
+            if input("really drop it? (yes) ").strip() != "yes":
+                print("cancelled")
                 return 1
         asyncio.run(drop_questions())
         print("dropped questions")
     elif args.orphans:
-        # 읽기만 하므로 묻지 않는다.
+        # It only reads, so it does not ask.
         asyncio.run(orphans())
     elif args.reclaim:
-        # 되돌리기는 되돌릴 수 있는 일이라(다시 집어 가면 그만이다) 묻지 않는다.
+        # Returning is an undoable act (someone can just pick them up again), so it does
+        # not ask.
         n = asyncio.run(reclaim(args.reclaim))
-        print(f"'{args.reclaim}' 의 과제 {n}개를 대기열로 되돌렸다")
+        print(f"returned {n} tasks of '{args.reclaim}' to the queue")
     elif args.close:
-        # 닫기는 그 실행을 끝난 것으로 만든다. 행은 남지만 다시 처리되지는 않으므로
-        # --drop 과 같은 방식으로 한 번 묻는다.
+        # Closing makes that run finished. The rows stay but are never processed again,
+        # so it asks once, the same way --drop does.
         if not args.yes:
-            print(f"'{args.close}' 의 안 끝난 과제를 전부 failed 로 닫습니다 (행은 남습니다).")
-            if input("정말 닫을까요? (yes) ").strip() != "yes":
-                print("취소")
+            print(f"every unfinished task of '{args.close}' will be closed as failed (the rows stay).")
+            if input("really close them? (yes) ").strip() != "yes":
+                print("cancelled")
                 return 1
         n = asyncio.run(close_run(args.close))
-        print(f"'{args.close}' 의 과제 {n}개를 failed 로 닫았다")
+        print(f"closed {n} tasks of '{args.close}' as failed")
     else:
         asyncio.run(show())
     return 0
 
 
 if __name__ == "__main__":
-    # 돌려받은 값을 그대로 종료 코드로 쓴다. 취소했으면 1로 끝난다.
+    # The returned value is used as the exit code as it stands. A cancel ends with 1.
     raise SystemExit(main())

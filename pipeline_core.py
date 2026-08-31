@@ -18,39 +18,44 @@ a dataclass is enough.
 
 
 ==============================================================================
- 이 파일을 읽는 법
+ How to read this file
 ==============================================================================
 
- 두 파이프라인(02·03)이 **공유하는 몸통**이다. 에이전트를 정의하고, 프롬프트를 쓰고,
- 결과를 모은다.
+ The **body shared by both pipelines** (02 and 03). It defines the agents, writes
+ the prompts, and gathers the results.
 
- 네 단계 — 2026-08-06 회의에서 정해진 그대로:
+ The four stages, exactly as fixed in the 2026-08-06 meeting:
 
-   (1) hypothesis   지식원을 읽고 어느 컬럼을 뽑을지 정한다   ← **유일하게 판단하는 쪽**
-   (2) data         그 컬럼 + 결과변수를 잘라 낸다            ← 시키는 대로만
-   (3) ML           학습하고 AUC 와 중요도를 낸다             ← 시키는 대로만
-   (4) interpreter  결과를 말로 푼다                          ← 서술만
+   (1) hypothesis   read the knowledge source, decide which columns to pull
+                                                          <- **the only one that judges**
+   (2) data         cut those columns plus the outcome     <- does as it is told
+   (3) ML           train, report AUC and importance       <- does as it is told
+   (4) interpreter  put the result into words              <- narrates only
 
- 크게 세 덩어리다.
+ There are three blocks of it.
 
-   ① 다양성          PERSPECTIVES · temperature_for
-                     같은 질문을 20번 하면 당연히 같은 답이 나온다. 그건 증거가
-                     아니다. 관점을 흔들어야 "다른 각도가 같은 곳에 모였다" 가 된다
+   (1) Diversity        PERSPECTIVES, temperature_for
+                        Asking the same question 20 times obviously produces the
+                        same answer. That is not evidence. Shaking the perspective
+                        is what makes it "different angles converged on one place"
 
-   ② 에이전트 정의   provision_all (02용 4개) · provision_board_agents (03용 6개)
-                     프롬프트가 여기 다 들어 있다. **이 파일에서 가장 중요한 부분**이다
+   (2) Agent definitions  provision_all (the 4 for 02), provision_board_agents
+                        (the 6 for 03). Every prompt is in here. **The most
+                        important part of this file.**
 
-   ③ 실행과 집계     run_one_trial (02의 감독자) · aggregate · tools_for
+   (3) Execution and aggregation  run_one_trial (02's supervisor), aggregate,
+                        tools_for
 
- 감독자가 **파이썬 함수이지 LLM 이 아니라는 점**이 핵심이다. "순서대로 부르고 결과를
- 다음에 넘긴다" 는 일에 모델을 쓸 이유가 없다 — 돈이 들고 결과가 흔들릴 뿐이다.
+ The key point is that the supervisor **is a Python function, not an LLM.** There is
+ no reason to pay a model for "call these in order and hand each output to the next"
+ — it only costs money and makes the result waver.
 """
 
 from __future__ import annotations
 
-import json      # 에이전트 출력(JSON 문자열)을 파이썬 값으로
-import uuid      # 실행 id
-from collections import Counter   # 컬럼이 몇 번씩 뽑혔나 세는 데
+import json      # agent output (a JSON string) into Python values
+import uuid      # run ids
+from collections import Counter   # for counting how often each column was chosen
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
@@ -79,14 +84,6 @@ from agentic_core.schemas.agent import LLMProvider, ModelConfig
 # actually makes.
 #
 # The meeting never discussed this. It is a design judgement, not a settled decision.
-#
-# ↑ **20번 반복이 의미를 가지려면 무엇이 필요한가.**
-#   같은 에이전트에게 같은 프롬프트를 20번 주면 답이 겹치는 게 당연하다. 그건
-#   "같은 입력에 같은 답이 나온다" 는 증거일 뿐, "이 변수들이 가장 예측력이 높다" 는
-#   증거가 아니다. 관점을 바꿔야 겹침이 **"다른 각도에서 출발했는데 같은 곳에
-#   모였다"** 가 되고, 논문이 실제로 주장하는 것이 그것이다.
-#
-#   회의에서 논의된 적 없다. **정해진 결정이 아니라 설계 판단이다.**
 PERSPECTIVES: list[str] = [
     "from a metabolic-pathway perspective",
     "from a cardiovascular risk-factor perspective",
@@ -114,16 +111,14 @@ PERSPECTIVES: list[str] = [
 # Minimum columns the hypothesis agent must choose (no upper bound — the agent
 # decides how many OKF-grounded columns the hypothesis needs).
 # run_report.py uses this to flag runs where the agent chose nothing at all.
-#
-# ↑ 에이전트가 최소 몇 개 이상 골라야 하는지만 정의. 상한은 없음 —
-#   OKF 근거가 있는 만큼 스스로 판단해서 고른다.
 COLUMN_COUNT_MIN = 1
 
 
 def perspective_for(trial: int) -> str:
     """Which angle this trial is asked to take.
 
-    시행 번호 → 관점 문구. 나머지 연산(%)이라 시행이 20을 넘으면 처음으로 돌아간다.
+    Trial number -> perspective phrase. It is a modulo (%), so past trial 20 it wraps
+    back to the beginning.
     """
     return PERSPECTIVES[trial % len(PERSPECTIVES)]
 
@@ -131,18 +126,18 @@ def perspective_for(trial: int) -> str:
 def temperature_for(trial: int) -> float:
     """Add a little sampling diversity on top of the perspective diversity.
 
-    ↑ 관점 다양성 **위에** 표본 다양성을 조금 더 얹는다. 0.30 · 0.45 · 0.60 · 0.75 ·
-      0.90 을 돌아가며 쓴다. 온도가 높을수록 모델이 덜 뻔한 답을 낸다.
+    0.30, 0.45, 0.60, 0.75 and 0.90 are used in rotation. The higher the temperature,
+    the less predictable the model's answer.
 
-      관점만으로도 충분하지 않느냐 — 같은 관점이라도 온도가 낮으면 거의 같은 답이
-      나온다. 둘을 같이 흔들어야 20번이 20번어치가 된다.
+    Is the perspective not enough on its own? No — at a low temperature the same
+    perspective yields nearly the same answer every time. Both have to be shaken for
+    20 trials to be worth 20 trials.
     """
     return round(0.3 + (trial % 5) * 0.15, 2)
 
 
 # --------------------------------------------------------------------------- #
-#  The to-do list
-#  할 일 목록 — 한 가설의 일생이 이 한 줄에 담긴다
+#  The to-do list — the whole life of one hypothesis fits on this single row
 # --------------------------------------------------------------------------- #
 
 
@@ -150,40 +145,36 @@ def temperature_for(trial: int) -> float:
 class TodoRow:
     """The whole life of one hypothesis. The four agents fill this row in turn.
 
-    ↑ 가설 하나의 **일생 전체**. 네 에이전트가 이 한 줄을 차례로 채운다.
-
-      02 경로(감독자 방식)에서만 쓴다. 03(판 방식)에서는 이 자리를 데이터베이스
-      테이블이 대신한다 — 그래야 여러 단계가 같은 줄을 두고 주고받을 수 있다.
+    Used only on the 02 path (the supervisor arrangement). On 03 (the board
+    arrangement) a database table stands in its place — that is what lets several
+    stages pass one row back and forth between them.
     """
 
-    trial: int                    # 몇 번째 시행인가
-    perspective: str = ""         # 그 시행이 받은 관점 문구
+    trial: int                    # which trial this is
+    perspective: str = ""         # the perspective phrase that trial was given
 
-    # (1) hypothesis  — 가설 단계가 채우는 칸
+    # (1) hypothesis  — the fields the hypothesis stage fills in
     hypothesis: str = ""
     columns: list[str] = field(default_factory=list)
     okf_concept_ids: list[str] = field(default_factory=list)
 
-    # (2) data  — 데이터 단계가 채우는 칸
+    # (2) data  — the fields the data stage fills in
     subset_path: str = ""
     columns_used: list[str] = field(default_factory=list)
     columns_missing: list[str] = field(default_factory=list)
 
-    # (3) ML  — 학습 단계가 채우는 칸
+    # (3) ML  — the fields the training stage fills in
     auc: float | None = None
     feature_importance: dict[str, float] = field(default_factory=dict)
     model: str = ""
 
-    # (4) interpreter  — 해석 단계가 채우는 칸
+    # (4) interpreter  — the field the interpretation stage fills in
     interpretation: str = ""
 
     # Tracing — a core run id is an opaque UUID that cannot be a foreign key in a
     # product database, so recording it here is the only way to trace back later
-    # with get_runs() / get_run_steps().
-    #
-    # ↑ 추적용. core 의 실행 id 는 그냥 UUID 라 우리 DB 의 외래키가 될 수 없다.
-    #   그러니 **여기 적어 두는 것이 나중에 되짚을 유일한 방법**이다. 이 값이 있어야
-    #   `trace_run.py` 로 "그 에이전트가 도구에 무엇을 묻고 무엇을 받았나" 를 본다.
+    # with get_runs() / get_run_steps(). It is this value that lets `trace_run.py`
+    # show what that agent asked the tools and what it got back.
     run_ids: dict[str, str] = field(default_factory=dict)
     error: str = ""
 
@@ -192,44 +183,39 @@ class TodoRow:
     # Not derivable from the logs: `llm.call.completed` is emitted only by _complete and
     # _complete_text (llm_service.py:576, :1053). complete_with_tools — the path every
     # reason_act turn takes — logs nothing, so a total summed from the log counted 9 of
-    # 41 calls on a real run and understated the cost roughly tenfold.
-    #
-    # ↑ 단계마다의 비용과 토큰. **로그에서는 못 구한다.** `llm.call.completed` 는
-    #   `_complete` 와 `_complete_text` 에서만 나오는데, 도구를 쓰는 모든 차례가
-    #   지나는 `complete_with_tools` 는 아무것도 안 찍는다. 실제 실행에서 로그로
-    #   합산했더니 41번 중 **9번만** 세어져 비용이 열 배쯤 낮게 나왔다.
-    #   그래서 `execute_run` 이 돌려주는 값을 여기 직접 적는다.
+    # 41 calls on a real run and understated the cost roughly tenfold. So what
+    # `execute_run` returns is written down here directly.
     cost: dict[str, float] = field(default_factory=dict)
     tokens: dict[str, list[int]] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
-        """이 시행이 성공했는가.
+        """Did this trial succeed?
 
-        판정 기준이 **AUC 가 있느냐** 하나다. 학습까지 갔다면 그 앞의 가설·데이터는
-        당연히 지났다는 뜻이므로, 단계마다 따로 표시할 필요가 없다.
+        There is one criterion: **is there an AUC.** Reaching the training stage at
+        all means the hypothesis and data stages before it obviously passed, so there
+        is no need to mark each stage separately.
         """
         return self.auc is not None
 
 
 def save_rows(rows: list[TodoRow], path: Path) -> None:
-    """할 일 목록을 JSON 파일로 저장한다.
+    """Save the to-do list to a JSON file.
 
-    `trace_run.py` 가 이 파일에서 시행 번호 → 실행 id 를 찾는다. 그래서 이것이
-    없으면 나중에 추적을 못 한다.
+    `trace_run.py` looks up trial number -> run id in this file. Without it, tracing
+    afterwards is not possible.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps([asdict(r) for r in rows], ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- #
-#  Agent provisioning — idempotent by name
-#  에이전트 준비 — 이름으로 찾고, 없으면 만든다
+#  Agent provisioning — idempotent by name: found by name, created if absent
 # --------------------------------------------------------------------------- #
 #
-# 에이전트는 **오래 남는 자원**이다. core 의 DB 에 저장되고, 다음 실행에서도 같은
-# 이름으로 찾아진다. 그래서 이 파일의 프롬프트를 고쳐도 **이미 만들어진 에이전트에는
-# 자동으로 반영되지 않는다** — `_ensure_agent` 가 달라진 것을 찾아 갱신해 준다.
+# An agent is a **durable resource.** It is stored in core's DB and found again by the
+# same name on the next run. So editing a prompt in this file does **not** reach an
+# already-created agent by itself — `_ensure_agent` finds what differs and updates it.
 
 AGENT_NAMES = {
     "hypothesis": "memstara-hypothesis",
@@ -486,13 +472,15 @@ async def provision_all(
 # word — the data and ml stages are no more free to think for themselves than before.
 # Only the fetching and the writing are new.
 
-# 판 경로의 에이전트 **여섯**. 02 경로보다 둘 많다 — 마지막에 결과표를 읽어
-# 보고서를 쓰는 `report`, 그리고 맨 앞에서 **무엇을 물을지 정하는** `curator` 다.
-# curator 가 맨 앞인 이유: 예전에는 질문이 PERSPECTIVES 20개로 코드에 박혀 있었고,
-# 그 목록은 지식원 코퍼스가 실제로 담은 주제와 어긋나 있었다.
+# The **six** agents of the board path. Two more than the 02 path — `report`, which
+# reads the results table at the end and writes the account, and `curator`, which
+# stands at the very front and **decides what gets asked.** Why the curator is first:
+# the questions used to be the 20 PERSPECTIVES hardcoded above, and that list did not
+# line up with the subjects the knowledge-source corpus actually holds.
 #
-# 이름 앞에 `board-` 를 붙여 02 경로의 것과 구분한다. 같은 이름이면 두 경로가
-# 같은 에이전트를 공유하게 되고, 한쪽 프롬프트를 고치면 다른 쪽이 조용히 바뀐다.
+# The names are prefixed with `board-` to keep them apart from the 02 path's. Under the
+# same names the two paths would share one agent, and editing one path's prompt would
+# quietly change the other.
 BOARD_AGENT_NAMES = {
     "curator": "memstara-board-curator",
     "hypothesis": "memstara-board-hypothesis",
@@ -506,13 +494,11 @@ BOARD_AGENT_NAMES = {
 # carries every stage's tools in one place, so handing it out whole would let the
 # hypothesis stage claim somebody else's work.
 #
-# ↑ **서버 단위가 아니라 도구 하나하나 단위로** 자른다. 판 서버 하나에 모든 단계의
-#   도구가 들어 있어서, 서버째 넘기면 가설 단계가 남의 일까지 집어 갈 수 있다.
-#
-#   실제로 그런 적이 있다 — 가설 에이전트가 `describe_dataset` 을 쓰려면 그것이
-#   `slice_columns` 와 같은 서버에 있어서 **자르는 도구까지 같이** 받았고, 3시행에
-#   여섯 번 잘랐다. 데이터를 자르는 건 데이터 단계의 일이다. 단계를 나눈 이유가
-#   "결과가 누구 판단인지 되짚을 수 있게" 인데, 남의 일을 대신 하면 그게 무너진다.
+# This has actually happened: the hypothesis agent needs `describe_dataset`, which sits
+# in the same server as `slice_columns`, so it was handed the cutter too — and cut six
+# times over a three-trial run. Cutting the data is the data stage's job. The reason the
+# stages are separated is so a result can be traced back to whose judgement produced it,
+# and doing somebody else's work destroys that.
 BOARD_TOOLS = {
     # okf_* rather than core's search_concepts/get_concept/list_concepts. Core's three
     # are still registered on the server and still work; they are simply not handed to
@@ -539,8 +525,8 @@ BOARD_TOOLS = {
     "report": {"read_results"},
 }
 
-# 어느 서버에 **접근이라도** 허용되는가. 위의 BOARD_TOOLS 와 함께 두 겹으로 거른다.
-# 서버로 한 번 좁히고, 그 안에서 도구 이름으로 다시 좁힌다.
+# Which servers may be reached **at all.** Together with BOARD_TOOLS above this filters
+# in two layers: narrowed once by server, then narrowed again by tool name within it.
 BOARD_SERVERS = {
     "curator": {"okf", "memstara-blackboard"},
     "hypothesis": {"okf", "memstara-data", "memstara-blackboard", "semantic-matcher"},
@@ -550,12 +536,15 @@ BOARD_SERVERS = {
     "report": {"memstara-blackboard"},
 }
 
-# 일을 **집어 가는** 세 단계(data · ml · interpreter)의 프롬프트 앞에 공통으로 붙는 글.
+# The text prefixed to the prompts of the three stages that **take** work from the
+# board (data, ml, interpreter).
 #
-# 가설 단계에는 안 붙는다 — 그 단계는 일을 집는 게 아니라 **만들기** 때문이다.
+# It is not prefixed to the hypothesis stage — that stage does not take work, it
+# **creates** it.
 #
-# 가장 중요한 문장은 2번이다: 집을 것이 없으면 **멈추라**는 것. 이걸 안 적으면
-# 에이전트가 없는 일을 지어내거나 남의 종류를 집는다.
+# The most important sentence is number 2: when there is nothing to take, **stop.**
+# Without it written down, an agent invents work that does not exist or takes a task
+# of somebody else's type.
 _CLAIM_PREAMBLE = (
     "Your work comes from a shared board, not from this message.\n\n"
     "1) Call claim_task with your own type **and the run_tag you were given in this "
@@ -577,14 +566,12 @@ async def provision_board_agents(
 ) -> dict[str, uuid.UUID]:
     """Create the six board-driven agents (or find the existing ones).
 
-    ↑ 판 경로의 에이전트 여섯을 만들거나 이미 있으면 찾아온다.
+    **The most important function in this file.** What each stage is, and what it must
+    do first, is written out here as a prompt and nowhere else. Changing the pipeline's
+    behaviour usually means editing this prose rather than the code.
 
-      **이 파일에서 가장 중요한 함수다.** 각 단계가 무엇을 하는 사람인지, 무엇을
-      먼저 해야 하는지가 전부 여기 프롬프트로 적혀 있다. 파이프라인의 행동을 바꾸려면
-      대개 코드가 아니라 이 글을 고치게 된다.
-
-      `_ensure_agent` 를 거치므로 여기 글을 고치면 다음 실행에서 **기존 에이전트가
-      갱신된다** — 이름은 그대로 두고 내용만 바뀐다.
+    It goes through `_ensure_agent`, so editing the prose here **updates the existing
+    agents** on the next run — the names stay and only the contents change.
     """
     mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096)
     react = {"execution_pattern": "reason_act"}
@@ -837,16 +824,6 @@ def tools_for(
     holding tools for every stage — creating a task, claiming one, writing a result
     back. Without tool-level filtering, giving any agent the board would give it all
     of those, and "each agent only takes its own work" would stop being true.
-
-    ↑ 요약: 에이전트가 쓸 도구를 **골라서** 준다.
-
-      *servers* 로 서버를 좁히고, *only* 로 그 안의 도구 이름까지 좁힌다. 두 겹인
-      이유가 있다 — 가설 에이전트는 `describe_dataset` 이 필요한데 그것이
-      `slice_columns` 와 같은 서버에 있다. 서버째 주면 **자르는 도구까지** 간다.
-      실제로 그래서 3시행에 여섯 번 잘랐다.
-
-      단계를 나눈 목적이 "이 결과가 누구 판단인지 되짚을 수 있게" 인데, 남의 일을
-      대신 할 수 있으면 그 목적이 무너진다.
     """
     picked = [t for t in registry.get_all_tools() if t.get("server") in servers]
     if only is None:
@@ -870,16 +847,6 @@ def _tagged(*, trial: int, stage: str, run_id: uuid.UUID) -> Iterator[None]:
     Each task from `asyncio.gather` copies the context at creation, so the bindings do
     not leak between concurrent trials; the reset covers the sequential stages within
     one trial.
-
-    ↑ 요약: 이 블록 안에서 나오는 **모든 로그 줄에** 시행 번호·단계·실행 id 를 찍는다.
-
-      시행이 동시에 돌기 때문에, 이게 없으면 로그가 뒤섞인 한 줄기가 되어 어느 줄이
-      누구 것인지 알 수 없다. 실제 실행에서 재 보니 **391개 기록 중 0개**가 이
-      정보를 갖고 있었다.
-
-      따로 손볼 것은 없다. `logging_setup` 이 이미 structlog 쪽과 표준 logging 쪽
-      양쪽에 `merge_contextvars` 를 넣어 두어서, core 의 기록에도 litellm·mcp 의
-      기록에도 이 딱지가 붙는다.
     """
     tokens = structlog.contextvars.bind_contextvars(trial=trial, stage=stage, run_id=str(run_id))
     try:
@@ -893,10 +860,6 @@ def _record_usage(row: TodoRow, stage: str, result: Any) -> None:
 
     A failed stage still spent money, and a report that only totals the successes
     understates what the run cost.
-
-    ↑ 이 단계의 비용과 토큰을 줄에 적는다. **성공했든 실패했든** 적는다.
-
-      실패한 단계도 돈은 썼다. 성공한 것만 더하는 보고서는 실제 비용을 낮게 말한다.
     """
     row.cost[stage] = float(getattr(result, "total_cost", 0.0) or 0.0)
     row.tokens[stage] = [
@@ -917,11 +880,9 @@ async def _run_stage(
 ) -> dict[str, Any] | None:
     """Execute one run and return its output_contract payload, or None on failure.
 
-    ↑ 에이전트를 한 번 돌리고 그 결과(약속된 모양의 값)를 돌려준다. 실패하면 None.
-
-      **02 경로가 LLM 을 부르는 유일한 자리**다. 여기서 `row.run_ids[stage]` 에
-      실행 id 를 적어 두는 것이 중요하다 — 나중에 `trace_run.py` 로 "그 에이전트가
-      도구에 무엇을 묻고 무엇을 받았나" 를 되짚는 유일한 고리다.
+    **This is the only place the 02 path calls an LLM.** Writing the run id into
+    `row.run_ids[stage]` here matters: it is the only link back, and what lets
+    `trace_run.py` later show what that agent asked the tools and what it got.
     """
     run = await create_run(
         agent_id=agent_id,
@@ -1118,12 +1079,15 @@ async def run_one_trial(trial: int, cfg: TrialConfig) -> TodoRow:
 
 # The real signal planted by make_sample_data.py. Meaningful ONLY on that dataset.
 # Opaque codes on purpose — see that file's module docstring.
-# 합성 데이터에 **일부러 심어 둔** 정답. make_sample_data.py 가 이 넷이 결과변수를
-# 실제로 예측하도록 만든다(단변량 AUC 0.73/0.66/0.63/0.60, 잡음 컬럼은 0.51).
 #
-# 이것이 있어야 "파이프라인이 옳은 것을 찾았는가" 를 **채점**할 수 있다. 실제
-# 데이터(NHANES · reviewer 코호트)에는 이런 정답이 없으므로, 거기서는 성능을 주장할 수
-# 없고 "임상적으로 잘 알려진 것이 상위에 오는가" 라는 약한 확인만 가능하다.
+# The answer key **planted deliberately** in the synthetic data. make_sample_data.py
+# makes these four genuinely predict the outcome (univariate AUC 0.73/0.66/0.63/0.60,
+# against 0.51 for the noise columns).
+#
+# It is what makes it possible to **score** "did the pipeline find the right thing".
+# Real data (NHANES, reviewer's cohort) has no such key, so there no claim about
+# performance can be made — only the weaker check of "do the clinically well-known
+# ones come out on top".
 PLANTED_SIGNAL = ["LBXGH", "BMXBMI", "RIDAGEYR", "BPXSY1"]
 
 
