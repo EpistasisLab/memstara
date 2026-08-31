@@ -16,28 +16,29 @@ WARNING: env vars must be on the allowlist to reach this process — see
 
 
 ==============================================================================
- 이 파일을 읽는 법
+ How to read this file
 ==============================================================================
 
- 학습 담당 도구 서버. 겉으로 보이는 도구는 **하나뿐**이다.
+ The ml agent's tool server. From the outside it exposes **only one** tool.
 
-   train_and_score(path, y_column)   작은 CSV 로 모델을 학습하고 AUC 를 돌려준다
+   train_and_score(path, y_column)   train a model on a small CSV and return AUC
 
- 안에서 부르는 도우미 둘:
-   _make_model(engine)      엔진 이름 → 실제 모델 객체
-   _importance(model, ...)  어느 컬럼이 얼마나 기여했나
+ Two helpers are called from inside it:
+   _make_model(engine)      engine name -> the actual model object
+   _importance(model, ...)  which column contributed how much
 
- 흐름:
-   ① 경로가 허용된 폴더 안인가 (보안 검사)
-   ② CSV 를 읽는다
-   ③ 문자열 컬럼을 숫자로 편다 (원-핫)
-   ④ 학습/시험으로 나눈다
-   ⑤ 학습하고 AUC 를 잰다
-   ⑥ 중요도를 뽑는다
+ The flow:
+   (1) is the path inside the allowed directory (security check)
+   (2) read the CSV
+   (3) expand string columns into numbers (one-hot)
+   (4) split into train and test
+   (5) fit and measure AUC
+   (6) pull out the importances
 
- AUC 는 0.5 가 동전 던지기, 1.0 이 완벽이다. 0.64 면 "약간의 신호는 있다" 정도.
+ For AUC, 0.5 is a coin flip and 1.0 is perfect. 0.64 means roughly "there is
+ some signal here".
 
- 사람이 직접 불러 보려면: `python debug_harness.py ml`
+ To call it by hand: `python debug_harness.py ml`
 """
 
 from __future__ import annotations
@@ -50,11 +51,12 @@ from typing import Any
 import pandas as pd
 from mcp.server.fastmcp import FastMCP
 
-# 자식 프로세스라 부모 디버거가 안 닿는다. MEMSTARA_DEBUGPY 에 이 서버 이름이
-# 들어 있을 때만 디버거를 기다린다 — 없으면 아무 일도 하지 않는다. debug_hook.py 참고.
+# This is a child process, so the parent's debugger cannot reach it. It waits for
+# a debugger only when MEMSTARA_DEBUGPY contains this server's name — otherwise it
+# does nothing at all. See debug_hook.py.
 from debug_hook import quiet_child, wait_for_debugger
 
-quiet_child()          # 자식이 켜질 때 찍는 잡음 세 가지를 끈다
+quiet_child()          # silences the three startup messages a child prints
 wait_for_debugger('memstara-ml')
 
 mcp = FastMCP("memstara-ml")
@@ -63,7 +65,8 @@ _DEFAULT_OUT = Path(__file__).parent / "outputs"
 
 
 def _output_dir() -> Path:
-    """읽어도 되는 유일한 폴더. resolve() 로 심볼릭 링크까지 펴서 실제 경로로 만든다."""
+    """The only directory that may be read from. resolve() flattens symlinks too,
+    so this is the real path."""
     return Path(os.environ.get("MEMSTARA_OUTPUT_DIR", "").strip() or _DEFAULT_OUT).resolve()
 
 
@@ -71,14 +74,13 @@ def _make_model(engine: str) -> Any:
     """Build a model for the named engine.
 
     Imports are deferred so that a missing optional engine does not prevent the
-    server from starting.
-
-    ↑ import 를 함수 **안**에 둔 이유: xgboost 가 안 깔려 있어도 서버는 떠야 한다.
-      맨 위에 두면 xgboost 를 안 쓰는 사람까지 설치해야 한다.
+    server from starting. Put at the top of the file instead, anyone who never
+    uses xgboost would still have to install it.
     """
     if engine == "sklearn_hgb":
-        # 기본값. 히스토그램 기반 그래디언트 부스팅.
-        # **결측(NaN)을 그대로 처리한다** — NHANES 처럼 30% 가 비어도 안 터진다.
+        # The default. Histogram-based gradient boosting.
+        # **It handles missing values (NaN) as they are** — it does not blow up
+        # when 30% is blank, as in NHANES.
         from sklearn.ensemble import HistGradientBoostingClassifier
 
         return HistGradientBoostingClassifier(max_iter=200, max_depth=4, random_state=0)
@@ -91,7 +93,7 @@ def _make_model(engine: str) -> Any:
 
         return XGBClassifier(n_estimators=200, max_depth=4, eval_metric="logloss", random_state=0)
 
-    # 오타를 조용히 넘기지 않는다. 무엇을 쓸 수 있는지도 같이 알려 준다.
+    # A typo is not let through silently. The message also names what is available.
     raise RuntimeError(f"unknown MEMSTARA_ML_ENGINE: {engine!r} (sklearn_hgb | random_forest | xgboost)")
 
 
@@ -100,20 +102,16 @@ def _importance(model: Any, X: pd.DataFrame, y: pd.Series) -> dict[str, float]:
 
     HistGradientBoosting has no ``feature_importances_``, so fall back to
     permutation importance. Slower, but there are fewer than ten columns here, and
-    it yields a comparable quantity across engines.
-
-    ↑ 엔진마다 중요도를 주는 방식이 다르다. 랜덤포레스트·XGBoost 는 자기가 계산해
-      들고 있지만, 기본 엔진(HistGradientBoosting)은 없다. 그럴 땐 **순열 중요도**를
-      쓴다 — 한 컬럼의 값을 뒤섞어 보고 성능이 얼마나 떨어지는지로 재는 방식이다.
-      느리지만 컬럼이 열 개도 안 되고, 엔진이 달라도 서로 비교할 수 있는 값이 된다.
+    it yields a comparable quantity across engines. Permutation importance works
+    by shuffling one column's values and measuring how far performance drops.
     """
     if hasattr(model, "feature_importances_"):
-        # 모델이 이미 들고 있으면 그대로 쓴다.
+        # If the model already carries them, use them as they are.
         return {c: float(v) for c, v in zip(X.columns, model.feature_importances_)}
 
     from sklearn.inspection import permutation_importance
 
-    # n_repeats=5 — 뒤섞기를 다섯 번 해서 평균. 한 번만 하면 우연에 흔들린다.
+    # n_repeats=5 — shuffle five times and average. A single shuffle is swayed by chance.
     r = permutation_importance(model, X, y, n_repeats=5, random_state=0, scoring="roc_auc")
     return {c: float(v) for c, v in zip(X.columns, r.importances_mean)}
 
@@ -126,27 +124,22 @@ def train_and_score(path: str, y_column: str, test_size: float = 0.25, seed: int
         path: sub-dataset CSV produced by slice_columns.
         y_column: name of the outcome column.
         test_size: test split fraction (default 0.25).
-        seed: random seed, for reproducibility.
+        seed: random seed. It is fixed, so the same input always yields the same
+            number and a result can be re-scored by hand later and checked
+            against what the board recorded.
 
     Returns:
         JSON with auc, feature_importance, n_train, n_test and model. Report the
         returned numbers as they stand; do not restate them approximately.
-
-    ↑ 요약: slice_columns 가 만든 작은 CSV 로 학습하고 AUC 를 돌려준다.
-      seed 가 고정돼 있어 같은 입력이면 **항상 같은 숫자**가 나온다 — 그래서
-      나중에 손으로 다시 채점해 판의 값과 대조할 수 있다.
     """
     # The path check comes FIRST. Putting a security check behind an optional
     # dependency means it is skipped entirely wherever that package is absent,
     # hidden behind an "install scikit-learn" message.
-    #
-    # ↑ 경로 검사를 **맨 먼저** 한다. 이걸 scikit-learn import 뒤에 두면, 그 패키지가
-    #   없는 환경에서는 보안 검사 자체가 건너뛰어진다 — "설치하세요" 메시지 뒤에 숨는다.
     out_dir = _output_dir()
     try:
         p = Path(path).resolve()
-        # relative_to 는 p 가 out_dir 아래가 아니면 예외를 던진다.
-        # "../../etc/passwd" 같은 경로를 막는 장치다.
+        # relative_to raises unless p sits under out_dir. This is what blocks a
+        # path such as "../../etc/passwd".
         p.relative_to(out_dir)
     except (ValueError, OSError):
         return json.dumps({"error": f"path is outside the allowed directory: {path}", "allowed_dir": str(out_dir)})
@@ -159,7 +152,7 @@ def train_and_score(path: str, y_column: str, test_size: float = 0.25, seed: int
     except ImportError:
         return json.dumps({"error": "scikit-learn is not installed. `pip install scikit-learn`"})
 
-    # 환경변수가 없거나 비어 있으면 기본 엔진.
+    # If the environment variable is unset or empty, use the default engine.
     engine = os.environ.get("MEMSTARA_ML_ENGINE", "").strip() or "sklearn_hgb"
 
     try:
@@ -167,33 +160,37 @@ def train_and_score(path: str, y_column: str, test_size: float = 0.25, seed: int
         if y_column not in df.columns:
             return json.dumps({"error": f"y_column '{y_column}' not found"})
 
-        y = df[y_column]                      # 맞혀야 할 값 (0 또는 1)
+        y = df[y_column]                      # the value to predict (0 or 1)
         if y.nunique() < 2:
-            # 전부 0 이거나 전부 1 이면 배울 것이 없다.
+            # All 0 or all 1 means there is nothing to learn.
             return json.dumps({"error": "the outcome has only one class; nothing to train"})
 
-        # One-hot so the engine tolerates categorical columns.
-        # ↑ 문자열 컬럼을 숫자로 편다. 예: Race1 하나가 Race1_White, Race1_Hispanic …
-        #   여러 개로 갈라진다. drop_first=True 는 그중 **한 범주를 기준으로 빼는** 것인데,
-        #   그래서 남은 것들의 중요도는 "그 값이 기여한다" 가 아니라 "빠진 범주 대비 차이" 다.
-        #   이 점이 해석을 헷갈리게 만든다 — 아직 고치지 않은 자리다.
+        # One-hot so the engine tolerates categorical columns. A single column such
+        # as Race1 splits into Race1_White, Race1_Hispanic and so on. drop_first=True
+        # **holds one category out as the baseline**, which means the importances of
+        # the ones that remain read as "the difference against the dropped category",
+        # not as "this value contributes". That makes interpretation confusing — it
+        # is a spot that has not been fixed yet.
         X = pd.get_dummies(df.drop(columns=[y_column]), drop_first=True)
         if X.empty or X.shape[1] == 0:
             return json.dumps({"error": "no feature columns"})
 
-        # 학습용과 시험용으로 나눈다. stratify=y 는 양성 비율을 양쪽에 똑같이 맞춘다 —
-        # 양성이 10% 뿐인 데이터에서 이게 없으면 시험 쪽에 양성이 거의 안 갈 수 있다.
+        # Split into train and test. stratify=y keeps the positive rate the same on
+        # both sides — without it, data with only 10% positives can end up with
+        # almost no positives on the test side.
         X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=test_size, random_state=seed, stratify=y)
         model = _make_model(engine)
-        model.fit(X_tr, y_tr)                 # 학습
+        model.fit(X_tr, y_tr)                 # fit
 
-        # predict_proba 는 [0일 확률, 1일 확률] 를 준다. [:, 1] 로 1일 확률만 뽑는다.
+        # predict_proba gives [P(0), P(1)]. [:, 1] takes only the probability of 1.
         auc = float(roc_auc_score(y_te, model.predict_proba(X_te)[:, 1]))
 
-        # 중요도는 **시험 데이터**로 잰다. 학습 데이터로 재면 외운 것까지 중요해 보인다.
+        # Importance is measured on the **test data**. Measured on the training data,
+        # whatever the model memorised would look important too.
         importance = _importance(model, X_te, y_te)
     except Exception as e:
-        # 무엇이 터졌는지 종류까지 적어 돌려준다. 에이전트가 읽고 판단할 수 있게.
+        # Return the kind of failure as well as the message, so the agent can read
+        # it and decide what to do.
         return json.dumps({"error": f"{type(e).__name__}: {e}"})
 
     return json.dumps(
@@ -207,20 +204,12 @@ def train_and_score(path: str, y_column: str, test_size: float = 0.25, seed: int
             # silently under the wrong row. Second, `feature_importance` is keyed by
             # post-one-hot names (`Race1_White`), which match no column and no knowledge
             # source concept; this keeps the original names in the record beside them.
-            #
-            # ↑ 한국어 요약: **실제로 학습에 쓴 컬럼**을 원-핫 이전 이름으로 남긴다.
-            #   두 가지 때문이다.
-            #   ① 결과가 자기 가설의 것인지 대조할 수 있는 **유일한 자리**다. 이게 없으면
-            #      판에는 "데이터 단계가 잘랐다고 말한 것" 만 남고 "학습이 실제로 읽은 것"
-            #      은 어디에도 없다 — 그 사이에 파일이 덮어써져도 조용히 지나간다.
-            #   ② feature_importance 의 키는 원-핫 뒤 이름(`Race1_White`)이라 데이터셋에도
-            #      지식원에도 없는 이름이다. 원래 이름을 옆에 같이 남겨 둔다.
             "features": [c for c in df.columns if c != y_column],
-            # 중요도가 큰 것부터 정렬해서 돌려준다 — 위에서부터 읽으면 되게.
+            # Sorted with the largest importance first, so it reads top-down.
             "feature_importance": {k: round(v, 5) for k, v in sorted(importance.items(), key=lambda kv: -kv[1])},
             "n_train": int(len(X_tr)),
             "n_test": int(len(X_te)),
-            "model": engine,      # 어느 엔진으로 낸 숫자인지 기록에 남긴다
+            "model": engine,      # record which engine produced these numbers
         }
     )
 

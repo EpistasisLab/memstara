@@ -34,34 +34,35 @@ Environment::
 
 
 ==============================================================================
- 이 파일을 읽는 법
+ How to read this file
 ==============================================================================
 
- 판(blackboard)을 만지는 **유일한 창구**. 에이전트는 DB 를 직접 보지 않는다.
+ The **only window** onto the board. Agents never look at the database directly.
 
- 표가 둘이다. 이 구분이 이 파일의 핵심이다.
+ There are two tables. That distinction is the heart of this file.
 
-   memstara_blackboard   작업대. 아직 움직이는 일이 놓인다. 치우면 사라진다
-   memstara_results      기록. 끝난 것만 남는다. 판을 치워도 남는다
+   memstara_blackboard   the workbench. Work still in motion sits here.
+                         Clear it and it is gone
+   memstara_results      the record. Only finished work. Survives clearing the board
 
- 한 과제가 지나가는 길:
+ The path one task travels:
 
-   create_task      가설 단계가 새 줄을 만든다        status=ready · type=data
-        ↓
-   claim_task       데이터 단계가 집어 간다            status=in_progress
-        ↓
-   submit_result    결과를 적고 다음 단계로 넘긴다     status=ready · type=ml
-        ↓           (같은 일이 ml → interpret 로 반복)
-        ↓
-   submit_result    마지막 단계가 끝내면              status=done
-                    **그때 결과표에 한 줄이 복사된다**
+   create_task      the hypothesis stage makes a new row   status=ready · type=data
+        |
+   claim_task       the data stage picks it up             status=in_progress
+        |
+   submit_result    writes its result and passes it on     status=ready · type=ml
+        |           (the same thing repeats for ml -> interpret)
+        |
+   submit_result    when the last stage finishes           status=done
+                    **that is when one row is copied to the results table**
 
- 읽는 도구 셋:
-   count_waiting    몇 개가 기다리나 (파이프라인용, 에이전트용 아님)
-   read_board       판 전체 — 안 끝난 것 포함
-   read_results     끝난 것만 — 보고 단계가 이걸 읽는다
+ Three tools for reading:
+   count_waiting    how many are queued (for the pipeline, not for an agent)
+   read_board       the whole board — unfinished work included
+   read_results     finished work only — this is what the reporting stage reads
 
- 사람이 직접 불러 보려면: `python debug_harness.py board`
+ To call it by hand: `python debug_harness.py board`
 """
 
 from __future__ import annotations
@@ -72,25 +73,27 @@ import os
 import re
 from typing import Any
 
-import asyncpg                            # PostgreSQL 비동기 드라이버
+import asyncpg                            # PostgreSQL async driver
 from mcp.server.fastmcp import FastMCP
 
-# 자식 프로세스라 부모 디버거가 안 닿는다. MEMSTARA_DEBUGPY 에 이 서버 이름이
-# 들어 있을 때만 디버거를 기다린다 — 없으면 아무 일도 하지 않는다. debug_hook.py 참고.
+# This is a child process, so the parent's debugger cannot reach it. It waits for a
+# debugger only when MEMSTARA_DEBUGPY contains this server's name — otherwise it
+# does nothing at all. See debug_hook.py.
 from debug_hook import quiet_child, wait_for_debugger
 
-quiet_child()          # 자식이 켜질 때 찍는 잡음 세 가지를 끈다
+quiet_child()          # silences the three startup messages a child prints
 wait_for_debugger('memstara-blackboard')
 
 mcp = FastMCP("memstara-blackboard")
 
-# 한 단계가 끝나면 다음은 누구인가. 여기 없는 단계(interpret)가 마지막이라는 뜻이다.
-# submit_result 가 이 표를 보고 status 를 'ready'(다음이 있음) 또는 'done' 으로 정한다.
+# Who comes next once a stage finishes. A stage missing from this table (interpret)
+# is the last one. submit_result reads this to decide whether status becomes
+# 'ready' (there is a next stage) or 'done'.
 NEXT_STAGE = {"hypothesis": "data", "data": "ml", "ml": "interpret"}
 
 
-# 환경변수가 없을 때 쓸 주소. docker-compose.yml 이 띄우는 컨테이너를 가리킨다.
-# 포트 5463 — core 의 5453 과 **다른 DB** 다.
+# The address used when the environment variable is unset. It points at the container
+# docker-compose.yml starts. Port 5463 — a **different database** from core's 5453.
 DEFAULT_DSN = "postgresql://memstara:memstara@localhost:5463/memstara"
 
 
@@ -101,16 +104,16 @@ def _dsn() -> str:
     during startup, and core reports that only as "tools available: []".
     """
     url = os.environ.get("MEMSTARA_DATABASE_URL", "").strip() or DEFAULT_DSN
-    # SQLAlchemy 는 "postgresql+asyncpg://" 처럼 드라이버를 이름에 붙이지만
-    # asyncpg 는 그 형식을 모른다. 붙어 있으면 떼어 낸다.
+    # SQLAlchemy attaches the driver to the scheme, as in "postgresql+asyncpg://",
+    # but asyncpg does not understand that form. Strip it off if it is there.
     return re.sub(r"^postgresql\+\w+://", "postgresql://", url)
 
 
 def _err(e: Exception) -> str:
-    """예외를 에이전트가 읽을 수 있는 JSON 으로. 종류 이름까지 넣는다.
+    """Turn an exception into JSON the agent can read, including the type's name.
 
-    도구는 예외를 밖으로 던지지 않는다. 던지면 에이전트에게는 "도구가 고장났다" 로만
-    보이고, 무엇을 고쳐야 할지 판단할 재료가 없다.
+    A tool never lets an exception out. Raised, it reads to the agent only as "the
+    tool is broken", leaving nothing to reason about what should be fixed.
     """
     return json.dumps({"error": f"{type(e).__name__}: {e}"})
 
@@ -164,10 +167,10 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
     try:
         conn = await asyncpg.connect(_dsn())
         try:
-            # 새 줄은 항상 status='ready', task_type='data' 로 시작한다 —
-            # 만들어지자마자 데이터 단계가 집어 갈 수 있는 상태다.
-            # y_column 을 여기 적는 것이 중요하다. 이후 모든 단계가 이 값을 판에서
-            # 읽는다 — 프롬프트로 따로 알려 주지 않는다.
+            # A new row always starts as status='ready', task_type='data' — ready
+            # for the data stage to pick up the moment it is created.
+            # Writing y_column here matters: every later stage reads that value off
+            # the board rather than being told it separately in a prompt.
             task_id = await conn.fetchval(
                 """
                 INSERT INTO memstara_blackboard
@@ -212,16 +215,11 @@ async def claim_task(task_type: str, run_tag: str = "") -> str:
             # The whole point of this server, in one statement. FOR UPDATE locks the
             # row we picked; SKIP LOCKED makes a second claimer step over it instead
             # of waiting, so two agents of the same type never end up on one task.
+            # Without SKIP LOCKED the second claimer waits for the first and then
+            # takes **the very same row** once the first is done.
             #
-            # ↑ 이 서버의 존재 이유가 이 한 문장에 있다.
-            #   FOR UPDATE       고른 줄을 잠근다 — 다른 연결이 못 건드린다
-            #   SKIP LOCKED      이미 잠긴 줄은 **기다리지 않고 건너뛴다**
-            #   두 개를 같이 써야 같은 종류의 에이전트 둘이 한 과제를 집는 일이 없다.
-            #   SKIP LOCKED 가 없으면 둘째가 첫째를 기다리다가, 첫째가 끝난 뒤
-            #   **같은 줄을** 집는다.
-            #
-            #   브레이크포인트로는 이 동작이 안 보인다 — 멈춰 있는 동안엔 경쟁이
-            #   없기 때문이다. 보려면 psql 두 창을 띄워야 한다.
+            # None of this is visible from a breakpoint — while execution is stopped
+            # there is no contention. Seeing it takes two psql windows.
             #
             # The run_tag condition is what keeps one run out of another's work. Without
             # it this picks the oldest ready row of the type from the whole board, and
@@ -229,12 +227,6 @@ async def claim_task(task_type: str, run_tag: str = "") -> str:
             # weeks ago is the first thing the next run reaches for. It then does that
             # work, on that run's money, and files the result under the dead run's tag.
             # run_lock() does not cover this: it only stops two drivers on the *same* tag.
-            #
-            # ↑ 이 run_tag 조건이 **실행끼리 서로의 일을 뺏지 않게** 막는 부분이다.
-            #   이게 없으면 판 전체에서 가장 오래된 대기 행을 집는데, ORDER BY task_id 라
-            #   **오래된 것부터**다. 즉 예전에 죽은 실행이 남긴 과제가 다음 실행이 가장
-            #   먼저 집는 것이 된다. 그 실행의 돈으로 남의 일을 하고, 결과는 죽은 실행의
-            #   태그로 적힌다. run_lock() 은 이걸 못 막는다 — 그건 **같은 태그**만 본다.
             async with conn.transaction():
                 row = await conn.fetchrow(
                     """
@@ -246,7 +238,8 @@ async def claim_task(task_type: str, run_tag: str = "") -> str:
                     WHERE task_id = (
                         SELECT task_id FROM memstara_blackboard
                         WHERE task_type = $1 AND status = 'ready'
-                          -- 빈 문자열이면 예전처럼 판 전체를 본다(하위 호환).
+                          -- An empty string reads the whole board, as before
+                          -- (backward compatible).
                           AND ($2 = '' OR run_tag = $2)
                         ORDER BY task_id
                         FOR UPDATE SKIP LOCKED
@@ -263,18 +256,20 @@ async def claim_task(task_type: str, run_tag: str = "") -> str:
     except Exception as e:  # noqa: BLE001
         return _err(e)
 
-    # 집을 게 없으면 None 이 온다. 이걸 오류로 만들지 않는 것이 중요하다 —
-    # "지금 나한테 올 일이 없다" 는 정상 상태이고, 에이전트는 여기서 멈춰야 한다.
+    # None comes back when there is nothing to claim. Not turning this into an error
+    # matters — "there is no work for me right now" is a normal state, and the agent
+    # is supposed to stop here.
     if row is None:
         return json.dumps({"task_id": None})
 
     out: dict[str, Any] = dict(row)
-    # DB 에는 JSON 문자열로 들어 있다. 파이썬 값으로 풀어서 돌려준다 —
-    # 안 풀면 에이전트가 문자열 안의 JSON 을 또 파싱해야 한다.
-    # 없을 때의 기본값이 다르다: 목록은 [], 중요도는 {}.
+    # These are stored as JSON strings in the database. They are unpacked into Python
+    # values before being returned — left packed, the agent would have to parse JSON
+    # out of a string a second time.
+    # The empty default differs by field: [] for the lists, {} for the importances.
     for k in ("columns", "okf_concept_ids", "columns_used", "feature_importance"):
         out[k] = json.loads(out[k]) if out[k] else ([] if k != "feature_importance" else {})
-    # default=str — 시각(datetime) 같은 값을 JSON 이 모르므로 문자열로 바꾼다.
+    # default=str — JSON does not know values such as datetime, so they become strings.
     return json.dumps(out, ensure_ascii=False, default=str)
 
 
@@ -329,24 +324,26 @@ async def submit_result(task_id: int, subset_path: str = "",
                 )
                 if cur is None:
                     return json.dumps({"error": f"no task {task_id}"})
-                # 집지 않은 과제에 결과를 쓰는 것을 막는다. 이 검사가 없으면
-                # 남이 하고 있는 일에 자기 결과를 덮어쓸 수 있다.
+                # Blocks writing a result to a task that was never claimed. Without
+                # this check, one agent could overwrite its own result onto work
+                # somebody else is holding.
                 if cur["status"] != "in_progress":
                     return json.dumps(
                         {"error": f"task {task_id} is '{cur['status']}', not in_progress — claim it first"}
                     )
 
-                stage = cur["task_type"]          # 지금 이 과제가 있는 단계
-                nxt = NEXT_STAGE.get(stage)       # 다음 단계 (없으면 None = 마지막)
-                new_status = "ready" if nxt else "done"   # 다음이 있으면 다시 대기
-                new_type = nxt or stage                   # 마지막이면 종류는 그대로
+                stage = cur["task_type"]          # the stage this task is at now
+                nxt = NEXT_STAGE.get(stage)       # the next stage (None = this was the last)
+                new_status = "ready" if nxt else "done"   # waiting again if there is a next
+                new_type = nxt or stage                   # on the last stage the type stays
 
-                # 단계마다 채우는 칸이 다르다. 그래서 **준 것만 덮어쓰고 나머지는
-                # 그대로 둔다.** 그 장치가 아래의 COALESCE / NULLIF / CASE 다.
-                #   NULLIF($2, '')  빈 문자열이면 NULL 로
-                #   COALESCE(a, b)  a 가 NULL 이면 b (= 원래 값 유지)
-                # 이게 없으면 ml 단계가 결과를 낼 때 데이터 단계가 적어 둔 경로가
-                # 빈 문자열로 지워진다.
+                # Each stage fills in different fields, so **only what was given is
+                # overwritten and the rest is left alone.** The COALESCE / NULLIF /
+                # CASE below is what does that.
+                #   NULLIF($2, '')  an empty string becomes NULL
+                #   COALESCE(a, b)  b when a is NULL (= keep the original value)
+                # Without it, the ml stage submitting its result would wipe the path
+                # the data stage wrote, replacing it with an empty string.
                 await conn.execute(
                     """
                     UPDATE memstara_blackboard SET
@@ -374,13 +371,13 @@ async def submit_result(task_id: int, subset_path: str = "",
                 )
 
                 # The results table is separate on purpose: the board holds what is
-                # still moving, this holds what was found.
+                # still moving, this holds what was found. The copy happens **only at
+                # this moment, when the last stage finishes** — which is why the
+                # results table contains nothing but work that made it all the way
+                # through. (Deleting the board row leaves this one standing: the
+                # foreign key is ON DELETE SET NULL, so only task_id empties and the
+                # content stays.)
                 #
-                # ↑ 결과표가 따로 있는 이유. 판은 작업대라 치우면 사라지지만, 찾아낸
-                #   것은 남아야 한다. **마지막 단계가 끝나는 이 순간에만** 한 줄이
-                #   복사된다 — 그래서 결과표에는 끝까지 간 것만 있다.
-                #   (판의 줄을 지워도 이 줄은 남는다. 외래키가 ON DELETE SET NULL 이라
-                #    task_id 만 비고 내용은 그대로다.)
                 #   The evidence columns travel with the conclusion on purpose. This
                 #   copy used to carry nine columns — the hypothesis, the columns used,
                 #   the outcome, the AUC and the write-up — which is what a report
