@@ -3,7 +3,7 @@
 
 export type AgentState = "idle" | "moving" | "working" | "unknown";
 export type StoreId = "okf" | "matcher" | "board" | "results" | "dataset" | "ml" | "unknown";
-export type StageId = "hypothesis" | "data" | "ml" | "interpreter" | "report";
+export type StageId = "curator" | "hypothesis" | "data" | "ml" | "interpreter" | "report";
 
 export interface Place {
   id: StoreId;

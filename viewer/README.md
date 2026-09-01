@@ -68,7 +68,8 @@ virtualenv 에서 도니 import 가 안 될 때는 적어 둔 사본으로 넘�
 낡으면 화면만 조용히 틀리게 된다. 그래서 대조 검사를 따로 둔다.
 
 ```bash
-../../motoro/.venv/bin/python check_definitions.py
+# viewer/ 에서. pipeline_core 와 motoro 를 둘 다 임포트할 수 있는 인터프리터라야 한다.
+../.venv/bin/python check_definitions.py
 ```
 
 ## 안 하는 것

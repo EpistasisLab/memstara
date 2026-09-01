@@ -33,7 +33,7 @@ tool, not by server.
    AGENT_LABELS             stage -> the name shown on screen
    TOOL_STORE / store_of()  tool -> store
    normalise_server()       fold the old `ecoxai-*` server names into the current ones
-   BOARD_WINDOWS            the six windows the board server opens, and whose they are
+   BOARD_WINDOWS            the eight windows the board server opens, and whose they are
 
  Easy to miss
    1. **Keyed by tool, not by server.** By server, the board and the results table
@@ -82,6 +82,8 @@ def _pipeline_definitions() -> tuple[dict[str, set[str]], dict[str, set[str]], d
         # checker after editing anything here.
         return (
             {
+                "curator": {"okf_list_domains", "okf_search", "okf_read",
+                            "read_questions", "read_results", "propose_questions"},
                 "hypothesis": {"okf_list_domains", "okf_search", "okf_read",
                                "describe_dataset", "match_concepts", "match_concept",
                                "create_task"},
@@ -91,6 +93,7 @@ def _pipeline_definitions() -> tuple[dict[str, set[str]], dict[str, set[str]], d
                 "report": {"read_results"},
             },
             {
+                "curator": {"okf", "memstara-blackboard"},
                 "hypothesis": {"okf", "memstara-data", "memstara-blackboard",
                                "semantic-matcher"},
                 "data": {"memstara-data", "memstara-blackboard"},
@@ -99,6 +102,7 @@ def _pipeline_definitions() -> tuple[dict[str, set[str]], dict[str, set[str]], d
                 "report": {"memstara-blackboard"},
             },
             {
+                "curator": "memstara-board-curator",
                 "hypothesis": "memstara-board-hypothesis",
                 "data": "memstara-board-data",
                 "ml": "memstara-board-ml",
@@ -155,19 +159,22 @@ PLACES: list[dict[str, Any]] = [
     {"id": "ml",      "label": "Trainer",          "sub": "train_and_score",     "x": 330, "y": 300},
 ]
 
-# Where each character rests when it has nothing to do — five of them side by side
-# along the bottom (y=470). A stage missing from here is silently dropped from the
-# drawing, which is what `check_definitions.py` watches for.
+# Where each character rests when it has nothing to do — six of them side by side
+# along the bottom (y=470), in the order the pipeline runs them. A stage missing from
+# here is silently dropped from the drawing, which is what `check_definitions.py`
+# watches for.
 HOME: dict[str, dict[str, int]] = {
-    "hypothesis":  {"x": 140, "y": 470},
-    "data":        {"x": 320, "y": 470},
-    "ml":          {"x": 500, "y": 470},
-    "interpreter": {"x": 680, "y": 470},
+    "curator":     {"x": 110, "y": 470},
+    "hypothesis":  {"x": 260, "y": 470},
+    "data":        {"x": 410, "y": 470},
+    "ml":          {"x": 560, "y": 470},
+    "interpreter": {"x": 710, "y": 470},
     "report":      {"x": 860, "y": 470},
 }
 
 AGENT_LABELS = {
     # Stage -> the name shown on screen.
+    "curator": "Curator",
     "hypothesis": "Hypothesis", "data": "Data", "ml": "ML",
     "interpreter": "Interpreter", "report": "Report",
 }
@@ -201,6 +208,13 @@ TOOL_STORE: dict[str, str] = {
     "read_board": "board",
     "count_waiting": "board",
     "read_results": "results",
+    # The curator's two. They are drawn as the board, but the table they really touch
+    # is `memstara_questions` (tools_blackboard.py:697, 811, 876) — a third store on the
+    # same server, not the task board. Folded in on purpose for now; if the question
+    # bank is ever worth its own place on screen, it needs PLACES here plus StoreId and
+    # STORE_LABEL on the web side.
+    "read_questions": "board",
+    "propose_questions": "board",
 }
 
 
@@ -236,4 +250,6 @@ BOARD_WINDOWS: list[dict[str, str]] = [
     {"tool": "read_results",  "holder": "Report",              "store": "results"},
     {"tool": "read_board",    "holder": "Driving script",      "store": "board"},
     {"tool": "count_waiting", "holder": "Nobody",              "store": "board"},
+    {"tool": "read_questions",    "holder": "Curator",         "store": "board"},
+    {"tool": "propose_questions", "holder": "Curator",         "store": "board"},
 ]

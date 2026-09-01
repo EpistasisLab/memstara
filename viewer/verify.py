@@ -260,10 +260,14 @@ def main() -> int:
     chk("6 dead run does not look alive", int(stale) > 0 and not working,
         f"{stale} old pending runs yet working {working}")
 
-    # The skeleton of the scene. 5 places and 5 characters must always come out. Add a
+    # The skeleton of the scene. 6 places and 6 characters must always come out. Add a
     # stage without making room for it in stores.PLACES/HOME and it is caught here.
-    chk("5 places", len(snap["scene"]["places"]) == 5)
-    chk("5 characters", len(snap["scene"]["agents"]) == 5)
+    # Both numbers are written out rather than read from stores, so that adding a stage
+    # to the viewer and forgetting to say so here still fails. (They were frozen at 5
+    # while PLACES already held 6 and the pipeline already had six stages, so this line
+    # was reporting a stale number rather than a real gap.)
+    chk("6 places", len(snap["scene"]["places"]) == 6, str(len(snap["scene"]["places"])))
+    chk("6 characters", len(snap["scene"]["agents"]) == 6, str(len(snap["scene"]["agents"])))
     chk("both DBs answered", snap["health"]["memstara"]["up"] and snap["health"]["core"]["up"])
 
     # Only the count for what passed; for what did not, the reason in full.
