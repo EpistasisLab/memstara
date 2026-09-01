@@ -71,6 +71,22 @@ BASE_VARS = {
     "MOTORO_DATABASE_URL": "core's DB — the agents and the run history",
 }
 
+#: The sources `allowlist_gaps()` scrapes, named one by one rather than globbed.
+#:
+#: This was `sorted(HERE.glob("tools_*.py")) + [HERE / "debug_hook.py"]`, and every
+#: hit was filtered through `if path.is_file()`. A glob that matches nothing is not an
+#: error — it is an empty list — and an empty list here means *"no gaps found"*. So the
+#: most valuable check in this file was one file move away from reporting success
+#: without having read a single line. Naming the files makes that failure loud.
+ALLOWLIST_SOURCES = (
+    "tools_okf.py",
+    "tools_data.py",
+    "tools_ml.py",
+    "tools_matcher.py",
+    "tools_blackboard.py",
+    "debug_hook.py",
+)
+
 #: Extra keys each provider needs. Only the one picked with `--provider` is checked.
 #:
 #: Before this existed, empty credentials did not surface until the **first LLM
@@ -127,6 +143,11 @@ def allowlist_gaps() -> list[str]:
 
     A hand-maintained list is guaranteed to drift, so **the sources are scanned and
     compared** instead.
+
+    Raises:
+        FileNotFoundError: if any file in `ALLOWLIST_SOURCES` is not where it is
+            expected. Skipping it quietly would leave this function returning `[]`,
+            which reads as "everything is fine".
     """
     from settings import Settings
 
@@ -136,9 +157,15 @@ def allowlist_gaps() -> list[str]:
     # Catches both `os.environ.get("X")` and `os.environ["X"]`.
     pattern = re.compile(r'os\.environ(?:\.get)?[\[(]\s*"([A-Z_][A-Z0-9_]*)"')
     read: set[str] = set()
-    for path in sorted(HERE.glob("tools_*.py")) + [HERE / "debug_hook.py"]:
-        if path.is_file():
-            read |= set(pattern.findall(path.read_text(encoding="utf-8")))
+    for name in ALLOWLIST_SOURCES:
+        path = HERE / name
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"{path} is missing, so the allowlist check cannot be trusted. "
+                "Update ALLOWLIST_SOURCES in bootstrap.py if the file was moved or "
+                "renamed — skipping it would turn this check into a permanent pass."
+            )
+        read |= set(pattern.findall(path.read_text(encoding="utf-8")))
 
     # Names core forwards by default — they arrive even when the list omits them.
     #

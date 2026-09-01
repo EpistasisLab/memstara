@@ -1,0 +1,91 @@
+# The sandbox, as an installable package.
+#
+# Why this file did not exist until now
+# -------------------------------------
+# Every peer repository has one — motoro, ASAREE, BaseAgent, tpot. This one did not,
+# and that absence is what let `tests/` resolve its imports by accident: `pytest.ini`
+# set no `pythonpath`, `tests/conftest.py` does no path work, yet
+# `tests/test_board_columns.py:24` says `import tools_blackboard`. Run from the
+# repository root that collects 67 tests; run from anywhere else it is 5 collection
+# errors. Nothing was broken to repair — something was missing to add.
+#
+# This file is step 1 of MEMO-05 (issue #33). It moves nothing. The move into
+# `src/memstara/` comes afterwards, and lands in a commit of its own.
+
+[project]
+name = "memstara"
+# Written here rather than derived from a git tag. motoro uses hatch-vcs because a
+# product pins it *by tag* and the release procedure would otherwise drift; this
+# repository has no tags and nothing installs it from an index, so a version derived
+# from `git describe` would say `0.1.dev<N>+g<sha>` and mean nothing to anyone.
+version = "0.1.0"
+description = "Memstara sandbox: the agentic ML pipeline, its MCP tool servers, and the shared blackboard."
+readme = "README.md"
+requires-python = ">=3.12"
+
+# What the sandbox imports directly and motoro does not already bring in.
+#
+# `motoro` itself is deliberately absent. It is a local editable checkout at
+# `../motoro`, not something a resolver can fetch, so it stays in `environment.yml`
+# where the relative path belongs. Anyone who installs this package without motoro
+# present will find out at the first `import motoro`, which is the honest failure.
+dependencies = [
+    "pandas",
+    "scikit-learn",
+    "numpy",
+    "python-dotenv",
+    # Capped to match motoro's own cap exactly (`motoro/pyproject.toml:53`). mcp 2.0.0
+    # renames FastMCP and changes ClientSession's shutdown so a connected client hangs
+    # on exit. Declaring it unpinned here would let a resolver walk this environment
+    # straight into that, past the cap core wrote to prevent it.
+    "mcp>=1.27.1,<2.0.0",
+]
+
+# `optional-dependencies`, not PEP 735 `[dependency-groups]` as motoro uses. motoro is
+# installed with uv, which understands groups; this repository is a conda environment
+# whose pip section installs with `pip install -e .[dev]`, and pip does not install
+# dependency-groups from a path requirement.
+[project.optional-dependencies]
+dev = [
+    # The test suite. Listed as a dependency, not an aside, because the matcher's claim
+    # to be a faithful port of afc-forge rests on 31 upstream tests running unmodified —
+    # an environment that cannot run them does not preserve that evidence.
+    "pytest",
+    # The tool servers are child processes, so attaching a debugger to one needs this.
+
+    "debugpy",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/memstara"]
+
+# --------------------------------------------------------------------------- #
+# pytest. This section replaces `pytest.ini`, which is deleted in the same commit.
+# --------------------------------------------------------------------------- #
+[tool.pytest.ini_options]
+# `testpaths = tests` is deliberate, and widening it gains nothing.
+#
+# The root `test_blackboard.py` looks excluded by this line, but it is not a pytest
+# file: it holds `cleanup`/`ok`/`main` and an `if __name__ == "__main__"` block, needs
+# a live Postgres, and is run by hand as `python test_blackboard.py`. Setting
+# `testpaths = ["tests", "."]` was measured — it collects the same 67 tests and only
+# adds an import of a database script. The name is what misleads; renaming it to
+# `check_blackboard.py` is the real fix and touches `02_mvp_pipeline.py:307`.
+testpaths = ["tests"]
+
+# The line this whole file exists for. Until now the tests found `tools_blackboard`,
+# `tools_data` and `matcher_impl` only because pytest happened to be started from the
+# repository root, which put the root on `sys.path` as rootdir. Saying so out loud
+# means `pytest <repo>/tests` works from anywhere.
+#
+# This is `["."]` while the modules are still at the root. It becomes `["src"]` when
+# they move, and then `pip install -e .` makes it redundant.
+pythonpath = ["."]
+
+markers = [
+    "unit: pure logic over a stubbed encoder — no model, no catalog, no filesystem",
+]

@@ -36,18 +36,12 @@ dependencies:
       # sentence-transformers·litellm·instructor·tenacity 를 함께 끌고 온다.
       - -e ../motoro
 
-      # 샌드박스가 직접 쓰는데 core 의존성에는 없는 것들.
-      - pandas
-      - scikit-learn
-      - numpy
-      - python-dotenv
-      - mcp
-
-      # 디버깅용. 도구 서버는 자식 프로세스라, 거기에 붙으려면 필요하다.
-
-      - debugpy
-
-      # The test suite. Listed here because the matcher's claim to be a faithful
-      # port of afc-forge rests on 31 upstream tests running unmodified — an
-      # environment file that cannot run them does not preserve that evidence.
-      - pytest
+      # The sandbox itself, editable, with its test and debug extras.
+      #
+      # This one line replaces the list of pandas / scikit-learn / numpy /
+      # python-dotenv / mcp / pytest / debugpy that used to sit here. They are declared
+      # in `pyproject.toml` now, with the reason for each. Two places to edit is how
+      # `mcp` came to be capped at <2.0.0 in motoro and left unpinned here — the cap
+      # core wrote to stop a resolver breaking MCP shutdown did not apply to the
+      # environment that actually runs the servers.
+      - -e .[dev]
