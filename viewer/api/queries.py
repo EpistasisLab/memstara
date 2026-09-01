@@ -38,6 +38,7 @@ a value.
    TASK_TOUCHES  ★ the bridge tying the board to the runs
    LAST_CALL     the most recent call per agent = where the character is standing
    RECENT_CALLS  calls within the last few seconds = the flashing lines
+   FEED          the newest calls regardless of age = the feed panel's rows
 
  Easy things to miss
    1. Everything that counts tool calls is built **on top of FLAT_CALLS.** That is so
@@ -268,4 +269,34 @@ JOIN agents a ON a.id = r.agent_id
 WHERE f.started_at > now() - ($1::text || ' seconds')::interval
 ORDER BY f.started_at DESC
 LIMIT 40
+"""
+
+# The feed panel's rows: the newest calls, **with no time window at all.**
+#
+# Why this is not RECENT_CALLS with a bigger number. RECENT_CALLS exists to drive the
+# flashing edges, so its window has to equal the animation length (4 seconds). The
+# screen polls every 2 seconds, so a feed built on it would show a handful of rows and
+# would lose anything that happened during a tick that ran slow. A feed has to be "the
+# last N calls, whenever they were" — then a quiet system shows its last activity
+# instead of showing nothing.
+#
+# No run_tag filter, on purpose. Only create_task/claim_task/submit_result carry a
+# run_tag (see TASK_TOUCHES above); a curator's okf_read has none, so filtering by the
+# selected run would silently drop most of the feed. The panel says "All runs" on
+# screen rather than pretending otherwise.
+#
+# `seq` is there so the screen has a stable key. One step can hold a batch containing
+# the same tool twice, so step_id alone collides and step_id + tool collides too.
+FEED = FLAT_CALLS + """
+SELECT a.name,
+       f.server,
+       f.tool,
+       f.started_at,
+       f.step_id,
+       row_number() OVER (PARTITION BY f.step_id ORDER BY f.tool) AS seq
+FROM flat f
+JOIN agent_runs r ON r.id = f.run_id
+JOIN agents a ON a.id = r.agent_id
+ORDER BY f.started_at DESC, f.step_id DESC
+LIMIT 60
 """

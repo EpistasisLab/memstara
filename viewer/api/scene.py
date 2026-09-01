@@ -23,11 +23,12 @@ doing.
    _jsonb / _iso / _retried        the small converters
    --- Reads ---
    list_runs / _board / _results   from the memstara DB
-   _core_facts                     from the core DB (six queries on one connection)
+   _core_facts                     from the core DB (seven queries on one connection)
    --- The scene ---
    _carrying     ★ replays who is holding which task right now
    _build_scene  ★ settles the characters' state, position and flashing
    _agent_totals / _access         the table and the access map
+   _feed                           the newest calls, in order, for the feed panel
    snapshot()    ★ gathers all of the above into one object
 
  Easy things to miss
@@ -198,12 +199,12 @@ async def _results(run_tag: str) -> list[dict[str, Any]]:
 async def _core_facts() -> dict[str, Any]:
     """Everything from core's database, in one connection acquisition.
 
-    Why six queries but not six calls to `guarded`:
-    - there is no acquiring and releasing a connection six times over, and
-    - above all **the six results are the DB state of one same moment,** so they cannot
+    Why seven queries but not seven calls to `guarded`:
+    - there is no acquiring and releasing a connection seven times over, and
+    - above all **the seven results are the DB state of one same moment,** so they cannot
       contradict each other. (One query never sees before an update while another sees
       after it.)
-    - and when it fails, **all six fail together:** a half-populated scene never arises.
+    - and when it fails, **all seven fail together:** a half-populated scene never arises.
     """
 
     async def q(conn: asyncpg.Connection) -> dict[str, Any]:
@@ -216,13 +217,14 @@ async def _core_facts() -> dict[str, Any]:
             "last_call": [dict(r) for r in await conn.fetch(queries.LAST_CALL)],
             "recent": [dict(r) for r in await conn.fetch(queries.RECENT_CALLS,
                                                         str(FLASH_SECONDS))],
+            "feed": [dict(r) for r in await conn.fetch(queries.FEED)],
         }
 
-    # The empty shell to return when core is down. It has to carry **the same six keys**
+    # The empty shell to return when core is down. It has to carry **the same seven keys**
     # as above. Leave even one out and a KeyError comes up below, turning "core is down"
     # into "the viewer crashed" — which makes everything guarded holds off pointless.
     empty: dict[str, Any] = {"totals": [], "open": [], "access": [],
-                             "touches": [], "last_call": [], "recent": []}
+                             "touches": [], "last_call": [], "recent": [], "feed": []}
     return await pools.guarded("core", q, empty)
 
 
@@ -396,6 +398,38 @@ def _access(core: dict[str, Any]) -> dict[str, Any]:
     return {"rows": rows, "windows": windows}
 
 
+def _feed(core: dict[str, Any]) -> list[dict[str, Any]]:
+    """The newest tool calls, newest first, for the feed panel.
+
+    Three things are deliberate here and each is visible on screen rather than silent:
+
+    1. **Both paths.** Like `_access` and unlike the scene, this uses
+       `AGENT_BY_NAME_ANY`. The supervisor path did most of the tool calls historically,
+       so a board-only feed would understate the system roughly fivefold.
+    2. **Every run, not the selected one.** Only create_task/claim_task/submit_result
+       carry a run_tag at all (queries.TASK_TOUCHES), so filtering by the run the
+       selector shows would drop most of the feed — a curator's okf_read would simply
+       never appear. The panel is labelled "All runs".
+    3. **An unrecognised agent is kept, not dropped.** `_build_scene` drops them because
+       a line has nowhere to be drawn, but a feed row always has somewhere to go, and a
+       call the viewer cannot name is exactly what someone would want to see.
+
+    `key` is built here rather than on the screen: `step_id` alone is not unique once a
+    step holds a batch, so the SQL's per-step `seq` is folded in.
+    """
+    return [{
+        "key": f"{r['step_id']}-{r['seq']}",
+        "name": r["name"],
+        "agent": stores.AGENT_BY_NAME_ANY.get(r["name"]),
+        "label": stores.AGENT_LABELS.get(stores.AGENT_BY_NAME_ANY.get(r["name"], ""), r["name"]),
+        "path": stores.AGENT_PATH.get(r["name"], "other"),
+        "server": stores.normalise_server(r["server"]),
+        "tool": r["tool"],
+        "store": stores.store_of(r["tool"]),
+        "at": _iso(r["started_at"]),
+    } for r in core["feed"]]
+
+
 async def snapshot(run_tag: str | None) -> dict[str, Any]:
     """★ The entry point. One object, everything the six screens need.
 
@@ -435,5 +469,6 @@ async def snapshot(run_tag: str | None) -> dict[str, Any]:
         "board": {"lanes": lanes, "tasks": board},
         "agents": _agent_totals(core),
         "access": _access(core),
+        "feed": _feed(core),
         "results": results,
     }

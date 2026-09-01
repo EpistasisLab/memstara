@@ -21,9 +21,12 @@ be trusted about what actually happened.
                            api/queries.py
    NAIVE_SQL               SQL written **wrong on purpose.** For proving the traps are
                            really handled
+   FEED_SQL                ★ the feed's rows, also **written separately from**
+                           api/queries.py — a LATERAL join where the API uses a comma
+   FEED_LIMIT              queries.FEED's LIMIT, written out here on purpose
    psql()                  runs psql inside the container with docker exec
    get()                   calls the viewer API over HTTP
-   main()                  runs checks 1 to 6 in order
+   main()                  runs checks 1 to 7 in order
 
  What is checked
    1  is read-only blocked **by permission** (an UPDATE is actually attempted)
@@ -32,6 +35,7 @@ be trusted about what actually happened.
    4  have the old `ecoxai-*` server names been normalised
    5  do the board row count, the AUCs and the results row count match the DB
    6  is a character holding a card really in_progress + does a dead run not look alive
+   7  does the feed hold the newest calls the DB holds — and is it non-empty at all
 
  Easy things to miss
    ★ **The right answers are not frozen into the file.** An earlier version hardcoded
@@ -55,6 +59,7 @@ import json
 import subprocess
 import sys
 import urllib.request
+from datetime import datetime
 
 # 8070 is the web (nginx) side. nginx hands /api on to the API container at 8071, so
 # knowing this one address is enough to check by exactly the same route the screen
@@ -110,6 +115,45 @@ SELECT tool || '=' || n FROM (
 """
 
 
+# queries.FEED's LIMIT, written out rather than imported — the same reason the scene's
+# "6 places" is written out. Change the limit on the API side and forget to say so here
+# and this fails, which is the point.
+FEED_LIMIT = 60
+
+# The feed's rows, computed independently of api/queries.py. Same three traps, expressed
+# differently again: a CROSS JOIN LATERAL where FLAT_CALLS uses the comma form, and the
+# two shapes named as separate CTEs rather than one UNION inside a single `flat`.
+#
+# `{where}` is filled with a boundary condition rather than an ORDER BY + LIMIT, because
+# the feed's ordering is genuinely ambiguous at the boundary: every call inside one
+# batched step shares a started_at *and* a step_id, so which of them lands on row 60 is
+# not defined by either side. Comparing everything **strictly newer than the feed's
+# oldest row** is tie-safe and still catches a dropped or mistyped call.
+FEED_SQL = """
+WITH one AS (
+    SELECT s.run_id, s.started_at, s.tool_call->>'tool' AS tool
+    FROM run_steps s
+    WHERE s.tool_call::text <> 'null' AND s.tool_call->>'server' IS NOT NULL
+), many AS (
+    SELECT s.run_id, s.started_at, c->>'tool' AS tool
+    FROM run_steps s
+    CROSS JOIN LATERAL json_array_elements(s.tool_call->'calls') c
+    WHERE s.tool_call::text <> 'null' AND s.tool_call->'calls' IS NOT NULL
+), every_call AS (
+    -- Not named `both`: that is a reserved word in Postgres (trim(BOTH ...)) and the
+    -- CTE fails to parse. psql's error goes to stderr, which psql() does not read, so
+    -- it would surface only as an empty result — "the DB has 0 calls".
+    SELECT * FROM one UNION ALL SELECT * FROM many
+)
+SELECT b.tool || '=' || count(*)
+FROM every_call b
+JOIN agent_runs r ON r.id = b.run_id
+JOIN agents a ON a.id = r.agent_id
+{where}
+GROUP BY b.tool ORDER BY b.tool
+"""
+
+
 def psql(container: str, user: str, db: str, q: str) -> str:
     # Run psql inside the container and take the result back as a string.
     # `-tAc` = no header (-t), unaligned (-A), one command only (-c). That makes the
@@ -133,7 +177,7 @@ def get(path: str) -> dict:
 
 
 def main() -> int:
-    # Runs checks 1 to 6 in order. **It does not stop at the first failure** — it
+    # Runs checks 1 to 7 in order. **It does not stop at the first failure** — it
     # collects everything that did not line up and shows the lot at the end.
     ok: list[str] = []
     bad: list[str] = []
@@ -269,6 +313,50 @@ def main() -> int:
     chk("6 places", len(snap["scene"]["places"]) == 6, str(len(snap["scene"]["places"])))
     chk("6 characters", len(snap["scene"]["agents"]) == 6, str(len(snap["scene"]["agents"])))
     chk("both DBs answered", snap["health"]["memstara"]["up"] and snap["health"]["core"]["up"])
+
+    # 7 — the feed.
+    # A feed that silently returns nothing looks exactly like a quiet system, so the first
+    # thing established is that it is empty only when there is genuinely nothing to show.
+    feed = snap["feed"]
+    all_rows = psql("motoro-postgres", "agentic", "motoro", FEED_SQL.format(where=""))
+    total = sum(
+        int(v) for _, v in (line.split("=") for line in all_rows.splitlines() if "=" in line)
+    )
+    chk("7 feed is empty only if the DB is", (len(feed) > 0) == (total > 0),
+        f"screen {len(feed)} rows / DB {total} calls")
+    chk("7 feed length", len(feed) == min(FEED_LIMIT, total),
+        f"screen {len(feed)} / DB min({FEED_LIMIT}, {total})")
+
+    # The feed really holds the newest calls the DB holds. Compared as counts per tool
+    # over everything **strictly newer than the feed's oldest row**, which is the widest
+    # slice both sides agree on unambiguously — see FEED_SQL on why the boundary row
+    # itself cannot be compared.
+    if feed:
+        t0 = min(datetime.fromisoformat(e["at"]) for e in feed)
+        newer = psql("motoro-postgres", "agentic", "motoro",
+                     FEED_SQL.format(where=f"WHERE b.started_at > timestamptz '{t0.isoformat()}'"))
+        want = dict(
+            (k, int(v)) for k, v in (line.split("=") for line in newer.splitlines() if "=" in line)
+        )
+        got: dict[str, int] = {}
+        for e in feed:
+            if datetime.fromisoformat(e["at"]) > t0:
+                got[e["tool"]] = got.get(e["tool"], 0) + 1
+        chk("7 feed holds the newest calls", got == want,
+            f"screen {sorted(got.items())} / DB {sorted(want.items())}")
+
+        # The same normalisation check as 4, on the feed's own rows — it builds its
+        # servers through stores.normalise_server just as the access map does, and a feed
+        # that skipped it would show one server under two names.
+        chk("7 feed servers normalised",
+            not any(e["server"].startswith("ecoxai") for e in feed),
+            str(sorted({e["server"] for e in feed})))
+
+        # A row the viewer cannot name keeps agent=null and is shown anyway. What must
+        # not happen is a *named* row naming a stage the scene does not have.
+        stages = {a["id"] for a in snap["scene"]["agents"]}
+        strays = {e["agent"] for e in feed if e["agent"] is not None} - stages
+        chk("7 feed stages are real stages", not strays, str(sorted(strays)))
 
     # Only the count for what passed; for what did not, the reason in full.
     # Exit code 1 is picked up as a failure by CI or the shell as it stands.
