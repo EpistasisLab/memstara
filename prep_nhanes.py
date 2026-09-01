@@ -70,8 +70,9 @@ from pathlib import Path
 
 import pandas as pd
 
-HERE = Path(__file__).parent
-OUT_DIR = HERE / "outputs"
+from memstara.paths import DEFAULT_OUTPUT_DIR
+
+OUT_DIR = DEFAULT_OUTPUT_DIR
 
 OUTCOME = "Diabetes"      # 맞히려는 것 — 당뇨 여부
 MIN_AGE = 20              # 성인만 남긴다

@@ -44,7 +44,9 @@ import sys
 from pathlib import Path
 
 # **First of all.** The imports below read the environment, so it must be set up first.
-from bootstrap import HERE, PROVIDER_KEYS, allowlist_gaps, load_env, missing_vars
+from bootstrap import PROVIDER_KEYS, allowlist_gaps, load_env, missing_vars
+from memstara.paths import ENV_FILES, REPO_ROOT
+from memstara.servers import BY_NAME, SERVERS
 
 _LOADED = load_env()
 
@@ -65,7 +67,7 @@ def check(label: str, passed: bool, detail: str = "", fix: str = "") -> bool:
 def check_env_files() -> None:
     """[1] Were both `.env` files found where they are expected."""
     print("\n[1] .env")
-    for path in (HERE / ".env", HERE / ".." / "motoro" / ".env"):
+    for path in ENV_FILES:
         check(f".env — {path.parent.name}/", path.is_file(), str(path.resolve()),
               f"create {path} (see .env.example)")
 
@@ -97,11 +99,11 @@ def check_paths() -> None:
         # (That happened: a flat bundle came out as 0 documents in the tool and
         # nobody noticed.)
         try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("tools_okf", HERE / "tools_okf.py")
-            mod = importlib.util.module_from_spec(spec)
-            sys.modules["tools_okf"] = mod
-            spec.loader.exec_module(mod)
+            # Imported by name, not loaded from a path. The module is importable
+            # because the package is installed, so this no longer depends on the two
+            # files being neighbours.
+            import importlib
+            mod = importlib.import_module(BY_NAME["okf"].module)
             docs, skipped = mod._load(Path(bundle))
             layout = "domain folders" if any("/" in d.address for d in docs) else "flat"
             check("the knowledge source has documents", bool(docs),
@@ -210,18 +212,17 @@ def check_servers() -> None:
     # Just import each file. Started as a server it would sit waiting on stdio and
     # never return, so **only the import** runs, which catches startup errors — where
     # nearly all the failures happen.
-    for name in ("tools_okf", "tools_data", "tools_ml", "tools_blackboard", "tools_matcher"):
+    for server in SERVERS:
         r = subprocess.run(
             [sys.executable, "-c",
-             f"import importlib.util,sys;"
-             f"s=importlib.util.spec_from_file_location('{name}','{HERE / (name + '.py')}');"
-             f"m=importlib.util.module_from_spec(s);sys.modules['{name}']=m;s.loader.exec_module(m);"
+             f"import importlib;m=importlib.import_module('{server.module}');"
              f"print(len([x for x in dir(m) if not x.startswith('_')]))"],
-            capture_output=True, text=True, cwd=HERE, timeout=120,
+            capture_output=True, text=True, cwd=REPO_ROOT, timeout=120,
         )
         ok = r.returncode == 0
         detail = "" if ok else (r.stderr.strip().splitlines() or ["?"])[-1][:90]
-        check(f"{name}.py", ok, detail, f"starting it directly with python {name}.py shows the real error")
+        check(f"{server.module}.py", ok, detail,
+              f"starting it directly with `python -m {server.module}` shows the real error")
 
 
 def main() -> int:

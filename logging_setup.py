@@ -32,8 +32,12 @@ from typing import Any
 
 import structlog
 
-LOG_DIR = Path(__file__).parent / "outputs" / "logs"
-RUNS_DIR = Path(__file__).parent / "outputs" / "runs"
+# These two were `Path(__file__).parent / "outputs" / ...` with no override of any
+# kind — the single most dangerous line to leave alone during a move. `.gitignore:21`
+# is `outputs/*`, which git anchors to the repository root, so an `outputs/` created
+# anywhere else is not ignored and every run record from the cohort would be sitting
+# untracked inside the source tree. memstara/paths.py pins them to the root.
+from memstara.paths import LOG_DIR, RUNS_DIR
 
 # Libraries that are chatty at INFO and say nothing a developer of this pipeline wants.
 # Raising their floor is better than filtering the output afterwards: the noise never

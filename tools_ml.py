@@ -56,12 +56,14 @@ from mcp.server.fastmcp import FastMCP
 # does nothing at all. See debug_hook.py.
 from debug_hook import quiet_child, wait_for_debugger
 
+from memstara.paths import DEFAULT_OUTPUT_DIR
+
 quiet_child()          # silences the three startup messages a child prints
 wait_for_debugger('memstara-ml')
 
 mcp = FastMCP("memstara-ml")
 
-_DEFAULT_OUT = Path(__file__).parent / "outputs"
+_DEFAULT_OUT = DEFAULT_OUTPUT_DIR
 
 
 def _output_dir() -> Path:

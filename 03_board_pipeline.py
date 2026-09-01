@@ -158,6 +158,7 @@ import asyncpg    # PostgreSQL async driver. Used only to query the board direct
 # value the moment it is imported. pipeline_core below drags litellm in, so with the
 # order reversed not one LLM request body is kept — and with no error at all.
 import bootstrap  # noqa: F401  (the import itself is the point)
+from bootstrap import load_env
 
 # blackboard.py — the board table's definition and connection details
 from blackboard import BoardBusy, dsn, run_lock
@@ -175,8 +176,10 @@ from pipeline_core import (
 )
 from settings import Settings   # the settings object that reads .env and hands it to core
 
-# There are two .env files, so the program reads them itself — see the comment in main().
-from dotenv import load_dotenv
+# memstara/paths.py, memstara/servers.py — where things are, and how the five tool
+# servers are launched. One copy each, for both pipelines and for preflight.
+from memstara.paths import DEFAULT_OUTPUT_DIR
+from memstara.servers import launch_table
 # The function that writes one run out in a form a person can read. render is used
 # rather than dump_all — dump_all presumes the todo_rows.json shape of the 02 path.
 # See write_traces().
@@ -193,9 +196,7 @@ from motoro.services.mcp_service import (
     update_server,
 )
 
-# The folder this file is in. Used to build the paths of the tool servers.
-HERE = Path(__file__).parent
-OUT_DIR = HERE / "outputs"
+OUT_DIR = DEFAULT_OUTPUT_DIR
 
 # The stages that take work off the board, in the order a task passes through them.
 #
@@ -430,23 +431,16 @@ async def setup_tools() -> MCPServerRegistry:
 
     registry = MCPServerRegistry()   # the vessel holding the connected servers and their tools
 
-    # `sys.executable` points at **the very Python running this file.** So whatever
-    # environment this file is started in, the five machines come up in the **same**
-    # environment. Write the path by hand and it has to be edited here every time the
-    # environment changes.
-    servers = [
-        ("okf", f"{sys.executable} {HERE / 'tools_okf.py'}"),
-        ("memstara-data", f"{sys.executable} {HERE / 'tools_data.py'}"),
-        ("memstara-ml", f"{sys.executable} {HERE / 'tools_ml.py'}"),
-        ("memstara-blackboard", f"{sys.executable} {HERE / 'tools_blackboard.py'}"),
-        # The semantic matcher, same server 02 starts. Without it the board's
-        # hypothesis agent picks column names by eye off `describe_dataset`, which
-        # is the thing the matcher was built to replace — and the two pipelines
-        # then choose columns by different means, so their AUCs are not comparable.
-        # Needs the cache: `python scripts/build_matcher_cache.py`.
-        ("semantic-matcher", f"{sys.executable} {HERE / 'tools_matcher.py'}"),
-    ]
-    for name, command in servers:
+    # The same five 02 starts, from the same table — memstara/servers.py. That the two
+    # pipelines start an identical set is not a coincidence to be maintained by hand:
+    # if 03's matcher went missing, its hypothesis agent would pick column names by eye
+    # off `describe_dataset`, the two pipelines would choose columns by different means,
+    # and their AUCs would stop being comparable without anything failing.
+    #
+    # `Server.command()` builds each command from `sys.executable` — the very Python
+    # running this file — so the five machines come up in the same environment as
+    # whatever started them.
+    for name, command in launch_table():
         existing = await get_server_by_name(name)   # already registered in core's DB?
         if existing is None:
             # A server never seen before — register it
@@ -1545,8 +1539,11 @@ async def main() -> int:
     # already there (override=False is the default), so whichever is read first wins, and
     # a value given by the shell or by launch.json comes ahead of both — which keeps the
     # intent of "a different bundle for this run only" working.
-    load_dotenv(HERE / ".env")
-    load_dotenv(HERE / ".." / "motoro" / ".env")
+    #
+    # `load_env` is bootstrap's, and it is now the only reader of those two files. This
+    # was one of four hand-written copies of the same pair, and they had already drifted:
+    # debug_harness.py read core's first, giving it priority over the sandbox's.
+    load_env()
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--trials", type=int, default=3, help="how many hypotheses to seed per wave")

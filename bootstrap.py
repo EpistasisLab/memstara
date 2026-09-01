@@ -26,7 +26,9 @@ Why there are two `.env` files
     motoro/.env           LLM credentials, MOTORO_DATABASE_URL — core's own
 
 They are not merged. Merging would put secrets in two places, and the copy would
-fall behind whenever the original changed. **Both are read instead.**
+fall behind whenever the original changed. **Both are read instead.** Where they
+are is `memstara.paths.ENV_FILES`; `load_env()` below is the only thing that reads
+them, and four other copies of that pair have been deleted in its favour.
 """
 
 from __future__ import annotations
@@ -37,31 +39,20 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-HERE = Path(__file__).parent.resolve()
+from memstara.paths import ENV_FILES
+from memstara.servers import SCANNED_MODULES, source_of
 
-# Turn litellm's request logging on **at import time**, not inside `load_env()`.
+# `LITELLM_LOG` used to be set here, by an `os.environ.setdefault` at import time.
 #
-# litellm reads `LITELLM_LOG` while it is being imported (`litellm/_logging.py:80`),
-# and by the time `load_env()` runs inside `main()` litellm has long since been
-# imported by `pipeline_core`. Setting it later leaves the request bodies unlogged —
-# which is exactly how this first failed, silently.
+# litellm reads it *while it is being imported* (`litellm/_logging.py:80`), so setting
+# it any later than that leaves every request body unlogged — silently, which is how
+# it first failed. The rule that came out of it was "every entry point must import
+# `bootstrap` before anything that pulls in motoro / litellm", and that rule caught us
+# twice more.
 #
-# So every entry point must import `bootstrap` **before** anything that pulls in
-# motoro / litellm. This has caught us twice.
-#
-# It is a setdefault, so a value given by the shell or by launch.json wins.
-os.environ.setdefault("LITELLM_LOG", "DEBUG")
-
-#: The `.env` files to read, **in priority order**.
-#:
-#: `load_dotenv` never overwrites a value that is already set (override=False is the
-#: default), so whichever file is read first wins, and whatever the shell or
-#: launch.json supplied beats both — which is what keeps "a different bundle for
-#: this run only" working.
-ENV_FILES = (
-    HERE / ".env",                            # this product's first
-    HERE / ".." / "motoro" / ".env",    # core fills the gaps
-)
+# It now lives in `src/memstara/__init__.py`, which the import above cannot avoid
+# running. A rule every entry point has to remember became a thing the interpreter
+# does on the way in.
 
 #: Required for any run, whichever entry point started it.
 BASE_VARS = {
@@ -70,22 +61,6 @@ BASE_VARS = {
     "MEMSTARA_OUTPUT_DIR": "where the subsets go",
     "MOTORO_DATABASE_URL": "core's DB — the agents and the run history",
 }
-
-#: The sources `allowlist_gaps()` scrapes, named one by one rather than globbed.
-#:
-#: This was `sorted(HERE.glob("tools_*.py")) + [HERE / "debug_hook.py"]`, and every
-#: hit was filtered through `if path.is_file()`. A glob that matches nothing is not an
-#: error — it is an empty list — and an empty list here means *"no gaps found"*. So the
-#: most valuable check in this file was one file move away from reporting success
-#: without having read a single line. Naming the files makes that failure loud.
-ALLOWLIST_SOURCES = (
-    "tools_okf.py",
-    "tools_data.py",
-    "tools_ml.py",
-    "tools_matcher.py",
-    "tools_blackboard.py",
-    "debug_hook.py",
-)
 
 #: Extra keys each provider needs. Only the one picked with `--provider` is checked.
 #:
@@ -145,8 +120,8 @@ def allowlist_gaps() -> list[str]:
     compared** instead.
 
     Raises:
-        FileNotFoundError: if any file in `ALLOWLIST_SOURCES` is not where it is
-            expected. Skipping it quietly would leave this function returning `[]`,
+        FileNotFoundError: if any module in `servers.SCANNED_MODULES` is not where it
+            is expected. Skipping it quietly would leave this function returning `[]`,
             which reads as "everything is fine".
     """
     from settings import Settings
@@ -157,13 +132,13 @@ def allowlist_gaps() -> list[str]:
     # Catches both `os.environ.get("X")` and `os.environ["X"]`.
     pattern = re.compile(r'os\.environ(?:\.get)?[\[(]\s*"([A-Z_][A-Z0-9_]*)"')
     read: set[str] = set()
-    for name in ALLOWLIST_SOURCES:
-        path = HERE / name
+    for module in SCANNED_MODULES:
+        path = source_of(module)
         if not path.is_file():
             raise FileNotFoundError(
                 f"{path} is missing, so the allowlist check cannot be trusted. "
-                "Update ALLOWLIST_SOURCES in bootstrap.py if the file was moved or "
-                "renamed — skipping it would turn this check into a permanent pass."
+                "Update SCANNED_MODULES in memstara/servers.py if the file was moved "
+                "or renamed — skipping it would turn this check into a permanent pass."
             )
         read |= set(pattern.findall(path.read_text(encoding="utf-8")))
 

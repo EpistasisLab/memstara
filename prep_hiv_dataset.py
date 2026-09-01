@@ -66,9 +66,10 @@ from pathlib import Path
 
 import pandas as pd
 
-HERE = Path(__file__).parent
-SOURCE = HERE.parent / "shared" / "Agentic-Clinical-Feature-Construction-Demo" / "cohort_v1_latest_no_PHI.csv"
-DEFAULT_OUT = HERE / "outputs" / "hiv_cohort.csv"
+from memstara.paths import DEFAULT_OUTPUT_DIR, SHARED_ROOT
+
+SOURCE = SHARED_ROOT / "Agentic-Clinical-Feature-Construction-Demo" / "cohort_v1_latest_no_PHI.csv"
+DEFAULT_OUT = DEFAULT_OUTPUT_DIR / "hiv_cohort.csv"
 
 OUTCOME = "HIV_DETECTABLE"   # 맞히려는 것 — 바이러스가 검출되는가
 

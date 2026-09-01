@@ -51,14 +51,17 @@ from mcp.server.fastmcp import FastMCP    # the toolkit for building an MCP serv
 # does nothing at all. See debug_hook.py.
 from debug_hook import quiet_child, wait_for_debugger
 
+from memstara.paths import DEFAULT_OUTPUT_DIR
+
 quiet_child()          # silences the three startup messages a child prints
 wait_for_debugger('memstara-data')
 
 mcp = FastMCP("memstara-data")
 
-# Fallback used when the output directory is not given in the environment —
-# outputs/ beside this file.
-_DEFAULT_OUT = Path(__file__).parent / "outputs"
+# Fallback used when the output directory is not given in the environment.
+# memstara/paths.py resolves it against the repository root, not against this file,
+# so it stays the directory `.gitignore` covers wherever this module lives.
+_DEFAULT_OUT = DEFAULT_OUTPUT_DIR
 
 
 def _dataset_path() -> Path:

@@ -68,14 +68,15 @@ from typing import Any
 
 from settings import Settings
 
+from memstara.paths import DEFAULT_OUTPUT_DIR
+
 from motoro import configure
 from motoro.runner import get_run, get_run_steps
 from motoro.schemas.llm import flatten_tool_call_records
 
-HERE = Path(__file__).parent
 # The trial list the most recent run left behind. It is the key that turns "trial 3" into
 # a run id.
-ROWS_FILE = HERE / "outputs" / "todo_rows.json"
+ROWS_FILE = DEFAULT_OUTPUT_DIR / "todo_rows.json"
 
 # The four stages one trial goes through. They are printed in this order too.
 STAGES = ("hypothesis", "data", "ml", "interpreter")

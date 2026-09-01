@@ -19,11 +19,11 @@ would leave tests that no longer prove identity with upstream.
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from memstara.paths import output_dir
 
 
 class _Base(BaseModel):
@@ -82,10 +82,7 @@ SCHEMA_VERSION: Final[int] = 1
 #: cannot see that change.
 CATALOG_BUILD_VERSION: Final[int] = 1
 
-_OUTPUT_DIR = Path(
-    os.environ.get("MEMSTARA_OUTPUT_DIR", "").strip()
-    or Path(__file__).parent.parent / "outputs"
-).resolve()
+_OUTPUT_DIR = output_dir()
 
 #: The only path setting. The other three artifacts are all derived from it
 #: (embeddings_path / embeddings_stamp_path / meta_path). A second, independently

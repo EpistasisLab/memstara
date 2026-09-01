@@ -30,47 +30,48 @@ In VS Code, press F5 on the "1. tool harness" configuration.
 from __future__ import annotations
 
 import asyncio
-import importlib.util
+import importlib
 import json
 import os
 import sys
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-
 # **Both** `.env` files have to be read. The sandbox's holds the dataset and bundle
 # paths, core's holds MOTORO_DATABASE_URL. Read only one and the pipeline cannot
 # even start — it stops at "Environment is not ready".
-from dotenv import load_dotenv  # noqa: E402
+#
+# This used to read core's file first, which is the opposite of the order every other
+# entry point used — a real difference in which file wins, hidden in a copy of two
+# lines. `load_env()` is now the one reader. (Measured before switching: the two files
+# share no key names at all, so nothing actually changed hands.)
+from bootstrap import load_env  # noqa: E402
 
-load_dotenv(HERE / ".." / "motoro" / ".env")
-load_dotenv(HERE / ".env")
+from memstara.paths import DEFAULT_OUTPUT_DIR, SHARED_ROOT  # noqa: E402
+
+load_env()
 
 # Which bundle and which data to look at — overridden for this run only, without
 # touching `.env`.
-BUNDLE = HERE / ".." / "shared" / "hiv-suppression" / "okf"
-DATASET = HERE / "outputs" / "hiv_cohort.csv"
+BUNDLE = SHARED_ROOT / "hiv-suppression" / "okf"
+DATASET = DEFAULT_OUTPUT_DIR / "hiv_cohort.csv"
 Y = "HIV_DETECTABLE"
 
 if BUNDLE.is_dir():
     os.environ["AGENTIC_OKF_BUNDLE_DIR"] = str(BUNDLE.resolve())
 if DATASET.is_file():
     os.environ["MEMSTARA_DATASET_PATH"] = str(DATASET.resolve())
-os.environ.setdefault("MEMSTARA_OUTPUT_DIR", str(HERE / "outputs"))
+os.environ.setdefault("MEMSTARA_OUTPUT_DIR", str(DEFAULT_OUTPUT_DIR))
 
 
 def load(name: str):
     """Load a module such as `tools_okf` into this process.
 
-    It is registered in sys.modules *before* it is executed: a dataclass looks its own
-    module back up in sys.modules while being defined, so executing first would die
-    there with an AttributeError.
+    `import_module` registers it in sys.modules *before* executing it, which matters
+    here: a dataclass looks its own module back up in sys.modules while being defined,
+    so executing first would die there with an AttributeError. Loading it from a file
+    path did that by hand, and tied this file to being the servers' neighbour.
     """
-    spec = importlib.util.spec_from_file_location(name, HERE / f"{name}.py")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
+    return importlib.import_module(name)
 
 
 def show(label: str, payload: str, limit: int = 900) -> None:
@@ -108,7 +109,7 @@ def do_data() -> None:
     # Same tag, different columns — this used to overwrite a single file twice.
     show("slice_columns(A, tag='dbg')", data.slice_columns(a, Y, "dbg"))
     show("slice_columns(B, tag='dbg')  ← same tag", data.slice_columns(b, Y, "dbg"))
-    made = sorted(p.name for p in (HERE / "outputs").glob("sub_dbg_*.csv"))
+    made = sorted(p.name for p in DEFAULT_OUTPUT_DIR.glob("sub_dbg_*.csv"))
     print(f"\n   {len(made)} files made: {made}")
     print("   two means there is no collision. One means it was overwritten.")
 

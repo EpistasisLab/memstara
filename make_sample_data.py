@@ -75,7 +75,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-OUT_DIR = Path(__file__).parent / "outputs"
+from memstara.paths import DEFAULT_OUTPUT_DIR
+
+OUT_DIR = DEFAULT_OUTPUT_DIR
 # Bundle folders are named okf_<source>_<what it holds> so the folder name alone
 # says where the knowledge came from — see outputs/README.md.
 #

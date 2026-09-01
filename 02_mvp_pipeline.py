@@ -116,12 +116,13 @@ from pipeline_core import (
     run_one_trial,
     save_rows,
 )
+from bootstrap import load_env
 from run_report import build_report
 from settings import Settings
-
-# There are two .env files, so the program reads them itself — see the comment in main().
-from dotenv import load_dotenv
 from trace_run import dump_all
+
+from memstara.paths import DEFAULT_OUTPUT_DIR
+from memstara.servers import launch_table
 
 from motoro import configure
 from motoro.mcp.registry import MCPServerRegistry
@@ -132,8 +133,7 @@ from motoro.services.mcp_service import (
     update_server,
 )
 
-HERE = Path(__file__).parent
-OUT_DIR = HERE / "outputs"
+OUT_DIR = DEFAULT_OUTPUT_DIR
 
 # Recorded in the manifest by name. Never dump os.environ: it holds the provider
 # credentials, and a run directory is something you hand to someone else to read. The
@@ -293,15 +293,12 @@ async def setup_tools() -> MCPServerRegistry:
     """
     registry = MCPServerRegistry()
 
-    # The executable must be on core's allowlist (python/node/npx/...) and the command
-    # must contain no shell metacharacters. sys.executable is python, whose
-    # basename is python, so it passes. It is the safeguard that stops an arbitrary
-    # command from being run.
-    #
-    # okf runs core's server through tools_okf.py rather than `-m ...okf` directly. That
-    # wrapper turns off one YAML behaviour so list_concepts stops failing on bundles core
-    # did not write (this synthetic bundle, for one); core's tools themselves are
-    # unchanged — they are only wrapped. See tools_okf.py.
+    # The table lives in memstara/servers.py — the same five, launched the same way,
+    # for this pipeline and for 03. It used to be written out here and again there,
+    # and the two copies are what a command string persisted in core's database will
+    # not forgive. The executable must be on core's allowlist (python/node/npx/...)
+    # and the command must contain no shell metacharacters; `Server.command()`
+    # satisfies both, and says why.
     #
     # memstara-blackboard is connected but not yet handed to any agent. The board exists
     # and its window works (see test_blackboard.py), but no agent is told to use it —
@@ -309,17 +306,7 @@ async def setup_tools() -> MCPServerRegistry:
     # the wiring is exercised on every run instead of only when someone remembers to
     # test it — and in between it could be quietly broken with nobody the wiser. Handing
     # out its tools waits until the prompts ask for them.
-    servers = [
-        ("okf", f"{sys.executable} {HERE / 'tools_okf.py'}"),
-        ("memstara-data", f"{sys.executable} {HERE / 'tools_data.py'}"),
-        ("memstara-ml", f"{sys.executable} {HERE / 'tools_ml.py'}"),
-        ("memstara-blackboard", f"{sys.executable} {HERE / 'tools_blackboard.py'}"),
-        # PROTOTYPE semantic matcher: OKF concept name -> EcoXAI column name
-        # needs the cache: python scripts/build_matcher_cache.py
-        ("semantic-matcher", f"{sys.executable} {HERE / 'tools_matcher.py'}"),
-    ]
-
-    for name, command in servers:
+    for name, command in launch_table():
         existing = await get_server_by_name(name)
         if existing is None:
             # A name never seen before gets registered.
@@ -416,8 +403,10 @@ async def main() -> int:
     # `load_dotenv` does not overwrite a value that is already there (override=False is
     # the default). So whatever the shell or launch.json gave takes precedence over both
     # — the intent of using a different bundle for that one run is preserved.
-    load_dotenv(HERE / ".env")
-    load_dotenv(HERE / ".." / "motoro" / ".env")
+    #
+    # `load_env` is bootstrap's, and it is now the only reader of those two files. This
+    # was one of four hand-written copies of the same pair.
+    load_env()
 
     ap = argparse.ArgumentParser()
     # --trials: how many times to form a hypothesis. 3 is for a quick check, 20 is the real run.
