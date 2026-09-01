@@ -131,15 +131,23 @@ def collect(run_dir: Path) -> dict[str, Any]:
     # text in full, uncut, too.
     problems = [r for r in records if r.get("level") in ("warning", "error", "critical")]
 
-    # One tool call produces TWO mcp.tool.executed events: agentic_core.mcp.client logs the
-    # transport, agentic_core.mcp.adapters logs the call the agent made. On all three real
+    # One tool call produces TWO mcp.tool.executed events: motoro.mcp.client logs the
+    # transport, motoro.mcp.adapters logs the call the agent made. On all three real
     # runs the two counts were identical (88/88, 75/75, 49/49), so counting both doubled
     # every figure in this report — and those figures reached the documents. The question
     # this report answers is how often an *agent* reached for a tool, so count the adapter
     # side; a driving script's own direct call appears only on the client side and is
     # rightly left out.
+    #
+    # Matched on the suffix, not the whole name. The logger name is derived from the
+    # module path, and core's package was renamed on 2026-09-01 (v0.5.2), so every
+    # run.jsonl written before that date carries a different first segment. Pinning
+    # the whole name would leave `by_adapter` empty for those, fall through to the
+    # `or executed` below, and silently double every historical figure — the exact
+    # bug the paragraph above says already reached the documents once.
     executed = [r for r in records if r.get("event") == "mcp.tool.executed"]
-    by_adapter = [r for r in executed if r.get("logger") == "agentic_core.mcp.adapters"]
+    by_adapter = [r for r in executed
+                  if str(r.get("logger", "")).endswith(".mcp.adapters")]
     # A log with no adapter side at all (an older run with a different setting) is
     # counted as it stands.
     executed = by_adapter or executed  # a log without the adapter side is counted as it is

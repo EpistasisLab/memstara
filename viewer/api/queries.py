@@ -139,7 +139,7 @@ ORDER BY result_id
 
 # --- core's database -------------------------------------------------------- #
 
-# From here on it is the core DB (agentic-core-postgres:5453), where the agents and the
+# From here on it is the core DB (motoro-postgres:5453), where the agents and the
 # run history live.
 
 # AGENT_TOTALS — the running totals per agent.

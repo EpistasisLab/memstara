@@ -65,7 +65,7 @@ if str(SANDBOX) not in sys.path:
 def _pipeline_definitions() -> tuple[dict[str, set[str]], dict[str, set[str]], dict[str, str]]:
     """BOARD_TOOLS / BOARD_SERVERS / BOARD_AGENT_NAMES straight from the pipeline.
 
-    Imported lazily and defensively: `pipeline_core` pulls in agentic_core, which needs
+    Imported lazily and defensively: `pipeline_core` pulls in motoro, which needs
     its own environment. If that fails the viewer must still start — it just falls back
     to the same tables written out, and says so (`IMPORTED_FROM_PIPELINE`, which
     `/api/health` carries out to the screen).

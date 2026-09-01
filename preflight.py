@@ -65,7 +65,7 @@ def check(label: str, passed: bool, detail: str = "", fix: str = "") -> bool:
 def check_env_files() -> None:
     """[1] Were both `.env` files found where they are expected."""
     print("\n[1] .env")
-    for path in (HERE / ".env", HERE / ".." / "agentic-core" / ".env"):
+    for path in (HERE / ".env", HERE / ".." / "motoro" / ".env"):
         check(f".env — {path.parent.name}/", path.is_file(), str(path.resolve()),
               f"create {path} (see .env.example)")
 
@@ -139,8 +139,8 @@ async def check_databases() -> None:
     from blackboard import dsn as board_dsn
 
     await reachable("board DB (memstara)", board_dsn(), "docker compose up -d")
-    await reachable("core DB (agentic_core)", os.environ.get("AGENTIC_DATABASE_URL", ""),
-                    "docker compose up -d in the agentic-core folder")
+    await reachable("core DB (motoro)", os.environ.get("MOTORO_DATABASE_URL", ""),
+                    "docker compose up -d in the motoro folder")
 
 
 def check_allowlist() -> None:

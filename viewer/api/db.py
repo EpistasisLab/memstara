@@ -24,7 +24,7 @@ mistake.
 
  The cast
    MEMSTARA_DSN_DEFAULT  the DB with the board and the results table (memstara-postgres:5463)
-   CORE_DSN_DEFAULT      the agent and run-history DB (agentic-core-postgres:5453)
+   CORE_DSN_DEFAULT      the agent and run-history DB (motoro-postgres:5453)
    _dsn()                reads the connection string from the environment and strips
                          the SQLAlchemy prefix off it
    Health                which DB answered on the last attempt, or why it did not
@@ -61,10 +61,10 @@ import asyncpg
 T = TypeVar("T")
 
 MEMSTARA_DSN_DEFAULT = "postgresql://memstara_viewer:viewer@localhost:5463/memstara"
-CORE_DSN_DEFAULT = "postgresql://memstara_viewer:viewer@localhost:5453/agentic_core"
+CORE_DSN_DEFAULT = "postgresql://memstara_viewer:viewer@localhost:5453/motoro"
 # The default connection strings for the two DBs. That the ports differ is exactly what
 # "completely different servers" means. 5463 = board and results table (memstara) /
-# 5453 = agents and run history (agentic_core). Started under Docker, environment
+# 5453 = agents and run history (motoro). Started under Docker, environment
 # variables override these defaults.
 
 

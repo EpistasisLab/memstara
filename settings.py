@@ -14,9 +14,15 @@ project.** There are four:
 It also picks an environment prefix. Core deliberately sets no prefix of its own —
 that is a product concern, and here the product is this sandbox.
 
-The prefix is `AGENTIC_` because the repo's own `.env.example` already uses
-`AGENTIC_DATABASE_URL` / `AGENTIC_REDIS_URL`. Reusing it avoids a second set of
+The prefix is `MOTORO_` because core's own `.env.example` already uses
+`MOTORO_DATABASE_URL` / `MOTORO_REDIS_URL`. Reusing it avoids a second set of
 names for the same things.
+
+The prefix was `AGENTIC_` until core's rename landed here on 2026-09-01 (v0.5.2).
+One name did **not** move with it: `AGENTIC_OKF_BUNDLE_DIR`. That one is read by
+bare name, not through this prefix — `mcp_servers/okf.py:66` and the subprocess
+allowlist in `mcp/client.py:57` both spell it out — so renaming it to match would
+leave the OKF server unable to find its bundle.
 
 Provider credentials are the exception — **they carry no prefix.** `CoreSettings`
 gives them bare-name validation aliases, so `ANTHROPIC_API_KEY` /
@@ -29,7 +35,7 @@ from __future__ import annotations
 
 from pydantic_settings import SettingsConfigDict
 
-from agentic_core import CoreSettings
+from motoro import CoreSettings
 
 
 class Settings(CoreSettings):
@@ -38,7 +44,7 @@ class Settings(CoreSettings):
     Apart from the four fields below, every value is core's default, untouched.
     """
 
-    model_config = SettingsConfigDict(env_prefix="AGENTIC_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="MOTORO_", env_file=".env", extra="ignore")
 
     # ------------------------------------------------------------------ #
     # MCP subprocess env allowlist — the tool servers die without this
@@ -75,7 +81,7 @@ class Settings(CoreSettings):
     # (mcp/client.py:56). So this is the sanctioned path, not a way around a wall.
     # Only this one server needs it; the other three never read it.
     #
-    # Note what is NOT here: `AGENTIC_DATABASE_URL`. The board has its own database now
+    # Note what is NOT here: `MOTORO_DATABASE_URL`. The board has its own database now
     # (docker-compose.yml), and core's credentials have no business reaching a server
     # of ours. Passing them once is how the board ended up inside core's database.
     #
@@ -144,4 +150,4 @@ class Settings(CoreSettings):
     #   data_dir: str = "./sandbox/outputs"
     #   my_feature_flag: bool = False
     #
-    # Overriding one from the environment takes the prefix — AGENTIC_DATA_DIR.
+    # Overriding one from the environment takes the prefix — MOTORO_DATA_DIR.

@@ -123,9 +123,9 @@ from settings import Settings
 from dotenv import load_dotenv
 from trace_run import dump_all
 
-from agentic_core import configure
-from agentic_core.mcp.registry import MCPServerRegistry
-from agentic_core.services.mcp_service import (
+from motoro import configure
+from motoro.mcp.registry import MCPServerRegistry
+from motoro.services.mcp_service import (
     get_server_by_name,
     hydrate_registry,
     register_server,
@@ -239,12 +239,12 @@ def check_environment(provider: str = "") -> list[str]:
     """
     problems: list[str] = []
 
-    # LLM credentials. These live in `agentic-core/.env` and main() reads them in.
+    # LLM credentials. These live in `motoro/.env` and main() reads them in.
     for name in _PROVIDER_KEYS.get(provider, ()):
         if not os.environ.get(name, "").strip():
             problems.append(
                 f"{name} is not set — needed for --provider {provider}. "
-                "Check agentic-core/.env."
+                "Check motoro/.env."
             )
 
     # The three below are this sandbox's path settings. "not set" and "set but pointing
@@ -406,7 +406,7 @@ async def main() -> int:
     # This project has **two** `.env` files and they hold different things.
     #
     #     memstara/.env   the MEMSTARA_* paths
-    #     agentic-core/.env           LLM credentials · AGENTIC_DATABASE_URL
+    #     motoro/.env           LLM credentials · MOTORO_DATABASE_URL
     #
     # `env_file=".env"` at `settings.py:27` reads the current folder only, so without
     # reading core's separately the first LLM call dies with "Azure Anthropic requests
@@ -417,7 +417,7 @@ async def main() -> int:
     # the default). So whatever the shell or launch.json gave takes precedence over both
     # — the intent of using a different bundle for that one run is preserved.
     load_dotenv(HERE / ".env")
-    load_dotenv(HERE / ".." / "agentic-core" / ".env")
+    load_dotenv(HERE / ".." / "motoro" / ".env")
 
     ap = argparse.ArgumentParser()
     # --trials: how many times to form a hypothesis. 3 is for a quick check, 20 is the real run.

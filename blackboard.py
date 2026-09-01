@@ -6,7 +6,7 @@ database** — its own Postgres server, its own volume, its own account. See
 ``docker-compose.yml`` next to this file; nothing here touches core's database.
 
 That independence is the point, and it is worth being blunt about why. These tables
-first lived inside core's `agentic_core` database, separated only by an `memstara_` name
+first lived inside core's `motoro` database, separated only by an `memstara_` name
 prefix. Everything worked, but the arrangement was wrong: Memstara is meant to be an
 application that owns its store, not a guest in core's. Sharing a server means core's
 container going down takes Memstara's results with it, a `docker volume rm` aimed at
@@ -366,7 +366,7 @@ MEMSTARA_DATABASE_URL_DEFAULT = "postgresql://memstara:memstara@localhost:5463/m
 def dsn() -> str:
     """Postgres address for Memstara's own database.
 
-    Deliberately **not** ``AGENTIC_DATABASE_URL``. Reading core's variable is how the
+    Deliberately **not** ``MOTORO_DATABASE_URL``. Reading core's variable is how the
     board ended up inside core's database in the first place: the address was there, it
     worked, and nothing ever forced the question of whose store this is.
 

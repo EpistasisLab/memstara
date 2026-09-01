@@ -47,7 +47,7 @@ from blackboard import dsn
 from settings import Settings
 from trace_run import render
 
-from agentic_core import configure
+from motoro import configure
 
 #: How far the board's time window is widened at each end. An agent run starts
 #: **before** its rows are written to the board and finishes **after**, so cutting
@@ -83,9 +83,9 @@ async def runs_between(lo: object, hi: object) -> list[tuple[str, uuid.UUID]]:
     import os
     import re
 
-    url = os.environ.get("AGENTIC_DATABASE_URL", "").strip()
+    url = os.environ.get("MOTORO_DATABASE_URL", "").strip()
     if not url:
-        sys.exit("no AGENTIC_DATABASE_URL — core's database address is needed.")
+        sys.exit("no MOTORO_DATABASE_URL — core's database address is needed.")
     # asyncpg does not understand the "postgresql+asyncpg://" form.
     url = re.sub(r"^postgresql\+\w+://", "postgresql://", url)
 
@@ -113,9 +113,9 @@ async def latest(n: int) -> list[tuple[str, uuid.UUID]]:
     import re
 
     url = re.sub(r"^postgresql\+\w+://", "postgresql://",
-                 os.environ.get("AGENTIC_DATABASE_URL", "").strip())
+                 os.environ.get("MOTORO_DATABASE_URL", "").strip())
     if not url:
-        sys.exit("no AGENTIC_DATABASE_URL.")
+        sys.exit("no MOTORO_DATABASE_URL.")
     conn = await asyncpg.connect(url)
     try:
         rows = await conn.fetch(

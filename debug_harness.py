@@ -17,10 +17,10 @@ tool can be called as a plain Python function — no adapter, no JSON-RPC.
 
 Usage
 -----
-    uv run --no-sync --project ../agentic-core python debug_harness.py okf
-    uv run --no-sync --project ../agentic-core python debug_harness.py data
-    uv run --no-sync --project ../agentic-core python debug_harness.py ml
-    uv run --no-sync --project ../agentic-core python debug_harness.py board
+    uv run --no-sync --project ../motoro python debug_harness.py okf
+    uv run --no-sync --project ../motoro python debug_harness.py data
+    uv run --no-sync --project ../motoro python debug_harness.py ml
+    uv run --no-sync --project ../motoro python debug_harness.py board
 
 Without `--no-sync`, uv tries to rebuild litellm from source and fails.
 
@@ -39,11 +39,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 # **Both** `.env` files have to be read. The sandbox's holds the dataset and bundle
-# paths, core's holds AGENTIC_DATABASE_URL. Read only one and the pipeline cannot
+# paths, core's holds MOTORO_DATABASE_URL. Read only one and the pipeline cannot
 # even start — it stops at "Environment is not ready".
 from dotenv import load_dotenv  # noqa: E402
 
-load_dotenv(HERE / ".." / "agentic-core" / ".env")
+load_dotenv(HERE / ".." / "motoro" / ".env")
 load_dotenv(HERE / ".env")
 
 # Which bundle and which data to look at — overridden for this run only, without

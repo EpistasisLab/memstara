@@ -1,7 +1,7 @@
 # Memstara Viewer. Read-only over the two databases.
 #
 # The databases live in *other* compose projects — memstara-postgres in
-# memstara, agentic-core-postgres in agentic-core — so they are reached
+# memstara, motoro-postgres in motoro — so they are reached
 # through host.docker.internal rather than a shared network. Joining their networks
 # would couple the viewer's lifecycle to theirs, and the viewer is an observer: it must
 # be startable and stoppable without touching what it observes.
@@ -16,7 +16,7 @@ services:
     restart: unless-stopped
     environment:
       MEMSTARA_VIEWER_DSN: postgresql://memstara_viewer:viewer@host.docker.internal:5463/memstara
-      CORE_VIEWER_DSN: postgresql://memstara_viewer:viewer@host.docker.internal:5453/agentic_core
+      CORE_VIEWER_DSN: postgresql://memstara_viewer:viewer@host.docker.internal:5453/motoro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

@@ -170,7 +170,7 @@ def main() -> int:
     for row in snap["access"]["rows"]:
         totals[row["tool"]] = totals.get(row["tool"], 0) + row["calls"]
 
-    raw = psql("agentic-core-postgres", "agentic", "agentic_core", EXPECTED_BY_AGENT_SQL)
+    raw = psql("motoro-postgres", "agentic", "motoro", EXPECTED_BY_AGENT_SQL)
     # The psql output is one `toolname=number` per line, so `split("=")` turns it
     # straight into a dict.
     # First **the tool list itself** is compared (as sets), then the counts one by one.
@@ -189,7 +189,7 @@ def main() -> int:
     #   - JSON-null: the naive side must show a "(none)" entry and the screen must not.
     #   - batched calls: the naive search_concepts count must be **smaller** than the
     #     right answer.
-    naive_raw = psql("agentic-core-postgres", "agentic", "agentic_core", NAIVE_SQL)
+    naive_raw = psql("motoro-postgres", "agentic", "motoro", NAIVE_SQL)
     naive = dict(
         (k, int(v)) for k, v in (line.split("=") for line in naive_raw.splitlines() if "=" in line)
     )
@@ -253,7 +253,7 @@ def main() -> int:
     # queries.OPEN_RUNS is doing its job.
     # (If there are 0 old pending runs this check proves nothing, so it is set up to be
     # caught as a failure.)
-    stale = psql("agentic-core-postgres", "agentic", "agentic_core",
+    stale = psql("motoro-postgres", "agentic", "motoro",
                  "SELECT count(*) FROM agent_runs WHERE completed_at IS NULL "
                  "AND status='pending' AND created_at < now() - interval '1 hour'")
     working = [a["label"] for a in snap["scene"]["agents"] if a["state"] == "working"]

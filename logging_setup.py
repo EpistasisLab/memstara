@@ -192,14 +192,14 @@ class _LLMRequestOnly(logging.Filter):
 # machine · learning machine · board window").
 #
 # Run with `--verbose` and this filter is not attached — that means you want all of it.
-# `agentic_core.mcp.adapters` is in here too. The `mcp.tool.executed` it emits is one line
+# `motoro.mcp.adapters` is in here too. The `mcp.tool.executed` it emits is one line
 # per tool call, but 03 already lays that call out **with its arguments and its result**
 # (show_what_agent_did). It amounts to printing the same fact twice, so it comes off the
 # console only.
 _CONSOLE_HIDE = (
-    "agentic_core.mcp.client",
-    "agentic_core.mcp.registry",
-    "agentic_core.mcp.adapters",
+    "motoro.mcp.client",
+    "motoro.mcp.registry",
+    "motoro.mcp.adapters",
 )
 
 

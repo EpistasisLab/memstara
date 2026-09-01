@@ -23,7 +23,7 @@ needs a single line: `load_env()`.
 Why there are two `.env` files
 ------------------------------
     memstara/.env   MEMSTARA_* — this product's paths and settings
-    agentic-core/.env           LLM credentials, AGENTIC_DATABASE_URL — core's own
+    motoro/.env           LLM credentials, MOTORO_DATABASE_URL — core's own
 
 They are not merged. Merging would put secrets in two places, and the copy would
 fall behind whenever the original changed. **Both are read instead.**
@@ -47,7 +47,7 @@ HERE = Path(__file__).parent.resolve()
 # which is exactly how this first failed, silently.
 #
 # So every entry point must import `bootstrap` **before** anything that pulls in
-# agentic_core / litellm. This has caught us twice.
+# motoro / litellm. This has caught us twice.
 #
 # It is a setdefault, so a value given by the shell or by launch.json wins.
 os.environ.setdefault("LITELLM_LOG", "DEBUG")
@@ -60,7 +60,7 @@ os.environ.setdefault("LITELLM_LOG", "DEBUG")
 #: this run only" working.
 ENV_FILES = (
     HERE / ".env",                            # this product's first
-    HERE / ".." / "agentic-core" / ".env",    # core fills the gaps
+    HERE / ".." / "motoro" / ".env",    # core fills the gaps
 )
 
 #: Required for any run, whichever entry point started it.
@@ -68,7 +68,7 @@ BASE_VARS = {
     "AGENTIC_OKF_BUNDLE_DIR": "the knowledge-source folder",
     "MEMSTARA_DATASET_PATH": "the data csv",
     "MEMSTARA_OUTPUT_DIR": "where the subsets go",
-    "AGENTIC_DATABASE_URL": "core's DB — the agents and the run history",
+    "MOTORO_DATABASE_URL": "core's DB — the agents and the run history",
 }
 
 #: Extra keys each provider needs. Only the one picked with `--provider` is checked.
@@ -105,7 +105,7 @@ def missing_vars(provider: str = "") -> list[str]:
     problems = [f"{name} is not set — {hint}"
                 for name, hint in BASE_VARS.items()
                 if not os.environ.get(name, "").strip()]
-    problems += [f"{name} is not set — needed for --provider {provider}. Check agentic-core/.env."
+    problems += [f"{name} is not set — needed for --provider {provider}. Check motoro/.env."
                  for name in PROVIDER_KEYS.get(provider, ())
                  if not os.environ.get(name, "").strip()]
     return problems

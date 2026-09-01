@@ -1,7 +1,7 @@
 """The body of the MVP pipeline — agent definitions, supervisor, aggregation.
 
 The four stages fixed in the 2026-08-06 meeting, expressed against the
-agentic-core API.
+motoro API.
 
     (1) hypothesis   read the OKF, decide which columns to pull   <- the only judge
     (2) data         slice those columns plus Y                   <- pure executor
@@ -64,14 +64,14 @@ from typing import Any
 
 import structlog
 
-from agentic_core.runner import (
+from motoro.runner import (
     create_agent,
     create_run,
     execute_run,
     get_agent_by_name,
     update_agent,
 )
-from agentic_core.schemas.agent import LLMProvider, ModelConfig
+from motoro.schemas.agent import LLMProvider, ModelConfig
 
 # --------------------------------------------------------------------------- #
 #  Diversity — what makes 20 repetitions mean anything

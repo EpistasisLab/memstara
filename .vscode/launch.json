@@ -103,7 +103,7 @@
       "justMyCode": false,
       "cwd": "${workspaceFolder}",
       "python": "${workspaceFolder}/.venv/bin/python",
-      "name": "판 파이프라인 · 보고만 (agentic-core 안까지 — 예비)",
+      "name": "판 파이프라인 · 보고만 (motoro 안까지 — 예비)",
       "args": [
         "--report-only",
         "--run-tag",

@@ -57,7 +57,7 @@ cd web && npm run dev            # → http://localhost:5173 (/api 는 8071 로 
 
 ## core 가 꺼져도 판은 보인다
 
-판(`memstara-postgres:5463`)과 에이전트 기록(`agentic-core-postgres:5453`)은 다른
+판(`memstara-postgres:5463`)과 에이전트 기록(`motoro-postgres:5453`)은 다른
 서버다. 한쪽이 죽으면 그 부분만 안내를 띄우고 나머지는 그대로 그린다 — 캐릭터는
 `쉼` 이 아니라 **`알 수 없음`** 이 된다. 모르는 것을 안다고 말하지 않기 위해서다.
 
@@ -68,7 +68,7 @@ virtualenv 에서 도니 import 가 안 될 때는 적어 둔 사본으로 넘�
 낡으면 화면만 조용히 틀리게 된다. 그래서 대조 검사를 따로 둔다.
 
 ```bash
-../../agentic-core/.venv/bin/python check_definitions.py
+../../motoro/.venv/bin/python check_definitions.py
 ```
 
 ## 안 하는 것

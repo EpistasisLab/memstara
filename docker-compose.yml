@@ -1,6 +1,6 @@
 # Memstara's own database.
 #
-# The board and the results table used to live inside core's `agentic_core` database,
+# The board and the results table used to live inside core's `motoro` database,
 # separated only by an `memstara_` name prefix. That was wrong: Memstara is meant to be an
 # application that owns its own store, not a guest in core's. Sharing a server also
 # means core's container going down takes Memstara's data with it, and a `docker volume

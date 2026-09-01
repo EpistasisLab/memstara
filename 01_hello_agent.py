@@ -46,15 +46,15 @@ from typing import Any
 from logging_setup import default_log_path, setup_logging
 from settings import Settings
 
-from agentic_core import configure
-from agentic_core.runner import (
+from motoro import configure
+from motoro.runner import (
     create_agent,       # make a new agent
     create_run,         # make one run — it does not execute yet
     execute_run,        # actually run a run that was made earlier
     get_agent_by_name,  # find an agent that already exists, by name
     get_run_steps,      # after it has finished, read the step record it left
 )
-from agentic_core.schemas.agent import LLMProvider, ModelConfig
+from motoro.schemas.agent import LLMProvider, ModelConfig
 
 
 async def provision(provider: str, model: str) -> Any:

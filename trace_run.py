@@ -68,9 +68,9 @@ from typing import Any
 
 from settings import Settings
 
-from agentic_core import configure
-from agentic_core.runner import get_run, get_run_steps
-from agentic_core.schemas.llm import flatten_tool_call_records
+from motoro import configure
+from motoro.runner import get_run, get_run_steps
+from motoro.schemas.llm import flatten_tool_call_records
 
 HERE = Path(__file__).parent
 # The trial list the most recent run left behind. It is the key that turns "trial 3" into

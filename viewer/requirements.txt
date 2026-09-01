@@ -1,10 +1,10 @@
 # Memstara Viewer — its own dependencies, in its own venv.
 #
-# Deliberately not installed into agentic-core/.venv: putting our packages in core's
+# Deliberately not installed into motoro/.venv: putting our packages in core's
 # environment is the same mistake as putting our tables in core's database and our
 # settings in core's .env, both of which were undone on 2026-08-17/18.
 #
-# The cost is that `pipeline_core` cannot be imported from here (it needs agentic_core),
+# The cost is that `pipeline_core` cannot be imported from here (it needs motoro),
 # so stores.py falls back to a written-out copy of BOARD_TOOLS / BOARD_SERVERS. That
 # copy is checked against the real definitions by check_definitions.py, which fails
 # loudly if they drift — a silently stale picture is the thing worth preventing.

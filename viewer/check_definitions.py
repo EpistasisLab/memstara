@@ -3,13 +3,13 @@
 
 `viewer/api/stores.py` keeps a written-out copy of `BOARD_TOOLS`, `BOARD_SERVERS` and
 `BOARD_AGENT_NAMES` because the viewer runs in its own virtualenv and cannot import
-`pipeline_core` (that needs agentic_core). A copy is fine; a copy nobody checks is not —
+`pipeline_core` (that needs motoro). A copy is fine; a copy nobody checks is not —
 the pipeline would change and only the picture would go stale, which is exactly the kind
 of quietly-wrong output this project keeps having to dig out.
 
 Run with the *core* interpreter, which can import both sides::
 
-    ../../agentic-core/.venv/bin/python check_definitions.py
+    ../../motoro/.venv/bin/python check_definitions.py
 
 ==============================================================================
  How to read this file

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Core's OKF server, plus a reading surface that suits a real literature bundle.
 
-Registered in place of `python -m agentic_core.mcp_servers.okf`. Core's tools are run
+Registered in place of `python -m motoro.mcp_servers.okf`. Core's tools are run
 unchanged — nothing here reimplements them, and nothing here removes them. Two things
 are added on top:
 
@@ -167,7 +167,7 @@ disable_yaml_timestamps()
 # `mcp` is the server object on which core has already registered its own tools.
 # Three more are attached to it below — which is how core's tools and this file's
 # tools come out of one server together.
-from agentic_core.mcp_servers.okf import (  # noqa: E402
+from motoro.mcp_servers.okf import (  # noqa: E402
     OKFError,
     _bundle_root,
     _parse_concept_file,

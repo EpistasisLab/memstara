@@ -182,11 +182,11 @@ from dotenv import load_dotenv
 # See write_traces().
 from trace_run import render
 
-# ---- agentic-core (the repo next door, installed editable) ------------------
-from agentic_core import configure
-from agentic_core.mcp.registry import MCPServerRegistry
-from agentic_core.runner import create_run, execute_run
-from agentic_core.services.mcp_service import (
+# ---- motoro (the repo next door, installed editable) ------------------
+from motoro import configure
+from motoro.mcp.registry import MCPServerRegistry
+from motoro.runner import create_run, execute_run
+from motoro.services.mcp_service import (
     get_server_by_name,
     hydrate_registry,
     register_server,
@@ -333,17 +333,17 @@ async def check_environment(provider: str = "", y_column: str = "") -> list[str]
     problems: list[str] = []   # if there is even one thing in here, it does not run
 
     # Two databases, and they are not interchangeable. core keeps its agents and run
-    # history in AGENTIC_DATABASE_URL; the board and the results table live in Memstara's
+    # history in MOTORO_DATABASE_URL; the board and the results table live in Memstara's
     # own server (MEMSTARA_DATABASE_URL, docker-compose.yml). Only the first is required
     # here — the second has a working default pointing at the compose container.
     #
-    #   AGENTIC_DATABASE_URL  : core's  — the people's role descriptions and run history (5453)
+    #   MOTORO_DATABASE_URL  : core's  — the people's role descriptions and run history (5453)
     #   MEMSTARA_DATABASE_URL : ours    — the board and the finished drawer              (5463)
     for name, hint in (
         ("AGENTIC_OKF_BUNDLE_DIR", "the knowledge source folder"),
         ("MEMSTARA_DATASET_PATH", "the dataset csv"),
         ("MEMSTARA_OUTPUT_DIR", "where sub-datasets go"),
-        ("AGENTIC_DATABASE_URL", "core's own database — agents and run history"),
+        ("MOTORO_DATABASE_URL", "core's own database — agents and run history"),
     ):
         value = os.environ.get(name, "").strip()   # empty string if unset
         if not value:
@@ -353,13 +353,13 @@ async def check_environment(provider: str = "", y_column: str = "") -> list[str]
     # requests require an api_base" — after one seeding has already been spent. Caught
     # here, it stops without spending anything.
     #
-    # These values live in `agentic-core/.env`. main() reads that file, so if they are
+    # These values live in `motoro/.env`. main() reads that file, so if they are
     # still empty by the time execution gets here, they really are not in it.
     for name in _PROVIDER_KEYS.get(provider, ()):
         if not os.environ.get(name, "").strip():
             problems.append(
                 f"{name} is not set — needed for --provider {provider}. "
-                "Check agentic-core/.env."
+                "Check motoro/.env."
             )
 
     # Reachability, not just presence. An unreachable board fails later as an opaque
@@ -522,7 +522,7 @@ async def call_agent(
     )
 
     # ── this is where the LLM runs ─────────────────────────────────────────
-    # `execute_run` is a function of agentic-core. Inside, it repeats reason -> act
+    # `execute_run` is a function of motoro. Inside, it repeats reason -> act
     # (calling a tool) -> observe. **We do not go inside it** — `justMyCode: true` in
     # launch.json steps F11 over it here. What we see is only the result.
     #
@@ -592,7 +592,7 @@ async def show_what_agent_did(call: dict[str, Any]) -> None:
         reason   thinking again (having seen the tool's result)
         act      ...
     """
-    from agentic_core.runner import get_run, get_run_steps
+    from motoro.runner import get_run, get_run_steps
 
     try:
         rid = uuid.UUID(call["run_id"])
@@ -678,7 +678,7 @@ async def _trace_one(call: dict[str, Any]) -> None:
 
     What goes in the file: status · tokens · cost · the thinking and acting of each step
     · **the arguments and results of the tool calls.** The last one is the point — it
-    happens inside agentic-core, so a breakpoint cannot show it.
+    happens inside motoro, so a breakpoint cannot show it.
     """
     if _TRACE_DIR is None:
         return
@@ -770,7 +770,7 @@ async def board_state(registry: MCPServerRegistry, run_tag: str) -> dict:
     board they see.
     """
     server = await get_server_by_name("memstara-blackboard")
-    from agentic_core.services.mcp_service import call_server_tool
+    from motoro.services.mcp_service import call_server_tool
 
     raw = await call_server_tool(server.id, "read_board", {"run_tag": run_tag}, registry=registry)
     # Sometimes the return is a (metadata, body) tuple, sometimes only the body.
@@ -844,8 +844,8 @@ async def harvest_match_trace(
         the pipeline, since the pipeline's actual work already succeeded by the time
         this runs.
     """
-    from agentic_core.runner import get_run_steps
-    from agentic_core.services.mcp_service import call_server_tool
+    from motoro.runner import get_run_steps
+    from motoro.services.mcp_service import call_server_tool
 
     try:
         steps = await get_run_steps(uuid.UUID(call["run_id"]))
@@ -913,7 +913,7 @@ async def call_board_tool(registry: MCPServerRegistry, tool: str, args: dict[str
     a trace is ready to file — has to be written by whoever knows it. These tools are
     kept out of BOARD_TOOLS so no agent can reach them.
     """
-    from agentic_core.services.mcp_service import call_server_tool
+    from motoro.services.mcp_service import call_server_tool
 
     server = await get_server_by_name("memstara-blackboard")
     raw = await call_server_tool(server.id, tool, args, registry=registry)
@@ -1528,7 +1528,7 @@ async def main() -> int:
     # This project has **two** `.env` files, and they hold different things.
     #
     #     memstara/.env   the MEMSTARA_* paths
-    #     agentic-core/.env           LLM credentials · AGENTIC_DATABASE_URL
+    #     motoro/.env           LLM credentials · MOTORO_DATABASE_URL
     #
     # But `env_file=".env"` in `settings.py:27` reads **only the current folder.** So
     # unless core's file is read separately the LLM credentials never arrive, and the
@@ -1546,7 +1546,7 @@ async def main() -> int:
     # a value given by the shell or by launch.json comes ahead of both — which keeps the
     # intent of "a different bundle for this run only" working.
     load_dotenv(HERE / ".env")
-    load_dotenv(HERE / ".." / "agentic-core" / ".env")
+    load_dotenv(HERE / ".." / "motoro" / ".env")
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--trials", type=int, default=3, help="how many hypotheses to seed per wave")
