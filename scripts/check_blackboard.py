@@ -12,7 +12,7 @@ database statement is safe under concurrency; a server round trip would only add
 Usage::
 
     set -a && . ./.env && set +a          # in the core repo
-    python test_blackboard.py
+    python scripts/check_blackboard.py
 
 A check script that confirms the **board table** (blackboard) behaves. The board is a
 database table where the work to be done is written down, and several agents take one
@@ -134,7 +134,7 @@ async def main() -> int:
     #
     # This comes before the board. For a trial to exist there first has to be something
     # to ask. Until now the thing to ask was 20 items hard-coded into the source
-    # (`pipeline_core.PERSPECTIVES`), so there was nowhere to go back and ask "why did
+    # (`memstara.pipeline.core.PERSPECTIVES`), so there was nowhere to go back and ask "why did
     # this trial exist".
     QTEXT = f"from a psychiatric-comorbidity perspective ({RUN_TAG})"
     QTAGS = ["psychiatric", "sud"]
@@ -577,7 +577,7 @@ async def main() -> int:
 
 if __name__ == "__main__":
     # There used to be a `sys.path.insert` of this file's own folder here, so it could
-    # find the `tools_blackboard.py` that sat beside it at the repository root. The board
+    # find the `src/memstara/mcp_servers/blackboard.py` that sat beside it at the repository root. The board
     # server is now `memstara.mcp_servers.blackboard` in an installed package, so this
     # runs the same from any directory without help.
     raise SystemExit(asyncio.run(main()))

@@ -1,6 +1,7 @@
 """Which store each tool touches, and where things sit on the scene.
 
-The mapping is derived from `pipeline_core.BOARD_TOOLS` / `BOARD_SERVERS` rather than
+The mapping is derived from `memstara.pipeline.core.BOARD_TOOLS` / `BOARD_SERVERS`
+rather than
 copied. Copying a table means the pipeline can change and only the picture goes stale —
 and a picture that is quietly wrong is worse than no picture. (A written-out fallback
 does live in the function below, for the case where the import fails; that copy is
@@ -55,7 +56,7 @@ import sys
 from typing import Any
 
 # There used to be a `sys.path.insert` of the sandbox root here, so that
-# `pipeline_core.py` sitting there could be imported. The pipeline is now the installed
+# `src/memstara/pipeline/core.py` sitting there could be imported. The pipeline is now the installed
 # `memstara` package, so the interpreter finds it on its own — or does not, in Docker,
 # which is what the fallback below is for.
 
@@ -63,7 +64,7 @@ from typing import Any
 def _pipeline_definitions() -> tuple[dict[str, set[str]], dict[str, set[str]], dict[str, str]]:
     """BOARD_TOOLS / BOARD_SERVERS / BOARD_AGENT_NAMES straight from the pipeline.
 
-    Imported lazily and defensively: `pipeline_core` pulls in motoro, which needs
+    Imported lazily and defensively: `memstara.pipeline.core` pulls in motoro, which needs
     its own environment. If that fails the viewer must still start — it just falls back
     to the same tables written out, and says so (`IMPORTED_FROM_PIPELINE`, which
     `/api/health` carries out to the screen).
@@ -120,7 +121,7 @@ IMPORTED_FROM_PIPELINE = "memstara.pipeline.core" in sys.modules
 # character — "memstara-board-ml" -> "ml".
 AGENT_BY_NAME = {v: k for k, v in BOARD_AGENT_NAMES.items()}
 
-# The older supervisor path (02_mvp_pipeline.py) has its own four agents, kept side by
+# The older supervisor path (src/memstara/pipeline/mvp.py) has its own four agents, kept side by
 # side so the two ways of driving the same four stages can be compared. They do real
 # work — 159 runs against the board path's 48 — so the access map has to include them
 # or it understates what actually happened by about five times. The scene draws only
@@ -207,7 +208,7 @@ TOOL_STORE: dict[str, str] = {
     "count_waiting": "board",
     "read_results": "results",
     # The curator's two. They are drawn as the board, but the table they really touch
-    # is `memstara_questions` (tools_blackboard.py:697, 811, 876) — a third store on the
+    # is `memstara_questions` (src/memstara/mcp_servers/blackboard.py:697, 811, 876) — a third store on the
     # same server, not the task board. Folded in on purpose for now; if the question
     # bank is ever worth its own place on screen, it needs PLACES here plus StoreId and
     # STORE_LABEL on the web side.

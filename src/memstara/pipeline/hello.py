@@ -13,8 +13,8 @@ Usage::
 
     cd <repo root>
     set -a && . ./.env && set +a
-    python sandbox/01_hello_agent.py
-    python sandbox/01_hello_agent.py --input "What is 17 * 23?" --trace
+    python -m memstara.pipeline.hello
+    python -m memstara.pipeline.hello --input "What is 17 * 23?" --trace
 
 The **simplest example in this folder**. It makes one agent, makes one run, runs it
 once, and prints the result. That is all of it.
@@ -131,7 +131,7 @@ async def main() -> int:
 
     # With --trace, read back from the stored record which steps the run just took.
     # Not the log that scrolled past on screen but **what stayed in the database**, so
-    # the same thing is still there much later. For more detail, use trace_run.py.
+    # the same thing is still there much later. For more detail, use src/memstara/trace/run.py.
     if args.trace:
         print("\npersisted trace:")
         for step in await get_run_steps(run.id):

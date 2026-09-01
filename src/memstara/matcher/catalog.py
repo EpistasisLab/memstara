@@ -30,7 +30,7 @@ so it stays checkable against upstream with a diff.
 output*, not the builder.
 
 **Caveat (out of scope):** in afc-forge this file is the single choke point for
-leakage. This port does not carry that layer — see `matcher_impl/__init__.py`.
+leakage. This port does not carry that layer — see `src/memstara/matcher/__init__.py`.
 """
 
 from __future__ import annotations

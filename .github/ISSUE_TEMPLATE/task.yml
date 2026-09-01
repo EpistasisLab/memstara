@@ -72,8 +72,9 @@ body:
         had gone stale without anyone noticing; two of them named work that was already
         finished.
       placeholder: |
-        Signature: tools_okf.py:634. The OR filter and its own comment ("not AND"):
-        tools_okf.py:685-688. Counts measured 2026-08-26 across 333 corpus documents.
+        Signature: src/memstara/mcp_servers/okf.py:634. The OR filter and its own
+        comment ("not AND"): src/memstara/mcp_servers/okf.py:685-688. Counts measured
+        2026-08-26 across 333 corpus documents.
     validations:
       required: false
 

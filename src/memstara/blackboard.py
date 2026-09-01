@@ -34,18 +34,18 @@ found", which is what that separation was for.
 
 Usage::
 
-    python blackboard.py --create      # idempotent
-    python blackboard.py --show
-    python blackboard.py --drop        # asks first
-    python blackboard.py --drop-questions   # the bank, which --drop leaves alone
+    python -m memstara.blackboard --create      # idempotent
+    python -m memstara.blackboard --show
+    python -m memstara.blackboard --drop        # asks first
+    python -m memstara.blackboard --drop-questions   # the bank, which --drop leaves alone
 
  The three below deal with **one run only**, not the whole board. They are for
  clearing away tasks left on the board by a run that was interrupted or died.
 
-    python blackboard.py --orphans   which run left how many unfinished tasks
-    python blackboard.py --reclaim TAG
+    python -m memstara.blackboard --orphans   which run left how many unfinished tasks
+    python -m memstara.blackboard --reclaim TAG
                                      put that run's 'in progress' back in the queue
-    python blackboard.py --close TAG close that run's unfinished tasks as failed.
+    python -m memstara.blackboard --close TAG close that run's unfinished tasks as failed.
                                      **The rows are not deleted** — they record why
                                      there is no result.
 
@@ -563,7 +563,7 @@ async def orphans() -> int:
 async def reclaim(run_tag: str) -> int:
     """Return every `in_progress` task of one tag to `ready`.
 
-    The same UPDATE as `reclaim_stalled` in `03_board_pipeline.py`, but **with no time
+    The same UPDATE as `reclaim_stalled` in `src/memstara/pipeline/board.py`, but **with no time
     condition.** There it waits stale_after seconds so as not to snatch a task somebody
     is working on right now; here a person is calling it knowing "that run is over", so
     there is no reason to wait.

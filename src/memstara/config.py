@@ -1,6 +1,6 @@
 """The settings class every sandbox script shares.
 
-The one settings object every script in this folder shares. It subclasses core's
+The one settings object every entry point in this package shares. It subclasses core's
 `CoreSettings` and overrides **only those of core's defaults that do not suit this
 project.** There are four:
 
@@ -60,7 +60,7 @@ class Settings(CoreSettings):
     #
     # AGENTIC_OKF_BUNDLE_DIR is already there because core ships its own OKF
     # server. The three below belong to this sandbox's tool servers
-    # (tools_data.py / tools_ml.py), so they have to be opened explicitly.
+    # (src/memstara/mcp_servers/data.py / src/memstara/mcp_servers/ml.py), so they have to be opened explicitly.
     #
     # **Leave a name off this list and it fails silently.** The variable never
     # reaches the tool server and nothing raises an error; the only symptom is a
@@ -86,7 +86,7 @@ class Settings(CoreSettings):
     # of ours. Passing them once is how the board ended up inside core's database.
     #
     # The last two are for debugging and carry no secret. A tool server runs as a child
-    # process, so a debugger attached to the pipeline never reaches it; `debug_hook.py`
+    # process, so a debugger attached to the pipeline never reaches it; `src/memstara/mcp_servers/debug_hook.py`
     # lets one wait for a debugger, but only when told to by name. Without these on the
     # list the variable never arrives and the hook silently does nothing — which is
     # exactly how it first failed here, with the port simply never opening.

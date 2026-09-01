@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SOURCE: SANDBOX-ORIGINAL — not copied from afc-forge. afc-forge exposes the
 #   matcher through its own CLI, not through MCP, so it has no counterpart to
-#   this file. The matcher itself lives in matcher_impl/ and IS a copy — see the
+#   this file. The matcher itself lives in memstara/matcher/ and IS a copy — see the
 #   SOURCE banner at the top of each file there.
 """Semantic matcher MCP server — clinical concept names -> exact cohort columns.
 

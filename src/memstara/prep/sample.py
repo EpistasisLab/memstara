@@ -30,8 +30,8 @@ aggregate, the pipeline works. It is **an exam paper that comes with its answer 
 
 Usage::
 
-    python sandbox/make_sample_data.py
-    python sandbox/make_sample_data.py --rows 1700 --seed 42
+    python -m memstara.prep.sample
+    python -m memstara.prep.sample --rows 1700 --seed 42
 
 This file makes **one sheet of fake clinical data (dataset.csv)** and **one fake
 bundle of knowledge (an OKF bundle, 31 .md files)** in a single go and puts them under

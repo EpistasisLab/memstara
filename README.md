@@ -48,52 +48,74 @@ the first open item, `V-01` (issue
 
 ## Layout
 
-**Flat**, like `examples/`. Scripts read their configuration from the same directory
-with `from settings import Settings`, so moving one into a subfolder breaks that
-import.
+**One package, `src/memstara/`, and no Python at the top level.** This matches
+`EpistasisLab/ASAREE` and `EpistasisLab/motoro`, and it is what `pyproject.toml`
+installs. Every module is reached by its import path, and every entry point is run
+with `-m`:
+
+    python -m memstara.pipeline.board --trials 3 --y-column HIV_DETECTABLE
+
+Running a file by its path instead would skip `src/memstara/__init__.py`, and that is
+where `LITELLM_LOG` is set before litellm can read it. `-m` is not a matter of taste
+here.
+
+Until 2026-09-01 the code was flat, on the stated grounds that scripts read their
+configuration from the same directory with `from settings import Settings`. That was
+never the real constraint — six sites did it, and `Settings`' `env_file=".env"`
+resolves against the working directory, not the module — while the flat layout did
+cost something: `tests/` resolved its imports only when pytest happened to be started
+
+table.
 
 **Documents do not sit at the top level.** `README.md` is the only one; everything
 else goes into the folder that matches what it is — with eight documents lying flat
-at the top, a reader has to decide where to start every single time. Code being flat
-is a different problem with a different reason.
+at the top, a reader has to decide where to start every single time. The stated
+
+
+45 published GitHub issues are keyed to it.
 
 ```
 memstara/
-├── README.md              this file — the only top-level document
+├── README.md              this file
 
+├── CHECKLIST_KR.md        the pre-run checklist
+├── pyproject.toml         installs src/memstara, and configures pytest
 │
-├── settings.py            CoreSettings subclass (shared by every script)
-├── bootstrap.py           the single place the environment is set up
-├── preflight.py           check everything before a run, and say what to fix
-├── 01_hello_agent.py      the first script — a working-or-not check
+├── src/memstara/
+│   ├── __init__.py        one statement, no imports — see its docstring
+│   ├── paths.py           every path in the repository, resolved once
+│   ├── config.py          CoreSettings subclass (shared by everything)
+│   ├── env.py             the single place the environment is set up
+│   ├── servers.py         the five tool servers, named once
+│   ├── blackboard.py      the shared work board — table definitions
+│   ├── logging_setup.py   log output (console + JSONL)
+│   ├── preflight.py       check everything before a run, and say what to fix
+│   ├── debug_harness.py   call the tools directly, in one process
+│   │
+│   ├── pipeline/          ── the pipeline ──
+│   │   ├── hello.py       the first script — a working-or-not check
+│   │   ├── core.py        the six agents · supervisor · aggregation
+│   │   ├── mvp.py         entry point — supervisor-driven, N trials
+│   │   └── board.py       entry point — the same stages driven by the board
+│   │
+│   ├── mcp_servers/       ── MCP tool servers, one process each ──
+│   │   ├── blackboard.py  the only way an agent touches the board
+│   │   ├── data.py        describe_dataset · slice_columns
+│   │   ├── ml.py          train_and_score
+│   │   ├── okf.py         the OKF corpus, with a reading surface for real literature
+│   │   ├── matcher.py     concept names → exact cohort columns
+│   │   └── debug_hook.py  let a debugger attach to a tool server child process
+│   │
+│   ├── trace/             ── looking at what happened ──
+│   │   ├── run.py         replay a stored run
+│   │   ├── board.py       replay a board run — what was asked, and what came back
+│   │   └── report.py      read a run directory, say whether it went normally
+│   │
+│   ├── prep/              sample.py · hiv.py · nhanes.py — building the cohorts
+│   └── matcher/           the semantic matcher — catalogue, embedder, vocabulary
 │
-│                          ── the pipeline ──
-├── make_sample_data.py    synthetic dataset + sample OKF bundle (once)
-├── prep_hiv_dataset.py    flatten the shared HIV cohort into a sliceable table
-├── prep_nhanes.py         the same for the public NHANES survey
-├── blackboard.py          the shared work board — table definitions
-├── pipeline_core.py       the six agents · supervisor · aggregation
-├── 02_mvp_pipeline.py     entry point — supervisor-driven, N trials
-├── 03_board_pipeline.py   entry point — the same stages driven by the board
-│
-│                          ── MCP tool servers ──
-├── tools_blackboard.py    the only way an agent touches the board
-├── tools_data.py          describe_dataset · slice_columns
-├── tools_ml.py            train_and_score
-├── tools_okf.py           the OKF corpus, with a reading surface for real literature
-├── tools_matcher.py       concept names → exact cohort columns
-│
-│                          ── looking at what happened ──
-├── logging_setup.py       log output (console + JSONL)
-├── run_report.py          read a run directory, say whether it went normally
-├── trace_run.py           replay a stored run
-├── trace_board.py         replay a board run — what was asked, and what came back
-├── debug_harness.py       call the tools directly, in one process
-├── debug_hook.py          let a debugger attach to a tool server child process
-│
-├── matcher_impl/          the semantic matcher — catalogue, embedder, vocabulary
 ├── viewer/                the live web viewer (web :8070, API :8071)
-├── scripts/               instruments — cache building, threshold calibration, issues
+├── scripts/               instruments — cache building, calibration, issues, checks
 ├── tests/                 pytest
 │
 
@@ -103,6 +125,10 @@ memstara/
 ├── kg/                    AlzKB and AddictionKB dumps + their loading scripts
 └── outputs/               dataset · OKF bundles · run artefacts (indexed in its README.md)
 ```
+
+`blackboard.py` appears twice on purpose. `memstara/blackboard.py` is the board
+itself — the table, the connection, the run lock — and can be tested without starting
+anything; `memstara/mcp_servers/blackboard.py` is the MCP surface in front of it.
 
 
 what we obtained. That can be decided without opening a file, and each needs only one
@@ -151,8 +177,8 @@ is the one that becomes issues, and it is the one that is correct if the two
 
    to do first.** The items left incomplete against the 8/12 alignment discussion, in
    order
-5. **`01_hello_agent.py`** — run this first, to confirm the environment works
-6. **`02_mvp_pipeline.py`** — the whole four-stage pipeline
+5. **`src/memstara/pipeline/hello.py`** — run this first, to confirm the environment works
+6. **`src/memstara/pipeline/mvp.py`** — the whole four-stage pipeline
 
 
 
@@ -163,7 +189,7 @@ cd /path/to/Documents/GitHub/EcoXAI_Projects/motoro
 
 # Setup (once) — activate the conda environment
 conda activate memstara
-python ../memstara/make_sample_data.py
+python -m memstara.prep.sample
 
 # Environment variables — without these the MCP tool servers cannot find their paths
 set -a && . ./.env && set +a
@@ -172,8 +198,8 @@ export MEMSTARA_DATASET_PATH="$PWD/../memstara/outputs/dataset.csv"
 export MEMSTARA_OUTPUT_DIR="$PWD/../memstara/outputs"
 
 # 3-trial smoke run → 20-trial real run
-python ../memstara/02_mvp_pipeline.py --trials 3 --trace
-python ../memstara/02_mvp_pipeline.py --trials 20
+python -m memstara.pipeline.mvp --trials 3 --trace
+python -m memstara.pipeline.mvp --trials 20
 ```
 
 **The synthetic data has real signal planted in it** — `hba1c` · `bmi` · `age` ·
@@ -194,7 +220,7 @@ Once the synthetic smoke test passes, switch to the data below.
 export AGENTIC_OKF_BUNDLE_DIR=../shared/hiv-suppression/okf
 export MEMSTARA_DATASET_PATH=../attri_shared/ecoxai_dataset_2.5pct_no_PHI.csv
 export MEMSTARA_OUTCOME_COLUMN=HIV_DETECTABLE
-python 03_board_pipeline.py --trials 3 --trace
+python -m memstara.pipeline.board --trials 3
 ```
 
 **Who reads what:**
@@ -262,7 +288,7 @@ ANTHROPIC_FOUNDRY_RESOURCE=...
 ```bash
 cd /path/to/Documents/GitHub/EcoXAI_Projects/motoro
 set -a && . ./.env && set +a          # load .env into the environment
-python ../memstara/01_hello_agent.py --input "What is 17 times 23?"
+python -m memstara.pipeline.hello --input "What is 17 times 23?"
 ```
 
 Forgetting `set -a && . ./.env && set +a` makes it fail at the database connection or
@@ -270,12 +296,17 @@ at resolving credentials.
 
 ## Adding a new experiment script
 
-1. Create `NN_name.py` in this folder (the number exists only to make the order easy
-   to see).
-2. At the very top, call `from settings import Settings` → `configure(Settings())`
-   **first, before anything else.** Calling it after a core module has started reading
-   configuration raises `RuntimeError`.
-3. Copying `01_hello_agent.py` is the fastest way to start.
+1. Create `src/memstara/pipeline/<name>.py`. There is no number in the name any more —
+   a module called `01_hello_agent` cannot be imported. The reading order the numbers
+   used to carry is written down in `src/memstara/pipeline/__init__.py` instead.
+2. At the very top, call `from memstara.config import Settings` →
+   `configure(Settings())` **first, before anything else.** Calling it after a core
+   module has started reading configuration raises `RuntimeError`.
+3. Give it `if __name__ == "__main__":` and run it with
+   `python -m memstara.pipeline.<name>`. Do not run it by path: that skips
+   `src/memstara/__init__.py`, and litellm then reads `LITELLM_LOG` too late to log
+   any request body — with no error to show for it.
+4. Copying `src/memstara/pipeline/hello.py` is the fastest way to start.
 
 ## Reference
 

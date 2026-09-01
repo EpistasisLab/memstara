@@ -14,7 +14,7 @@ Setup::
     uv pip install pandas scikit-learn
 
     SB=../memstara                 # this folder, outside the repo
-    python $SB/make_sample_data.py
+    python -m memstara.prep.sample             # installed with -e, so -m works from here
 
     set -a && . ./.env && set +a
     export AGENTIC_OKF_BUNDLE_DIR="$PWD/$SB/outputs/okf_synthetic_sample"
@@ -23,8 +23,8 @@ Setup::
 
 Run::
 
-    python $SB/02_mvp_pipeline.py --trials 3      # smoke
-    python $SB/02_mvp_pipeline.py --trials 20     # full
+    python -m memstara.pipeline.mvp --trials 3      # smoke
+    python -m memstara.pipeline.mvp --trials 20     # full
 
 Point AGENTIC_OKF_BUNDLE_DIR at a different bundle folder to swap knowledge
 sources — the server reads exactly one bundle; several cannot be loaded at once. See
@@ -100,13 +100,15 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-# Below are the sibling modules in this folder. Most of the actual work happens in
+# Below are the other modules in this package. Most of the actual work happens in
 # them; this file's role is to call them in order.
-#   logging_setup  — make the run directory, configure logging, record the console
-#   pipeline_core  — run one trial, aggregate, prepare the agents
-#   run_report     — read the run directory, write REPORT.md, judge normal/abnormal
-#   settings       — the settings object that reads the environment variables
-#   trace_run      — pull the database's record of tool calls out into files
+#   memstara.logging_setup  — make the run directory, configure logging, record
+#                             the console
+#   memstara.pipeline.core  — run one trial, aggregate, prepare the agents
+#   memstara.trace.report   — read the run directory, write REPORT.md, judge
+#                             normal/abnormal
+#   memstara.config         — the settings object that reads the environment vars
+#   memstara.trace.run      — pull the database's record of tool calls out to files
 from memstara.logging_setup import new_run_dir, setup_logging, tee_console
 from memstara.pipeline.core import (
     TrialConfig,
@@ -145,7 +147,7 @@ def dataset_columns() -> list[str] | None:
     """The dataset's column names, read from its header row alone.
 
     Only `aggregate` needs this, and only to decide whether this is the synthetic data
-    make_sample_data.py produced — that is, whether the planted-signal answer key may be
+    src/memstara/prep/sample.py produced — that is, whether the planted-signal answer key may be
     applied to it. There is no reason to pull a file of tens of thousands of rows into
     memory for that one judgement, so a single line is read.
 
@@ -262,7 +264,7 @@ def check_environment(provider: str = "") -> list[str]:
     if not ds:
         problems.append(f'MEMSTARA_DATASET_PATH is not set — export MEMSTARA_DATASET_PATH="{OUT_DIR / "dataset.csv"}"')
     elif not Path(ds).is_file():
-        problems.append(f"MEMSTARA_DATASET_PATH file not found: {ds} (run make_sample_data.py first)")
+        problems.append(f"MEMSTARA_DATASET_PATH file not found: {ds} (run src/memstara/prep/sample.py first)")
 
     if not os.environ.get("MEMSTARA_OUTPUT_DIR", "").strip():
         problems.append(f'MEMSTARA_OUTPUT_DIR is not set — export MEMSTARA_OUTPUT_DIR="{OUT_DIR}"')
@@ -396,7 +398,7 @@ async def main() -> int:
     #     memstara/.env   the MEMSTARA_* paths
     #     motoro/.env           LLM credentials · MOTORO_DATABASE_URL
     #
-    # `env_file=".env"` at `settings.py:27` reads the current folder only, so without
+    # `env_file=".env"` at `src/memstara/config.py:27` reads the current folder only, so without
     # reading core's separately the first LLM call dies with "Azure Anthropic requests
     # require an api_base". Running `source` on both in the shell avoids it, but that
     # varies with how it is launched, so the program reads them itself.
@@ -405,7 +407,7 @@ async def main() -> int:
     # the default). So whatever the shell or launch.json gave takes precedence over both
     # — the intent of using a different bundle for that one run is preserved.
     #
-    # `load_env` is bootstrap's, and it is now the only reader of those two files. This
+    # `load_env` is `memstara.env`'s, and it is now the only reader of those two files. This
     # was one of four hand-written copies of the same pair.
     load_env()
 
@@ -531,7 +533,7 @@ async def _run_pipeline(
             # exactly the "tools available: []" situation check_environment's comment
             # is about.
             print("!! no tools at all — the MCP servers did not connect.", file=sys.stderr)
-            print("   Check mcp_allowed_env_vars in settings.py.", file=sys.stderr)
+            print("   Check mcp_allowed_env_vars in src/memstara/config.py.", file=sys.stderr)
             return 1
 
         if args.ablate_okf:
@@ -591,7 +593,7 @@ async def _run_pipeline(
         summary_json = json.dumps(summary, ensure_ascii=False, indent=2)
         OUT_DIR.mkdir(parents=True, exist_ok=True)
         # [10] The same file is written in two places. outputs/ keeps the latest — that
-        #   is what trace_run.py reads by default. The run directory keeps this run's,
+        #   is what src/memstara/trace/run.py reads by default. The run directory keeps this run's,
         #   which the latest will overwrite tomorrow while the run directory's stays.
         #   Convenience (always in the same spot) and preservation (one per run), both.
         for target in (OUT_DIR, run_dir):

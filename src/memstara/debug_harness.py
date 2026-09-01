@@ -3,9 +3,8 @@
 
 Why this is needed
 ------------------
-In a normal run `tools_okf.py`, `tools_data.py`, `tools_ml.py` and
-`tools_blackboard.py` are **child processes** started by
-`03_board_pipeline.py:119 setup_tools()`. Attaching a debugger to the pipeline
+In a normal run the five modules in `memstara/mcp_servers/` are **child processes**
+started by `src/memstara/pipeline/board.py:119 setup_tools()`. Attaching a debugger to the pipeline
 therefore **never** hits a breakpoint in the tool code.
 
 This file pulls the same functions **into this process** and calls them. Breakpoints
@@ -17,12 +16,15 @@ tool can be called as a plain Python function — no adapter, no JSON-RPC.
 
 Usage
 -----
-    uv run --no-sync --project ../motoro python debug_harness.py okf
-    uv run --no-sync --project ../motoro python debug_harness.py data
-    uv run --no-sync --project ../motoro python debug_harness.py ml
-    uv run --no-sync --project ../motoro python debug_harness.py board
+    python -m memstara.debug_harness okf
+    python -m memstara.debug_harness data
+    python -m memstara.debug_harness ml
+    python -m memstara.debug_harness board
 
-Without `--no-sync`, uv tries to rebuild litellm from source and fails.
+These used to be `uv run --no-sync --project ../motoro python -m memstara.debug_harness okf`.
+The `--no-sync` mattered: without it uv tried to rebuild litellm from source and
+failed. None of that is needed now — the conda environment has both this package and
+motoro installed editable, so the plain interpreter is enough.
 
 In VS Code, press F5 on the "1. tool harness" configuration.
 """
@@ -47,6 +49,7 @@ from pathlib import Path
 from memstara.env import load_env  # noqa: E402
 
 from memstara.paths import DEFAULT_OUTPUT_DIR, SHARED_ROOT  # noqa: E402
+from memstara.servers import BY_NAME  # noqa: E402
 
 load_env()
 
@@ -64,7 +67,7 @@ os.environ.setdefault("MEMSTARA_OUTPUT_DIR", str(DEFAULT_OUTPUT_DIR))
 
 
 def load(name: str):
-    """Load a module such as `tools_okf` into this process.
+    """Load a module such as `memstara.mcp_servers.okf` into this process.
 
     `import_module` registers it in sys.modules *before* executing it, which matters
     here: a dataclass looks its own module back up in sys.modules while being defined,
@@ -72,6 +75,18 @@ def load(name: str):
     path did that by hand, and tied this file to being the servers' neighbour.
     """
     return importlib.import_module(name)
+
+
+def load_server(name: str):
+    """Load a tool server by its **registered** name, e.g. "okf" or "memstara-data".
+
+    Goes through `servers.BY_NAME` rather than naming the module here. The module
+    names used to be written out in this file as well, which is how it came to still
+    say `tools_okf` after the modules had moved into the package — a stale string that
+    no import rewrite could see and no import error could catch, because it is only
+    read when the function runs.
+    """
+    return load(BY_NAME[name].module)
 
 
 def show(label: str, payload: str, limit: int = 900) -> None:
@@ -82,8 +97,8 @@ def show(label: str, payload: str, limit: int = 900) -> None:
 
 
 def do_okf() -> None:
-    """Knowledge source. Put breakpoints in tools_okf.py: _load, scoring, section extraction."""
-    okf = load("tools_okf")
+    """Knowledge source. Put breakpoints in src/memstara/mcp_servers/okf.py: _load, scoring, section extraction."""
+    okf = load_server("okf")
 
     show("okf_list_domains", okf.okf_list_domains())
     show("okf_search('adherence')", okf.okf_search("adherence", k=3))
@@ -99,13 +114,17 @@ def do_okf() -> None:
 
 
 def do_data() -> None:
-    """Data. Put a breakpoint on the hash computation at tools_data.py:149."""
-    data = load("tools_data")
+    """Data. Put a breakpoint on the hash computation at src/memstara/mcp_servers/data.py:152."""
+    data = load_server("memstara-data")
 
     show("describe_dataset", data.describe_dataset(), limit=600)
 
-    a = "CURRENT_AGE,SEX,TOBACCO_LAST_STATUS,n_diagnoses"
-    b = "CURRENT_AGE,SEX,RACE_1,MARITAL_STATUS"
+    # A list, not a comma-separated string. `slice_columns` refuses a bare string
+    # outright (see its docstring: 158 of this cohort's columns have a comma inside
+    # the name), so this mode had been returning an error payload and reporting
+    # "0 files made" ever since the signature changed under it.
+    a = ["CURRENT_AGE", "SEX", "TOBACCO_LAST_STATUS", "n_diagnoses"]
+    b = ["CURRENT_AGE", "SEX", "RACE_1", "MARITAL_STATUS"]
     # Same tag, different columns — this used to overwrite a single file twice.
     show("slice_columns(A, tag='dbg')", data.slice_columns(a, Y, "dbg"))
     show("slice_columns(B, tag='dbg')  ← same tag", data.slice_columns(b, Y, "dbg"))
@@ -115,10 +134,10 @@ def do_data() -> None:
 
 
 def do_ml() -> None:
-    """Training. Put breakpoints on get_dummies at tools_ml.py:118 and features at :141."""
-    data, ml = load("tools_data"), load("tools_ml")
+    """Training. Put breakpoints on get_dummies at src/memstara/mcp_servers/ml.py:120 and features at :141."""
+    data, ml = load_server("memstara-data"), load_server("memstara-ml")
 
-    cols = "CURRENT_AGE,SEX,RACE_1,MARITAL_STATUS,n_diagnoses"
+    cols = ["CURRENT_AGE", "SEX", "RACE_1", "MARITAL_STATUS", "n_diagnoses"]
     sliced = json.loads(data.slice_columns(cols, Y, "dbgml"))
     print(f"\n   subset: {Path(sliced['path']).name}")
 
@@ -132,7 +151,7 @@ def do_ml() -> None:
 
 def do_board() -> None:
     """Board. Read-only — this harness never writes anything to the board."""
-    board = load("tools_blackboard")
+    board = load_server("memstara-blackboard")
 
     async def go() -> None:
         show("read_board(run_tag='example')", await board.read_board("example"), limit=1200)

@@ -23,8 +23,8 @@ The source directory is **read only**. Output goes to this sandbox's outputs/.
 
 Usage::
 
-    python prep_hiv_dataset.py
-    python prep_hiv_dataset.py --top 12 --out outputs/hiv_cohort.csv
+    python -m memstara.prep.hiv
+    python -m memstara.prep.hiv --top 12 --out outputs/hiv_cohort.csv
 
 
 ==============================================================================

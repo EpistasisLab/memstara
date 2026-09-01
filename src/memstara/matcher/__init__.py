@@ -1,6 +1,6 @@
 # SOURCE: SANDBOX-ORIGINAL — not copied from afc-forge. It documents the port;
 #   it is not part of it. The SOURCE-tag convention is defined below.
-"""matcher_impl — afc-forge's semantic matcher, ported into memstara.
+"""memstara.matcher — afc-forge's semantic matcher, ported into memstara.
 
 `vocab.py`, `matcher.py`, `embedder.py` and the top half of `catalog.py` are ports
 of afc-forge (`ade_forge/tools/impl/*`); each carries a PORT NOTE listing every
@@ -11,7 +11,7 @@ English.
 
 HOW TO TELL WHOSE CODE YOU ARE READING
 ---------------------------------------
-Every file in this package, plus `tools_matcher.py`, `scripts/*.py` and the
+Every file in this package, plus `src/memstara/mcp_servers/matcher.py`, `scripts/*.py` and the
 matcher's tests, opens with a `SOURCE:` comment. Four values, and they are
 greppable — `grep -rn "^# SOURCE:" .` prints the whole map:
 
@@ -33,16 +33,17 @@ The claim "this is a copy" is meant to stay verifiable, so keep it that way — 
 not add sandbox code to a PORTED file, and do not tidy upstream's wording in
 one. Both turn a one-command check into a manual reading:
 
-    diff <(sed 's|ade_forge.tools.impl|matcher_impl|g' \\
+    diff <(sed 's|ade_forge.tools.impl|memstara.matcher|g' \\
              ../shared/afc-forge/ade_forge/tools/impl/matcher.py) \\
-         matcher_impl/matcher.py
+         src/memstara/matcher/matcher.py
 
-As of 2026-08-25 that diff is 28 lines for `matcher.py`, 44 for `vocab.py` and
-50 for `embedder.py`. Most of each is the banner and PORT NOTE themselves. The
+As of 2026-09-01 that diff is 35 lines for `matcher.py`, 47 for `vocab.py` and
+58 for `embedder.py`. Most of each is the banner and PORT NOTE themselves, which
+is why the total grew when the restructure added a line to each of them. The
 check that matters is the diff with comments dropped, which leaves only what the
 PORT NOTEs declare — 7 lines, 27 and 32 respectively:
 
-    diff <(sed 's|ade_forge.tools.impl|matcher_impl|g' <upstream>) <file> \\
+    diff <(sed 's|ade_forge.tools.impl|memstara.matcher|g' <upstream>) <file> \\
       | grep '^[<>]' | grep -v '^> *#'
 
 For `matcher.py` those 7 lines are one import and two rebuild hints, and nothing

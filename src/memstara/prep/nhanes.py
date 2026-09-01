@@ -32,7 +32,7 @@ Adults only (Age >= 20), and rows where the outcome is known.
 Usage::
 
     Rscript -e 'load("NHANES.rda"); write.csv(NHANES, "nhanes_raw.csv", row.names=FALSE)'
-    python prep_nhanes.py --raw nhanes_raw.csv
+    python -m memstara.prep.nhanes --raw nhanes_raw.csv
 
 
 ==============================================================================

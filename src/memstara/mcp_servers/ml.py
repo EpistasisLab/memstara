@@ -12,7 +12,7 @@ The default is scikit-learn to keep the install small — one package and it run
 xgboost is optional and only fails if you select that engine.
 
 WARNING: env vars must be on the allowlist to reach this process — see
-`mcp_allowed_env_vars` in `sandbox/settings.py`.
+`mcp_allowed_env_vars` in `src/memstara/config.py`.
 
 
 ==============================================================================
@@ -38,7 +38,7 @@ WARNING: env vars must be on the allowlist to reach this process — see
  For AUC, 0.5 is a coin flip and 1.0 is perfect. 0.64 means roughly "there is
  some signal here".
 
- To call it by hand: `python debug_harness.py ml`
+ To call it by hand: `python -m memstara.debug_harness ml`
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ from mcp.server.fastmcp import FastMCP
 
 # This is a child process, so the parent's debugger cannot reach it. It waits for
 # a debugger only when MEMSTARA_DEBUGPY contains this server's name — otherwise it
-# does nothing at all. See debug_hook.py.
+# does nothing at all. See src/memstara/mcp_servers/debug_hook.py.
 from memstara.mcp_servers.debug_hook import quiet_child, wait_for_debugger
 
 from memstara.paths import DEFAULT_OUTPUT_DIR

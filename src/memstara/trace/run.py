@@ -11,14 +11,14 @@ existed, because none of this is new instrumentation. It is all already in the d
 
 Usage::
 
-    python sandbox/trace_run.py --trial 0
-    python sandbox/trace_run.py --trial 0 --stage hypothesis
-    python sandbox/trace_run.py --trial 0 --summary
-    python sandbox/trace_run.py --run-id 30b49492-d4bd-411c-bbad-999b41286bff
-    python sandbox/trace_run.py --trial 0 --full     # do not truncate payloads
-    python sandbox/trace_run.py --from outputs/runs/<run> --trial 0
+    python -m memstara.trace.run --trial 0
+    python -m memstara.trace.run --trial 0 --stage hypothesis
+    python -m memstara.trace.run --trial 0 --summary
+    python -m memstara.trace.run --run-id 30b49492-d4bd-411c-bbad-999b41286bff
+    python -m memstara.trace.run --trial 0 --full     # do not truncate payloads
+    python -m memstara.trace.run --from outputs/runs/<run> --trial 0
 
-02_mvp_pipeline.py calls :func:`dump_all` at the end of every run, so a run directory
+src/memstara/pipeline/mvp.py calls :func:`dump_all` at the end of every run, so a run directory
 already contains these traces as files; the CLI is for going back further.
 
 
@@ -51,7 +51,7 @@ already contains these traces as files; the CLI is for going back further.
      database; what was missing was the side that **reads it.**
    · By default the text is trimmed for display. When you need to see everything that
      went into a tool, always add `--full`.
-   · 02_mvp_pipeline.py calls dump_all at the end of every run, so a run directory
+   · src/memstara/pipeline/mvp.py calls dump_all at the end of every run, so a run directory
      already holds the trace/ files. Reaching for the command line is for going back to
      **something older than that.**
 """
@@ -164,7 +164,8 @@ def _dump_leftovers(emit: Any, data: Any, phase: str, tag: str) -> None:
 def _load_rows(rows_file: Path = ROWS_FILE) -> list[dict[str, Any]]:
     """Read the trial list file. If it is not there, say what to run first and stop."""
     if not rows_file.is_file():
-        print(f"!! {rows_file} not found — run 02_mvp_pipeline.py first", file=sys.stderr)
+        print(f"!! {rows_file} not found — run `python -m memstara.pipeline.mvp` first",
+              file=sys.stderr)
         raise SystemExit(1)
     return json.loads(rows_file.read_text(encoding="utf-8"))
 
@@ -245,7 +246,7 @@ async def render(
         already said, and a field we do not know about is left in by `_dump_leftovers`
 
     Why the default is False — so that the output of the existing way of using
-    `trace_run.py`, from the command line, does not change.
+    `src/memstara/trace/run.py`, from the command line, does not change.
     """
     out = stream if stream is not None else sys.stdout
 
@@ -376,7 +377,7 @@ async def dump_all(rows_file: Path, out_dir: Path) -> list[Path]:
     call with its arguments and its result, but they only become something you can read
     later if someone goes and gets them — a live log never carried them at all.
 
-    02_mvp_pipeline.py calls this function at the end of every run. That is why a run
+    src/memstara/pipeline/mvp.py calls this function at the end of every run. That is why a run
     directory holds its trace/ from the moment it is made.
     """
     out_dir.mkdir(parents=True, exist_ok=True)

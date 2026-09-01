@@ -3,7 +3,7 @@
 
 Why it is needed
 ----------------
-`03_board_pipeline.py:121 setup_tools()` starts four tool servers, **each in its own
+`src/memstara/pipeline/board.py:121 setup_tools()` starts four tool servers, **each in its own
 process**. A debugger attached to the parent is a stranger to those children, so
 breakpoints in `tools_*.py` never fire.
 
@@ -15,15 +15,15 @@ Usage
 -----
 List the servers you want, comma-separated. With nothing set, nothing happens.
 
-    MEMSTARA_DEBUGPY=data python 03_board_pipeline.py --trials 1 ...
-    MEMSTARA_DEBUGPY=okf,ml python 03_board_pipeline.py ...
+    MEMSTARA_DEBUGPY=data python -m memstara.pipeline.board --trials 1 ...
+    MEMSTARA_DEBUGPY=okf,ml python -m memstara.pipeline.board ...
 
 That server then stops on startup to wait for a debugger and prints to stderr::
 
     [debugpy] data is waiting for a debugger on 127.0.0.1:5679
 
 In VS Code, pick the "attach to child tool server" configuration matching that port
-and press F5; from then on breakpoints in `tools_data.py` fire.
+and press F5; from then on breakpoints in `src/memstara/mcp_servers/data.py` fire.
 
 Ports
 -----

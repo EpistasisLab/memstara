@@ -148,7 +148,7 @@ def disable_yaml_timestamps() -> int:
 
 # This is a child process, so the parent's debugger cannot reach it. It waits for a
 # debugger only when MEMSTARA_DEBUGPY contains "okf" — otherwise it does nothing at
-# all. See debug_hook.py.
+# all. See src/memstara/mcp_servers/debug_hook.py.
 from memstara.mcp_servers.debug_hook import quiet_child, wait_for_debugger
 
 quiet_child()          # silences the three startup messages a child prints

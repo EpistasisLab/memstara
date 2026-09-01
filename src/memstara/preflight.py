@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Check everything before a run, and on failure say **what to fix**.
 
-    python preflight.py                 # with the default provider
-    python preflight.py --provider openai
-    python preflight.py --quick         # do not start the tool servers (seconds)
+    python -m memstara.preflight                 # with the default provider
+    python -m memstara.preflight --provider openai
+    python -m memstara.preflight --quick         # do not start the tool servers (seconds)
 
 Why this file exists
 --------------------
@@ -93,7 +93,7 @@ def check_paths() -> None:
 
     check("knowledge-source folder", bool(bundle) and Path(bundle).is_dir(), bundle or "(not set)")
     if bundle and Path(bundle).is_dir():
-        # Do not reimplement the counting here; call `tools_okf._load` itself. A
+        # Do not reimplement the counting here; call the okf server's own `_load`. A
         # separate count is certain to drift, and drift means "the check passes but
         # there are really 0 documents".
         # (That happened: a flat bundle came out as 0 documents in the tool and
@@ -114,7 +114,7 @@ def check_paths() -> None:
         except Exception as e:  # noqa: BLE001
             check("the knowledge source has documents", False, f"{type(e).__name__}: {e}")
     check("data csv", bool(dataset) and Path(dataset).is_file(), dataset or "(not set)",
-          "run make_sample_data.py or prep_*.py first")
+          "run `python -m memstara.prep.sample` first, or prep.hiv / prep.nhanes")
     check("output folder", bool(outdir) and Path(outdir).is_dir(), outdir or "(not set)")
 
 
@@ -149,11 +149,11 @@ def check_allowlist() -> None:
     """[5] Does the MCP allowlist cover every variable the tools read."""
     print("\n[5] MCP allowlist")
     # This is the quietest failure in the whole project — see the comments on
-    # bootstrap.allowlist_gaps.
+    # memstara.env.allowlist_gaps.
     gaps = allowlist_gaps()
     check("the list covers every variable the tools read", not gaps,
           "nothing missing" if not gaps else f"missing: {', '.join(gaps)}",
-          "add the names above to mcp_allowed_env_vars in settings.py")
+          "add the names above to mcp_allowed_env_vars in src/memstara/config.py")
 
 
 def check_matcher_catalog() -> None:
@@ -170,7 +170,7 @@ def check_matcher_catalog() -> None:
         from memstara.matcher.embedder import embeddings_stale
         from memstara.matcher.service import build_run_config, current_fingerprint
     except Exception as e:  # noqa: BLE001
-        check("import matcher_impl", False, f"{type(e).__name__}: {e}",
+        check("import memstara.matcher", False, f"{type(e).__name__}: {e}",
               "check you are in the memstara environment and that numpy is installed")
         return
 

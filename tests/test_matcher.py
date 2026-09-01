@@ -16,7 +16,7 @@ family beside a smaller one, and a dx group whose `match_text` is `desc (code)`.
 
 # --- PORT NOTE (memstara) -------------------------------------
 # Ported from afc-forge `tests/test_matcher.py`. The ONLY edits are the
-# import paths (`ade_forge.tools.impl.*` -> `matcher_impl.*`). Assertions,
+# import paths (`ade_forge.tools.impl.*` -> `memstara.matcher.*`). Assertions,
 # fixtures and docstrings are untouched: an edited test no longer proves that
 # this matcher behaves the way afc-forge's does, which is the whole point of
 # running them here.

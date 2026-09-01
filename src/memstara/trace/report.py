@@ -19,9 +19,9 @@ manifest.json, todo_rows.json, summary.json and run.jsonl.
 
 Usage::
 
-    python sandbox/run_report.py outputs/runs/<run>
+    python -m memstara.trace.report outputs/runs/<run>
 
-02_mvp_pipeline.py calls :func:`build_report` at the end of every run, so a run
+src/memstara/pipeline/mvp.py calls :func:`build_report` at the end of every run, so a run
 directory arrives with its REPORT.md already written.
 
 
@@ -342,7 +342,7 @@ def render(run_dir: Path, data: dict[str, Any], verdict: str, reasons: list[str]
     L.append("No column-count constraint — the agent decides for itself on the OKF grounds.")
     L.append("")
 
-    # Only when this dataset carries the planted answer key — see pipeline_core.aggregate.
+    # Only when this dataset carries the planted answer key — see memstara.pipeline.core.aggregate.
     # On any other dataset there is no answer key, and reporting one would be a
     # failure that did not happen.
     summary = data["summary"]
@@ -394,7 +394,7 @@ def render(run_dir: Path, data: dict[str, Any], verdict: str, reasons: list[str]
     L.append("| `run.jsonl` | the structured log in full. Every line tagged with trial and stage |")
     L.append("")
     L.append("```bash")
-    L.append(f"python trace_run.py --from {run_dir} --trial 0 --full")
+    L.append(f"python -m memstara.trace.run --from {run_dir} --trial 0 --full")
     L.append("```")
     L.append("")
 
@@ -404,7 +404,7 @@ def render(run_dir: Path, data: dict[str, Any], verdict: str, reasons: list[str]
 def build_report(run_dir: Path) -> tuple[str, list[str], Path]:
     """Write REPORT.md into *run_dir*. Returns the verdict, its reasons and the path.
 
-    This function is the one way in from outside. 02_mvp_pipeline.py calls it at the end
+    This function is the one way in from outside. src/memstara/pipeline/mvp.py calls it at the end
     of every run, so a run directory carries its REPORT.md from the moment it is made.
     """
     data = collect(run_dir)

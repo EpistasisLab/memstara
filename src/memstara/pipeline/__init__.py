@@ -6,7 +6,7 @@
     board.py    the board pipeline: agents take work off a shared blackboard and put
                 results back, and the sequence is not fixed in advance.
 
-They were `01_hello_agent.py`, `02_mvp_pipeline.py` and `03_board_pipeline.py`. The
+They were `src/memstara/pipeline/hello.py`, `src/memstara/pipeline/mvp.py` and `src/memstara/pipeline/board.py`. The
 numbers said "read these in this order", which was worth having and is why this
 docstring exists — a module cannot be called `01_hello_agent` and be imported.
 

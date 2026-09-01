@@ -2,7 +2,7 @@
 #   upstream: shared/afc-forge/ade_forge/tools/impl/embedder.py (312 lines)
 # --- PORT NOTE (memstara) -------------------------------------
 # A port of afc-forge `ade_forge/tools/impl/embedder.py`. Four differences:
-#   1. the EmbeddingConfig import points at matcher_impl.config
+#   1. the EmbeddingConfig import points at memstara.matcher.config
 #   2. the device-selection expression is extracted into current_device()
 #      (the selection rule itself is unchanged)
 #   3. the embedding stamp records "device"

@@ -4,12 +4,17 @@ This file is empty of imports on purpose, and must stay that way.
 
 Why it holds a single `setdefault`
 ----------------------------------
+.. repair-citations: off
+
 litellm reads `LITELLM_LOG` **while it is being imported** (`litellm/_logging.py:80`).
 Set it any later and the request bodies go unlogged — silently, which is exactly how
-it first failed. `bootstrap.py:42-53` records the rule that came out of that:
+it first failed. `env.py` (`bootstrap.py:42-53` before the restructure) records the
+rule that came out of that:
 
-    every entry point must import `bootstrap` **before** anything that pulls in
+    every entry point must import the env module **before** anything that pulls in
     motoro / litellm. This has caught us twice.
+
+.. repair-citations: on
 
 A rule every entry point must remember is a rule that will be forgotten a third time.
 Here it stops being a convention: under `python -m memstara.<anything>`, the

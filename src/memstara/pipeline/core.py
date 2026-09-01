@@ -110,7 +110,7 @@ PERSPECTIVES: list[str] = [
 
 # Minimum columns the hypothesis agent must choose (no upper bound — the agent
 # decides how many OKF-grounded columns the hypothesis needs).
-# run_report.py uses this to flag runs where the agent chose nothing at all.
+# src/memstara/trace/report.py uses this to flag runs where the agent chose nothing at all.
 COLUMN_COUNT_MIN = 1
 
 
@@ -173,7 +173,7 @@ class TodoRow:
 
     # Tracing — a core run id is an opaque UUID that cannot be a foreign key in a
     # product database, so recording it here is the only way to trace back later
-    # with get_runs() / get_run_steps(). It is this value that lets `trace_run.py`
+    # with get_runs() / get_run_steps(). It is this value that lets `src/memstara/trace/run.py`
     # show what that agent asked the tools and what it got back.
     run_ids: dict[str, str] = field(default_factory=dict)
     error: str = ""
@@ -202,7 +202,7 @@ class TodoRow:
 def save_rows(rows: list[TodoRow], path: Path) -> None:
     """Save the to-do list to a JSON file.
 
-    `trace_run.py` looks up trial number -> run id in this file. Without it, tracing
+    `src/memstara/trace/run.py` looks up trial number -> run id in this file. Without it, tracing
     afterwards is not possible.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -504,7 +504,7 @@ BOARD_TOOLS = {
     # are still registered on the server and still work; they are simply not handed to
     # this agent. Measured on reviewer's 142-paper bundle, core's set reports 152 documents,
     # matches 132 of them on the substring "art", and returns whole 6,700-character
-    # bodies. See tools_okf.py. Putting the old three names back here reverts the change.
+    # bodies. See src/memstara/mcp_servers/okf.py. Putting the old three names back here reverts the change.
     # `match_concepts` / `match_concept` are the same pair 02 hands its hypothesis
     # agent (see run_one_trial). `describe_matcher` is deliberately not here: it
     # reports cache paths and versions, which is a fact about this machine and not
@@ -882,7 +882,7 @@ async def _run_stage(
 
     **This is the only place the 02 path calls an LLM.** Writing the run id into
     `row.run_ids[stage]` here matters: it is the only link back, and what lets
-    `trace_run.py` later show what that agent asked the tools and what it got.
+    `src/memstara/trace/run.py` later show what that agent asked the tools and what it got.
     """
     run = await create_run(
         agent_id=agent_id,
@@ -1077,10 +1077,10 @@ async def run_one_trial(trial: int, cfg: TrialConfig) -> TodoRow:
 #  Aggregation — the paper's output. Done in code, not by an LLM.
 # --------------------------------------------------------------------------- #
 
-# The real signal planted by make_sample_data.py. Meaningful ONLY on that dataset.
+# The real signal planted by src/memstara/prep/sample.py. Meaningful ONLY on that dataset.
 # Opaque codes on purpose — see that file's module docstring.
 #
-# The answer key **planted deliberately** in the synthetic data. make_sample_data.py
+# The answer key **planted deliberately** in the synthetic data. src/memstara/prep/sample.py
 # makes these four genuinely predict the outcome (univariate AUC 0.73/0.66/0.63/0.60,
 # against 0.51 for the noise columns).
 #

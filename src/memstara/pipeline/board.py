@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The same four stages, driven by a shared board instead of a supervisor.
 
-In `02_mvp_pipeline.py` a Python function calls the stages in order and carries each
+In `src/memstara/pipeline/mvp.py` a Python function calls the stages in order and carries each
 output to the next by variable. Here nobody carries anything: the hypothesis stage puts
 work on a board, and the other stages take work off it. Each task says which stage
 should pick it up next, so an agent only has to know its own type.
@@ -28,12 +28,12 @@ when a run is interrupted.
 
 Setup is the same as 02, plus the board::
 
-    python blackboard.py --create
+    python -m memstara.blackboard --create
 
 Run::
 
-    python 03_board_pipeline.py --trials 3
-    python 03_board_pipeline.py --report-only --run-tag <tag>
+    python -m memstara.pipeline.board --trials 3
+    python -m memstara.pipeline.board --report-only --run-tag <tag>
 
 
 ==============================================================================
@@ -121,7 +121,7 @@ Run::
  inside `tools_*.py` — those are somebody else's program.
 
  There are two ways to stop in there:
-   · `python debug_harness.py data`  — pull the machine into this program and use it here
+   · `python -m memstara.debug_harness data`  — pull the machine into this program and use it here
    · turn on `MEMSTARA_DEBUGPY=data` and attach a debugger to that machine separately
 
 
@@ -155,7 +155,7 @@ import asyncpg    # PostgreSQL async driver. Used only to query the board direct
 
 # ---- the rest of the package -------------------------------------------------
 # LITELLM_LOG has to be set before litellm is imported, and `memstara.pipeline.core`
-# below drags litellm in. There used to be a bare `import bootstrap` here to force
+# below drags litellm in. There used to be a bare `import` of the env module here to force
 # that order. It is gone: reaching this module at all runs `memstara/__init__.py`
 # first, and that is where the variable is now set. See its docstring.
 from memstara.env import load_env
@@ -376,7 +376,7 @@ async def check_environment(provider: str = "", y_column: str = "") -> list[str]
         )
 
     # The outcome column has to exist in the dataset, and nothing checked that until
-    # now. A wrong `--y-column` was caught in tools_data.py, deep inside the data stage,
+    # now. A wrong `--y-column` was caught in src/memstara/mcp_servers/data.py, deep inside the data stage,
     # after every hypothesis agent had already been paid for — and the run still ended
     # "successfully" and wrote a report full of nulls. The default is `outcome`, which
     # is not a column in this cohort, so the default path always went that way.
@@ -392,7 +392,7 @@ async def check_environment(provider: str = "", y_column: str = "") -> list[str]
             )
         else:
             if y_column not in header:
-                # Near-misses only, never the whole column list. tools_data.py hides the
+                # Near-misses only, never the whole column list. src/memstara/mcp_servers/data.py hides the
                 # outcome column from its error for a reason (an agent that learns the
                 # name can use it as a feature); a console message is safer but the same
                 # restraint keeps 1,393 names out of the terminal.
@@ -422,7 +422,7 @@ async def setup_tools() -> MCPServerRegistry:
     #
     # **It has to be set here.** debugpy checks the moment the child Python starts, so
     # turning it off inside the child's code is already too late. The parent has to put
-    # it in beforehand, and it has to be on the allowlist in `settings.py` to reach the
+    # it in beforehand, and it has to be on the allowlist in `src/memstara/config.py` to reach the
     # child at all.
     #
     # The warning itself is about the **inside** of the standard library and has nothing
@@ -463,7 +463,7 @@ async def setup_tools() -> MCPServerRegistry:
 # Collects the agents called in this run, in the order they were called.
 #
 # Why a list and why not per trial — on the 02 path one trial passes through the four
-# stages in turn, so it groups by `TodoRow.run_ids[stage]` (pipeline_core.py:664). The
+# stages in turn, so it groups by `TodoRow.run_ids[stage]` (src/memstara/pipeline/core.py:664). The
 # board path is different. **Which task a single `call_agent(data, ...)` picks up is
 # decided by the board at that moment.** So it cannot be grouped by trial, and keeping
 # the order they were called in is what matches the facts.
@@ -500,7 +500,7 @@ async def call_agent(
     overrides = {"temperature": temperature} if temperature is not None else None
 
     # core creates a "run" first and executes it afterwards. Being split in two is what
-    # leaves the record in the DB, so it can be retraced later with trace_run.py.
+    # leaves the record in the DB, so it can be retraced later with src/memstara/trace/run.py.
     run = await create_run(agent_id=agent_id, user_input=prompt, model_config_overrides=overrides)
 
     # Written down **before** executing. The run_id has to survive even if it dies
@@ -693,7 +693,7 @@ async def _trace_one(call: dict[str, Any]) -> None:
         with path.open("w", encoding="utf-8") as fh:
             # readable=True — it is printed for a person to read. Nothing is truncated.
             # The only thing left out is **what another line already said** (see the
-            # explanation of trace_run.render).
+            # explanation of memstara.trace.run.render).
             await render(call["stage"], uuid.UUID(call["run_id"]),
                          full=True, summary=False, stream=fh, readable=True)
 
@@ -735,8 +735,8 @@ async def write_traces(run_dir: Path) -> int:
     Without the skip, the file is written afresh and the LLM requests disappear (see
     the comment above).
 
-    Why `trace_run.dump_all` is not used — that function assumes the per-trial
-    `run_ids` shape of `todo_rows.json` (trace_run.py:161). The board path is not that
+    Why `memstara.trace.run.dump_all` is not used — that function assumes the per-trial
+    `run_ids` shape of `todo_rows.json` (src/memstara/trace/run.py:162). The board path is not that
     shape, so `render()`, one layer below, is called directly.
     """
     if not _CALLS:
@@ -745,7 +745,7 @@ async def write_traces(run_dir: Path) -> int:
     out_dir = run_dir / "trace"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # The list itself is left behind too. It is what trace_board.py, or a person
+    # The list itself is left behind too. It is what src/memstara/trace/board.py, or a person
     # retracing by hand, reads later.
     (run_dir / "runs.json").write_text(
         json.dumps(_CALLS, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -1524,7 +1524,7 @@ async def main() -> int:
     #     memstara/.env   the MEMSTARA_* paths
     #     motoro/.env           LLM credentials · MOTORO_DATABASE_URL
     #
-    # But `env_file=".env"` in `settings.py:27` reads **only the current folder.** So
+    # But `env_file=".env"` in `src/memstara/config.py:27` reads **only the current folder.** So
     # unless core's file is read separately the LLM credentials never arrive, and the
     # result is this error, which blows up on the first call:
     #
@@ -1540,7 +1540,7 @@ async def main() -> int:
     # a value given by the shell or by launch.json comes ahead of both — which keeps the
     # intent of "a different bundle for this run only" working.
     #
-    # `load_env` is bootstrap's, and it is now the only reader of those two files. This
+    # `load_env` is `memstara.env`'s, and it is now the only reader of those two files. This
     # was one of four hand-written copies of the same pair, and they had already drifted:
     # debug_harness.py read core's first, giving it priority over the sandbox's.
     load_env()
@@ -1619,8 +1619,8 @@ async def main() -> int:
             # The board is a database; whatever was written stays written. Say what to
             # do next rather than leaving a bare traceback.
             print("\n\ninterrupted. the board is still there.")
-            print(f"  see the state:  python blackboard.py --show")
-            print(f"  report only:    python 03_board_pipeline.py --report-only --run-tag {args.run_tag}")
+            print(f"  see the state:  python -m memstara.blackboard --show")
+            print(f"  report only:    python -m memstara.pipeline.board --report-only --run-tag {args.run_tag}")
             return 130
 
 

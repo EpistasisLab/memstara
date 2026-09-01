@@ -108,7 +108,7 @@ _LLM_REQUEST_MARK = "POST Request Sent from LiteLLM"
 #:
 #: They do not go into `run.jsonl` — one request is tens of thousands of characters, which
 #: would grow the JSONL past usefulness. The text itself is appended by
-#: 03_board_pipeline.py into `trace/NN_stage.txt`.
+#: src/memstara/pipeline/board.py into `trace/NN_stage.txt`.
 _llm_requests: list[str] = []
 
 

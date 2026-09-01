@@ -3,7 +3,14 @@
 Why this file exists
 --------------------
 Before it, fourteen modules each worked out where they were with
-`Path(__file__).parent` and built the repository's layout back up from there:
+`Path(__file__).parent` and built the repository's layout back up from there.
+
+.. repair-citations: off
+
+**The paths below are the pre-restructure ones** — they are the record of what was
+consolidated, not somewhere to go and look now. Read them at `2ff414d`, the commit
+before the move; every one of these files lives under `src/memstara/` today and none
+of them still computes its own paths::
 
     logging_setup.py:35-36   outputs/logs, outputs/runs
     tools_data.py:61         outputs/
@@ -16,6 +23,8 @@ Before it, fourteen modules each worked out where they were with
     bootstrap.py:61-64       .env and ../motoro/.env
     02_mvp_pipeline.py:419-420, 03_board_pipeline.py:1548-1549,
     debug_harness.py:46-47, preflight.py:68   the same two `.env` files again
+
+.. repair-citations: on
 
 Each of those is correct only while the file stays exactly where it is. That is a
 fragile thing to have written down fourteen times, and it fails **quietly**: a
@@ -61,9 +70,12 @@ SHARED_ROOT = WORKSPACE_ROOT / "shared"
 #: into; moving the code must not move the data.
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "outputs"
 
-#: Logs and run records. Unconditional, matching `logging_setup.py:35-36` exactly
-#: as it was: these two are **not** redirected by `MEMSTARA_OUTPUT_DIR`, because a
-#: run that sends its subsets elsewhere still belongs in the one run history.
+# repair-citations: off
+#: Logs and run records. Unconditional, matching what `logging_setup.py:35-36` did
+#: before this file absorbed it — a pre-move line, read it at `2ff414d`. These two are
+#: **not** redirected by `MEMSTARA_OUTPUT_DIR`, because a run that sends its subsets
+#: elsewhere still belongs in the one run history.
+# repair-citations: on
 LOG_DIR = DEFAULT_OUTPUT_DIR / "logs"
 RUNS_DIR = DEFAULT_OUTPUT_DIR / "runs"
 
@@ -74,7 +86,7 @@ RUNS_DIR = DEFAULT_OUTPUT_DIR / "runs"
 #:
 #: They are not merged. Merging would put secrets in two places, and the copy would
 #: fall behind whenever the original changed. Both are read instead, and the reader
-#: is `bootstrap.load_env()` — the only one.
+#: is `memstara.env.load_env()` — the only one.
 ENV_FILES = (
     REPO_ROOT / ".env",
     MOTORO_ROOT / ".env",
@@ -85,7 +97,7 @@ def output_dir() -> Path:
     """Where subsets and catalogs are written, honouring `MEMSTARA_OUTPUT_DIR`.
 
     A function rather than a constant because the tool servers are child processes:
-    core hands them the variable at spawn time, and `tools_ml.py:67-70` has always
+    core hands them the variable at spawn time, and `src/memstara/mcp_servers/ml.py:69-72` has always
     read it per call. Freezing it at import would be a behaviour change disguised as
     a tidy-up.
 

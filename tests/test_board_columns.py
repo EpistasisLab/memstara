@@ -11,7 +11,7 @@ the same 158 columns.
 
 Only the refusal is tested here. The list normalisation and the round trip happen
 against Postgres, which these tests deliberately do not need — that half is
-covered by `test_blackboard.py`, run by hand against a live board.
+covered by `scripts/check_blackboard.py`, run by hand against a live board.
 """
 
 from __future__ import annotations

@@ -22,13 +22,13 @@ report is written from finished results.
     read_board      the whole board, unfinished work included
     read_results    what has actually been produced (the reporting stage)
 
-Core launches this file as a stdio subprocess, same shape as tools_data.py.
+Core launches this file as a stdio subprocess, same shape as src/memstara/mcp_servers/data.py.
 
 The board lives in **Memstara's own database**, not core's — see ``docker-compose.yml``.
 
 Environment::
 
-    MEMSTARA_DATABASE_URL    must be on `mcp_allowed_env_vars` in settings.py —
+    MEMSTARA_DATABASE_URL    must be on `mcp_allowed_env_vars` in src/memstara/config.py —
                            core does not hand credentials to a subprocess by default.
                            Unset falls back to the compose container on :5463.
 
@@ -62,7 +62,7 @@ Environment::
    read_board       the whole board — unfinished work included
    read_results     finished work only — this is what the reporting stage reads
 
- To call it by hand: `python debug_harness.py board`
+ To call it by hand: `python -m memstara.debug_harness board`
 """
 
 from __future__ import annotations
@@ -78,7 +78,7 @@ from mcp.server.fastmcp import FastMCP
 
 # This is a child process, so the parent's debugger cannot reach it. It waits for a
 # debugger only when MEMSTARA_DEBUGPY contains this server's name — otherwise it
-# does nothing at all. See debug_hook.py.
+# does nothing at all. See src/memstara/mcp_servers/debug_hook.py.
 from memstara.mcp_servers.debug_hook import quiet_child, wait_for_debugger
 
 quiet_child()          # silences the three startup messages a child prints

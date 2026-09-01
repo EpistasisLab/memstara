@@ -2,13 +2,19 @@
 
 Why this file exists
 --------------------
-The same five servers were spelled out in five places:
+.. repair-citations: off
+
+The same five servers were spelled out in five places. **Those are the
+pre-restructure paths** — the record of what this file replaced, readable at
+`2ff414d`, the commit before the move. Nothing sits at them now::
 
     02_mvp_pipeline.py:313-319    the launch table for the supervised pipeline
     03_board_pipeline.py:438-447  the launch table for the board pipeline
     preflight.py:213             the names it starts to prove they start
     debug_harness.py:85-134      the modules it pulls into one process
     bootstrap.py:139             the sources it scrapes for env-var reads
+
+.. repair-citations: on
 
 Four of the five built a command string out of an absolute path. The fifth used a
 glob, which is how it came to be able to report success having read nothing (see
@@ -24,7 +30,7 @@ What is here and what is not
 ----------------------------
 This file owns **how a server is launched**: its registered name, its module, and
 the command. It does not own **which pipeline stage may talk to which server** —
-that is `pipeline_core.BOARD_SERVERS`, a different question with a different
+that is `memstara.pipeline.core.BOARD_SERVERS`, a different question with a different
 answer, kept under its own guard by `viewer/check_definitions.py`.
 """
 
@@ -46,7 +52,7 @@ class Server:
     Attributes:
         name: The name core registers it under. This is the server's identity —
             `get_server_by_name` looks it up by this and nothing else — so it must
-            match the `FastMCP(...)` name inside the module (`tools_data.py:57`).
+            match the `FastMCP(...)` name inside the module (`src/memstara/mcp_servers/data.py:59`).
         module: The importable module name.
         why: One line on what it is for, shown nowhere; it is here so that reading
             this table tells you what the five machines are.
@@ -120,7 +126,7 @@ def launch_table() -> list[tuple[str, str]]:
     return [(s.name, s.command()) for s in SERVERS]
 
 
-#: The sources `bootstrap.allowlist_gaps()` scrapes — the five servers, plus the
+#: The sources `memstara.env.allowlist_gaps()` scrapes — the five servers, plus the
 #: debug hook, which is not a server but is loaded into every one of them and reads
 #: `MEMSTARA_DEBUGPY` itself. Leaving it out is exactly the omission that made the
 #: debugger silently never open its port.

@@ -11,7 +11,7 @@ own OKF server (`AGENTIC_OKF_BUNDLE_DIR`): an agent never supplies a path.
     MEMSTARA_OUTPUT_DIR     where sub-datasets are written (default: outputs/ beside this file)
 
 WARNING: these must be on core's MCP subprocess env allowlist to reach this
-process — see `mcp_allowed_env_vars` in `sandbox/settings.py`. Without them the
+process — see `mcp_allowed_env_vars` in `src/memstara/config.py`. Without them the
 tools below return `{"error": ...}`.
 
 Reading the environment inside the functions rather than at module scope is
@@ -28,11 +28,11 @@ the caller sees only "failed to connect" with no indication of why.
    describe_dataset()   what columns this dataset has, and how empty each one is
    slice_columns(...)   cut out only the chosen columns and save a small CSV
 
- This file runs as a **separate process**, started with `python tools_data.py`.
+ This file runs as a **separate process**, started with `python -m memstara.mcp_servers.data`.
  The pipeline launches it as a child and talks to it over stdin/stdout. That is
  why attaching a debugger to the pipeline will not hit breakpoints in here.
 
- To call it by hand: `python debug_harness.py data`
+ To call it by hand: `python -m memstara.debug_harness data`
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ from mcp.server.fastmcp import FastMCP    # the toolkit for building an MCP serv
 # This server's name. The pipeline looks it up as "memstara-data".
 # It is a child process, so the parent's debugger cannot reach it. It waits for a
 # debugger only when MEMSTARA_DEBUGPY contains this server's name — otherwise it
-# does nothing at all. See debug_hook.py.
+# does nothing at all. See src/memstara/mcp_servers/debug_hook.py.
 from memstara.mcp_servers.debug_hook import quiet_child, wait_for_debugger
 
 from memstara.paths import DEFAULT_OUTPUT_DIR
@@ -72,7 +72,7 @@ def _dataset_path() -> Path:
         # almost always caused by a missing entry in the allowlist.
         raise RuntimeError(
             "MEMSTARA_DATASET_PATH is not set. Check that you exported it, and that it "
-            "appears in mcp_allowed_env_vars in sandbox/settings.py."
+            "appears in mcp_allowed_env_vars in src/memstara/config.py."
         )
     path = Path(raw)
     if not path.is_file():

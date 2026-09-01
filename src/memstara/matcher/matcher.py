@@ -5,7 +5,7 @@
 # and is byte-identical to upstream apart from the three edits listed below.
 #
 # Allowed edits (these three only):
-#   1. the 5 local import lines -> matcher_impl.*
+#   1. the 5 local import lines -> memstara.matcher.*
 #   2. the CLI hint in __init__'s shape-mismatch message
 #   3. the CLI hint in from_catalog's stale-matrix message
 #
@@ -17,7 +17,7 @@
 #
 # Sandbox glue (the lru_cache singleton, MCP wrappers) does NOT go here. The
 # moment it does, "identical to afc-forge" stops being checkable with a diff.
-# It goes in matcher_impl/service.py.
+# It goes in src/memstara/matcher/service.py.
 # -------------------------------------------------------------------------
 """The matcher — a concept an agent can say, mapped to feature keys it can request.
 

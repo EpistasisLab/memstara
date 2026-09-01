@@ -10,7 +10,7 @@ they are named; this is where they live.
     ml.py          train a model on a subset and score it
     blackboard.py  the shared work board — the server in front of memstara/blackboard.py
     matcher.py     OKF concept name -> cohort column name
-    debug_hook.py  not a server; the thing each one calls to wait for a debugger
+    src/memstara/mcp_servers/debug_hook.py  not a server; the thing each one calls to wait for a debugger
 
 `blackboard.py` appears twice in this package tree on purpose. `memstara/blackboard.py`
 is the board itself — the table, the DSN, the run lock — and can be tested without

@@ -69,12 +69,13 @@ packages = ["src/memstara"]
 [tool.pytest.ini_options]
 # `testpaths = tests` is deliberate, and widening it gains nothing.
 #
-# The root `test_blackboard.py` looks excluded by this line, but it is not a pytest
-# file: it holds `cleanup`/`ok`/`main` and an `if __name__ == "__main__"` block, needs
-# a live Postgres, and is run by hand as `python test_blackboard.py`. Setting
-# `testpaths = ["tests", "."]` was measured — it collects the same 67 tests and only
-# adds an import of a database script. The name is what misleads; renaming it to
-# `check_blackboard.py` is the real fix and touches `02_mvp_pipeline.py:307`.
+# This carries `pytest.ini`'s reasoning across. There used to be a `test_blackboard.py`
+# at the repository root that looked excluded by this line, but it was never a pytest
+# file: it holds `cleanup`/`ok`/`main` and an `if __name__ == "__main__"` block, needs a
+# live Postgres, and is run by hand. Setting `testpaths = ["tests", "."]` was measured —
+# it collects the same 67 tests and only adds an import of a database script. The name
+# was what misled, so the file is now `scripts/check_blackboard.py`, renamed in the
+# move commit along with its one call site, `src/memstara/pipeline/mvp.py:306`.
 testpaths = ["tests"]
 
 # The line this whole file exists for. Until now the tests found `tools_blackboard`,

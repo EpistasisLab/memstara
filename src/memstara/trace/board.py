@@ -3,7 +3,7 @@
 
 Why this is separate
 --------------------
-`03_board_pipeline.py` now leaves `runs.json` and `trace/` behind at the end of a
+`src/memstara/pipeline/board.py` now leaves `runs.json` and `trace/` behind at the end of a
 run. But that is a story about **future runs**. The earlier ones (`conda1`,
 `example`, …) recorded no run_id.
 
@@ -23,11 +23,11 @@ Each run's input text is printed alongside so a mix-up is visible.
 
 Usage
 -----
-    python trace_board.py --run-tag example          # runs inside that run's time window
-    python trace_board.py --run-tag example --out /tmp/t   # to files instead of the screen
-    python trace_board.py --last 10                  # the 10 most recent runs
-    python trace_board.py --run-id 04f6812d-...      # just one
-    python trace_board.py --run-tag example --summary  # headers only, bodies omitted
+    python -m memstara.trace.board --run-tag example          # runs inside that run's time window
+    python -m memstara.trace.board --run-tag example --out /tmp/t   # to files instead of the screen
+    python -m memstara.trace.board --last 10                  # the 10 most recent runs
+    python -m memstara.trace.board --run-id 04f6812d-...      # just one
+    python -m memstara.trace.board --run-tag example --summary  # headers only, bodies omitted
 
 Read-only. Nothing is modified, neither the board nor core's database.
 """

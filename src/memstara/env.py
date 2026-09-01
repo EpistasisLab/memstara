@@ -16,7 +16,7 @@ this project four times in one day.
 All four share one root: **the code that set up the environment lived separately at
 every entry point.** Separate copies always drift apart.
 
-So it is gathered here. `02_mvp_pipeline.py`, `03_board_pipeline.py`,
+So it is gathered here. `src/memstara/pipeline/mvp.py`, `src/memstara/pipeline/board.py`,
 `debug_harness.py` and `preflight.py` all call this file, and a new entry point
 needs a single line: `load_env()`.
 
@@ -47,7 +47,8 @@ from memstara.servers import SCANNED_MODULES, source_of
 # litellm reads it *while it is being imported* (`litellm/_logging.py:80`), so setting
 # it any later than that leaves every request body unlogged — silently, which is how
 # it first failed. The rule that came out of it was "every entry point must import
-# `bootstrap` before anything that pulls in motoro / litellm", and that rule caught us
+# this module before anything that pulls in motoro / litellm", and that rule caught
+# us
 # twice more.
 #
 # It now lives in `src/memstara/__init__.py`, which the import above cannot avoid
@@ -144,7 +145,7 @@ def allowlist_gaps() -> list[str]:
 
     # Names core forwards by default — they arrive even when the list omits them.
     #
-    # PYDEVD_* is set by debug_hook **inside its own process**, so it need not come
+    # PYDEVD_* is set by `mcp_servers/debug_hook.py` **inside its own process**, so it need not come
     # from the parent. PATH and friends are already on core's default list.
     always = {"AGENTIC_OKF_BUNDLE_DIR", "PATH", "HOME", "PYDEVD_DISABLE_FILE_VALIDATION"}
 
