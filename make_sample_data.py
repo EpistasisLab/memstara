@@ -6,16 +6,8 @@ what lets the pipeline be validated now. When real data arrives, point
 MEMSTARA_DATASET_PATH and AGENTIC_OKF_BUNDLE_DIR at it — the pipeline code does not
 change.
 
-↑ 진짜 데이터도, 진짜 OKF 번들도 아직 없다. 그래서 이 파일이 둘 다 지어낸다.
-  지금 당장 파이프라인을 돌려 볼 수 있게 하는 것이 목적이다. 나중에 진짜가
-  들어오면 환경변수 두 개를 그쪽으로 돌리기만 하면 되고, 파이프라인 코드는
-  그대로 둔다.
-
 Two properties of this data are deliberate, and the pipeline is worthless without
 them.
-
-↑ 이 데이터에는 의도적으로 넣은 성질이 둘 있다. 둘 중 하나라도 빠지면
-  파이프라인을 검증하는 의미가 사라진다.
 
 **Column names are opaque codes.** Everything is an NHANES-style identifier —
 LBXGH, BMXBMI, BPXSY1 — including the non-predictive columns. An earlier version
@@ -24,12 +16,6 @@ from the names alone and reduced the knowledge source to after-the-fact
 justification. Opaque codes mean the ONLY route from a column to its meaning runs
 through OKF.
 
-↑ **컬럼 이름이 암호다.** 전부 NHANES식 코드(LBXGH, BMXBMI, BPXSY1)로 되어 있고,
-  예측력이 없는 컬럼도 똑같이 코드다. 예전 판은 bmi / hba1c / noise_01처럼
-  이름을 그대로 써 두었는데, 그러자 에이전트가 **이름만 보고** 정답을 골랐다.
-  그러면 OKF는 고르고 나서 갖다 붙이는 변명거리로 전락한다. 이름을 암호로 두면
-  코드에서 의미로 가는 길이 OKF 하나뿐이 된다.
-
 **The knowledge source offers more candidates than a hypothesis can use.** Roughly
 18 of the dataset's columns are described by a concept, but only six carry signal.
 With the agent limited to 3-8 columns it has to choose, so different perspectives
@@ -37,57 +23,48 @@ select different subsets — which is the precondition for overlap across trials
 carry any information. If OKF pointed only at the six real ones, "take everything
 OKF mentions" would win trivially and every trial would return the same set.
 
-↑ **지식 원천이 쓸 수 있는 것보다 많은 후보를 준다.** 개념이 설명하는 컬럼은
-  18개쯤 되는데 그중 신호를 가진 것은 여섯 개뿐이다. 에이전트는 3~8개만 고를 수
-  있으므로 **반드시 추려야** 한다. 그래야 관점이 다른 시행이 서로 다른 조합을
-  고르고, 시행 간에 겹치는 부분(overlap)이 정보를 담게 된다. 만약 OKF가 진짜
-  여섯 개만 가리켰다면 "OKF가 말한 것 전부 넣기"가 자동으로 정답이 되고, 모든
-  시행이 같은 답을 내서 겹침을 세는 일 자체가 무의미해진다.
-
 A real signal is still planted: LBXGH / BMXBMI / RIDAGEYR / BPXSY1 genuinely predict
-the outcome. If those four rise to the top of an aggregate, the pipeline works.
-
-↑ 그러면서도 진짜 신호는 심어 두었다. LBXGH(당화혈색소) / BMXBMI(체질량지수) /
-  RIDAGEYR(나이) / BPXSY1(수축기혈압) 네 개는 결과변수를 실제로 예측한다.
-  각각을 혼자 놓고 재면 AUC가 0.73 / 0.66 / 0.63 / 0.60 이고, 잡음 컬럼은
-  0.51 — 동전 던지기와 같다. 여러 시행을 모은 집계에서 이 넷이 위로 올라오면
-  파이프라인이 제 일을 한 것이다. **채점표가 있는 시험지**인 셈이다.
+the outcome. Measured one at a time the univariate AUC is 0.73 / 0.66 / 0.63 / 0.60,
+against 0.51 for a noise column — a coin toss. If those four rise to the top of an
+aggregate, the pipeline works. It is **an exam paper that comes with its answer key**.
 
 Usage::
 
     python sandbox/make_sample_data.py
     python sandbox/make_sample_data.py --rows 1700 --seed 42
 
-==============================================================================
- 이 파일을 읽는 법
-==============================================================================
+This file makes **one sheet of fake clinical data (dataset.csv)** and **one fake
+bundle of knowledge (an OKF bundle, 31 .md files)** in a single go and puts them under
+outputs/. Real data and a real knowledge bundle do not exist yet, so validating the
+pipeline now means inventing both. When the real ones arrive, only the two environment
+variables (MEMSTARA_DATASET_PATH, AGENTIC_OKF_BUNDLE_DIR) are pointed at them; the
+pipeline code is not touched.
 
- 이 파일은 **가짜 임상 데이터 한 장(dataset.csv)** 과 **가짜 지식 묶음(OKF 번들,
- .md 31장)** 을 한 번에 만들어 outputs/ 아래에 놓는다. 진짜 데이터와 진짜 지식
- 묶음이 아직 없어서, 파이프라인을 지금 검증하려면 둘 다 지어내야 하기 때문이다.
- 진짜가 도착하면 환경변수 두 개(MEMSTARA_DATASET_PATH, AGENTIC_OKF_BUNDLE_DIR)만
- 그쪽으로 돌리면 되고, 파이프라인 코드는 손대지 않는다.
+There are three functions.
 
- 주요 함수
-   build_dataset(n_rows, seed)  — 표(데이터프레임) 한 장을 만든다. 컬럼을 먼저
-                                  뽑고, 그중 여섯 개를 조합해 결과변수 Y를 만든다.
-   write_okf_bundle(okf_dir, stamp) — 개념 31개를 마크다운 파일 31장으로 쓴다.
-                                  여기에 index.md·log.md가 더해진다.
-   main()                       — 인자를 읽고, 위 둘을 부르고, 요약을 출력한다.
+    build_dataset(n_rows, seed)       makes one table (a dataframe). It draws the
+                                      columns first, then combines six of them into
+                                      the outcome variable Y
+    write_okf_bundle(okf_dir, stamp)  writes the 31 concepts as 31 markdown files,
+                                      with index.md and log.md added on top
+    main()                            reads the arguments, calls the two above, and
+                                      prints a summary
 
- 놓치기 쉬운 핵심
-   1. **정답을 일부러 심어 두었다.** hba1c(LBXGH)·bmi(BMXBMI)·나이(RIDAGEYR)·
-      수축기혈압(BPXSY1) 네 개는 Y를 실제로 예측한다. 혼자만 놓고 재도
-      단변량 AUC가 각각 0.73 / 0.66 / 0.63 / 0.60 이고, 잡음 컬럼은 0.51 —
-      즉 동전 던지기다. 정답이 정해져 있으니 "파이프라인이 옳은 답을 찾았는가"를
-      점수로 매길 수 있다. 이것이 이 파일의 존재 이유다.
-   2. **컬럼 이름을 일부러 암호로 두었다.** LBXGH 같은 코드만 보고는 그것이
-      당화혈색소인지 알 수 없다. 의미로 가는 길이 OKF 하나뿐이어야, 에이전트가
-      OKF를 실제로 읽었는지 아닌지가 결과에 드러난다. (다만 shared의 실제 코호트는
-      컬럼 이름이 사람이 읽을 수 있게 되어 있다. 이 암호화는 합성 데이터에서만
-      쓴 장치이지, 실제 데이터의 성질이 아니다.)
-   3. **이 번들은 평평하다.** 도메인별 하위 폴더 없이 루트에 .md 31장이 그대로
-      놓인다. 계층 구조가 있는 번들은 아직 시험하지 않았다.
+Easy to miss:
+
+  1. **The answer is planted on purpose.** hba1c (LBXGH) · bmi (BMXBMI) · age
+     (RIDAGEYR) · systolic pressure (BPXSY1) genuinely predict Y. Measured on their
+     own the univariate AUC is 0.73 / 0.66 / 0.63 / 0.60, against 0.51 for a noise
+     column — a coin toss. Because the answer is fixed, "did the pipeline find the
+     right one" can be scored. That is why this file exists.
+  2. **Column names were made opaque on purpose.** From a code like LBXGH alone
+     there is no telling that it is glycated haemoglobin. Only if the one route to
+     meaning is OKF does whether the agent actually read OKF show up in the result.
+     (reviewer's real cohort, though, has column names a person can read. This
+     encoding is a device used in the synthetic data only, not a property of the
+     real data.)
+  3. **This bundle is flat.** No per-domain subfolders — the 31 .md files sit at the
+     root as they are. A bundle with a hierarchy has not been tried yet.
 """
 
 from __future__ import annotations

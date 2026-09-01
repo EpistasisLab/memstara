@@ -14,48 +14,50 @@ Usage::
     set -a && . ./.env && set +a          # in the core repo
     python test_blackboard.py
 
+A check script that confirms the **board table** (blackboard) behaves. The board is a
+database table where the work to be done is written down, and several agents take one
+piece each from it. This file actually runs that taking and sees whether it is safe.
 
-==============================================================================
- 이 파일을 읽는 법
-==============================================================================
+There are three functions.
 
- **판 테이블**(blackboard)이 제대로 동작하는지 확인하는 검사 스크립트다. 판이란
- 할 일을 적어 두는 데이터베이스 표이고, 여러 에이전트가 여기서 일을 하나씩
- 집어 간다. 이 파일은 그 집어 가기가 안전한지를 실제로 돌려 본다.
+    cleanup()               deletes rows carrying the test marker (run_tag). Called
+                            twice, before and after
+    ok(passed, label, ...)  prints one line for one check and returns its verdict
+    main()                  the body of the check. It flows in the order below
 
- 함수는 셋이다.
+What main() confirms, in order:
 
-   cleanup()               검사용 표시(run_tag)가 붙은 줄을 지운다. 앞뒤로 두 번 부른다
-   ok(passed, label, ...)  한 항목의 통과 여부를 한 줄로 찍고 그 결과를 돌려준다
-   main()                  검사 본체. 아래 순서대로 흐른다
+  (0) file questions into the question bank — one with no tag is refused, and the same
+      one is filed only once. **A reword is blocked too** — while a neighbouring
+      question on a different branch is let through
+  (1) make 8 pieces of waiting work (carrying the question id filed in (0))
+  (2) **THE GATE** — when 12 rush to claim at once, do any overlap
+  (3) does a claimed piece carry what the previous stage left on it (outcome
+      column · columns)
+  (4) does claim → submit → hand on to the next stage keep flowing
+  (5) is submitting without claiming blocked
+  (6) does a finished piece pile up in the results table, and is what remains counted
+      exactly
+  (7) is the score fed back into the question bank, and does the bank survive the
+      board being cleared
+  (8) does a question used three times retire and drop out of the open list — while
+      the record and the reword block stay
 
- main() 이 확인하는 것, 순서대로:
+Easy to miss:
 
-   ⓪ 질문 은행에 질문을 담는다 — 태그 없는 것은 거절되고, 같은 것은 한 번만 담긴다.
-     **말만 바꾼 것도 막힌다** — 옆 질문과 다른 갈래는 그대로 통과시키면서
-   ① 대기 중인 일 8개를 만든다 (⓪ 에서 담은 질문 번호를 달고)
-   ② **관문** — 12명이 동시에 집으러 달려들었을 때 겹치지 않는가
-   ③ 집어 간 일에 앞 단계가 남긴 것(결과변수·컬럼)이 실려 있는가
-   ④ 집기 → 써넣기 → 다음 단계로 넘어가기가 이어지는가
-   ⑤ 안 집고 써넣으려 하면 막히는가
-   ⑥ 다 끝난 것이 결과 표에 쌓이는가, 남은 개수를 정확히 세는가
-   ⑦ 성적이 질문 은행으로 되먹여지는가, 판을 치워도 은행이 남는가
-   ⑧ 세 번 쓴 질문이 은퇴해 열린 목록에서 빠지는가 — 기록과 재탕 차단은 남긴 채
-
- 놓치기 쉬운 것:
-
-   · **②가 이 파일의 존재 이유다.** 집어 가기가 원자적이지 않으면 데이터 담당
-     에이전트 둘이 언젠가 같은 줄을 잡고, 그 뒤에 나오는 이상한 결과는 전부
-     설명이 둘이 된다 — 경합 때문인가, 프롬프트 때문인가. 여기서 매듭지어 두면
-     나중의 실패에 설명 하나가 줄어든다.
-   · 도구를 MCP 서버 너머가 아니라 **그냥 파이썬 함수로** 부른다. 묻는 것은
-     데이터베이스 문장이 동시성 아래서 안전한가이지 서버 왕복이 아니라서,
-     서버를 끼우면 잡음만 는다.
-   · 이 검사는 **진짜 데이터베이스에 쓴다.** 그래서 시작과 끝에서 cleanup() 이 제 것만
-     골라 지운다.
-   · **질문 은행(memstara_questions)은 판과 달리 실행을 넘어 쌓인다.** 그래서 cleanup()
-     은 이 표에서도 run_tag 가 아니라 origin_run 이 제 것인 줄만 골라 지운다. 통째로
-     지우면 다른 실행이 쌓아 둔 질문까지 없어진다.
+  · **(2) is the reason this file exists.** If claiming is not atomic, two data agents
+    eventually hold the same row, and every strange result after that has two
+    explanations — was it the race, or the prompt? Settling it here means later
+    failures have one fewer explanation.
+  · The tools are called **as plain Python functions**, not across an MCP server. The
+    question is whether the database statement is safe under concurrency, not whether
+    the server round trip works, so putting a server in the way only adds noise.
+  · This check **writes to the real database.** That is why cleanup() picks out only
+    its own rows at the start and at the end.
+  · **The question bank (memstara_questions), unlike the board, accumulates across
+    runs.** So in that table too, cleanup() picks out only the rows whose origin_run —
+    not run_tag — is its own. Clearing it wholesale would take with it the questions
+    other runs have piled up.
 """
 
 from __future__ import annotations
@@ -65,23 +67,25 @@ import json
 import sys
 from collections import Counter
 
-import tools_blackboard as bb   # 판을 다루는 도구들 — 서버 없이 직접 부른다
+import tools_blackboard as bb   # the board's tools — called directly, without a server
 
-# 이 검사가 만든 줄에만 붙이는 표시. 같은 표에 들어 있는 진짜 실행 기록을
-# 건드리지 않고 이 검사 것만 골라 지울 수 있게 해 준다.
+# The marker put only on rows this check made. It is what lets us pick out this
+# check's rows and delete them without touching the real run records that live in
+# the same table.
 RUN_TAG = "test_atomicity"
 
 
 async def cleanup() -> None:
-    """이 검사가 만든 줄만 지운다. 시작할 때와 끝날 때 각각 한 번씩 부른다.
+    """Delete only the rows this check made. Called once at the start and once at the end.
 
-    시작할 때도 지우는 이유: 앞선 검사가 중간에 죽었으면 찌꺼기가 남아 있고,
-    그러면 "대기 8개" 를 세는 항목이 8이 아닌 수를 보게 된다. 검사는 언제 돌려도
-    같은 자리에서 출발해야 한다.
+    Why it also deletes at the start: if an earlier check died partway there is debris
+    left behind, and then the item counting "8 waiting" would see a number that is not
+    8. A check has to start from the same place whenever it is run.
 
-    질문 은행만 조건이 다르다. 그 표에는 run_tag 가 없다 — 실행을 넘어 쌓이는
-    전역 표라서 일부러 안 두었다. 그래서 "누가 냈나"(origin_run) 로 골라 지운다.
-    통째로 지우면 다른 실행이 쌓아 둔 질문까지 같이 없어진다.
+    Only the question bank has a different condition. That table has no run_tag — it is
+    a global table that accumulates across runs, and that was left out on purpose. So
+    rows are picked out by "who filed it" (origin_run). Clearing it wholesale would
+    take the questions other runs piled up along with it.
     """
     import asyncpg
 
@@ -95,10 +99,10 @@ async def cleanup() -> None:
 
 
 async def cleanup_tag(run_tag: str) -> None:
-    """`cleanup()` 과 같은 일을 아무 태그에나 한다.
+    """Do what `cleanup()` does, but for any tag.
 
-    실행끼리 서로의 일을 안 집는지 보려면 태그가 **둘** 있어야 한다. 두 번째 태그는
-    RUN_TAG 가 아니므로 위 cleanup() 이 안 지운다.
+    Seeing whether runs avoid claiming each other's work needs **two** tags. The second
+    tag is not RUN_TAG, so the cleanup() above does not delete it.
     """
     import asyncpg
 
@@ -111,209 +115,219 @@ async def cleanup_tag(run_tag: str) -> None:
 
 
 def ok(passed: bool, label: str, detail: str = "") -> bool:
-    """한 항목의 결과를 한 줄로 찍고, 그 통과 여부를 그대로 돌려준다.
+    """Print one line for one check and return its verdict unchanged.
 
-    돌려주는 값을 main() 이 목록에 쌓아 두었다가 마지막에 "몇 개 중 몇 개 통과"
-    를 낸다. 찍기와 세기를 한 함수로 묶어 둔 것이라, 찍었는데 세는 것을 잊는 일이
-    생기지 않는다.
+    main() piles the returned values into a list and produces "how many of how many
+    passed" at the end. Printing and counting are bound into one function so that
+    printing something and forgetting to count it cannot happen.
     """
     print(f"  {'OK  ' if passed else 'FAIL'} {label}" + (f"  — {detail}" if detail else ""))
     return passed
 
 
 async def main() -> int:
-    """검사 본체. 위 「이 파일을 읽는 법」의 ①~⑥ 이 여기 순서대로 있다."""
-    results: list[bool] = []   # 항목별 통과 여부를 쌓아 둔다
-    await cleanup()            # 앞선 검사의 찌꺼기를 먼저 치운다
-    await cleanup_tag(f"{RUN_TAG}_other")   # ⑦ 이 쓰는 두 번째 태그도 같이
+    """The body of the check. Steps (0)-(8) from the header above are here, in order."""
+    results: list[bool] = []   # each item's verdict, piled up
+    await cleanup()            # clear an earlier check's debris first
+    await cleanup_tag(f"{RUN_TAG}_other")   # and the second tag that (7) uses
 
-    # ---- 질문 은행에 먼저 담는다 ---------------------------------------
+    # ---- file into the question bank first ------------------------------
     #
-    # 판보다 이것이 앞이다. 시행이 생기려면 먼저 물어볼 것이 있어야 하기 때문이다.
-    # 지금까지는 물어볼 것이 코드에 20개 박혀 있었고(`pipeline_core.PERSPECTIVES`),
-    # 그래서 "왜 이 시행이 존재했는가" 를 나중에 되물을 곳이 없었다.
+    # This comes before the board. For a trial to exist there first has to be something
+    # to ask. Until now the thing to ask was 20 items hard-coded into the source
+    # (`pipeline_core.PERSPECTIVES`), so there was nowhere to go back and ask "why did
+    # this trial exist".
     QTEXT = f"from a psychiatric-comorbidity perspective ({RUN_TAG})"
     QTAGS = ["psychiatric", "sud"]
-    # 한 번에 둘을 낸다 — 태그가 있는 것과 없는 것. 없는 쪽이 거절되어야 한다.
+    # Two are filed at once — one with a tag and one without. The one without has to be
+    # refused.
     #
-    # 이것이 형식 검사가 아닌 이유: 코퍼스가 답할 수 없는 질문을 받아도 가설 담당은
-    # 답을 낸다. 근거를 못 찾았다는 결말이 그 단계에 없기 때문이다. 그래서 근거를
-    # 지어낸다. 태그를 여기서 강제하는 것이 그것을 **불가능하게** 만드는 자리다.
+    # Why this is not a formality check: given a question the corpus cannot answer, the
+    # hypothesis agent produces an answer anyway. That stage has no ending that means
+    # "found no evidence". So it invents the evidence. Forcing a tag here is the place
+    # that makes that **impossible**.
     p1 = json.loads(await bb.propose_questions(json.dumps([
-        {"text": QTEXT, "okf_tags": QTAGS, "rationale": "코퍼스 333편이 이 갈래에 몰려 있다"},
-        {"text": f"태그 없이 낸 질문 ({RUN_TAG})", "okf_tags": [], "rationale": ""},
+        {"text": QTEXT, "okf_tags": QTAGS,
+         "rationale": "the corpus's 333 documents cluster on this branch"},
+        {"text": f"a question filed with no tag ({RUN_TAG})", "okf_tags": [], "rationale": ""},
     ], ensure_ascii=False), origin_run=RUN_TAG, origin_wave=0))
     results.append(ok(len(p1.get("added", [])) == 1 and len(p1.get("rejected", [])) == 1,
-                      "태그 있는 질문만 은행에 담긴다 (근거 없는 질문은 거절)",
-                      f"담김 {len(p1.get('added', []))} · 거절 {len(p1.get('rejected', []))}"))
+                      "only a tagged question reaches the bank (an unevidenced one is refused)",
+                      f"added {len(p1.get('added', []))} · refused {len(p1.get('rejected', []))}"))
     QID = p1["added"][0]["question_id"]
 
-    # 같은 질문을 대소문자와 앞뒤 공백만 바꿔 다시 낸다. 사람이 보기에 같은 질문은
-    # 은행에도 같은 질문이어야 한다 — 안 그러면 다음 실행이 이미 물어본 것을
-    # 못 알아보고 계속 다시 묻는다. 그것은 진전처럼 보이지만 진전이 아니다.
+    # File the same question again with only its case and its surrounding whitespace
+    # changed. A question that looks the same to a person has to be the same question to
+    # the bank too — otherwise the next run cannot recognise what has already been asked
+    # and goes on asking it. That looks like progress and is not.
     p2 = json.loads(await bb.propose_questions(json.dumps([
         {"text": "  " + QTEXT.upper() + "  ", "okf_tags": QTAGS},
     ], ensure_ascii=False), origin_run=RUN_TAG, origin_wave=1))
     results.append(ok(not p2.get("added") and len(p2.get("duplicates", [])) == 1,
-                      "이미 물어본 질문은 다시 담기지 않는다 (대소문자·공백 무시)",
-                      f"담김 {len(p2.get('added', []))} · 중복 {len(p2.get('duplicates', []))}"))
+                      "a question already asked is not filed again (case and space ignored)",
+                      f"added {len(p2.get('added', []))} · duplicate {len(p2.get('duplicates', []))}"))
 
-    # ---- ⭐ 관문: 말만 바꾼 질문을 알아보는가 ---------------------------
+    # ---- ⭐ THE GATE: is a reworded question recognised ------------------
     #
-    # 위의 검사는 **글자가 같은 것**만 잡는다. 그런데 질문 담당이 겹침을 만드는
-    # 실제 방식은 같은 문장을 두 번 내는 게 아니라 **같은 것을 다르게 적는 것**이다.
-    # 그러면 시행 비용은 그대로 나가고 얻는 것은 없다.
+    # The check above catches **identical characters** only. But the way the curator
+    # actually creates an overlap is not filing the same sentence twice — it is
+    # **writing the same thing differently**. The trial then costs what it costs and
+    # returns nothing.
     #
-    # 셋을 한 번에 던진다. 각각이 지켜야 할 것이 다르다:
-    #   ① 말만 바꾼 것         → 막힌다. 어느 질문의 재탕인지(duplicate_of)까지 알려 준다
-    #   ② 태그는 같고 내용이 다른 것 → 담긴다. 옆 질문까지 막으면 은행이 한 갈래에서 멈춘다
-    #   ③ 문장은 비슷하고 태그가 다른 것 → 담긴다. 갈래가 다르면 다른 질문이다
+    # Three are thrown at once. Each has to hold a different line:
+    #   (1) a reword                     → blocked. It even says which question it
+    #                                      repeats (duplicate_of)
+    #   (2) same tags, different content  → filed. Block the neighbour too and the bank
+    #                                      stalls on one branch
+    #   (3) similar sentence, different tags → filed. A different branch is a different
+    #                                      question
     p3 = json.loads(await bb.propose_questions(json.dumps([
         {"text": f"from a comorbid psychiatric illness perspective ({RUN_TAG})",
-         "okf_tags": QTAGS, "rationale": "말만 바꾼 것"},
+         "okf_tags": QTAGS, "rationale": "a reword"},
         {"text": f"from a substance-use-disorder perspective ({RUN_TAG})",
-         "okf_tags": QTAGS, "rationale": "같은 갈래의 다른 질문"},
+         "okf_tags": QTAGS, "rationale": "a different question on the same branch"},
         {"text": f"from a psychiatric comorbidity perspective ({RUN_TAG})",
-         "okf_tags": ["metapath"], "rationale": "문장은 비슷하나 갈래가 다르다"},
+         "okf_tags": ["metapath"], "rationale": "similar sentence, different branch"},
     ], ensure_ascii=False), origin_run=RUN_TAG, origin_wave=1))
     reword = (p3.get("skipped") or [{}])[0]
     results.append(ok(len(p3.get("skipped", [])) == 1
                       and reword.get("duplicate_of") == QID
                       and len(p3.get("added", [])) == 2,
-                      "말만 바꾼 질문은 막고, 옆 질문과 다른 갈래는 통과시킨다",
-                      f"막힘 {len(p3.get('skipped', []))} (#{reword.get('duplicate_of')} "
-                      f"유사도 {reword.get('similarity')}) · 담김 {len(p3.get('added', []))}"))
+                      "a reworded question is blocked, a neighbour and another branch get through",
+                      f"blocked {len(p3.get('skipped', []))} (#{reword.get('duplicate_of')} "
+                      f"similarity {reword.get('similarity')}) · added {len(p3.get('added', []))}"))
 
-    # 낸 것이 그대로 돌아오는가. 태그와 근거가 왕복하지 못하면 질문 담당은 다음
-    # 파도에서 "무엇을 근거로 물었는지" 를 못 보고, 되먹임이 거기서 끊긴다.
+    # Does what was filed come back unchanged. If the tags and the rationale do not make
+    # the round trip, the curator cannot see "on what evidence was this asked" in the
+    # next wave, and the feedback loop breaks right there.
     bank = json.loads(await bb.read_questions(limit=200)).get("questions", [])
     mine = next((q for q in bank if q.get("question_id") == QID), None)
     results.append(ok(mine is not None
                       and mine.get("okf_tags") == QTAGS
-                      and mine.get("rationale", "").startswith("코퍼스")
+                      and mine.get("rationale", "").startswith("the corpus")
                       and mine.get("times_used") == 0,
-                      "질문 은행이 태그와 근거를 그대로 돌려준다",
-                      f"태그 {(mine or {}).get('okf_tags')} · 쓰인 횟수 {(mine or {}).get('times_used')}"))
+                      "the question bank returns the tags and the rationale unchanged",
+                      f"tags {(mine or {}).get('okf_tags')} · times used {(mine or {}).get('times_used')}"))
 
-    # ---- 판을 채운다 -------------------------------------------------
+    # ---- fill the board ----------------------------------------------
     #
-    # 관점과 가설은 내용이 중요하지 않아 번호만 붙인다. 확인하려는 것은 판의
-    # 동작이지 가설의 품질이 아니다. 컬럼과 결과변수는 실제 이름을 쓴다 — 뒤에서
-    # 그것이 그대로 실려 돌아오는지 확인하기 때문이다.
+    # The perspective and the hypothesis do not matter in content, so they are just
+    # numbered. What is being confirmed is the board's behaviour, not the quality of a
+    # hypothesis. The columns and the outcome column use real names — because further
+    # down we confirm that those come back carried unchanged.
     N = 8
     # One of these two carries a comma INSIDE the name — 158 of the cohort's 1,393
     # columns do. It is here so the board's round trip is checked against the case
     # that used to break it, not only against names a split would survive.
     COLUMNS = ["CURRENT_AGE", "LAB__HDL CHOLESTEROL, DIRECT"]
-    # 왜 이 컬럼을 골랐는지의 근거. 이것이 끝까지 살아남는지가 아래 두 항목이다.
+    # The evidence for why these columns were chosen. Whether it survives to the end is
+    # what the two items below ask.
     OKF_IDS = ["anchors/hiv", "mechanisms/comorbidity/mp010-comorbidity-psychiatric"]
     for i in range(N):
-        r = json.loads(await bb.create_task(RUN_TAG, i, f"관점 {i}", f"가설 {i}",
+        r = json.loads(await bb.create_task(RUN_TAG, i, f"perspective {i}", f"hypothesis {i}",
                                             COLUMNS, "HIV_DETECTABLE",
                                             okf_concept_ids=OKF_IDS,
                                             question_id=QID))
         assert "task_id" in r, r
-    results.append(ok(True, f"대기 중인 일 {N}개를 만들었다"))
+    results.append(ok(True, f"made {N} pieces of waiting work"))
 
-    # ---- ⭐ 관문: 동시에 집어도 겹치지 않는가 --------------------------
+    # ---- ⭐ THE GATE: claiming at once, do any overlap ------------------
     #
     # More claimers than tasks on purpose: the surplus must come back empty rather
-    # than duplicate somebody else's row.
+    # than duplicate somebody else's row. 12 claimers for 8 pieces; the 4 left over have
+    # to come back empty-handed rather than take one more of somebody else's row. Throw
+    # exactly as many as there are and an overlap could hide in the arithmetic.
     #
-    # ↑ 일보다 집는 쪽을 **일부러 더 많이** 던진다(8개에 12명). 남는 4명은 빈 손으로
-    #   돌아와야지, 남의 줄을 하나 더 집어서는 안 된다. 딱 맞게 던지면 겹침이
-    #   있어도 숫자상 들키지 않을 수 있다.
+    # asyncio.gather launches the 12 claims **at the same time**. Calling them one after
+    # another means the race never happens and this check confirms nothing.
     #
-    #   asyncio.gather 는 12번의 집기를 **동시에** 띄운다. 하나씩 차례로 부르면
-    #   경합 자체가 일어나지 않아 이 검사는 아무것도 확인하지 못한다.
-    #
-    #   RUN_TAG 를 실어 보내는 것이 중요하다. 안 그러면 판 **전체**에서 가장 오래된
-    #   대기 행을 집는데, 다른 실행이 중단되며 남긴 과제가 있으면 그게 먼저 걸린다.
-    #   실제로 그런 일이 있었다: 이 줄에 태그가 없던 동안 아래 학습 단계 검사가
-    #   `dry-stop` 실행이 남긴 과제를 집어, 검사용 가짜 숫자를 그 실행의 결과표에 적었다.
+    # Sending RUN_TAG along matters. Without it, the claim takes the oldest waiting row
+    # on the **whole board**, and if another run was interrupted and left a task behind,
+    # that one gets caught first. That really happened: while this line had no tag, the
+    # ml-stage check below claimed a task left by a `dry-stop` run and wrote the check's
+    # fake numbers into that run's results table.
     claims = await asyncio.gather(
         *[bb.claim_task("data", RUN_TAG) for _ in range(N + 4)])
     got = [json.loads(c) for c in claims]
-    ids = [g["task_id"] for g in got if g.get("task_id") is not None]   # 집힌 것
-    empty = [g for g in got if g.get("task_id") is None]                # 빈 손
-    dupes = [i for i, n in Counter(ids).items() if n > 1]               # 둘이 집은 것
+    ids = [g["task_id"] for g in got if g.get("task_id") is not None]   # claimed
+    empty = [g for g in got if g.get("task_id") is None]                # empty-handed
+    dupes = [i for i, n in Counter(ids).items() if n > 1]               # claimed by two
 
-    results.append(ok(not dupes, "동시 claim 에서 같은 일을 둘이 집지 않았다",
-                      f"{len(ids)}개 집힘, 중복 {len(dupes)}"))
-    results.append(ok(len(ids) == N, f"대기 {N}개가 모두 정확히 한 번씩 집혔다", f"{len(ids)}/{N}"))
-    results.append(ok(len(empty) == 4, "대기보다 많이 던진 4개는 빈 손으로 돌아왔다",
-                      f"{len(empty)}개가 task_id=null"))
+    results.append(ok(not dupes, "no two claimed the same piece in a concurrent claim",
+                      f"{len(ids)} claimed, {len(dupes)} duplicated"))
+    results.append(ok(len(ids) == N, f"all {N} waiting were claimed exactly once each", f"{len(ids)}/{N}"))
+    results.append(ok(len(empty) == 4, "the 4 thrown beyond the waiting count came back empty",
+                      f"{len(empty)} with task_id=null"))
 
-    # ---- 집힌 일에는 앞 단계가 남긴 것이 실려 있는가 --------------------
-    first = next(g for g in got if g.get("task_id") is not None)   # 집힌 것 중 아무거나 하나
+    # ---- does a claimed piece carry what the previous stage left --------
+    first = next(g for g in got if g.get("task_id") is not None)   # any one of the claimed
     # The outcome column has to come back with the task, or a stage would have to be
     # told it separately and the board would not be the source of truth it claims to be.
-    #
-    # ↑ 결과변수는 일과 **함께** 딸려 와야 한다. 안 그러면 각 단계에 그것을 따로
-    #   알려 줘야 하고, 그 순간 판은 "여기만 보면 된다" 는 유일한 근거이기를
-    #   그만둔다. 근거가 둘이 되면 언젠가 둘이 어긋난다.
+    # The moment there are two sources of truth, one day the two disagree.
     results.append(ok(first.get("y_column") == "HIV_DETECTABLE",
-                      "집어간 일에 결과변수가 실려 있다", str(first.get("y_column"))))
+                      "a claimed piece carries the outcome column", str(first.get("y_column"))))
     results.append(ok(first.get("columns") == COLUMNS,
-                      "집어간 일에 가설이 고른 컬럼이 실려 있다 (이름 속 쉼표 포함)",
+                      "a claimed piece carries the columns the hypothesis chose (comma inside a name included)",
                       str(first.get("columns"))))
 
-    # ---- 판을 읽으면 근거가 보이는가 -----------------------------------
+    # ---- does reading the board show the evidence ----------------------
     #
-    # `read_board` 의 SELECT 가 `okf_concept_ids` 를 빠뜨린 적이 있다. 넣기는
-    # 제대로 넣고 있었으므로 표에는 있었고, 창구로만 안 보였다 — 그래서 판을
-    # 아무리 들여다봐도 "왜 이 컬럼인가" 를 알 수 없었다. 여기서 확인하는 것은
-    # **넣은 것이 그대로 돌아오는가**이다.
+    # `read_board`'s SELECT once left out `okf_concept_ids`. It was being written
+    # correctly, so it was there in the table and invisible only through the window —
+    # which meant that however hard you stared at the board you could not tell "why
+    # these columns". What is confirmed here is **that what went in comes back out**.
     board_now = json.loads(await bb.read_board(RUN_TAG))["tasks"][0]
     results.append(ok(board_now.get("okf_concept_ids") == OKF_IDS,
-                      "판을 읽으면 근거 문서가 보인다", str(board_now.get("okf_concept_ids"))))
+                      "reading the board shows the evidence documents", str(board_now.get("okf_concept_ids"))))
 
-    # ---- 흐름: 집기 → 써넣기 → 다음 타입으로 --------------------------
+    # ---- the flow: claim → submit → on to the next type -----------------
     #
-    # 데이터 단계가 결과를 써넣으면, 그 줄은 저절로 "학습 차례" 로 바뀌고 다시
-    # 대기 상태가 되어야 한다. 다음 단계에게 따로 알릴 사람이 없기 때문이다 —
-    # 판이 스스로 넘겨야 흐름이 이어진다.
+    # When the data stage submits its result, that row has to turn into "the ml stage's
+    # turn" by itself and go back to waiting. There is nobody to tell the next stage
+    # separately — the board has to hand it on itself for the flow to continue.
     tid = first["task_id"]
 
-    # 매처가 무엇을 보고 무엇을 골랐는지. 구동 프로그램이 추적에서 뽑아 붙이는
-    # 자리라, 여기서는 그것을 손으로 흉내 낸다. **완료되기 전에** 붙여야 한다 —
-    # 완료되는 순간 결과표로 복사되기 때문이다.
+    # What the matcher looked at and what it chose. This is the slot the driver fills
+    # from the trace, so here it is imitated by hand. It has to be attached **before the
+    # task completes** — the moment it completes it is copied into the results table.
     TRACE = [{"tool": "match_concepts",
               "arguments": {"concepts": ["age"]},
               "result": {"results": [{"concept": "age", "candidates": [
                   {"feature_name": "CURRENT_AGE", "similarity_score": 0.93},
                   {"feature_name": "LAB__AGE_ADJ", "similarity_score": 0.91}]}]}}]
     at = json.loads(await bb.attach_match_trace(tid, json.dumps(TRACE)))
-    results.append(ok(at.get("calls") == 1, "매처 기록을 판에 붙인다", str(at.get("calls"))))
+    results.append(ok(at.get("calls") == 1, "the matcher record is attached to the board", str(at.get("calls"))))
 
     r = json.loads(await bb.submit_result(tid, subset_path="outputs/sub_x.csv",
                                           columns_used=COLUMNS))
     results.append(ok(r.get("task_type") == "ml" and r.get("status") == "ready",
-                      "데이터 단계가 써넣자 다음이 학습으로 넘어갔다", f"{r.get('status')} · {r.get('task_type')}"))
+                      "the data stage submitted and the next turn moved to ml", f"{r.get('status')} · {r.get('task_type')}"))
 
-    # 안 집고 써넣으려 하면 막히는가
+    # is submitting without claiming blocked
     #
-    # 방금 tid 는 이미 써넣기가 끝나 진행 중이 아니다. 여기에 또 써넣으려 하면
-    # 오류가 나야 한다. 이것이 막히지 않으면, 늦게 도착한 응답 하나가 이미 끝난
-    # 줄을 덮어써서 결과가 조용히 바뀔 수 있다.
+    # tid has just finished submitting, so it is not in progress. Trying to submit to it
+    # again has to raise an error. If this is not blocked, one late-arriving response can
+    # overwrite an already-finished row and the result changes silently.
     r2 = json.loads(await bb.submit_result(tid))
-    results.append(ok("error" in r2, "집지 않은 일에는 써넣을 수 없다", r2.get("error", "")[:48]))
+    results.append(ok("error" in r2, "a piece that was not claimed cannot be submitted to", r2.get("error", "")[:48]))
 
-    # 학습 → 해석 → 완료
+    # ml → interpret → done
     #
-    # 남은 두 단계를 그대로 밟아 본다. 값(auc 0.71 등)은 아무 숫자여도 된다.
-    # 확인하는 것은 마지막 단계가 끝났을 때 상태가 "done" 이 되는가이다.
+    # Walk the remaining two stages as they are. The values (auc 0.71 and so on) can be
+    # any numbers. What is confirmed is whether the status becomes "done" when the last
+    # stage finishes.
     c = json.loads(await bb.claim_task("ml", RUN_TAG))
     await bb.submit_result(c["task_id"], auc=0.71, feature_importance='{"CURRENT_AGE": 0.4}')
     c = json.loads(await bb.claim_task("interpret", RUN_TAG))
-    r3 = json.loads(await bb.submit_result(c["task_id"], interpretation="지지됨"))
-    results.append(ok(r3.get("status") == "done", "해석까지 끝나면 완료가 된다", str(r3.get("status"))))
+    r3 = json.loads(await bb.submit_result(c["task_id"], interpretation="supported"))
+    results.append(ok(r3.get("status") == "done", "once interpretation finishes it becomes done", str(r3.get("status"))))
 
-    # ---- results 표에 쌓였는가 ---------------------------------------
+    # ---- did it pile up in the results table ---------------------------
     #
-    # 판(memstara_blackboard)은 진행 상황을 들고 있고, 끝난 것은 결과 표
-    # (memstara_results)로 넘어가야 한다. 여기서는 데이터베이스에 직접 물어본다 —
-    # 도구를 통해 확인하면 도구와 표가 함께 틀려 있어도 통과할 수 있다.
+    # The board (memstara_blackboard) holds the progress, and what has finished has to
+    # move to the results table (memstara_results). Here the database is asked directly —
+    # confirming it through the tool could pass while the tool and the table are wrong
+    # together.
     board = json.loads(await bb.read_board(RUN_TAG))
     import asyncpg
 
@@ -322,44 +336,46 @@ async def main() -> int:
         n_res = await conn.fetchval("SELECT count(*) FROM memstara_results WHERE run_tag=$1", RUN_TAG)
     finally:
         await conn.close()
-    results.append(ok(n_res == 1, "완료된 것이 results 표에 쌓였다", f"{n_res}행"))
+    results.append(ok(n_res == 1, "what finished piled up in the results table", f"{n_res} rows"))
 
-    # ---- 결과표로 근거까지 넘어갔는가 ----------------------------------
+    # ---- did the evidence make it across to the results table ----------
     #
-    # 오래 남는 표는 결과표다. 예전에는 여기로 아홉 칸만 넘어갔고, 그 아홉 칸은
-    # 전부 **결론** 이었다 — 가설 · 쓴 컬럼 · AUC · 해석. 왜 그 컬럼이었는지
-    # (okf_concept_ids · match_trace) 와 그것이 값을 했는지(feature_importance) 는
-    # 치워도 되는 표에 남아 있었다. 그래서 오래 남는 기록이 하필 **확인할 수 없는
-    # 부분**이었다.
+    # The table that lasts is the results table. It used to receive nine fields, and all
+    # nine were **conclusions** — hypothesis · columns used · AUC · interpretation. Why
+    # those columns (okf_concept_ids · match_trace) and whether they were worth anything
+    # (feature_importance) stayed on the table you are allowed to clear. So the record
+    # that lasted was precisely **the part you could not check**.
     res = json.loads(await bb.read_results(RUN_TAG, include_match_trace=True))["results"][0]
     carried = (res.get("okf_concept_ids") == OKF_IDS
                and len(res.get("match_trace") or []) == 1
                and (res.get("feature_importance") or {}).get("CURRENT_AGE") == 0.4
                and res.get("columns") == COLUMNS)
-    results.append(ok(carried, "결과표가 결론과 함께 근거도 들고 있다",
-                      f"근거 {len(res.get('okf_concept_ids') or [])}개 · "
-                      f"후보기록 {len(res.get('match_trace') or [])}건 · "
-                      f"기여도 {len(res.get('feature_importance') or {})}개"))
+    results.append(ok(carried, "the results table holds the evidence along with the conclusion",
+                      f"evidence {len(res.get('okf_concept_ids') or [])} · "
+                      f"candidate records {len(res.get('match_trace') or [])} · "
+                      f"importances {len(res.get('feature_importance') or {})}"))
 
-    # ---- 결과가 "무엇을 물었나" 까지 들고 갔는가 ------------------------
+    # ---- did the result carry "what was asked" too ---------------------
     #
-    # 결과표는 지금까지 **답만** 들고 있었다. 어떤 질문에 대한 답인지는 판의
-    # perspective 칸에만 있었고, 판은 치우면 사라진다. 그래서 실행이 끝나면 답은
-    # 남고 질문은 없어졌다 — 성적을 질문에 되먹일 방법이 그 순간 사라진다.
+    # The results table used to hold **the answer only**. Which question it answered was
+    # in the board's perspective field alone, and the board disappears when cleared. So
+    # when a run ended the answer stayed and the question was gone — and the way to feed
+    # the score back to the question disappears at that moment.
     results.append(ok(res.get("question_id") == QID,
-                      "결과표에 어떤 질문에서 나온 답인지가 남는다",
-                      f"question_id={res.get('question_id')} (기대 {QID})"))
+                      "the results table keeps which question the answer came from",
+                      f"question_id={res.get('question_id')} (expected {QID})"))
 
-    # ---- 성적을 질문 은행으로 되먹인다 ---------------------------------
+    # ---- feed the score back into the question bank --------------------
     #
-    # 이걸 부르는 것은 에이전트가 아니라 구동 프로그램이다. 파도가 끝났다는 사실을
-    # 아는 쪽이 거기뿐이기 때문이다. 이것이 없으면 은행은 "무엇을 물었나" 의 목록일
-    # 뿐, "물어서 무엇이 나왔나" 의 기록이 되지 못한다.
+    # What calls this is not an agent but the driving program. Only that side knows the
+    # fact that a wave has ended. Without it the bank is only a list of "what was asked",
+    # never a record of "what came of asking".
     fed = json.loads(await bb.record_question_outcomes(RUN_TAG))
     scored = next((q for q in json.loads(await bb.read_questions(limit=200))["questions"]
                    if q.get("question_id") == QID), {})
-    # 한 번 더 불러도 같은 자리에 있어야 한다. times_used 를 더하는 게 아니라 결과표에서
-    # 다시 세기 때문이다 — 재시도나 중복 호출이 횟수를 부풀리면 안 된다.
+    # Calling it once more has to leave it in the same place. times_used is not
+    # incremented but recounted from the results table — a retry or a duplicate call must
+    # not inflate the count.
     await bb.record_question_outcomes(RUN_TAG)
     again = next((q for q in json.loads(await bb.read_questions(limit=200))["questions"]
                   if q.get("question_id") == QID), {})
@@ -367,80 +383,86 @@ async def main() -> int:
                       and scored.get("times_used") == 1
                       and scored.get("best_auc") == 0.71
                       and again.get("times_used") == 1,
-                      "성적이 질문 은행으로 되먹여진다 (두 번 불러도 같다)",
-                      f"쓰인 횟수 {scored.get('times_used')} · 최고 AUC {scored.get('best_auc')}"))
+                      "the score is fed back into the question bank (same when called twice)",
+                      f"times used {scored.get('times_used')} · best AUC {scored.get('best_auc')}"))
 
-    # ---- 세기 --------------------------------------------------------
+    # ---- counting ------------------------------------------------------
     #
-    # 8개 중 1개만 끝까지 갔고, 나머지 7개는 아까 집힌 채 그대로 있다. 그래서
-    # 대기 0 · 진행 중 7(= N-1) 이 맞는 답이다. 이 숫자가 어긋나면 어딘가에서
-    # 상태가 두 번 바뀌었다는 뜻이다.
+    # Only 1 of the 8 went all the way, and the other 7 are still sitting claimed. So
+    # waiting 0 · in progress 7 (= N-1) is the right answer. If these numbers are off it
+    # means a status changed twice somewhere.
     #
-    # RUN_TAG 로 좁혀서 센다. count_waiting 은 안 주면 **판 전체**를 세는데, 그러면
-    # 다른 실행이 남긴 과제가 이 숫자에 섞인다 — 실제로 `dry-stop` 이 남긴 학습 과제
-    # 하나 때문에 진행중이 8로 나와 이 항목이 틀렸다. 세는 대상이 "이 검사가 만든 것"
-    # 이므로 좁히는 쪽이 맞다.
+    # Counted narrowed to RUN_TAG. Given nothing, count_waiting counts the **whole
+    # board**, and then tasks other runs left get mixed into this number — one ml task
+    # left by `dry-stop` really did make in-progress read 8 and this item fail. What is
+    # being counted is "what this check made", so narrowing is the right call.
     cnt = json.loads(await bb.count_waiting(run_tag=RUN_TAG))
     results.append(ok(cnt["ready"] == 0 and cnt["in_progress"] == N - 1,
-                      "남은 것을 정확히 센다", f"대기 {cnt['ready']} · 진행중 {cnt['in_progress']}"))
-    results.append(ok(board["count"] == N, "판 전체를 읽는다", f"{board['count']}개"))
+                      "what is left is counted exactly", f"waiting {cnt['ready']} · in progress {cnt['in_progress']}"))
+    results.append(ok(board["count"] == N, "the whole board is read", f"{board['count']}"))
 
-    # ---- ⭐ 관문: 판을 치워도 근거가 남는가 -----------------------------
+    # ---- ⭐ THE GATE: does the evidence survive clearing the board ------
     #
-    # 표를 둘로 나눈 이유가 이것이므로, 이 항목이 이 파일에서 가장 중요한 축에
-    # 든다. 판은 작업대라 언제든 치울 수 있고(`blackboard.py --drop`), 치우고 나면
-    # 남는 것은 결과표뿐이다. 근거가 판에만 있었다면 이 시점에 사라진다.
+    # This is the reason the tables were split in two, so this item is among the most
+    # important in this file. The board is a workbench and can be cleared at any time
+    # (`blackboard.py --drop`), and once cleared the only thing left is the results
+    # table. Had the evidence been on the board alone, it would vanish at this point.
     #
-    # 마지막에 두는 이유 — 여기서 판의 줄을 지우므로, 위의 개수 세기 항목들이
-    # 먼저 끝나 있어야 한다.
+    # Why it comes last — the board's rows are deleted here, so the counting items above
+    # have to have finished first.
     conn = await asyncpg.connect(bb._dsn())
     try:
         await conn.execute("DELETE FROM memstara_blackboard WHERE run_tag=$1", RUN_TAG)
     finally:
         await conn.close()
-    # 기본값으로 읽으면 후보 기록은 건수만 온다 — 보고 프롬프트가 부풀지 않도록.
+    # Read with the defaults and the candidate record comes back as a count only — so the
+    # reporting prompt does not swell.
     brief = json.loads(await bb.read_results(RUN_TAG))["results"][0]
-    # 달라고 하면 내용까지 온다. 관문이 증명할 것은 내용 쪽이다.
+    # Ask for it and the content comes too. What the gate has to prove is the content.
     after = json.loads(await bb.read_results(RUN_TAG, include_match_trace=True))["results"][0]
-    survived = (after.get("task_id") is None            # 연결은 끊기고
-                and after.get("okf_concept_ids") == OKF_IDS   # 내용은 남는다
+    survived = (after.get("task_id") is None            # the link is broken
+                and after.get("okf_concept_ids") == OKF_IDS   # the content stays
                 and "match_trace" not in brief and brief.get("match_trace_calls") == 1
                 and len(after.get("match_trace") or []) == 1
                 and (after.get("feature_importance") or {}).get("CURRENT_AGE") == 0.4)
-    results.append(ok(survived, "판을 치워도 결과표의 근거는 남는다",
+    results.append(ok(survived, "the results table's evidence survives clearing the board",
                       f"task_id={after.get('task_id')} · "
-                      f"근거 {len(after.get('okf_concept_ids') or [])}개 · "
-                      f"후보기록 {len(after.get('match_trace') or [])}건"))
+                      f"evidence {len(after.get('okf_concept_ids') or [])} · "
+                      f"candidate records {len(after.get('match_trace') or [])}"))
 
-    # ---- ⭐ 관문: 판을 치워도 질문 은행은 남는가 -------------------------
+    # ---- ⭐ THE GATE: does the question bank survive clearing the board -
     #
-    # 질문을 판의 perspective 칸에만 두지 않고 별도 표로 뺀 이유가 이것이다. 방금
-    # 판의 줄을 통째로 지웠는데, 그래도 은행의 질문과 결과표의 question_id 가 함께
-    # 살아 있어야 한다. 둘 중 하나라도 없어지면 다음 실행은 "이건 이미 물어봤고
-    # AUC 0.71 이 나왔다" 를 알 길이 없어, 같은 질문을 처음처럼 다시 묻는다.
+    # This is the reason the question was pulled out into its own table instead of being
+    # left in the board's perspective field. The board's rows were just deleted wholesale,
+    # and even so the bank's question and the results table's question_id have to be alive
+    # together. Lose either one and the next run has no way of knowing "this was already
+    # asked and it gave AUC 0.71", so it asks the same question as if for the first time.
     #
-    # 은행이 판을 향한 외래키를 갖고 있지 않은 것도 이 항목이 지키는 것이다.
-    # 외래키가 있었다면 오래 남을 표가 먼저 사라질 표를 가리키게 된다.
+    # That the bank holds no foreign key pointing at the board is also what this item
+    # protects. Had there been one, the table meant to last would point at the table meant
+    # to disappear first.
     bank_after = next((q for q in json.loads(await bb.read_questions(limit=200))["questions"]
                        if q.get("question_id") == QID), None)
     results.append(ok(bank_after is not None
                       and bank_after.get("times_used") == 1
                       and after.get("question_id") == QID,
-                      "판을 치워도 질문 은행과 그 연결은 남는다",
-                      f"은행 {'있음' if bank_after else '없음'} · "
-                      f"결과표 question_id={after.get('question_id')}"))
+                      "the question bank and its link survive clearing the board",
+                      f"bank {'present' if bank_after else 'absent'} · "
+                      f"results question_id={after.get('question_id')}"))
 
-    # ---- ⭐ 관문: 다 쓴 질문이 은퇴하는가 -------------------------------
+    # ---- ⭐ THE GATE: does a used-up question retire --------------------
     #
-    # `status` 칸과 그 두 값('open' | 'exhausted')은 은행을 만들 때부터 스키마에
-    # 있었는데, 2026-08-30 까지 **'exhausted' 를 쓰는 코드가 하나도 없었다.** 그래서
-    # 열린 목록은 늘기만 했고, 세 번 써 본 질문이 아직 아무도 안 물어본 질문과
-    # 똑같은 얼굴로 질문 담당 앞에 계속 돌아왔다.
+    # The `status` field and its two values ('open' | 'exhausted') were in the schema from
+    # the day the bank was built, and until 2026-08-30 **not one line of code ever wrote
+    # 'exhausted'.** So the open list only grew, and a question tried three times kept
+    # coming back in front of the curator wearing the same face as one nobody had asked
+    # yet.
     #
-    # 판은 위에서 통째로 지웠으므로 여기서 새로 두 개를 만들어 끝까지 밟는다.
-    # QID 는 결과가 하나 있으므로 이걸로 셋이 되고, 그 순간 은퇴해야 한다.
+    # The board was deleted wholesale above, so two new ones are made here and walked to
+    # the end. QID already has one result, so this makes three, and at that moment it has
+    # to retire.
     for i in range(N, N + 2):
-        await bb.create_task(RUN_TAG, i, f"관점 {i}", f"가설 {i}",
+        await bb.create_task(RUN_TAG, i, f"perspective {i}", f"hypothesis {i}",
                              COLUMNS, "HIV_DETECTABLE",
                              okf_concept_ids=OKF_IDS, question_id=QID)
         c = json.loads(await bb.claim_task("data", RUN_TAG))
@@ -449,7 +471,7 @@ async def main() -> int:
         c = json.loads(await bb.claim_task("ml", RUN_TAG))
         await bb.submit_result(c["task_id"], auc=0.5)
         c = json.loads(await bb.claim_task("interpret", RUN_TAG))
-        await bb.submit_result(c["task_id"], interpretation="지지 안 됨")
+        await bb.submit_result(c["task_id"], interpretation="not supported")
 
     fed2 = json.loads(await bb.record_question_outcomes(RUN_TAG))
     open_now = json.loads(await bb.read_questions(status="open", limit=500))["questions"]
@@ -459,99 +481,103 @@ async def main() -> int:
                       and not any(q.get("question_id") == QID for q in open_now)
                       and gone is not None
                       and gone.get("times_used") == 3
-                      # 은퇴는 삭제가 아니다. 최고 성적은 그대로 남아야 한다.
+                      # Retiring is not deleting. The best score has to stay as it was.
                       and gone.get("best_auc") == 0.71,
-                      "세 번 쓴 질문은 은퇴해 다음 파도의 목록에서 빠진다 (기록은 남는다)",
-                      f"은퇴 {fed2.get('questions_retired')}개 · "
-                      f"쓰인 횟수 {(gone or {}).get('times_used')} · "
-                      f"최고 AUC {(gone or {}).get('best_auc')}"))
+                      "a question used three times retires out of the next wave's list (the record stays)",
+                      f"retired {fed2.get('questions_retired')} · "
+                      f"times used {(gone or {}).get('times_used')} · "
+                      f"best AUC {(gone or {}).get('best_auc')}"))
 
-    # 은퇴시켰다고 그 질문의 재탕까지 통과시키면 안 된다. 다 써서 치운 질문을
-    # 말만 바꿔 다시 묻는 것은, 열린 질문을 재탕하는 것과 똑같이 낭비다.
+    # Having retired it must not let a reword of it through either. Asking a used-up,
+    # shelved question again in different words is exactly as wasteful as rewording an
+    # open one.
     p4 = json.loads(await bb.propose_questions(json.dumps([
         {"text": f"from a comorbid psychiatric illness perspective ({RUN_TAG})",
-         "okf_tags": QTAGS, "rationale": "은퇴한 질문의 재탕"},
+         "okf_tags": QTAGS, "rationale": "a reword of a retired question"},
     ], ensure_ascii=False), origin_run=RUN_TAG, origin_wave=2))
     results.append(ok(not p4.get("added") and len(p4.get("skipped", [])) == 1,
-                      "은퇴한 질문도 재탕을 막는다",
-                      f"담김 {len(p4.get('added', []))} · 막힘 {len(p4.get('skipped', []))}"))
+                      "a retired question blocks rewords too",
+                      f"added {len(p4.get('added', []))} · blocked {len(p4.get('skipped', []))}"))
 
-    # ---- ⑦ 실행끼리 서로의 일을 집지 않는가 ------------------------------
+    # ---- (7) do runs avoid claiming each other's work --------------------
     #
-    # `claim_task` 는 오랫동안 run_tag 를 안 봤다. 판 전체에서 `ORDER BY task_id` 로
-    # 가장 오래된 대기 행을 집었으므로, **죽은 실행이 남긴 과제가 다음 실행이 가장
-    # 먼저 집는 것**이었다. 그 실행의 돈으로 남의 일을 하고, 결과는 죽은 실행의
-    # 태그로 적힌다. run_lock() 은 이걸 못 막는다 — 그건 같은 태그만 본다.
+    # `claim_task` did not look at run_tag for a long time. It took the oldest waiting row
+    # on the whole board with `ORDER BY task_id`, so **a task left by a dead run was the
+    # first thing the next run claimed**. That run's money does somebody else's work, and
+    # the result is filed under the dead run's tag. run_lock() cannot stop this — it only
+    # looks at the same tag.
     #
-    # 이건 상상이 아니다. 2026-08-31, 위 학습 단계 검사에 태그가 없던 동안 이 검사가
-    # `dry-stop` 실행이 남긴 과제를 집어, 검사용 가짜 숫자(auc 0.71, "지지됨")를
-    # 그 실행의 결과표에 적었다.
+    # This is not imagined. On 2026-08-31, while the ml-stage check above had no tag, this
+    # check claimed a task left by a `dry-stop` run and wrote the check's fake numbers
+    # (auc 0.71, "supported") into that run's results table.
     #
-    # 두 태그를 만들어 **나중 것**을 지목해 집는다. 좁히기가 없으면 오래된 A 가
-    # 나오므로, 이 검사는 조건이 빠지는 순간 실패한다.
+    # Two tags are made and **the later one** is named when claiming. Without the
+    # narrowing the older A would come out, so this check fails the moment the condition
+    # goes missing.
     other_tag = f"{RUN_TAG}_other"
-    await bb.create_task(other_tag, 90, "관점 A", "가설 A", COLUMNS, "HIV_DETECTABLE")
-    await bb.create_task(RUN_TAG, 91, "관점 B", "가설 B", COLUMNS, "HIV_DETECTABLE")
+    await bb.create_task(other_tag, 90, "perspective A", "hypothesis A", COLUMNS, "HIV_DETECTABLE")
+    await bb.create_task(RUN_TAG, 91, "perspective B", "hypothesis B", COLUMNS, "HIV_DETECTABLE")
     picked = json.loads(await bb.claim_task("data", RUN_TAG))
     results.append(ok(picked.get("run_tag") == RUN_TAG,
-                      "run_tag 를 주면 자기 실행의 일만 집는다 (남의 것이 더 오래돼도)",
-                      f"집힌 것의 태그 {picked.get('run_tag')}"))
+                      "given a run_tag it claims only its own run's work (even if another's is older)",
+                      f"claimed row's tag {picked.get('run_tag')}"))
 
-    # 빈 문자열이면 예전처럼 판 전체를 본다. 기존 호출이 안 깨져야 하고, 그 사실
-    # 자체를 검사가 붙들고 있어야 나중에 조용히 바뀌지 않는다.
+    # An empty string looks at the whole board as before. Existing callers must not break,
+    # and the check has to hold on to that fact so it cannot change quietly later.
     #
-    # 다만 이 한 줄은 **판 전체**를 건드리므로, 남의 실행이 남긴 대기 행이 있으면
-    # 그걸 집어 in_progress 로 만들어 버린다. 이 검사가 고치려는 바로 그 사고다.
-    # 그래서 먼저 확인하고, 남의 것이 있으면 집지 않고 건너뛴다.
+    # This one line does touch the **whole board**, though, so if another run left a
+    # waiting row it would claim it and turn it in_progress. That is the very accident
+    # this check exists to fix. So look first, and if somebody else's is there, skip the
+    # claim.
     board_all = json.loads(await bb.read_board())["tasks"]
     strays = [t for t in board_all
               if t["task_type"] == "data" and t["status"] == "ready"
               and t["run_tag"] not in (RUN_TAG, other_tag)]
     if strays:
-        results.append(ok(True, "태그 없는 집기 검사는 건너뛴다 — 판에 남의 대기 행이 있다",
-                          f"{len(strays)}개 ({strays[0]['run_tag']} 등)"))
+        results.append(ok(True, "skipping the untagged-claim check — another run's waiting rows are on the board",
+                          f"{len(strays)} ({strays[0]['run_tag']} and so on)"))
     else:
         picked2 = json.loads(await bb.claim_task("data"))
         results.append(ok(picked2.get("run_tag") == other_tag,
-                          "태그를 안 주면 예전처럼 판 전체에서 가장 오래된 것을 집는다",
-                          f"집힌 것의 태그 {picked2.get('run_tag')}"))
+                          "given no tag it claims the oldest on the whole board, as before",
+                          f"claimed row's tag {picked2.get('run_tag')}"))
 
-    # ---- ⑧ 남은 과제를 되돌리고 닫을 수 있는가 ---------------------------
+    # ---- (8) can leftover tasks be reclaimed and closed -------------------
     #
-    # 위 두 줄은 지금 in_progress 다. 실행이 여기서 죽으면 아무도 안 치운다 —
-    # 드라이버의 reclaim_stalled 는 자기 태그만, 그것도 일 루프 안에서만 보기 때문이다.
-    # blackboard.py 의 세 명령이 그 자리를 메운다.
+    # The two rows above are in_progress right now. If the run dies here nobody clears
+    # them — the driver's reclaim_stalled looks at its own tag only, and then only inside
+    # the work loop. blackboard.py's three commands fill that gap.
     import blackboard as bbm
 
-    # 남의 태그가 지금 어떤 상태인지 먼저 적어 둔다. --reclaim 뒤에도 **그대로**여야
-    # 한다는 것이 이 항목의 절반이다.
+    # Note down first what state the other tag is in. That it is **unchanged** after
+    # --reclaim is half of what this item checks.
     other_before = [t["status"] for t in json.loads(await bb.read_board(other_tag))["tasks"]]
     back = await bbm.reclaim(RUN_TAG)
     after = json.loads(await bb.read_board(RUN_TAG))["tasks"]
     mine_ready = [t for t in after if t["status"] == "ready" and t["trial"] == 91]
     other_after = [t["status"] for t in json.loads(await bb.read_board(other_tag))["tasks"]]
     results.append(ok(back == 1 and len(mine_ready) == 1 and other_after == other_before,
-                      "--reclaim 은 그 실행만 대기열로 되돌리고 남의 태그는 안 건드린다",
-                      f"되돌림 {back}개 · 남의 태그 {other_before} → {other_after}"))
+                      "--reclaim requeues that run only and does not touch another's tag",
+                      f"reclaimed {back} · other tag {other_before} → {other_after}"))
 
     closed = await bbm.close_run(RUN_TAG)
     left = json.loads(await bb.read_board(RUN_TAG))["tasks"]
     failed = [t for t in left if t["status"] == "failed"]
     results.append(ok(closed >= 1 and len(failed) == closed,
-                      "--close 는 failed 로 닫을 뿐 행을 지우지 않는다 (왜 결과가 없는지 남는다)",
-                      f"닫힘 {closed}개 · 남은 failed 행 {len(failed)}개"))
+                      "--close only closes as failed, it does not delete rows (why there is no result stays)",
+                      f"closed {closed} · failed rows left {len(failed)}"))
 
-    # 검사가 만든 것은 남기지 않는다. 위에서 만든 두 번째 태그도 같이 지운다.
+    # What the check made is not left behind. The second tag made above goes too.
     await cleanup()
     await cleanup_tag(other_tag)
-    # sum(results) — True 는 1, False 는 0 이라 그대로 더하면 통과 개수가 된다.
-    print(f"\n  {sum(results)}/{len(results)} 통과")
-    # 하나라도 실패하면 0 이 아닌 값으로 끝낸다. CI 나 셸이 실패를 알아챌 수 있게.
+    # sum(results) — True is 1 and False is 0, so adding them gives the number passed.
+    print(f"\n  {sum(results)}/{len(results)} passed")
+    # If even one failed, exit with a non-zero value. So CI or a shell notices the failure.
     return 0 if all(results) else 1
 
 
 if __name__ == "__main__":
-    # 이 파일이 있는 폴더를 찾는 경로 맨 앞에 넣는다. 어느 위치에서 실행해도
-    # 옆에 있는 tools_blackboard 를 찾을 수 있게 하려는 것이다.
+    # Put this file's own folder at the front of the search path. So that whatever
+    # directory it is run from, it can find the tools_blackboard sitting next to it.
     sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
     raise SystemExit(asyncio.run(main()))
