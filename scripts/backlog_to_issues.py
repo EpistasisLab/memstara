@@ -8,6 +8,7 @@
     python scripts/backlog_to_issues.py link       # append issue numbers to id references
     python scripts/backlog_to_issues.py board      # add every issue to the project
     python scripts/backlog_to_issues.py annotate   # write the numbers back into the files
+    python scripts/backlog_to_issues.py sync --dry-run   # comment where a path went stale
 
 
 issues, this file is the list. After they become issues, this file is the record
@@ -522,6 +523,111 @@ def cmd_board(manifest: list[dict[str, Any]]) -> int:
     return 0
 
 
+#: `sync` writes this into every comment it leaves and reads it back to decide
+#: whether an issue has already been told. A marker in the text, not a record kept
+#: on this side, so the answer survives losing `outputs/` and cannot drift from
+#: what is actually on GitHub.
+SYNC_MARKER = "<!-- memstara: memo-05-path-sync -->"
+
+#: The commit that repaired the paths in the tracked documents.
+SYNC_COMMIT = "c888120"
+
+
+def _moves() -> dict[str, str]:
+    """Load `repair_citations.py`'s move table — old path -> new path.
+
+    Read from that file rather than copied, because two copies of a move table
+    is the same failure this whole item was about.
+
+    Returns:
+        The `MOVES` mapping.
+    """
+    import importlib.util
+
+    path = Path(__file__).with_name("repair_citations.py")
+    spec = importlib.util.spec_from_file_location("_repair_citations", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.MOVES
+
+
+def cmd_sync(manifest: list[dict[str, Any]], only: str = "", dry_run: bool = False) -> int:
+    """Comment on every issue whose text names a file the restructure moved.
+
+    ONE comment per issue, and the issue itself is never edited. The 45 issues
+    are the record of what was true when they were filed — rewriting them is the
+
+    records. A comment adds today's answer without touching that record.
+
+    Args:
+        manifest: The resolved items, with issue numbers.
+        only: Comma-separated ids to restrict to, e.g. `MEMO-05`. Empty means all.
+        dry_run: Print what would be posted and post nothing.
+
+    Returns:
+        Process exit code.
+    """
+    moves = _moves()
+    wanted = {i.strip() for i in only.split(",") if i.strip()}
+    posted = clean = already = 0
+
+    # The manifest on disk is whatever `plan` last wrote, and `plan` does not know
+    # any issue numbers — only `create` fills them in. Asking GitHub costs one call
+    # and means `sync` works off a freshly planned manifest as well as a created one.
+    on_github = existing_issues()
+
+    for item in manifest:
+        number = item.get("issue") or on_github.get(item["id"], {}).get("number")
+        if not number or (wanted and item["id"] not in wanted):
+            continue
+
+        raw = gh("issue", "view", str(number), "--repo", REPO, "--json", "body,comments")
+        issue = json.loads(raw)
+        if any(SYNC_MARKER in (c.get("body") or "") for c in issue.get("comments", [])):
+            already += 1
+            continue
+
+        # A name counts as found only where it is written as a path — with a line
+        # number, or with the directory it used to sit in. A bare `blackboard.py`
+        # is still the file's name and says nothing stale.
+        body = issue.get("body") or ""
+        found = {old: new for old, new in moves.items()
+                 if re.search(rf"(?<![\w/.-]){re.escape(old)}(?=:\d|[^\w.]|$)", body)
+                 and (f"{old}:" in body or "/" in old or old not in
+                      {"blackboard.py", "logging_setup.py", "preflight.py", "debug_harness.py"})}
+        if not found:
+            clean += 1
+            continue
+
+        rows = "\n".join(f"| `{old}` | `{new}` |" for old, new in sorted(found.items()))
+        comment = (
+            f"{SYNC_MARKER}\n"
+            f"**The paths in this issue are from before the 2026-09-01 restructure.**\n\n"
+            f"Every module that sat at the repository root now lives under "
+            f"`src/memstara/`. Commit `{SYNC_COMMIT}` repaired the citations in the "
+            f"tracked documents; the full table of where each file landed is in "
+
+            f"What this issue names, and where it is now:\n\n"
+            f"| Written here | Now |\n|---|---|\n{rows}\n\n"
+            f"Line numbers still hold for the files that moved untouched. The issue "
+            f"text is left exactly as filed — it is the record of what was true then, "
+            f"and this comment is the only thing that dates."
+        )
+
+        if dry_run:
+            print(f"\n──── #{number} · {item['id']} ────\n{comment}")
+        else:
+            gh("issue", "comment", str(number), "--repo", REPO, "--body", comment)
+            print(f"  sync   {item['id']:<8} #{number}  ({len(found)} names)")
+        posted += 1
+
+    verb = "would comment on" if dry_run else "commented on"
+    print(f"\n{verb} {posted}; {clean} name nothing that moved; {already} already done")
+    return 0
+
+
 def cmd_annotate(manifest: list[dict[str, Any]]) -> int:
     """Write `**Issue** — #N` under every item's field line, in all four files.
 
@@ -582,7 +688,12 @@ def main() -> int:
         Process exit code.
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("command", choices=("plan", "create", "link", "board", "annotate"))
+    parser.add_argument("command",
+                        choices=("plan", "create", "link", "board", "annotate", "sync"))
+    parser.add_argument("--only", default="",
+                        help="sync: restrict to these ids, comma-separated")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="sync: print the comments and post nothing")
     args = parser.parse_args()
 
     if args.command in ("plan", "create"):
@@ -599,6 +710,9 @@ def main() -> int:
             print(f"no manifest at {MANIFEST_PATH} — run `plan` first", file=sys.stderr)
             return 1
         manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+
+    if args.command == "sync":
+        return cmd_sync(manifest, only=args.only, dry_run=args.dry_run)
 
     return {"plan": cmd_plan, "create": cmd_create, "link": cmd_link,
             "board": cmd_board, "annotate": cmd_annotate}[args.command](manifest)
