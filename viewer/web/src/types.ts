@@ -38,6 +38,25 @@ export interface Flash {
   at: string;
 }
 
+/** One row of the feed: a single tool call, newest first.
+ *
+ *  Unlike `Flash` this has no time window — the feed is "the last N calls, whenever
+ *  they were", so a quiet system shows its last activity instead of showing nothing.
+ *  `agent` is null when the viewer does not recognise the agent name; the row is still
+ *  shown, because a call it cannot name is exactly what someone would want to see. */
+export interface FeedEvent {
+  /** Stable across polls — step id plus the call's position within its batch. */
+  key: string;
+  name: string;
+  agent: StageId | null;
+  label: string;
+  path: "board" | "supervisor" | "other";
+  server: string;
+  tool: string;
+  store: StoreId;
+  at: string;
+}
+
 export interface Task {
   task_id: number;
   run_tag: string;
@@ -137,5 +156,7 @@ export interface Snapshot {
   board: { lanes: Record<string, number>; tasks: Task[] };
   agents: AgentTotals[];
   access: { rows: AccessRow[]; windows: Window[] };
+  /** Every run and both driving paths — not just the selected run. See api/scene._feed. */
+  feed: FeedEvent[];
   results: Result[];
 }

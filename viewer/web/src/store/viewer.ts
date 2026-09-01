@@ -4,10 +4,12 @@ import type { Snapshot } from "../types";
 /**
  * One store, one poller.
  *
- * Six screens each fetching their own slice would send six requests every tick and
- * could disagree with each other about the same run. Instead the store polls
- * `/api/snapshot` once and every screen selects from that single object, so what the
- * scene shows and what the board tab shows can never be from different moments.
+ * Every panel fetching its own slice would send a request each per tick and they could
+ * disagree with each other about the same run. Instead the store polls `/api/snapshot`
+ * once and every panel selects from that single object, so what the scene shows, what
+ * the feed shows and what the results panel shows can never be from different moments.
+ * That matters most for the feed: a row appearing there but not in the scene would look
+ * like a bug in the scene.
  *
  * Polling stops when the tab is hidden. A viewer left open overnight otherwise keeps
  * two databases busy for nobody.
@@ -15,7 +17,9 @@ import type { Snapshot } from "../types";
 
 export const POLL_MS = 2000;
 
-export type TabId = "scene" | "board" | "task" | "agents" | "access" | "results";
+/** What the main area shows. Results is not here on purpose: ResultsPanel is always on
+ *  screen at bottom-right, so a nav entry for it would be a second door to one room. */
+export type ViewId = "scene" | "board" | "task" | "agents" | "access";
 
 interface ViewerState {
   snapshot: Snapshot | null;
@@ -24,13 +28,16 @@ interface ViewerState {
   /** Set when the API itself is unreachable — different from a database being down. */
   error: string | null;
   runTag: string | null;
-  tab: TabId;
+  view: ViewId;
   selectedTask: number | null;
   selectedAgent: string | null;
   /** Counts responses, so a stuck poller is visible rather than silently frozen. */
   ticks: number;
+  /** Collapses the control panel to an icon rail. */
+  railCollapsed: boolean;
 
-  setTab: (t: TabId) => void;
+  setView: (v: ViewId) => void;
+  toggleRail: () => void;
   setRunTag: (t: string | null) => void;
   selectTask: (id: number | null) => void;
   selectAgent: (id: string | null) => void;
@@ -49,17 +56,19 @@ export const useViewer = create<ViewerState>((set, get) => ({
   loading: true,
   error: null,
   runTag: null,
-  tab: "scene",
+  view: "scene",
   selectedTask: null,
   selectedAgent: null,
   ticks: 0,
+  railCollapsed: false,
 
-  setTab: (tab) => set({ tab }),
+  setView: (view) => set({ view }),
+  toggleRail: () => set((s) => ({ railCollapsed: !s.railCollapsed })),
   setRunTag: (runTag) => {
     set({ runTag, loading: true, selectedTask: null });
     void get().fetchOnce();
   },
-  selectTask: (selectedTask) => set({ selectedTask, tab: selectedTask ? "task" : get().tab }),
+  selectTask: (selectedTask) => set({ selectedTask, view: selectedTask ? "task" : get().view }),
   selectAgent: (selectedAgent) => set({ selectedAgent }),
 
   fetchOnce: async () => {
@@ -115,3 +124,4 @@ export const useHealth = () => useViewer((s) => s.snapshot?.health ?? null);
 export const useAccess = () => useViewer((s) => s.snapshot?.access ?? null);
 export const useResults = () => useViewer((s) => s.snapshot?.results ?? null);
 export const useAgentTotals = () => useViewer((s) => s.snapshot?.agents ?? null);
+export const useFeed = () => useViewer((s) => s.snapshot?.feed ?? null);
