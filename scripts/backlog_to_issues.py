@@ -1,0 +1,608 @@
+#!/usr/bin/env python3
+# SOURCE: SANDBOX-ORIGINAL — not copied from afc-forge. Nothing upstream knows
+#   about this repository's backlog files or its GitHub board.
+
+
+    python scripts/backlog_to_issues.py plan       # build the manifest, create nothing
+    python scripts/backlog_to_issues.py create     # create (and close) the issues
+    python scripts/backlog_to_issues.py link       # append issue numbers to id references
+    python scripts/backlog_to_issues.py board      # add every issue to the project
+    python scripts/backlog_to_issues.py annotate   # write the numbers back into the files
+
+
+issues, this file is the list. After they become issues, this file is the record
+of where each one came from." This is the thing that moves it across.
+
+
+editions of the English originals, so they are never parsed — only annotated, in
+the last step, so they stay true to that claim.
+
+EVERY SUBCOMMAND IS IDEMPOTENT. `create` skips an id that already has an issue,
+`board` skips one already on the board, `annotate` skips a line already written.
+A creation script that is not idempotent has exactly one safe run, and any
+interruption after that leaves a board nobody can trust. Re-running is the
+recovery procedure, so re-running has to be free.
+
+THE MANIFEST IS NOT COMMITTED. `outputs/` is ignored, and this file stays there
+on purpose: it copies every issue body out of the backlog, so committing it would
+
+the exact thing the backlog was written against. It is rebuilt by `plan`, and
+`create` refills the issue numbers from GitHub, so losing it costs one command.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+_ROOT = Path(__file__).parent.parent.resolve()
+
+REPO = "HyunjunA/memstara"
+PROJECT_OWNER = "HyunjunA"
+PROJECT_TITLE = "Memstara"
+
+#: The two English files that are parsed. Order matters: it is the order the
+
+
+
+#: The four files that get issue numbers written back into them. The `_KR`
+#: editions are in this list and in no other — they are annotated, never read.
+
+
+#: Same work, written down twice. Each pair becomes ONE issue, and the id that
+#: survives is the one holding more of the record.
+#:
+#: `MEMO-09` ≡ `H-08` — both "move to motoro v0.5.2", both Done. `H-08` keeps the
+#: table of where every name landed and the three that deliberately did not move.
+DROP_IDS = {"MEMO-09": "H-08"}
+
+
+#: 본 것이다. 두 번 하지 말고 거기서 한다"). One issue, but MEMO-08's framing —
+#: *the corpus is fine, the bridge is broken* — is not in `A-02` today and is
+#: worth keeping, so it is folded in rather than dropped.
+FOLD_IDS = {"MEMO-08": "A-02"}
+
+
+#: `.github/ISSUE_TEMPLATE/task.yml:80-92`). A label outside this set is a bug in
+#: the source file, not something to pass through to GitHub.
+ALLOWED_LABELS = {"bug", "enhancement", "research-decision", "verification", "housekeeping"}
+
+#: Board vocabulary, copied from the ASAREE Roadmap so the two boards read the
+
+STATUSES = ("Backlog", "Ready", "In progress", "In review", "Done")
+SIZES = ("XS", "S", "M", "L", "XL")
+PRIORITIES = ("P0", "P1", "P2", "P3")
+
+#: `task.yml:112-116` spells P0 out. The board copies that wording exactly, so a
+#: person reading the board and a person filing through the template see one thing.
+PRIORITY_OPTIONS = ("P0 — blocks other work", "P1", "P2", "P3")
+
+MANIFEST_PATH = _ROOT / "outputs" / "issues_manifest.json"
+
+#: `### A-02 · title`. The id shape is strict on purpose: `#### Board fields` and
+#: the other prose subheadings must not be mistaken for items.
+_ITEM_RE = re.compile(r"^### ([A-Z]+-\d+) · (.+)$")
+
+#: The field line under every heading. `Priority` is absent on the `D-*` items,
+#: so it is optional here and defaults later.
+_FIELD_RE = re.compile(r"^`Status: ([^`]+)`(?: · `Priority: ([^`]+)`)? · `Size: ([^`]+)` · `Labels: ([^`]+)`$")
+
+#: A bold field opener at the start of a line — `**What** — text`. Rewritten into
+#: a `### What` heading so a scripted issue and one filed through the template
+#: look the same.
+_BOLD_FIELD_RE = re.compile(r"^\*\*([A-Z][^*]{2,60}?)\*\* — ", re.MULTILINE)
+
+#: Every reference to another item, for the `link` pass.
+_ID_REF_RE = re.compile(r"\b([A-Z]+-\d{2})\b")
+
+
+# --------------------------------------------------------------------------- #
+# Reading the files
+# --------------------------------------------------------------------------- #
+
+
+def _to_headings(body: str) -> str:
+    """Rewrite `**What** — text` openers into `### What` headings.
+
+    Only the opener moves. Everything else in the body — tables, block quotes,
+    the extra sections a few items carry (`H-08`'s "Where everything landed") —
+    is left exactly as written, because an issue that drops part of its item is
+    worse than one that looks slightly different from the template.
+
+    Args:
+        body: The item's markdown, below its field line.
+
+    Returns:
+        The same markdown with field openers promoted to headings.
+    """
+    return _BOLD_FIELD_RE.sub(lambda m: f"### {m.group(1)}\n\n", body)
+
+
+def parse_file(path: Path) -> list[dict[str, Any]]:
+    """Read one backlog file into a list of items.
+
+    An item runs from its `### ID · title` heading to the next heading of the
+    same level or higher. Whatever sits in between is the body, verbatim.
+
+    Args:
+        path: Repository-relative path of an English backlog file.
+
+    Returns:
+        One dict per item, in file order.
+
+    Raises:
+        ValueError: If an item's field line is missing or malformed, or if it
+            carries a label outside the five. Both mean the file is wrong, and
+            filing 45 issues off a wrong file is not something to do quietly.
+    """
+    lines = (_ROOT / path).read_text(encoding="utf-8").splitlines()
+    items: list[dict[str, Any]] = []
+    group = ""
+
+    for i, line in enumerate(lines):
+
+
+        # so both levels count and the most recent one wins.
+        if line.startswith("# ") or line.startswith("## "):
+            group = line.lstrip("#").strip()
+            continue
+
+        match = _ITEM_RE.match(line)
+        if not match:
+            continue
+
+        item_id, raw_title = match.group(1), match.group(2).strip()
+
+        # The field line is the next non-blank line. Anything else is a
+        # malformed item, and guessing past it is how a board goes wrong.
+        cursor = i + 1
+        while cursor < len(lines) and not lines[cursor].strip():
+            cursor += 1
+        fields = _FIELD_RE.match(lines[cursor].strip()) if cursor < len(lines) else None
+        if not fields:
+            raise ValueError(f"{path}:{cursor + 1} — {item_id} has no readable field line")
+
+        # The body ends where the next item or section starts.
+        end = cursor + 1
+        while end < len(lines) and not (lines[end].startswith("### ") or lines[end].startswith("# ")):
+            end += 1
+        body = "\n".join(lines[cursor + 1 : end]).strip().rstrip("-").strip()
+
+        status = fields.group(1).strip()
+        priority = (fields.group(2) or "P2").strip()
+        size = fields.group(3).strip()
+        labels = [label.strip() for label in fields.group(4).split(",")]
+
+        bad = set(labels) - ALLOWED_LABELS
+        if bad:
+            raise ValueError(f"{path} — {item_id} carries {sorted(bad)}, outside the five")
+        if status not in STATUSES:
+            raise ValueError(f"{path} — {item_id} has status {status!r}")
+        if size not in SIZES:
+            raise ValueError(f"{path} — {item_id} has size {size!r}")
+        if priority not in PRIORITIES:
+            raise ValueError(f"{path} — {item_id} has priority {priority!r}")
+
+        # `— **Done 2026-09-01**` in a heading is the file's own marker; the
+        # status field already carries it, so it does not need repeating in an
+        # issue title that GitHub will show as closed anyway.
+        title = re.sub(r"\s+—\s+\*\*Done [\d-]+\*\*$", "", raw_title)
+        title = title.replace("**", "")
+
+        items.append(
+            {
+                "id": item_id,
+                "title": title,
+                "source": str(path),
+                "group": group,
+                "status": status,
+                "priority": priority,
+                "size": size,
+                "labels": labels,
+                "state": "closed" if status == "Done" else "open",
+                "body_md": _to_headings(body),
+                "heading_line": i + 1,
+            }
+        )
+
+    return items
+
+
+def build_manifest() -> list[dict[str, Any]]:
+    """Read both English files and resolve the two duplicate pairs.
+
+    Returns:
+        The items that become issues, one per piece of work.
+
+    Raises:
+        ValueError: If a duplicate's partner is missing, which would mean the
+            drop silently lost work rather than de-duplicating it.
+    """
+    items: list[dict[str, Any]] = []
+    for source in SOURCES:
+        items.extend(parse_file(Path(source)))
+
+    by_id = {item["id"]: item for item in items}
+
+    for dropped, kept in {**DROP_IDS, **FOLD_IDS}.items():
+        if dropped in by_id and kept not in by_id:
+            raise ValueError(f"{dropped} would be dropped in favour of {kept}, which does not exist")
+
+    # Fold before dropping, so the folded text is added to a surviving item.
+    for folded, kept in FOLD_IDS.items():
+        if folded not in by_id:
+            continue
+        source = by_id[folded]
+        by_id[kept]["body_md"] += (
+            f"\n\n---\n\n### Also filed here — {folded}\n\n"
+            f"`{source['source']}` records the same work seen from the corpus side, and says so "
+            f"itself: do it here rather than twice. Its framing is kept because it is not in this "
+            f"item otherwise — **the corpus is fine, the bridge is not.** The OKF corpus already "
+            f"is the HIV corpus (333 documents, every metapath from an HIV/AIDS anchor); what "
+            f"fails is the crossing from a corpus concept to a cohort column.\n\n"
+            f"{source['body_md']}"
+        )
+        by_id[kept].setdefault("folds", []).append(folded)
+
+    dropped_ids = set(DROP_IDS) | set(FOLD_IDS)
+    kept = [item for item in items if item["id"] not in dropped_ids]
+
+    for item in kept:
+        item["issue_body"] = render_body(item)
+    return kept
+
+
+def render_body(item: dict[str, Any]) -> str:
+    """Render an item's GitHub issue body.
+
+    The footer is the point of the file's own promise — an issue that cannot say
+    which line of which file it came from cannot be checked against it.
+
+    Args:
+        item: A parsed item.
+
+    Returns:
+        Markdown for the issue body.
+    """
+    folds = "".join(f" · folds **{f}**" for f in item.get("folds", []))
+    return (
+        f"{item['body_md']}\n\n"
+        f"---\n\n"
+        f"From `{item['source']}` · **{item['id']}** · {item['group']} · "
+        f"Status `{item['status']}` · Priority `{item['priority']}` · Size `{item['size']}`{folds}\n"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Talking to GitHub
+# --------------------------------------------------------------------------- #
+
+
+def gh(*args: str, check: bool = True) -> str:
+    """Run a `gh` command and return its stdout.
+
+    Args:
+        *args: Arguments after `gh`.
+        check: Raise on a non-zero exit.
+
+    Returns:
+        Stripped stdout.
+
+    Raises:
+        RuntimeError: If the command fails and `check` is set.
+    """
+    result = subprocess.run(["gh", *args], capture_output=True, text=True)
+    if check and result.returncode != 0:
+        raise RuntimeError(f"gh {' '.join(args)} failed:\n{result.stderr.strip()}")
+    return result.stdout.strip()
+
+
+def existing_issues() -> dict[str, dict[str, Any]]:
+    """Map item id to the issue that already exists for it.
+
+    The id is read off the title prefix (`A-02 · …`), which is why the prefix is
+    part of the title and not only the body: it is what makes a second run safe.
+
+    Returns:
+        `{"A-02": {"number": 7, "state": "OPEN", "title": "..."}}`.
+    """
+    raw = gh("issue", "list", "--repo", REPO, "--state", "all", "--limit", "300",
+             "--json", "number,title,state")
+    found: dict[str, dict[str, Any]] = {}
+    for issue in json.loads(raw or "[]"):
+        head = issue["title"].split(" · ", 1)[0].strip()
+        if re.fullmatch(r"[A-Z]+-\d+", head):
+            found[head] = issue
+    return found
+
+
+def cmd_plan(manifest: list[dict[str, Any]]) -> int:
+    """Write the manifest and print what a `create` run would do.
+
+    Nothing is created. 45 issues is not a step to take on trust.
+
+    Args:
+        manifest: The resolved items.
+
+    Returns:
+        Process exit code.
+    """
+    MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    MANIFEST_PATH.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    opened = [i for i in manifest if i["state"] == "open"]
+    closed = [i for i in manifest if i["state"] == "closed"]
+    labels: dict[str, int] = {}
+    for item in manifest:
+        for label in item["labels"]:
+            labels[label] = labels.get(label, 0) + 1
+
+    print(f"manifest  {MANIFEST_PATH.relative_to(_ROOT)}")
+    print(f"items     {len(manifest)}  ({len(opened)} open, {len(closed)} closed)")
+    print(f"dropped   {', '.join(f'{d} → {k}' for d, k in {**DROP_IDS, **FOLD_IDS}.items())}")
+    print(f"labels    {', '.join(f'{k} {v}' for k, v in sorted(labels.items()))}")
+    print(f"first     {manifest[0]['id']} · {manifest[0]['title'][:60]}")
+    print()
+    for item in manifest:
+        mark = "x" if item["state"] == "closed" else " "
+        print(f"  [{mark}] {item['id']:<8} {item['priority']} {item['size']:<2} "
+              f"{','.join(item['labels']):<18} {item['title'][:64]}")
+    return 0
+
+
+def cmd_create(manifest: list[dict[str, Any]]) -> int:
+    """Create every issue that does not exist yet, and close the finished ones.
+
+
+    asks for it: "this item stays at the top of the list until it closes."
+
+    Args:
+        manifest: The resolved items.
+
+    Returns:
+        Process exit code.
+    """
+    have = existing_issues()
+    created = skipped = 0
+
+    ordered = [i for i in manifest if i["state"] == "open"] + [i for i in manifest if i["state"] == "closed"]
+    for item in ordered:
+        if item["id"] in have:
+            skipped += 1
+            print(f"  skip   {item['id']:<8} #{have[item['id']]['number']}")
+            continue
+
+        args = ["issue", "create", "--repo", REPO,
+                "--title", f"{item['id']} · {item['title']}",
+                "--body", item["issue_body"]]
+        for label in item["labels"]:
+            args += ["--label", label]
+        url = gh(*args)
+        number = int(url.rstrip("/").rsplit("/", 1)[-1])
+        item["issue"] = number
+        created += 1
+        print(f"  create {item['id']:<8} #{number}")
+
+        if item["state"] == "closed":
+            # A closing comment, not a bare close. A board that says "done" and
+            # not "done by what" is the thing the backlog was written against.
+            gh("issue", "close", str(number), "--repo", REPO, "--reason", "completed",
+               "--comment", f"Finished before this board existed. The record is in "
+                            f"`{item['source']}` under **{item['id']}**, including how it was "
+                            f"checked. Filed and closed together so the month does not read empty.")
+
+    for item in manifest:
+        if "issue" not in item and item["id"] in have:
+            item["issue"] = have[item["id"]]["number"]
+
+    MANIFEST_PATH.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"\ncreated {created}, skipped {skipped}")
+    return 0
+
+
+def cmd_link(manifest: list[dict[str, Any]]) -> int:
+    """Append issue numbers to the id references inside issue bodies.
+
+    The number is APPENDED, never substituted — `**A-03** (#7)`. The id is what
+    ties an issue back to the file it came from; substituting would break that
+    link in both directions.
+
+    Args:
+        manifest: The resolved items, with issue numbers.
+
+    Returns:
+        Process exit code.
+    """
+    numbers = {item["id"]: item["issue"] for item in manifest if item.get("issue")}
+    numbers.update({dropped: numbers[kept] for dropped, kept in {**DROP_IDS, **FOLD_IDS}.items()
+                    if kept in numbers})
+    updated = 0
+
+    for item in manifest:
+        if not item.get("issue"):
+            continue
+        body = item["issue_body"]
+
+        def add_number(match: re.Match[str]) -> str:
+            ref = match.group(1)
+            if ref == item["id"] or ref not in numbers:
+                return match.group(0)
+            # Already linked on a previous run.
+            if body[match.end() : match.end() + 12].lstrip("*` ").startswith("(#"):
+                return match.group(0)
+            return f"{match.group(0)} (#{numbers[ref]})"
+
+        linked = _ID_REF_RE.sub(add_number, body)
+        if linked == body:
+            continue
+        gh("issue", "edit", str(item["issue"]), "--repo", REPO, "--body", linked)
+        item["issue_body"] = linked
+        updated += 1
+        print(f"  link   {item['id']:<8} #{item['issue']}")
+
+    MANIFEST_PATH.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"\nlinked {updated}")
+    return 0
+
+
+def _project_number() -> str:
+    """Find the `Memstara` project's number under the owner.
+
+    Returns:
+        The project number as a string.
+
+    Raises:
+        RuntimeError: If no project by that title exists yet.
+    """
+    raw = gh("project", "list", "--owner", PROJECT_OWNER, "--format", "json")
+    for project in json.loads(raw)["projects"]:
+        if project["title"] == PROJECT_TITLE:
+            return str(project["number"])
+    raise RuntimeError(f"no project titled {PROJECT_TITLE!r} under {PROJECT_OWNER}")
+
+
+def cmd_board(manifest: list[dict[str, Any]]) -> int:
+    """Add every issue to the project and set `Status`, `Priority` and `Size`.
+
+    Args:
+        manifest: The resolved items, with issue numbers.
+
+    Returns:
+        Process exit code.
+    """
+    number = _project_number()
+    fields = {f["name"]: f for f in json.loads(
+        gh("project", "field-list", number, "--owner", PROJECT_OWNER, "--format", "json"))["fields"]}
+    project_id = json.loads(
+        gh("project", "view", number, "--owner", PROJECT_OWNER, "--format", "json"))["id"]
+
+    on_board = {}
+    for entry in json.loads(gh("project", "item-list", number, "--owner", PROJECT_OWNER,
+                               "--format", "json", "--limit", "300"))["items"]:
+        head = entry.get("title", "").split(" · ", 1)[0].strip()
+        if re.fullmatch(r"[A-Z]+-\d+", head):
+            on_board[head] = entry["id"]
+
+    def option_id(field_name: str, value: str) -> str | None:
+        """Resolve a single-select option's id, tolerating the `P0 — …` wording."""
+        for option in fields.get(field_name, {}).get("options", []):
+            if option["name"] == value or option["name"].startswith(f"{value} "):
+                return option["id"]
+        return None
+
+    added = 0
+    for item in manifest:
+        if not item.get("issue"):
+            continue
+        item_id = on_board.get(item["id"])
+        if item_id is None:
+            url = f"https://github.com/{REPO}/issues/{item['issue']}"
+            item_id = json.loads(gh("project", "item-add", number, "--owner", PROJECT_OWNER,
+                                    "--url", url, "--format", "json"))["id"]
+            added += 1
+
+        for field_name, value in (("Status", item["status"]),
+                                  ("Priority", item["priority"]),
+                                  ("Size", item["size"])):
+            field = fields.get(field_name)
+            option = option_id(field_name, value)
+            if field is None or option is None:
+                print(f"  !      {item['id']:<8} {field_name} has no option for {value!r}")
+                continue
+            gh("project", "item-edit", "--id", item_id, "--project-id", project_id,
+               "--field-id", field["id"], "--single-select-option-id", option)
+        print(f"  board  {item['id']:<8} #{item['issue']}")
+
+    print(f"\nadded {added}, fields set on {sum(1 for i in manifest if i.get('issue'))}")
+    return 0
+
+
+def cmd_annotate(manifest: list[dict[str, Any]]) -> int:
+    """Write `**Issue** — #N` under every item's field line, in all four files.
+
+    The `_KR` editions are annotated too. They declare themselves full editions —
+    same items, same ids, same order — and an edition missing the issue numbers
+    its original carries is no longer that.
+
+    Args:
+        manifest: The resolved items, with issue numbers.
+
+    Returns:
+        Process exit code.
+    """
+    numbers = {item["id"]: item["issue"] for item in manifest if item.get("issue")}
+    lines_by_id = {item_id: f"**Issue** — #{number}" for item_id, number in numbers.items()}
+    # The two duplicates point at the issue that survived them, and say whose it
+    # is — a bare number under `MEMO-08` would read as MEMO-08's own issue.
+    for dropped, kept in {**DROP_IDS, **FOLD_IDS}.items():
+        if kept in numbers:
+            numbers[dropped] = numbers[kept]
+            lines_by_id[dropped] = f"**Issue** — #{numbers[kept]}, filed as **{kept}**"
+
+    for name in ANNOTATE_FILES:
+        path = _ROOT / name
+        lines = path.read_text(encoding="utf-8").splitlines()
+        out: list[str] = []
+        written = 0
+        current: str | None = None
+
+        for i, line in enumerate(lines):
+            out.append(line)
+            match = _ITEM_RE.match(line)
+            if match:
+                current = match.group(1)
+                continue
+            if current and line.startswith("`Status:"):
+                # The line written below is preceded by a blank one, so looking
+                # only at `i + 1` would see the blank and write a second copy.
+                ahead = i + 1
+                while ahead < len(lines) and not lines[ahead].strip():
+                    ahead += 1
+                already = ahead < len(lines) and lines[ahead].startswith("**Issue** — ")
+                if not already and current in numbers:
+                    out.append("")
+                    out.append(lines_by_id[current])
+                    written += 1
+                current = None
+
+        path.write_text("\n".join(out) + "\n", encoding="utf-8")
+        print(f"  {name:<20} {written} written")
+    return 0
+
+
+def main() -> int:
+    """Parse arguments and dispatch.
+
+    Returns:
+        Process exit code.
+    """
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("command", choices=("plan", "create", "link", "board", "annotate"))
+    args = parser.parse_args()
+
+    if args.command in ("plan", "create"):
+        manifest = build_manifest()
+        if args.command == "create" and MANIFEST_PATH.exists():
+            # Carry forward the numbers a previous run recorded, so `create`
+            # after an interruption knows what it already made.
+            previous = {i["id"]: i.get("issue") for i in json.loads(MANIFEST_PATH.read_text())}
+            for item in manifest:
+                if previous.get(item["id"]):
+                    item["issue"] = previous[item["id"]]
+    else:
+        if not MANIFEST_PATH.exists():
+            print(f"no manifest at {MANIFEST_PATH} — run `plan` first", file=sys.stderr)
+            return 1
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+
+    return {"plan": cmd_plan, "create": cmd_create, "link": cmd_link,
+            "board": cmd_board, "annotate": cmd_annotate}[args.command](manifest)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
