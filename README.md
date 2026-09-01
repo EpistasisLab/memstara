@@ -5,20 +5,21 @@
 
 > 적은 기록이라, 당시 쓰지도 않던 이름으로 바꾸면 기록이 아니게 된다.
 
-`agentic-core`를 **라이브러리로 가져다 쓰는** 내 실험 스크립트와 요구사항을 두는 곳.
-이름이 `agentic-core-`로 시작하는 것은 무엇에 대한 실험인지 폴더 이름만으로 알기 위해서다.
+`motoro`를 **라이브러리로 가져다 쓰는** 내 실험 스크립트와 요구사항을 두는 곳.
+이름이 `agentic-core-`로 시작하는 것은 무엇에 대한 실험인지 폴더 이름만으로 알기
+위해서다 — 라이브러리가 `motoro`로 개명된 뒤에도 이 저장소 이름은 그대로 두었다.
 
 ## 이 폴더의 성격 — git 저장소 밖에 있다
 
 ```
-Memstara_Projects/              ← git 저장소가 아님
-├── agentic-core/             ← git 저장소 (upstream + 내 private fork)
+EcoXAI_Projects/              ← git 저장소가 아님
+├── motoro/                   ← git 저장소 (upstream + 내 private fork)
 └── memstara/     ← 여기. 저장소 밖
 ```
 
 **어떤 git 저장소에도 속하지 않는다.** 그래서 실수로 커밋할 대상 자체가 없다.
 
-처음에는 `agentic-core/sandbox/`에 두고 ignore 규칙 두 층(`.gitignore`,
+처음에는 `motoro/sandbox/`에 두고 ignore 규칙 두 층(`.gitignore`,
 `.git/info/exclude`)으로 막았지만, 그 방식은 규칙이 계속 맞아야만 안전하다.
 특히 `.git/info/exclude`는 clone으로 전파되지 않아 다른 머신에서는 보호가 사라진다.
 밖으로 옮기면서 그 의존이 없어졌고, **저장소는 upstream과 완전히 동일한 상태로 복구했다.**
@@ -103,7 +104,7 @@ memstara/
 ## MVP 파이프라인 실행
 
 ```bash
-cd /path/to/Documents/GitHub/Memstara_Projects/agentic-core
+cd /path/to/Documents/GitHub/EcoXAI_Projects/motoro
 
 # 준비 (최초 1회) — conda 환경을 켠다
 conda activate memstara
@@ -152,33 +153,36 @@ OKF에는 **데이터셋에 없는 변수를 가리키는 함정 개념 4개**�
 ## 준비 (최초 1회)
 
 ```bash
-cd /path/to/Documents/GitHub/Memstara_Projects/agentic-core
+cd /path/to/Documents/GitHub/EcoXAI_Projects/motoro
 
 # 1) 인프라 — postgres :5453, redis :6381, 스키마 적용까지
 cp .env.example .env          # 그리고 .env에 API 키를 채운다
 docker compose up -d
 
 # 2) 파이썬 환경 — conda. core는 editable로 들어간다
-#    (샌드박스 폴더에서 실행한다. environment.yml이 ../agentic-core를 상대경로로 가리킨다)
+#    (샌드박스 폴더에서 실행한다. environment.yml이 ../motoro를 상대경로로 가리킨다)
 conda env create -f ../memstara/environment.yml
 conda activate memstara
 ```
 
-> **저장소 이름이 바뀌었다 (2026-08-19).**
-> 상류가 `EpistasisLab/agentic-core` 에서 **`EpistasisLab/motoro`** 로 이름을 바꿨다.
-> `git remote` 의 `upstream` 은 새 주소로 갱신해 두었다.
+> **core 는 전부 `motoro` 다** (2026-09-01, `v0.5.2` 기준).
+> 파이썬 패키지 `motoro` (`from motoro import ...`), 로컬 폴더 `../motoro/`,
+> 환경변수 접두사 `MOTORO_`, 도커 컨테이너 `motoro-postgres`/`motoro-redis`,
+> 데이터베이스 `motoro`/`motoro_test`, alembic 버전표 `alembic_version_motoro`.
+> `environment.yml` 과 `.vscode/launch.json` 이 `../motoro` 를 상대경로로 가리키므로
+> **폴더 이름을 바꾸면 둘 다 같이 고쳐야 한다.**
 >
-> 바뀌지 않은 것: **파이썬 패키지 이름**(`agentic_core`), **로컬 폴더 이름**
-> (`agentic-core/`), 그리고 모든 `from agentic_core import ...`. 그래서 코드는
-> 한 줄도 안 바뀐다.
+> **두 이름은 이 규칙을 따르지 않는다.**
+> 하나는 **이 저장소 자신의 이름 `memstara`** 로, 무엇에 대한 실험인지
+> 폴더 이름만으로 알기 위해 그대로 두었다(맨 위 참조).
+> 다른 하나는 **`AGENTIC_OKF_BUNDLE_DIR`** 로, 상류가 접두사를 거치지 않고 이 문자
+> 그대로 읽는다 (`motoro/src/motoro/mcp_servers/okf.py:66`, `mcp/client.py:57`) —
+> 접두사를 따라 바꾸면 **OKF 서버가 번들을 못 찾는다.**
 >
-> 폴더 이름을 같이 바꾸지 않은 이유 — 그 경로가 conda 의 editable 설치,
-> `.vscode/` 설정, `bootstrap.py` 의 `ENV_FILES`, 문서 여러 편에 박혀 있다.
-> 패키지 이름이 `agentic_core` 인 한 폴더만 `motoro` 로 두면 이름이 더 어긋난다.
->
-> (몇 달 뒤 `agentic-core` 를 검색해도 안 나올 때 이 문단을 보면 된다)
+> Postgres 역할 이름은 **`agentic` 그대로**다. 상류 자신이 `POSTGRES_USER=agentic`
+> 을 쓰기 때문에(`motoro/.env.example:6`) 여기서 바꾸면 상류와 어긋난다.
 
-파이썬은 **conda 환경 `memstara`** 하나로 통일돼 있다(3.12). `agentic-core`는
+파이썬은 **conda 환경 `memstara`** 하나로 통일돼 있다(3.12). `motoro`는
 editable로 설치돼 있어 소스를 고치면 재설치 없이 반영된다. 도구 서버는
 `sys.executable`로 뜨므로 자식 프로세스도 같은 환경을 쓴다.
 
@@ -197,7 +201,7 @@ ANTHROPIC_FOUNDRY_RESOURCE=...
 ## 실행
 
 ```bash
-cd /path/to/Documents/GitHub/Memstara_Projects/agentic-core
+cd /path/to/Documents/GitHub/EcoXAI_Projects/motoro
 set -a && . ./.env && set +a          # .env를 환경변수로 올린다
 python ../memstara/01_hello_agent.py --input "17 곱하기 23은?"
 ```
@@ -214,5 +218,5 @@ python ../memstara/01_hello_agent.py --input "17 곱하기 23은?"
 ## 참고
 
 - 공개 API 전체와 사용 예시: 저장소 밖 `../AgenticCore_상세해설_KR.pdf` §4
-- core가 제공하는 원본 예시: `../agentic-core/examples/` (provision / run / memory_run / mcp_run)
+- core가 제공하는 원본 예시: `../motoro/examples/` (provision / run / memory_run / mcp_run)
 
