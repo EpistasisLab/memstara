@@ -1,0 +1,118 @@
+name: Task
+description: A unit of Memstara work, split until all four questions can be answered
+title: "· "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Four questions, and the evidence.** The first four come from
+
+        all four can be answered. The fifth comes from the same document's demand that
+        a claim carry its evidence.
+
+        **If you cannot answer all four, this is not a task — it is a topic, and it
+        needs splitting.** That is not a formality: on 2026-08-11 three separate
+        failures traced back to items that had been written down before they were
+        decomposed.
+
+
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What
+      description: What gets done. One change. If you need the word "and", consider two issues.
+      placeholder: Add an all/any mode to the tags filter in okf_search, defaulting to the present any behaviour.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: Why it is worth doing. What is wrong now, or what becomes possible.
+      placeholder: |
+        The corpus has 26 branches and 16 of them are intersections. The filter keeps a
+        document if the tag sets merely overlap, so asking for one intersection returns
+        68 documents instead of 7.
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: How we'll know it's done
+      description: >
+        The check that closes this. A command someone else can run, or an observation
+        someone else can make. "It works" is not a check.
+      placeholder: okf_search(tags="treatment-toxicity,sud", tags_mode="all") returns 7 documents; with tags_mode="any" it still returns 68.
+    validations:
+      required: true
+
+  - type: textarea
+    id: depends
+    attributes:
+      label: Depends on
+      description: >
+        What has to be true first — other issues, a decision, access to something.
+        Write "Nothing" if nothing. Leaving it blank and leaving it empty are different
+        answers, and only one of them is useful later.
+      placeholder: Nothing.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: >
+        file:line, a command's output, or a measurement — with the date it was taken.
+
+        had gone stale without anyone noticing; two of them named work that was already
+        finished.
+      placeholder: |
+        Signature: tools_okf.py:634. The OR filter and its own comment ("not AND"):
+        tools_okf.py:685-688. Counts measured 2026-08-26 across 333 corpus documents.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: label
+    attributes:
+      label: Kind
+      description: Five labels, and no more. A sixth costs more to maintain than it explains.
+      options:
+        - bug
+        - enhancement
+        - research-decision
+        - verification
+        - housekeeping
+    validations:
+      required: true
+
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      description: Same vocabulary as the ASAREE Roadmap board, so the two boards read the same way.
+      options:
+        - XS
+        - S
+        - M
+        - L
+        - XL
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P0 — blocks other work
+        - P1
+        - P2
+        - P3
+    validations:
+      required: true
