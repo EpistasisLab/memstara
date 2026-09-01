@@ -70,11 +70,11 @@ from typing import Any
 
 import numpy as np
 
-from matcher_impl.config import RunConfig
-from matcher_impl import catalog as catalog_mod
-from matcher_impl import vocab as vocab_mod
-from matcher_impl.catalog import CatalogEntry
-from matcher_impl.embedder import (
+from memstara.matcher.config import RunConfig
+from memstara.matcher import catalog as catalog_mod
+from memstara.matcher import vocab as vocab_mod
+from memstara.matcher.catalog import CatalogEntry
+from memstara.matcher.embedder import (
     Encoder,
     embed_catalog,
     embeddings_stale,

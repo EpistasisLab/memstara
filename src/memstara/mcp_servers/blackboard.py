@@ -79,7 +79,7 @@ from mcp.server.fastmcp import FastMCP
 # This is a child process, so the parent's debugger cannot reach it. It waits for a
 # debugger only when MEMSTARA_DEBUGPY contains this server's name — otherwise it
 # does nothing at all. See debug_hook.py.
-from debug_hook import quiet_child, wait_for_debugger
+from memstara.mcp_servers.debug_hook import quiet_child, wait_for_debugger
 
 quiet_child()          # silences the three startup messages a child prints
 wait_for_debugger('memstara-blackboard')

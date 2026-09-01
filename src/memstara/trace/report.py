@@ -75,7 +75,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from pipeline_core import COLUMN_COUNT_MIN
+from memstara.pipeline.core import COLUMN_COUNT_MIN
 
 # Ordered worst-first: the verdict is the first one whose condition holds. Turn the
 # order around and a failed run settles down into "warning".

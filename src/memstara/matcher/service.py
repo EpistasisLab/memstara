@@ -18,11 +18,11 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from matcher_impl import config as cfg_mod
-from matcher_impl.catalog import catalog_fingerprint
-from matcher_impl.config import RunConfig
-from matcher_impl.embedder import sentence_transformer_encoder
-from matcher_impl.matcher import Matcher
+from memstara.matcher import config as cfg_mod
+from memstara.matcher.catalog import catalog_fingerprint
+from memstara.matcher.config import RunConfig
+from memstara.matcher.embedder import sentence_transformer_encoder
+from memstara.matcher.matcher import Matcher
 
 log = logging.getLogger(__name__)
 

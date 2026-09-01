@@ -41,7 +41,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from matcher_impl.vocab import VOCABULARIES
+from memstara.matcher.vocab import VOCABULARIES
 
 # ---------------------------------------------------------------------------
 # Ported half — afc-forge `ade_forge/tools/impl/catalog.py`

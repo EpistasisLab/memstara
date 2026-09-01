@@ -153,19 +153,19 @@ from typing import Any
 # ---- outside packages -------------------------------------------------------
 import asyncpg    # PostgreSQL async driver. Used only to query the board directly
 
-# ---- the other files in this folder -----------------------------------------
-# bootstrap is imported **first of all**. It sets LITELLM_LOG, and litellm reads that
-# value the moment it is imported. pipeline_core below drags litellm in, so with the
-# order reversed not one LLM request body is kept — and with no error at all.
-import bootstrap  # noqa: F401  (the import itself is the point)
-from bootstrap import load_env
+# ---- the rest of the package -------------------------------------------------
+# LITELLM_LOG has to be set before litellm is imported, and `memstara.pipeline.core`
+# below drags litellm in. There used to be a bare `import bootstrap` here to force
+# that order. It is gone: reaching this module at all runs `memstara/__init__.py`
+# first, and that is where the variable is now set. See its docstring.
+from memstara.env import load_env
 
-# blackboard.py — the board table's definition and connection details
-from blackboard import BoardBusy, dsn, run_lock
-# logging_setup.py — makes a directory per run and also keeps the log in a file
-from logging_setup import drain_llm_requests, new_run_dir, setup_logging, tee_console
-# pipeline_core.py — the part the two pipelines (02, 03) share
-from pipeline_core import (
+# memstara/blackboard.py — the board table's definition and connection details
+from memstara.blackboard import BoardBusy, dsn, run_lock
+# memstara/logging_setup.py — makes a directory per run and also keeps the log in a file
+from memstara.logging_setup import drain_llm_requests, new_run_dir, setup_logging, tee_console
+# memstara/pipeline/core.py — the part the two pipelines (mvp, board) share
+from memstara.pipeline.core import (
     BOARD_SERVERS,           # the tool servers each stage is allowed to reach
     BOARD_TOOLS,             # the individual tool names each stage is allowed
     PERSPECTIVES,            # the perspective wording given differently per trial
@@ -174,7 +174,7 @@ from pipeline_core import (
     temperature_for,         # trial number -> temperature
     tools_for,               # picks out of the registry only the tools to be used
 )
-from settings import Settings   # the settings object that reads .env and hands it to core
+from memstara.config import Settings   # the settings object that reads .env and hands it to core
 
 # memstara/paths.py, memstara/servers.py — where things are, and how the five tool
 # servers are launched. One copy each, for both pipelines and for preflight.
@@ -183,7 +183,7 @@ from memstara.servers import launch_table
 # The function that writes one run out in a form a person can read. render is used
 # rather than dump_all — dump_all presumes the todo_rows.json shape of the 02 path.
 # See write_traces().
-from trace_run import render
+from memstara.trace.run import render
 
 # ---- motoro (the repo next door, installed editable) ------------------
 from motoro import configure

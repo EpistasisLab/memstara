@@ -24,7 +24,7 @@ import json
 
 import pytest
 
-import tools_data
+from memstara.mcp_servers import data as tools_data
 
 #: `@mcp.tool()` wraps the function; `.fn` is the undecorated callable.
 slice_columns = getattr(tools_data.slice_columns, "fn", tools_data.slice_columns)

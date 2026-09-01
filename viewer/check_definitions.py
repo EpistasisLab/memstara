@@ -52,9 +52,9 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).parent
-SANDBOX = HERE.parent
-# HERE = viewer/ , SANDBOX = the one above it (memstara/). pipeline_core
-# sits at the sandbox root, so SANDBOX is slipped into sys.path further down.
+# HERE = viewer/. The pipeline it checks against is the installed `memstara` package,
+# so nothing has to be put on sys.path to reach it. `HERE / "api"` still does, further
+# down — that directory is a set of flat sibling modules, not a package.
 
 
 def _copy_from_stores() -> dict[str, object]:
@@ -83,14 +83,14 @@ def main() -> int:
     # The exit code is the result: 0 everything matches / 1 something does not line up /
     # 2 pipeline_core could not be read. The point is that CI or a shell can pick it up
     # as a failure as it stands.
-    sys.path.insert(0, str(SANDBOX))
     # This is where the real pipeline definitions are fetched. On failure it ends with 2
     # (= "the check could not be made"), not with 1 (= "they do not line up"). Mix the
     # two and picking the wrong interpreter looks like broken definitions.
     try:
-        from pipeline_core import BOARD_AGENT_NAMES, BOARD_SERVERS, BOARD_TOOLS
+        from memstara.pipeline.core import BOARD_AGENT_NAMES, BOARD_SERVERS, BOARD_TOOLS
     except Exception as e:  # noqa: BLE001
-        print(f"  could not read pipeline_core — run it with the core interpreter: {e}")
+        print(f"  could not read memstara.pipeline.core — "
+              f"run it with the core interpreter: {e}")
         return 2
 
     copy = _copy_from_stores()

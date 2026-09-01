@@ -82,9 +82,9 @@ testpaths = ["tests"]
 # repository root, which put the root on `sys.path` as rootdir. Saying so out loud
 # means `pytest <repo>/tests` works from anywhere.
 #
-# This is `["."]` while the modules are still at the root. It becomes `["src"]` when
-# they move, and then `pip install -e .` makes it redundant.
-pythonpath = ["."]
+# There is no `pythonpath` here. There was one — `["."]` — for exactly one commit,
+# while the modules still sat at the repository root. `pip install -e .` puts
+# `src/memstara` on the path properly, so pytest needs no help.
 
 markers = [
     "unit: pure logic over a stubbed encoder — no model, no catalog, no filesystem",

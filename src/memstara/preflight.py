@@ -44,7 +44,7 @@ import sys
 from pathlib import Path
 
 # **First of all.** The imports below read the environment, so it must be set up first.
-from bootstrap import PROVIDER_KEYS, allowlist_gaps, load_env, missing_vars
+from memstara.env import PROVIDER_KEYS, allowlist_gaps, load_env, missing_vars
 from memstara.paths import ENV_FILES, REPO_ROOT
 from memstara.servers import BY_NAME, SERVERS
 
@@ -138,7 +138,7 @@ async def check_databases() -> None:
         except Exception as e:  # noqa: BLE001
             check(label, False, type(e).__name__, hint)
 
-    from blackboard import dsn as board_dsn
+    from memstara.blackboard import dsn as board_dsn
 
     await reachable("board DB (memstara)", board_dsn(), "docker compose up -d")
     await reachable("core DB (motoro)", os.environ.get("MOTORO_DATABASE_URL", ""),
@@ -165,10 +165,10 @@ def check_matcher_catalog() -> None:
     """
     print("\n[6] matcher catalog cache")
     try:
-        from matcher_impl import config as matcher_cfg
-        from matcher_impl.catalog import load_catalog, verify_catalog
-        from matcher_impl.embedder import embeddings_stale
-        from matcher_impl.service import build_run_config, current_fingerprint
+        from memstara.matcher import config as matcher_cfg
+        from memstara.matcher.catalog import load_catalog, verify_catalog
+        from memstara.matcher.embedder import embeddings_stale
+        from memstara.matcher.service import build_run_config, current_fingerprint
     except Exception as e:  # noqa: BLE001
         check("import matcher_impl", False, f"{type(e).__name__}: {e}",
               "check you are in the memstara environment and that numpy is installed")
@@ -221,7 +221,7 @@ def check_servers() -> None:
         )
         ok = r.returncode == 0
         detail = "" if ok else (r.stderr.strip().splitlines() or ["?"])[-1][:90]
-        check(f"{server.module}.py", ok, detail,
+        check(server.module, ok, detail,
               f"starting it directly with `python -m {server.module}` shows the real error")
 
 

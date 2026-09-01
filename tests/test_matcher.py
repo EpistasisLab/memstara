@@ -30,17 +30,17 @@ from collections.abc import Sequence
 import numpy as np
 import pytest
 
-from matcher_impl.config import EmbeddingConfig, RunConfig
-from matcher_impl import catalog as catalog_mod
-from matcher_impl import matcher as matcher_mod
-from matcher_impl.catalog import CatalogEntry
-from matcher_impl.embedder import (
+from memstara.matcher.config import EmbeddingConfig, RunConfig
+from memstara.matcher import catalog as catalog_mod
+from memstara.matcher import matcher as matcher_mod
+from memstara.matcher.catalog import CatalogEntry
+from memstara.matcher.embedder import (
     embeddings_path,
     embeddings_stale,
     embeddings_stamp_path,
     save_embeddings,
 )
-from matcher_impl.matcher import Matcher
+from memstara.matcher.matcher import Matcher
 
 #: pure ranking over a stubbed encoder (§9.2 layer 1).
 pytestmark = pytest.mark.unit

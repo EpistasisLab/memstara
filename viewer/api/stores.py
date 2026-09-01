@@ -52,14 +52,12 @@ tool, not by server.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from typing import Any
 
-# The sandbox root, where pipeline_core lives. Importing it is the point of this file.
-# `parents[2]` = api/ -> viewer/ -> the sandbox root. Not inserted twice.
-SANDBOX = Path(__file__).resolve().parents[2]
-if str(SANDBOX) not in sys.path:
-    sys.path.insert(0, str(SANDBOX))
+# There used to be a `sys.path.insert` of the sandbox root here, so that
+# `pipeline_core.py` sitting there could be imported. The pipeline is now the installed
+# `memstara` package, so the interpreter finds it on its own — or does not, in Docker,
+# which is what the fallback below is for.
 
 
 def _pipeline_definitions() -> tuple[dict[str, set[str]], dict[str, set[str]], dict[str, str]]:
@@ -71,7 +69,7 @@ def _pipeline_definitions() -> tuple[dict[str, set[str]], dict[str, set[str]], d
     `/api/health` carries out to the screen).
     """
     try:
-        from pipeline_core import BOARD_AGENT_NAMES, BOARD_SERVERS, BOARD_TOOLS  # type: ignore
+        from memstara.pipeline.core import BOARD_AGENT_NAMES, BOARD_SERVERS, BOARD_TOOLS  # type: ignore
 
         return dict(BOARD_TOOLS), dict(BOARD_SERVERS), dict(BOARD_AGENT_NAMES)
     except Exception:  # noqa: BLE001 - any import failure has the same fallback
@@ -116,7 +114,7 @@ BOARD_TOOLS, BOARD_SERVERS, BOARD_AGENT_NAMES = _pipeline_definitions()
 # True if the real definitions were read, False if the written fallback was used.
 # `/api/health` passes this straight through, so someone looking at the screen can tell
 # whether the picture is drawn against the real pipeline.
-IMPORTED_FROM_PIPELINE = "pipeline_core" in sys.modules
+IMPORTED_FROM_PIPELINE = "memstara.pipeline.core" in sys.modules
 
 # Reverse of BOARD_AGENT_NAMES, so a row from core's `agents` table becomes a scene
 # character — "memstara-board-ml" -> "ml".

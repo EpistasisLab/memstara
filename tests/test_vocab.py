@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import pytest
 
-from matcher_impl import vocab
+from memstara.matcher import vocab
 
 #: pure code normalization and recognition (§9.2 layer 1).
 pytestmark = pytest.mark.unit

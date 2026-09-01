@@ -44,7 +44,7 @@ from pathlib import Path
 # entry point used — a real difference in which file wins, hidden in a copy of two
 # lines. `load_env()` is now the one reader. (Measured before switching: the two files
 # share no key names at all, so nothing actually changed hands.)
-from bootstrap import load_env  # noqa: E402
+from memstara.env import load_env  # noqa: E402
 
 from memstara.paths import DEFAULT_OUTPUT_DIR, SHARED_ROOT  # noqa: E402
 

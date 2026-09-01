@@ -66,7 +66,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from settings import Settings
+from memstara.config import Settings
 
 from memstara.paths import DEFAULT_OUTPUT_DIR
 

@@ -124,7 +124,7 @@ def allowlist_gaps() -> list[str]:
             is expected. Skipping it quietly would leave this function returning `[]`,
             which reads as "everything is fine".
     """
-    from settings import Settings
+    from memstara.config import Settings
 
     allowed = {v.strip() for v in Settings().mcp_allowed_env_vars.split(",") if v.strip()}
 

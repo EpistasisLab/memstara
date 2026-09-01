@@ -30,15 +30,10 @@ the one that leaks what is in them.
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
-
-_ROOT = Path(__file__).parent.resolve()
-sys.path.insert(0, str(_ROOT))
 
 from mcp.server.fastmcp import FastMCP
 
-from debug_hook import quiet_child, wait_for_debugger
+from memstara.mcp_servers.debug_hook import quiet_child, wait_for_debugger
 
 quiet_child()
 wait_for_debugger("semantic-matcher")
@@ -53,7 +48,7 @@ def _check_feature_type(feature_type: str | None) -> str | None:
     candidate list whose note says "nothing was close enough — try rewording",
     and that advice is wrong. No amount of rewording fixes a typo in the scope.
     """
-    from matcher_impl.service import valid_feature_types
+    from memstara.matcher.service import valid_feature_types
 
     if feature_type is None or feature_type in valid_feature_types():
         return None
@@ -74,9 +69,9 @@ def describe_matcher() -> str:
     Operational tool — not exposed to the agents. Use it to confirm the cache was
     built against the cohort you think it was.
     """
-    from matcher_impl import config
-    from matcher_impl.embedder import embeddings_path
-    from matcher_impl.service import current_fingerprint, get_matcher, valid_feature_types
+    from memstara.matcher import config
+    from memstara.matcher.embedder import embeddings_path
+    from memstara.matcher.service import current_fingerprint, get_matcher, valid_feature_types
 
     try:
         matcher = get_matcher()
@@ -159,7 +154,7 @@ def match_concepts(
     if bad is not None:
         return bad
 
-    from matcher_impl.service import get_matcher
+    from memstara.matcher.service import get_matcher
 
     results = get_matcher().match_many(
         concepts, feature_type=feature_type, top_k=top_k, threshold=threshold
@@ -183,7 +178,7 @@ def match_concept(
     if bad is not None:
         return bad
 
-    from matcher_impl.service import get_matcher
+    from memstara.matcher.service import get_matcher
 
     result = get_matcher().match(
         concept, feature_type=feature_type, top_k=top_k, threshold=threshold

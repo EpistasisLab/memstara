@@ -64,10 +64,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 from collections import Counter
 
-import tools_blackboard as bb   # the board's tools — called directly, without a server
+from memstara.mcp_servers import blackboard as bb  # the board's tools — called directly, without a server
 
 # The marker put only on rows this check made. It is what lets us pick out this
 # check's rows and delete them without touching the real run records that live in
@@ -547,7 +546,7 @@ async def main() -> int:
     # The two rows above are in_progress right now. If the run dies here nobody clears
     # them — the driver's reclaim_stalled looks at its own tag only, and then only inside
     # the work loop. blackboard.py's three commands fill that gap.
-    import blackboard as bbm
+    from memstara import blackboard as bbm
 
     # Note down first what state the other tag is in. That it is **unchanged** after
     # --reclaim is half of what this item checks.
@@ -577,7 +576,8 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
-    # Put this file's own folder at the front of the search path. So that whatever
-    # directory it is run from, it can find the tools_blackboard sitting next to it.
-    sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
+    # There used to be a `sys.path.insert` of this file's own folder here, so it could
+    # find the `tools_blackboard.py` that sat beside it at the repository root. The board
+    # server is now `memstara.mcp_servers.blackboard` in an installed package, so this
+    # runs the same from any directory without help.
     raise SystemExit(asyncio.run(main()))

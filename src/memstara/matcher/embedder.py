@@ -54,7 +54,7 @@ from typing import Final
 
 import numpy as np
 
-from matcher_impl.config import EmbeddingConfig
+from memstara.matcher.config import EmbeddingConfig
 
 log = logging.getLogger(__name__)
 

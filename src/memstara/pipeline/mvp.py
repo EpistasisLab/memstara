@@ -107,8 +107,8 @@ from typing import Any
 #   run_report     — read the run directory, write REPORT.md, judge normal/abnormal
 #   settings       — the settings object that reads the environment variables
 #   trace_run      — pull the database's record of tool calls out into files
-from logging_setup import new_run_dir, setup_logging, tee_console
-from pipeline_core import (
+from memstara.logging_setup import new_run_dir, setup_logging, tee_console
+from memstara.pipeline.core import (
     TrialConfig,
     aggregate,
     interpret_overall,
@@ -116,10 +116,10 @@ from pipeline_core import (
     run_one_trial,
     save_rows,
 )
-from bootstrap import load_env
-from run_report import build_report
-from settings import Settings
-from trace_run import dump_all
+from memstara.env import load_env
+from memstara.trace.report import build_report
+from memstara.config import Settings
+from memstara.trace.run import dump_all
 
 from memstara.paths import DEFAULT_OUTPUT_DIR
 from memstara.servers import launch_table
@@ -301,7 +301,8 @@ async def setup_tools() -> MCPServerRegistry:
     # satisfies both, and says why.
     #
     # memstara-blackboard is connected but not yet handed to any agent. The board exists
-    # and its window works (see test_blackboard.py), but no agent is told to use it —
+    # and its window works (see scripts/check_blackboard.py), but no agent is told to use
+    # it —
     # the prompts still receive their input from run_one_trial. Connecting it now means
     # the wiring is exercised on every run instead of only when someone remembers to
     # test it — and in between it could be quietly broken with nobody the wiser. Handing

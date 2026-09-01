@@ -43,8 +43,8 @@ import asyncio
 import sys
 from typing import Any
 
-from logging_setup import default_log_path, setup_logging
-from settings import Settings
+from memstara.logging_setup import default_log_path, setup_logging
+from memstara.config import Settings
 
 from motoro import configure
 from motoro.runner import (

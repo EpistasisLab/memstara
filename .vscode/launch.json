@@ -18,7 +18,7 @@
     {
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/03_board_pipeline.py",
+      "module": "memstara.pipeline.board",
       "console": "integratedTerminal",
       "justMyCode": true,
       "cwd": "${workspaceFolder}",
@@ -38,7 +38,7 @@
     {
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/03_board_pipeline.py",
+      "module": "memstara.pipeline.board",
       "console": "integratedTerminal",
       "justMyCode": true,
       "cwd": "${workspaceFolder}",
@@ -58,7 +58,7 @@
     {
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/03_board_pipeline.py",
+      "module": "memstara.pipeline.board",
       "console": "integratedTerminal",
       "justMyCode": true,
       "cwd": "${workspaceFolder}",
@@ -79,7 +79,7 @@
     {
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/03_board_pipeline.py",
+      "module": "memstara.pipeline.board",
       "console": "integratedTerminal",
       "justMyCode": true,
       "cwd": "${workspaceFolder}",
@@ -98,7 +98,7 @@
     {
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/03_board_pipeline.py",
+      "module": "memstara.pipeline.board",
       "console": "integratedTerminal",
       "justMyCode": false,
       "cwd": "${workspaceFolder}",
@@ -118,7 +118,7 @@
       "name": "도구 하네스 (okf · data · ml · board)",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/debug_harness.py",
+      "module": "memstara.debug_harness",
       "args": [
         "${input:harnessMode}"
       ],

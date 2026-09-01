@@ -43,9 +43,9 @@ from pathlib import Path
 
 import asyncpg
 
-from blackboard import dsn
-from settings import Settings
-from trace_run import render
+from memstara.blackboard import dsn
+from memstara.config import Settings
+from memstara.trace.run import render
 
 from motoro import configure
 

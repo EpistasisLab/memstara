@@ -34,14 +34,10 @@ Both are now hard failures. Nothing here defaults.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
-_ROOT = Path(__file__).parent.parent.resolve()
-sys.path.insert(0, str(_ROOT))
-
-from matcher_impl import config
-from matcher_impl.catalog import build_catalog, save_catalog, save_catalog_meta
-from matcher_impl.embedder import (
+from memstara.matcher import config
+from memstara.matcher.catalog import build_catalog, save_catalog, save_catalog_meta
+from memstara.matcher.embedder import (
     embed_catalog,
     embeddings_path,
     embeddings_stamp_path,
@@ -49,7 +45,7 @@ from matcher_impl.embedder import (
     save_embeddings,
     sentence_transformer_encoder,
 )
-from matcher_impl.service import (
+from memstara.matcher.service import (
     build_run_config,
     current_fingerprint,
     dataset_path,

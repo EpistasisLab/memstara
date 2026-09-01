@@ -25,17 +25,12 @@ GOOD query that is actually absent moves the recommended floor down for no reaso
 from __future__ import annotations
 
 import statistics
-import sys
-from pathlib import Path
-
-_ROOT = Path(__file__).parent.parent.resolve()
-sys.path.insert(0, str(_ROOT))
 
 import numpy as np
 
-from matcher_impl.catalog import build_catalog
-from matcher_impl.embedder import embed_catalog, l2_normalize, sentence_transformer_encoder
-from matcher_impl.service import build_run_config, dataset_path, outcome_column, read_columns
+from memstara.matcher.catalog import build_catalog
+from memstara.matcher.embedder import embed_catalog, l2_normalize, sentence_transformer_encoder
+from memstara.matcher.service import build_run_config, dataset_path, outcome_column, read_columns
 
 #: (query, a substring of the column it should reach). `None` where only the
 #: top-1 score matters and no single column is "the" right answer.

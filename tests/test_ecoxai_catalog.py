@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import pytest
 
-from matcher_impl.catalog import CatalogEntry, build_catalog, catalog_fingerprint
-from matcher_impl.config import RunConfig
-from matcher_impl.matcher import Matcher
+from memstara.matcher.catalog import CatalogEntry, build_catalog, catalog_fingerprint
+from memstara.matcher.config import RunConfig
+from memstara.matcher.matcher import Matcher
 
 pytestmark = pytest.mark.unit
 

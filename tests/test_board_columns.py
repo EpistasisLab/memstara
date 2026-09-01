@@ -21,7 +21,7 @@ import json
 
 import pytest
 
-import tools_blackboard
+from memstara.mcp_servers import blackboard as tools_blackboard
 
 pytestmark = pytest.mark.unit
 
