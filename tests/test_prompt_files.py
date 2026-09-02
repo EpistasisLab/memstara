@@ -31,6 +31,12 @@ AGENTS = [
 #: Files that are not agents. A fragment has no goal and is never loaded on its own.
 FRAGMENTS = ["board/_claim_preamble"]
 
+#: The directory's rules file, which is prose for people and never loaded as a prompt.
+#: Named here rather than filtered by a pattern, on the same principle as
+#: `scripts/check_citations.py:47-49`: an exemption a reader can see beats one that a
+#: glob happens to make.
+NOT_A_PROMPT = ["CLAUDE"]
+
 
 def prompt_files() -> list:
     return sorted(PROMPTS_DIR.rglob("*.md"))
@@ -55,7 +61,7 @@ def test_no_file_is_unaccounted_for():
     keeps working, and the stale file goes on being edited by whoever finds it first.
     """
     on_disk = {p.relative_to(PROMPTS_DIR).with_suffix("").as_posix() for p in prompt_files()}
-    assert on_disk == set(AGENTS) | set(FRAGMENTS)
+    assert on_disk == set(AGENTS) | set(FRAGMENTS) | set(NOT_A_PROMPT)
 
 
 @pytest.mark.parametrize("name", AGENTS)
