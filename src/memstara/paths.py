@@ -41,9 +41,10 @@ So the layout is asserted once, here, and every other module asks.
 
 The one assumption
 ------------------
-`REPO_ROOT` is the only line in this repository that depends on how deep a file
-sits. It is `parents[2]` because this file is `<root>/src/memstara/paths.py`. If
-that ever changes, this is the single line to change — which is the entire point.
+`REPO_ROOT` and `PACKAGE_ROOT` are the only lines in this repository that depend on
+how deep a file sits. They are `parents[2]` and `parent` because this file is
+`<root>/src/memstara/paths.py`. If that ever changes, these are the two lines to
+change — which is the entire point.
 """
 
 from __future__ import annotations
@@ -53,6 +54,20 @@ from pathlib import Path
 
 #: `<root>/src/memstara/paths.py` → parents[0] = memstara, [1] = src, [2] = the root.
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+#: The installed package itself — `<root>/src/memstara`.
+PACKAGE_ROOT = Path(__file__).resolve().parent
+
+#: The agents' system prompts, one `.md` file per agent, read by
+#: `memstara.pipeline.prompts.load_prompt`.
+#:
+#: Pinned to the package and **not** to `REPO_ROOT`, which is the opposite of the
+#: decision made for `DEFAULT_OUTPUT_DIR` below and for the same underlying reason.
+#: `outputs/` is data that must not move when the code does. A prompt is the
+#: opposite: it is what the code *does*, versioned with it and shipped with it, so
+#: it belongs inside the package. `pyproject.toml:94-95` gives hatchling
+#: `packages = ["src/memstara"]`, which puts these files in the wheel already.
+PROMPTS_DIR = PACKAGE_ROOT / "prompts"
 
 #: The folder holding this checkout and its siblings. `motoro` and `shared`
 #: are checked out beside this repository, not inside it, and several paths are
