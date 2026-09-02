@@ -642,6 +642,63 @@ async def main() -> int:
                       f"{retaken.get('claimed_by')!r} · late submit "
                       f"{late.get('error', 'ALLOWED — the overwrite happened')[:40]}"))
 
+    # ---- (10) two named workers on one run, at the same time -------------
+    #
+    # (9) proves the contract one call at a time. This is the shape the driver actually
+    # produces now that --data-agents may be more than 1: the work loop collects a lap's
+    # calls and starts them with asyncio.gather, so two `data` workers reach claim_task
+    # together rather than in turn.
+    #
+    # The gate at the top of this file already fires 12 claimers at 8 tasks and proves no
+    # row is taken twice. What that one cannot show is the **name**: it claims without a
+    # worker, so every row it takes is held by "". Here each claimer carries the identity
+    # the driver mints (`data#1`, `data#2`), and the thing being checked is that the name
+    # on the row is the name of the worker that was handed the row — not merely that some
+    # name is there. Mix those up and the guard in (9) starts refusing the right worker.
+    #
+    # Two rounds of two rather than one round of four, because that is the driver's own
+    # rhythm: the lap launches min(waiting, N) workers, they finish, the next lap looks at
+    # the board again. A worker name is reused across laps and must not be a problem.
+    made = []
+    for trial in range(93, 97):
+        r = json.loads(await bb.create_task(RUN_TAG, trial, f"perspective {trial}",
+                                            f"hypothesis {trial}", COLUMNS, "HIV_DETECTABLE"))
+        made.append(r["task_id"])
+
+    taken: list[tuple[str, int]] = []          # (worker, task_id), in claim order
+    for _lap in range(2):
+        names = ["data#1", "data#2"]
+        got = await asyncio.gather(*(bb.claim_task("data", RUN_TAG, worker=w) for w in names))
+        # strict=True on purpose: gather returns one result per coroutine, so a length
+        # mismatch here would mean a claim silently vanished, and zip's default would
+        # hide exactly the worker whose disappearance this item exists to catch.
+        taken += [(w, json.loads(g).get("task_id")) for w, g in zip(names, got, strict=True)]
+
+    rows = {t["task_id"]: t for t in json.loads(await bb.read_board(RUN_TAG))["tasks"]}
+    ids = [tid for _w, tid in taken]
+    results.append(ok(sorted(i for i in ids if i is not None) == sorted(made)
+                      and len(set(ids)) == len(ids)
+                      # The row names the worker that was handed it — not just somebody.
+                      and all(rows[tid]["claimed_by"] == w for w, tid in taken),
+                      "two workers claiming together take four different tasks, each under its own name",
+                      " · ".join(f"{w}→#{tid}" for w, tid in taken)))
+
+    # Both submit, together, each naming itself. Every one has to go through: (9) showed
+    # the guard refusing a stranger, and a guard that also refuses the holder under load
+    # would look identical from the outside until a real run stalled on it.
+    sent = await asyncio.gather(*(bb.submit_result(tid, subset_path="outputs/sub_x.csv",
+                                                   columns_used=COLUMNS, worker=w)
+                                  for w, tid in taken))
+    moved = {t["task_id"]: t for t in json.loads(await bb.read_board(RUN_TAG))["tasks"]}
+    results.append(ok(all("error" not in json.loads(s) for s in sent)
+                      and all(moved[tid]["task_type"] == "ml" for _w, tid in taken)
+                      # Handing the task on releases it, or the ml worker that picks it up
+                      # next is refused by a data worker's name left behind on the row.
+                      and all(moved[tid]["claimed_by"] == "" for _w, tid in taken),
+                      "each worker's own result goes through and hands the task on, naming nobody",
+                      f"{sum('error' not in json.loads(s) for s in sent)}/{len(sent)} accepted · "
+                      f"holders after {[moved[tid]['claimed_by'] for _w, tid in taken]}"))
+
     # What the check made is not left behind. The second tag made above goes too.
     await cleanup()
     await cleanup_tag(other_tag)
