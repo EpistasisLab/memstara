@@ -81,6 +81,10 @@ dev = [
     # The tool servers are child processes, so attaching a debugger to one needs this.
 
     "debugpy",
+    # The linter, configured in `[tool.ruff]` below and run by
+    # `.github/workflows/ci.yml`. Declared here rather than installed ad hoc so that
+    # the version CI uses and the version this machine uses come from one place.
+    "ruff",
 ]
 
 [build-system]
@@ -117,3 +121,65 @@ testpaths = ["tests"]
 markers = [
     "unit: pure logic over a stubbed encoder — no model, no catalog, no filesystem",
 ]
+
+# --------------------------------------------------------------------------- #
+# ruff. Run by `.github/workflows/ci.yml` as `ruff check src/`.
+#
+# There is no mypy here, and that is a decision rather than an omission: `src/`
+# is 12,426 lines carrying no type hints, so `--strict` would produce thousands
+# of findings and exactly one habit, which is ignoring the output. Adding types
+# is a piece of work with its own backlog item, not a flag to switch on.
+#
+# The scope is `src/`, and it is set by the command rather than by an `exclude`
+# here, so that a deliberate `ruff check scripts/` still works. `scripts/` is
+# one-off tooling written to be read rather than reused, and `tests/` carries
+# ported afc-forge tests that are evidence only while they stay unmodified
+
+# they were not written to, for no gain.
+# --------------------------------------------------------------------------- #
+[tool.ruff]
+# isort's notion of a first-party import, which is what makes `memstara.*` sort
+# into its own block rather than alongside numpy.
+src = ["src"]
+
+# Measured, not chosen. The distribution of line lengths across `src/` on
+# 2026-09-01: median 45, p90 87, p95 90, p99 106, longest 182. At 100 ruff
+# reports 85 lines; at 110, 20; at 120, exactly one
+# (`src/memstara/trace/__init__.py:7`). 120 is therefore the limit that gates
+# what gets written next instead of generating a backlog of reflowing existing
+# prose — and a limit that produces 85 findings on day one is a limit that gets
+# added to `ignore` within a week.
+line-length = 120
+
+[tool.ruff.lint]
+# E/F are pyflakes and pycodestyle: undefined names, unused imports, unreachable
+# code — the findings that are bugs rather than style. I sorts imports. B is
+# flake8-bugbear, which is where `zip()` without `strict=` gets caught. UP is
+# pyupgrade; it currently reports nothing, and is listed so that it keeps
+# reporting nothing as files are edited.
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# The three files below are `SOURCE: PORTED FROM afc-forge`, and
+
+# this package is a faithful port rests entirely on a diff against upstream
+# printing only what the PORT NOTEs declare
+# (`src/memstara/matcher/__init__.py:44-48`), and a tidied import block is
+# indistinguishable from a divergence in that diff.
+#
+# So the two findings here are upstream's, and both are correct as they stand:
+# `matcher.py:64` orders its imports the way afc-forge does, and the `torch` at
+# `embedder.py:154` is imported for its side effect — it must be loaded after
+# the offline flag is flipped and before `sentence_transformers`, which is why
+# it is never referenced by name.
+#
+# `vocab.py` is clean today and is listed anyway, because the rule is about
+# where the file came from, not about what ruff happens to say this month.
+#
+# If a new rule fires on one of these files, the fix is to add its code to this
+# list with a line explaining what upstream does. It is never to edit the file.
+# `catalog.py` is deliberately absent: it is `SOURCE: MIXED`, and its
+# sandbox-original half from `catalog.py:190` onward should be linted normally.
+"src/memstara/matcher/matcher.py" = ["I001"]
+"src/memstara/matcher/embedder.py" = ["F401"]
+"src/memstara/matcher/vocab.py" = ["I001", "F401"]
