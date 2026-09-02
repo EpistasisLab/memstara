@@ -566,6 +566,82 @@ async def main() -> int:
                       "--close only closes as failed, it does not delete rows (why there is no result stays)",
                       f"closed {closed} · failed rows left {len(failed)}"))
 
+    # ---- (9) ⭐ THE GATE: is the holder recorded, and does the record hold -
+    #
+    # The gate at the top proves two workers cannot **take** the same task. This one is
+    # about what happens after: a worker that has already taken one and is slow.
+    #
+    # `submit_result` used to check the status and nothing else, and a status cannot tell
+    # these two apart — "the task I am holding" and "the task that was taken away from me
+    # and given to somebody else" are both `in_progress` when you look at them. So a
+    # worker that overran `--stale-after`, had its row requeued and handed on, and then
+    # finished, wrote its result straight over the top of whoever now held it. Nothing
+    # errored and nothing looked wrong; the results table simply held the wrong run of
+    # the wrong worker's work.
+    #
+    # This never happened, because there has only ever been one worker per stage. It is
+    # the ordinary case with two, which is the whole point of adding a second.
+    #
+    # RUN_TAG's rows are all `failed` by now (--close, just above), so the task made here
+    # is the only one this claims, and no earlier item is disturbed.
+    await bb.create_task(RUN_TAG, 92, "perspective C", "hypothesis C", COLUMNS, "HIV_DETECTABLE")
+    held = json.loads(await bb.claim_task("data", RUN_TAG, worker="data-1"))
+    owned = held["task_id"]
+    shown = next(t for t in json.loads(await bb.read_board(RUN_TAG))["tasks"]
+                 if t["task_id"] == owned)
+    results.append(ok(held.get("claimed_by") == "data-1" and shown.get("claimed_by") == "data-1",
+                      "a claimed task records who is holding it, and the board shows it",
+                      f"claim returned {held.get('claimed_by')!r} · board shows {shown.get('claimed_by')!r}"))
+
+    # Somebody else's result, on a task that is legitimately in_progress. The status check
+    # passes here — it has to, the task really is in progress — so if this goes through,
+    # the only guard that could have stopped it is the one being checked.
+    wrong = json.loads(await bb.submit_result(owned, subset_path="outputs/sub_wrong.csv",
+                                              columns_used=COLUMNS, worker="data-2"))
+    intact = next(t for t in json.loads(await bb.read_board(RUN_TAG))["tasks"]
+                  if t["task_id"] == owned)
+    results.append(ok("error" in wrong and "data-1" in wrong.get("error", "")
+                      and intact.get("status") == "in_progress"
+                      and intact.get("task_type") == "data"
+                      # Refused means nothing was written, not written and rolled back
+                      # later. columns_used is what that submit would have filled.
+                      and intact.get("columns_used") == [],
+                      "another worker's result is refused by name and nothing is written",
+                      wrong.get("error", "ALLOWED")[:56]))
+
+    # And the holder's own result still goes through — a guard that refuses everybody is
+    # not a guard, it is an outage.
+    rightful = json.loads(await bb.submit_result(owned, subset_path="outputs/sub_x.csv",
+                                                 columns_used=COLUMNS, worker="data-1"))
+    freed = next(t for t in json.loads(await bb.read_board(RUN_TAG))["tasks"]
+                 if t["task_id"] == owned)
+    results.append(ok(rightful.get("task_type") == "ml" and freed.get("claimed_by") == "",
+                      "the holder's own result goes through, and submitting releases the task",
+                      f"{rightful.get('status')} · {rightful.get('task_type')} · "
+                      f"holder now {freed.get('claimed_by')!r}"))
+
+    # ---- the whole thing, end to end -----------------------------------
+    #
+    # The three items above check the pieces. This one walks the accident itself: claim,
+    # stall, requeue, somebody else takes it, the slow one finishes and submits. `reclaim`
+    # stands in for `reclaim_stalled` — same UPDATE without the time condition, so the
+    # stall does not have to be waited out.
+    slow = json.loads(await bb.claim_task("ml", RUN_TAG, worker="ml-1"))["task_id"]
+    await bbm.reclaim(RUN_TAG)
+    requeued = next(t for t in json.loads(await bb.read_board(RUN_TAG))["tasks"]
+                    if t["task_id"] == slow)
+    retaken = json.loads(await bb.claim_task("ml", RUN_TAG, worker="ml-2"))
+    late = json.loads(await bb.submit_result(slow, auc=0.99, worker="ml-1"))
+    results.append(ok(requeued.get("claimed_by") == ""
+                      and retaken.get("task_id") == slow
+                      and retaken.get("claimed_by") == "ml-2"
+                      and "error" in late and "ml-2" in late.get("error", ""),
+                      "the stalled-worker overwrite: requeued names nobody, the second worker "
+                      "takes it, the first one's late result is refused",
+                      f"requeued holder {requeued.get('claimed_by')!r} → retaken by "
+                      f"{retaken.get('claimed_by')!r} · late submit "
+                      f"{late.get('error', 'ALLOWED — the overwrite happened')[:40]}"))
+
     # What the check made is not left behind. The second tag made above goes too.
     await cleanup()
     await cleanup_tag(other_tag)
