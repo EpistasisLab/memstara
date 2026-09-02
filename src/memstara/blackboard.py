@@ -321,7 +321,32 @@ CREATE TABLE IF NOT EXISTS memstara_questions (
     best_auc     DOUBLE PRECISION,
 
     status       TEXT        NOT NULL DEFAULT 'open',   -- 'open' | 'exhausted'
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    -- Who is working this question right now, and since when. The same pair the board
+    -- carries, for the same reason and with the same vocabulary: with two hypothesis
+    -- agents seeding one wave, something has to stop both of them setting out from the
+    -- question. Without it the only thing keeping them apart is the driver handing each
+    -- a different one out of its own memory, which is not written down anywhere and
+    -- therefore not true of a second driver, a resumed run, or a crash mid-wave.
+    --
+    -- **These two are temporary in a way the board's are not, and that difference is the
+    -- whole design.** There is deliberately no run_tag on this table (see above): the
+    -- bank spans runs so the project can answer "what have we already asked". A claim
+    -- that is never released would therefore drain the bank permanently — the second run
+    -- would find every question taken by the first and have nothing to ask. So a claim
+    -- lives only as long as the seeding window it exists to protect, and it is ended two
+    -- ways: release_questions() clears the run's claims the moment its wave has finished
+    -- seeding, and claim_question treats a claim older than the staleness window as free,
+    -- which is what recovers a run that died between the two.
+    --
+    -- claimed_run is which run is holding it, not which agent — release_questions works a
+    -- run at a time, and the worker name alone ('hypothesis#1') is reused by every run
+    -- there has ever been. claimed_by is kept beside it anyway, because "run X is holding
+    -- this" does not tell a person reading the bank which of X's two workers had it.
+    claimed_run  TEXT        NOT NULL DEFAULT '',
+    claimed_by   TEXT        NOT NULL DEFAULT '',
+    claimed_at   TIMESTAMPTZ
 );
 
 -- read_questions() asks for open rows newest-first; this is that order.
@@ -359,6 +384,13 @@ ALTER TABLE memstara_results    ADD COLUMN IF NOT EXISTS question_id INTEGER;
 -- this line the column exists only on a database nobody has — the ownership check would
 -- read a column that is not there and the fix would look applied while changing nothing.
 ALTER TABLE memstara_blackboard ADD COLUMN IF NOT EXISTS claimed_by TEXT NOT NULL DEFAULT '';
+
+-- The question bank's own claim, added the same way. The bank is the oldest table here
+-- and the one most certain to already exist, so of every ALTER in this block these are
+-- the three least safe to leave out.
+ALTER TABLE memstara_questions ADD COLUMN IF NOT EXISTS claimed_run TEXT NOT NULL DEFAULT '';
+ALTER TABLE memstara_questions ADD COLUMN IF NOT EXISTS claimed_by  TEXT NOT NULL DEFAULT '';
+ALTER TABLE memstara_questions ADD COLUMN IF NOT EXISTS claimed_at  TIMESTAMPTZ;
 
 -- Same reason as the ADD COLUMN above: an existing table keeps whatever constraint it
 -- was created with, so the change has to be stated for databases made before it.
@@ -608,6 +640,55 @@ async def reclaim(run_tag: str) -> int:
                  WHERE run_tag = $1 AND status = 'in_progress'
              RETURNING 1
             ) SELECT count(*) FROM returned
+            """,
+            run_tag,
+        )
+    finally:
+        await conn.close()
+
+
+async def release_questions(run_tag: str) -> int:
+    """Give back every bank question one run is holding. **The bank itself is untouched.**
+
+    The counterpart to `claim_question` in `src/memstara/mcp_servers/blackboard.py`, and the
+    reason a question claim is safe to make at all. `memstara_questions` has no run_tag
+    (`src/memstara/blackboard.py:292-295`) — the bank spans runs so the project can answer
+    "what have we already asked". A claim left behind would therefore not expire with the
+    run that made it; it would take that question out of circulation for every run after,
+    and the bank would look exhausted while being full.
+
+    So a claim is meant to be short. It exists to keep two hypothesis workers of **one
+    wave** off one question, and the driver calls this the moment that wave has finished
+    seeding — long before the wave's tasks are done, because by then the question's job is
+    over and the work it produced is on the board under its own question_id.
+
+    This is the normal ending. The other one is in `claim_question`, which treats a claim
+    older than the staleness window as free; that is what recovers a run that died between
+    claiming and this call, and it is the only thing that does.
+
+    Not an MCP tool, deliberately. An agent claims; releasing is the driver's business,
+    the same split `reclaim` above already keeps. Adding it to the tool server would give
+    a model a way to hand somebody else's question back mid-wave.
+
+    Args:
+        run_tag: which run's claims to give back. No other run's are touched.
+
+    Returns:
+        How many were released.
+    """
+    conn = await asyncpg.connect(dsn())
+    try:
+        return await conn.fetchval(
+            """
+            WITH freed AS (
+                UPDATE memstara_questions
+                   -- All three, together. A row naming a holder with no claimed_at could
+                   -- never go stale, so it would be the one kind of leak the staleness
+                   -- rule cannot clean up afterwards.
+                   SET claimed_run = '', claimed_by = '', claimed_at = NULL
+                 WHERE claimed_run = $1
+             RETURNING 1
+            ) SELECT count(*) FROM freed
             """,
             run_tag,
         )
