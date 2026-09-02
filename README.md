@@ -65,14 +65,14 @@ never the real constraint — six sites did it, and `Settings`' `env_file=".env"
 resolves against the working directory, not the module — while the flat layout did
 cost something: `tests/` resolved its imports only when pytest happened to be started
 
-table.
+since 2026-09-02, so it carries the full move table on this machine and in no clone.
 
 **Documents do not sit at the top level.** `README.md` is the only one; everything
 else goes into the folder that matches what it is — with eight documents lying flat
 at the top, a reader has to decide where to start every single time. The stated
 
 
-45 published GitHub issues are keyed to it.
+script is local-only since 2026-09-02, and the 45 issues it published are keyed to it.
 
 ```
 memstara/
@@ -158,7 +158,7 @@ what it depends on · evidence. The shape comes from the four questions in
 All 45 of them are GitHub issues as of 2026-09-01 —
 **[issues](https://github.com/HyunjunA/memstara/issues)** ·
 the file and line it was written from, and every item in the file carries its issue
-number. `scripts/backlog_to_issues.py` keeps the two in step and is safe to re-run.
+number. `scripts/backlog_to_issues.py` did that, and is local-only as of 2026-09-02.
 
 **`BACKLOG_KR.md`** is a full Korean edition of it, not a summary. **The English file
 is the one that becomes issues, and it is the one that is correct if the two
@@ -166,17 +166,17 @@ is the one that becomes issues, and it is the one that is correct if the two
 
 ## The Korean files are not in this repository
 
-Every Korean file here carries `_KR` in its name, and since 2026-09-02 `.gitignore`
-matches `*_KR*`, so **all 108 of them are on the author's machine and in no clone.**
+Every Korean file here carries `_KR` in its name, and since 2026-09-02 `.gitignore` matches `*_KR*`,
 
 
-name them, because that is what they are called; the links resolve to nothing here. What
-this repository tracks is the English half, and it is meant to stand on its own.
+
+
+turns it into issues. The English files still name all of them; the links resolve to nothing here.
+What this repository tracks is the English half, and it is meant to stand on its own.
 
 ## Reading order
 
-Items 1 to 4 are Korean and therefore local-only, per the section above. They are still
-the order to read them in.
+Items 1 to 4 are Korean and therefore local-only, per the section above — still the reading order.
 
 1. **`spec/Memstara_SRS_KR.pdf`** — **what has to be built.** Start with §2.3 (user
    characteristics) and §11 (unresolved items) to see what is settled and what is not

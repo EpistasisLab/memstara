@@ -87,6 +87,41 @@ __pycache__/
 *_KR*
 
 # ---------------------------------------------------------------------------
+# The three Korean files that could not be renamed. Local only, as of 2026-09-02.
+#
+# The `*_KR*` rule above works by filename, and these three cannot take that
+# name. They are listed by path instead, one line each, because the reason is
+# different for every one of them and a pattern would hide that.
+#
+
+#       Builds the Korean slide deck. Its Korean is slide copy inside string
+#       literals — being Korean is what the file is *for*. Renaming a `.py` to
+#       `*_KR*` would gitignore an executable under a rule meant for prose.
+#
+
+#       Opens with the original memo, transcribed exactly as it was written.
+#       Translating it would make it stop being the original.
+#
+#   scripts/backlog_to_issues.py
+#       Two comment lines quote that memo verbatim (`FOLD_IDS`). **This is the
+#       expensive one**: the repository now does not contain the script that
+
+#       reproduce the board. It was excluded on instruction, and the cheap way
+#       back is to rewrite those two lines as a citation rather than a quotation
+#       and track the file again.
+#
+
+
+# tree, not the index. What is lost is that neither is checked any more —
+# `scripts/check_citations.py` indexes `git ls-files`, so citations *inside*
+# these three stop being verified, and citations *into* them are reported as
+# not verifiable here, by name (`LOCAL_ONLY`).
+# ---------------------------------------------------------------------------
+
+
+scripts/backlog_to_issues.py
+
+# ---------------------------------------------------------------------------
 # macOS and Office leavings
 # ---------------------------------------------------------------------------
 .DS_Store
