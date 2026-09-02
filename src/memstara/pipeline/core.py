@@ -40,8 +40,12 @@ a dataclass is enough.
                         is what makes it "different angles converged on one place"
 
    (2) Agent definitions  provision_all (the 4 for 02), provision_board_agents
-                        (the 6 for 03). Every prompt is in here. **The most
-                        important part of this file.**
+                        (the 6 for 03). What each agent is told is **not** in
+                        here — it is one .md file per agent under
+                        src/memstara/prompts/, read by memstara.pipeline.prompts.
+                        These two functions name the files and pass the model
+                        configuration; the prose they used to hold is the thing
+                        most often edited, and it is edited there now
 
    (3) Execution and aggregation  run_one_trial (02's supervisor), aggregate,
                         tools_for
@@ -287,186 +291,33 @@ async def provision_all(
 ) -> dict[str, uuid.UUID]:
     """Create the four agents (or find the existing ones) and return their ids.
 
+    The mvp path. Its four prompts are one file each under
+    `src/memstara/prompts/mvp/`, named for their key in `AGENT_NAMES`, on the same
+    rule as the board's — see `provision_board_agents`. They are kept separate from
+    `board/` rather than shared: the two pipelines exist to be compared, and a
+    prompt one of them edits must not silently change the other.
+
     No api_key is passed: ModelConfig.api_key is exclude=True, so it does not survive
     being persisted with the agent. Credentials resolve at call time instead.
     """
     mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096)
     react = {"execution_pattern": "reason_act"}
 
-    hypothesis = await _ensure_agent(
-        AGENT_NAMES["hypothesis"],
-        goal="Choose the set of columns that will predict the given outcome, grounded in the OKF knowledge source.",
-        system_prompt=(
-            "You are a hypothesis agent. Decide which columns to pull from the dataset in "
-            "order to predict the outcome.\n\n"
-            "The knowledge source (OKF) tells you WHICH PHENOMENA matter for this outcome "
-            "and how strong the evidence is. The dataset tells you WHICH COLUMNS EXIST. "
-            "Neither one alone is enough, and nothing connects them for you — making that "
-            "connection is your job.\n\n"
-            "Do NOT assume the knowledge source states column names. Different bundles are "
-            "written by different people to different conventions; some name variables "
-            "explicitly, some only describe a phenomenon in prose, and a field naming "
-            "columns may not exist at all. Read what is actually there.\n\n"
-            "Work in this order:\n"
-            "1) Call describe_dataset FIRST. Read the column names and note "
-            "   'missing_pct' — a column can exist and still be almost entirely blank, "
-            "   and choosing such a column is close to choosing nothing.\n"
-            "2) Call okf_list_domains to see what the knowledge source actually covers. It "
-            "   is the cheapest possible picture of the bundle and costs one call.\n"
-            "3) Search it with okf_search — on ideas, not on column names. It searches what "
-            "   the authors said each document is ABOUT (title, tags, description, journal), "
-            "   never the bodies, so a hit means the bundle says this document is about your "
-            "   query. Pass several wordings at once, comma-separated.\n"
-            "4) Open the promising ones with okf_read. Ask for section=\"Bottom line\" first — "
-            "   it is the conclusion, and it is a tenth the length of the whole paper. Read "
-            "   further sections only when the bottom line leaves you undecided. Several "
-            "   references can go in one call, comma-separated.\n"
-            "5) Call match_concepts with every concept at once. It returns a GROUP, not "
-            "   an answer. The top-ranked candidate is frequently a false friend: for "
-            "   'hypertension' it returns DX__I11.0__Hypertensive heart disease first "
-            "   while the column you want, DX__I10__Essential hypertension, is third; for "
-            "   'chronic kidney disease' a diabetes-complication code outranks DX__N18.3; "
-            "   for 'hemoglobin a1c' the plain LAB__HEMOGLOBIN — a different analyte — "
-            "   outranks real A1c columns. Read the whole group and pick the clinically "
-            "   correct column by name. Never take rank 1 on faith. If nothing fits, "
-            "   reword and call again. If a result is empty, read its 'note': "
-            "   'nothing was close enough' means reword; 'a code this cohort does not "
-            "   carry' means rewording will not help — name it in clinical English. "
-            "   Codes work best INSIDE English: 'essential hypertension (I10)'.\n"
-            "6) CAT__ columns are 0/1 indicators for one level of a family, and the "
-            "   matcher returns the whole family. A family with fewer levels than you "
-            "   expect has a dropped reference level — CAT__SEX__Male is the only sex "
-            "   column, and 0 there means not male. Choose only column names spelled "
-            "   exactly as describe_dataset or the matcher spelled them, and never the "
-            "   outcome itself.\n\n"
-            "Not every described variable is worth taking. The knowledge source covers far "
-            "more phenomena than you may select, and it states how strong the evidence is "
-            "for each. Judge, do not enumerate. If the knowledge source points at something "
-            "this dataset does not measure, say so rather than substituting a weak proxy.\n\n"
-            "Choose as many columns as the OKF evidence justifies — no fixed limit. "
-            "More is not better: each column must map to a specific OKF path with a "
-            "clear clinical rationale. Prefer fewer high-confidence matches over many "
-            "weak ones. At minimum, choose 1 column.\n\n"
-            "Your final answer MUST state, explicitly:\n"
-            "- the list of chosen column names, spelled exactly as the dataset spells them\n"
-            "- one sentence on why that combination should predict the outcome\n"
-            "- the list of knowledge-source concept ids you relied on\n"
-            "If you omit these, the downstream stages cannot read your decision."
-        ),
-        model_config=mc,
-        pattern_config=react,
-        output_contract={
-            "name": "Hypothesis",
-            "fields": [
-                {
-                    "name": "columns",
-                    "type": "list",
-                    "default": [],
-                    "description": "The column names chosen, spelled exactly as the dataset spells them.",
-                },
-                {
-                    "name": "hypothesis",
-                    "type": "str",
-                    "default": "",
-                    "description": "One sentence on why these columns should predict the outcome.",
-                },
-                {
-                    "name": "okf_concept_ids",
-                    "type": "list",
-                    "default": [],
-                    "description": "Ids of the knowledge-source concepts relied on.",
-                },
-            ],
-        },
+    hypothesis = await _ensure_agent_from_file(
+        AGENT_NAMES["hypothesis"], "mvp/hypothesis",
+        model_config=mc, pattern_config=react,
     )
-
-    data = await _ensure_agent(
-        AGENT_NAMES["data"],
-        goal="Extract only the specified columns and the outcome from the source dataset into a sub-dataset.",
-        system_prompt=(
-            "You are a data extraction agent. Use the slice_columns tool to cut out the "
-            "given column list plus the outcome.\n\n"
-            "Do not exercise judgement:\n"
-            "- Do not add columns. 'This one looks relevant too' is not your call.\n"
-            "- Do not drop columns. 'This one looks mostly missing' is not your call either.\n"
-            "- Do not preprocess.\n"
-            "- Do not retype or reformat a column name. You are given a JSON list; "
-            "slice_columns takes a JSON list. Pass it through unchanged. Many names "
-            "contain a comma ('LAB__HDL CHOLESTEROL, DIRECT') and that comma is part "
-            "of the name, not a separator — splitting one produces two names that "
-            "exist nowhere.\n\n"
-            "If a requested column is absent from the dataset, REPORT THAT FACT in your "
-            "final answer. Hiding it makes the next stage mistake a wrong result for a "
-            "right one.\n\n"
-            "State the file path produced, the row count, the columns actually used, and "
-            "the columns that were missing."
-        ),
-        model_config=mc,
-        pattern_config=react,
-        output_contract={
-            "name": "SubDataset",
-            "fields": [
-                {"name": "path", "type": "str", "description": "Path of the sub-dataset file produced."},
-                {"name": "n_rows", "type": "int", "description": "Row count."},
-                {
-                    "name": "columns_used",
-                    "type": "list",
-                    "default": [],
-                    "description": "Columns actually extracted, including the outcome.",
-                },
-                {
-                    "name": "columns_missing",
-                    "type": "list",
-                    "default": [],
-                    "description": "Columns requested but absent from the dataset.",
-                },
-            ],
-        },
+    data = await _ensure_agent_from_file(
+        AGENT_NAMES["data"], "mvp/data",
+        model_config=mc, pattern_config=react,
     )
-
-    ml = await _ensure_agent(
-        AGENT_NAMES["ml"],
-        goal="Train a classifier on the sub-dataset and report AUC and feature importance.",
-        system_prompt=(
-            "You are an ML execution agent. Call train_and_score with the given path and "
-            "report the returned numbers EXACTLY as they came back.\n\n"
-            "- Do not perform feature selection. Train on the columns you were given.\n"
-            "- Do not round or embellish the numbers.\n"
-            "- If the tool returns an error, report that error verbatim.\n\n"
-            "State the AUC, the per-column feature importance, the training row count, and "
-            "the model name used."
-        ),
-        model_config=mc,
-        pattern_config=react,
-        output_contract={
-            "name": "MLResult",
-            "fields": [
-                {"name": "auc", "type": "float", "description": "Test AUC."},
-                {
-                    "name": "feature_importance",
-                    "type": "dict",
-                    "default": {},
-                    "description": "Column name to importance value.",
-                },
-                {"name": "n_train", "type": "int", "description": "Training row count."},
-                {"name": "model", "type": "str", "default": "", "description": "Name of the model used."},
-            ],
-        },
+    ml = await _ensure_agent_from_file(
+        AGENT_NAMES["ml"], "mvp/ml",
+        model_config=mc, pattern_config=react,
     )
-
-    interpreter = await _ensure_agent(
-        AGENT_NAMES["interpreter"],
-        goal="Interpret the ML result against the original hypothesis.",
-        system_prompt=(
-            "You are an interpretation agent. Given the hypothesis, the chosen columns, the "
-            "AUC and the feature importance, argue whether the hypothesis was supported.\n\n"
-            "- Do not claim anything the data does not say.\n"
-            "- If the hypothesis was rejected, say so. Do not paper over it.\n"
-            "- Treat an AUC of 0.5 as equivalent to chance.\n\n"
-            "Three to five sentences."
-        ),
-        model_config=mc,
-        pattern_config=react,  # even with no tools, reason_act finishes in one call and costs less
+    interpreter = await _ensure_agent_from_file(
+        AGENT_NAMES["interpreter"], "mvp/interpreter",
+        model_config=mc, pattern_config=react,
     )
 
     return {
