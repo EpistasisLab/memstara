@@ -133,11 +133,13 @@ MANIFEST_PATH = _ROOT / "outputs" / "issues_manifest.json"
 _ITEM_RE = re.compile(r"^### ([A-Z]+-\d+) · (.+)$")
 
 #: The field line under every heading. `Priority` is absent on the `D-*` items,
-#: so it is optional here and defaults later. `Area` is optional for the same
-#: shape of reason and none of the substance: it is being added to fifty field
-#: lines across four files, and the `$` anchor means a parser that demanded it
-#: would refuse to read the very files the edit is halfway through. It stops
-#: being optional in the commit after those files are complete.
+#: so it is optional here and defaults later.
+#:
+#: `Area` is optional *in the regex* and required in `parse_file`, which is not a
+#: contradiction: the regex has to match a line missing its area in order for the
+#: error to be able to name the item. Made mandatory here, the failure would be
+#: "H-07 has no readable field line", which sends the reader looking at the wrong
+#: thing.
 _FIELD_RE = re.compile(
     r"^`Status: ([^`]+)`"
     r"(?: · `Priority: ([^`]+)`)?"
@@ -237,10 +239,14 @@ def parse_file(path: Path) -> list[dict[str, Any]]:
         bad = set(labels) - KIND_LABELS
         if bad:
             raise ValueError(f"{path} — {item_id} carries {sorted(bad)}, outside the five")
-        # An area is checked against the vocabulary whenever one is given. A typo
-        # would otherwise become a real GitHub label with one issue on it, which
-        # reads as a tenth area rather than as the mistake it is.
-        if area and area not in AREAS:
+        # An area is required, and checked against the vocabulary. A missing one
+        # would file an issue that the area axis cannot see, which is exactly the
+        # state this axis was added to end. A typo would be worse than missing:
+        # it becomes a real GitHub label with one issue on it, and reads as a
+        # tenth area rather than as the mistake it is.
+        if not area:
+            raise ValueError(f"{path} — {item_id} has no `Area:` in its field line")
+        if area not in AREAS:
             raise ValueError(f"{path} — {item_id} has area {area!r}, outside {sorted(AREAS)}")
         if status not in STATUSES:
             raise ValueError(f"{path} — {item_id} has status {status!r}")
