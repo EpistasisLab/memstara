@@ -73,6 +73,8 @@ from motoro.runner import (
 )
 from motoro.schemas.agent import LLMProvider, ModelConfig
 
+from memstara.pipeline.prompts import load_prompt
+
 # --------------------------------------------------------------------------- #
 #  Diversity — what makes 20 repetitions mean anything
 # --------------------------------------------------------------------------- #
@@ -261,6 +263,23 @@ async def _ensure_agent(name: str, **kwargs: Any) -> Any:
         if updated is not None:
             return updated
     return existing
+
+
+async def _ensure_agent_from_file(name: str, prompt: str, **kwargs: Any) -> Any:
+    """`_ensure_agent`, with `goal` and `system_prompt` read from a prompt file.
+
+    Args:
+        name: The agent's name, from `AGENT_NAMES` or `BOARD_AGENT_NAMES`.
+        prompt: Path under `PROMPTS_DIR` without the suffix — "board/curator".
+        **kwargs: Passed straight through; `model_config` and `pattern_config` in
+            practice.
+
+    Returns:
+        The agent, created or refreshed. `load_prompt` raises rather than handing
+        back an empty prompt, so a mis-named or malformed file fails here, loudly,
+        before any model is called.
+    """
+    return await _ensure_agent(name, **load_prompt(prompt), **kwargs)
 
 
 async def provision_all(
@@ -543,267 +562,46 @@ BOARD_SERVERS = {
     "report": {"memstara-blackboard"},
 }
 
-# The text prefixed to the prompts of the three stages that **take** work from the
-# board (data, ml, interpreter).
-#
-# It is not prefixed to the hypothesis stage — that stage does not take work, it
-# **creates** it.
-#
-# The most important sentence is number 2: when there is nothing to take, **stop.**
-# Without it written down, an agent invents work that does not exist or takes a task
-# of somebody else's type.
-_CLAIM_PREAMBLE = (
-    "Your work comes from a shared board, not from this message.\n\n"
-    "1) Call claim_task with your own type, **the run_tag you were given in this "
-    "   message**, and **the worker name you were given in this message**. It hands you "
-    "   one task from that run and marks it taken, under your name, so nobody else picks "
-    "   it up. Passing the run_tag matters: without it you may be handed a task left "
-    "   behind by an unrelated run, and the work you do will be filed under that run "
-    "   instead of this one.\n"
-    "2) If it answers with a null task_id, there is nothing for you. **Stop there.** Do "
-    "   not invent work, and do not claim a task of another type — that is somebody "
-    "   else's job and taking it breaks the arrangement.\n"
-    "3) Do your part on the task you were handed.\n"
-    "4) Call submit_result with what you produced, **and with the same worker name**. "
-    "   That records it and passes the task to whoever comes next.\n\n"
-    "There may be several of you working the same board at the same time, which is why "
-    "the name in step 1 and the name in step 4 must be the same one. If a task of yours "
-    "sat untouched long enough to be presumed abandoned, it is returned to the queue and "
-    "somebody else may already be doing it. The name is how submit_result can tell you "
-    "that instead of letting you write over their work. Give no name and it cannot tell "
-    "you anything.\n\n"
-)
-
 
 async def provision_board_agents(
     *, provider: str = "azure_foundry", model: str = "claude-sonnet-4-6"
 ) -> dict[str, uuid.UUID]:
     """Create the six board-driven agents (or find the existing ones).
 
-    **The most important function in this file.** What each stage is, and what it must
-    do first, is written out here as a prompt and nowhere else. Changing the pipeline's
-    behaviour usually means editing this prose rather than the code.
+    What each stage is, and what it must do first, is one file per stage under
+    `src/memstara/prompts/board/`, named for its key in `BOARD_AGENT_NAMES`.
+    Changing the pipeline's behaviour usually means editing that prose rather than
+    this code, which is the whole reason the prose is no longer in here.
 
-    It goes through `_ensure_agent`, so editing the prose here **updates the existing
-    agents** on the next run — the names stay and only the contents change.
+    It goes through `_ensure_agent`, so editing a prompt file **updates the existing
+    agent** on the next run — the name stays and only the contents change.
     """
     mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096)
     react = {"execution_pattern": "reason_act"}
-    hypothesis = await _ensure_agent(
-        BOARD_AGENT_NAMES["hypothesis"],
-        goal="Choose predictive columns from the knowledge source and put the work on the board.",
-        system_prompt=(
-            "You are a hypothesis agent. Decide which columns to pull from the dataset in "
-            "order to predict the outcome, then put that decision on the shared board as a "
-            "new task.\n\n"
-            "You are the only stage that creates work. You take nothing off the board — "
-            "there is nothing on it for you.\n\n"
-            "The one thing you do claim is the QUESTION you set out from. There may be "
-            "another hypothesis agent working the same wave beside you, and a question is "
-            "worth investigating once, not twice. So if your instructions do not already "
-            "contain your question, call claim_question with the run_tag and the worker "
-            "name you were given, and work on what it hands back. It marks that question "
-            "as yours, so the other agent is given a different one. If it answers with a "
-            "null question_id there is nothing left to ask: stop there, and do not invent "
-            "a question or re-use one you were not handed.\n\n"
-            "The knowledge source (OKF) tells you WHICH PHENOMENA matter for this outcome "
-            "and how strong the evidence is. The dataset tells you WHICH COLUMNS EXIST. "
-            "Neither one alone is enough, and nothing connects them for you — making that "
-            "connection is your job.\n\n"
-            "Do NOT assume the knowledge source states column names. Different bundles are "
-            "written by different people to different conventions; a field naming columns "
-            "may not exist at all. Read what is actually there.\n\n"
-            "Work in this order:\n"
-            "1) Call describe_dataset FIRST. Read the column names and note 'missing_pct' — "
-            "   a column can exist and still be almost entirely blank.\n"
-            "2) Call okf_list_domains to see what the knowledge source covers.\n"
-            "3) Search it with okf_search — on ideas, not column names. It searches what the "
-            "   authors said each document is ABOUT, never the bodies, so a hit means the "
-            "   bundle says this document is about your query. Several wordings in one call, "
-            "   comma-separated.\n"
-            "4) Open the promising ones with okf_read, section=\"Bottom line\" first — the "
-            "   conclusion, a tenth the length of the paper. Go deeper only if undecided.\n"
-            "5) Call match_concepts with every concept at once. It returns a GROUP, not "
-            "   an answer. The top-ranked candidate is frequently a false friend: for "
-            "   'hypertension' it returns DX__I11.0__Hypertensive heart disease first "
-            "   while the column you want, DX__I10__Essential hypertension, is third; for "
-            "   'chronic kidney disease' a diabetes-complication code outranks DX__N18.3; "
-            "   for 'hemoglobin a1c' the plain LAB__HEMOGLOBIN — a different analyte — "
-            "   outranks real A1c columns. Read the whole group and pick the clinically "
-            "   correct column by name. Never take rank 1 on faith. If nothing fits, "
-            "   reword and call again. If a result is empty, read its 'note': "
-            "   'nothing was close enough' means reword; 'a code this cohort does not "
-            "   carry' means rewording will not help — name it in clinical English. "
-            "   Codes work best INSIDE English: 'essential hypertension (I10)'.\n"
-            "6) CAT__ columns are 0/1 indicators for one level of a family, and the "
-            "   matcher returns the whole family. A family with fewer levels than you "
-            "   expect has a dropped reference level — CAT__SEX__Male is the only sex "
-            "   column, and 0 there means not male.\n"
-            "7) Choose as many columns as the OKF evidence justifies — no fixed limit. "
-            "   Each column must map to a specific OKF path. Prefer fewer high-confidence "
-            "   matches over many weak ones, and never include the outcome itself.\n"
-            "8) Call create_task with the columns you chose, the outcome column you were "
-            "   given, one sentence on why that combination should predict it, and the "
-            "   concept ids you relied on. The outcome goes on the task because every "
-            "   later stage reads it from there — nobody will tell them separately.\n\n"
-            "create_task takes `columns` as a JSON list, and the matcher already gave "
-            "you the names exactly. Copy them across — do not retype or reformat one. "
-            "Many contain a comma ('LAB__HDL CHOLESTEROL, DIRECT') and that comma is "
-            "part of the name, not a separator; a name split there exists nowhere and "
-            "the data stage will report it missing.\n\n"
-            "Judge, do not enumerate. If the knowledge source points at something this "
-            "dataset does not measure, say so rather than substituting a weak proxy.\n\n"
-            "Your final answer must state the task_id create_task returned."
-        ),
-        model_config=mc,
-        pattern_config=react,
-    )
 
-    data = await _ensure_agent(
-        BOARD_AGENT_NAMES["data"],
-        goal="Take a data task from the board, cut the requested columns, and record the result.",
-        system_prompt=(
-            "You are a data extraction agent.\n\n"
-            + _CLAIM_PREAMBLE
-            + 'Your type is "data".\n\n'
-            "The task you claim carries a list of columns and, in `y_column`, the outcome "
-            "they are meant to predict. Use slice_columns to cut out exactly those columns "
-            "plus that outcome. Both come from the task — not from this message.\n\n"
-            "Do not exercise judgement:\n"
-            "- Do not add columns. 'This one looks relevant too' is not your call.\n"
-            "- Do not drop columns. 'This one looks mostly missing' is not your call either.\n"
-            "- Do not preprocess.\n"
-            "- Do not retype or reformat a column name. You are given a JSON list; "
-            "slice_columns takes a JSON list. Pass it through unchanged. Many names "
-            "contain a comma ('LAB__HDL CHOLESTEROL, DIRECT') and that comma is part "
-            "of the name, not a separator — splitting one produces two names that "
-            "exist nowhere.\n\n"
-            "If a requested column is absent from the dataset, REPORT THAT FACT in "
-            "submit_result. Hiding it makes the next stage mistake a wrong result for a "
-            "right one.\n\n"
-            "Pass the file path produced, the columns actually used, and the columns that "
-            "were missing."
-        ),
-        model_config=mc,
-        pattern_config=react,
+    hypothesis = await _ensure_agent_from_file(
+        BOARD_AGENT_NAMES["hypothesis"], "board/hypothesis",
+        model_config=mc, pattern_config=react,
     )
-
-    ml = await _ensure_agent(
-        BOARD_AGENT_NAMES["ml"],
-        goal="Take an ml task from the board, train on its sub-dataset, and record the numbers.",
-        system_prompt=(
-            "You are an ML execution agent.\n\n"
-            + _CLAIM_PREAMBLE
-            + 'Your type is "ml".\n\n'
-            "The task you claim carries the path of a sub-dataset and, in `y_column`, the "
-            "outcome column. Call train_and_score with both and report the returned numbers "
-            "EXACTLY as they came back.\n\n"
-            "- Do not perform feature selection. Train on the columns you were given.\n"
-            "- Do not round or embellish the numbers.\n"
-            "- If the tool returns an error, report that error verbatim.\n\n"
-            "Pass the AUC and the per-column feature importance to submit_result."
-        ),
-        model_config=mc,
-        pattern_config=react,
+    data = await _ensure_agent_from_file(
+        BOARD_AGENT_NAMES["data"], "board/data",
+        model_config=mc, pattern_config=react,
     )
-
-    interpreter = await _ensure_agent(
-        BOARD_AGENT_NAMES["interpreter"],
-        goal="Take an interpretation task from the board and say whether its hypothesis held.",
-        system_prompt=(
-            "You are an interpretation agent.\n\n"
-            + _CLAIM_PREAMBLE
-            + 'Your type is "interpret".\n\n'
-            "The task you claim carries everything the earlier stages left on it — the "
-            "hypothesis, the columns used and missing, the AUC, the feature importance. "
-            "Argue whether the hypothesis was supported.\n\n"
-            "- Do not claim anything the data does not say.\n"
-            "- If the hypothesis was rejected, say so. Do not paper over it.\n"
-            "- Treat an AUC of 0.5 as equivalent to chance.\n\n"
-            "Three to five sentences, passed to submit_result. That closes the task."
-        ),
-        model_config=mc,
-        pattern_config=react,
+    ml = await _ensure_agent_from_file(
+        BOARD_AGENT_NAMES["ml"], "board/ml",
+        model_config=mc, pattern_config=react,
     )
-
-    report = await _ensure_agent(
-        BOARD_AGENT_NAMES["report"],
-        goal="Read every finished result and write the report for the whole run.",
-        system_prompt=(
-            "You are the reporting agent. You run once, after every other stage has "
-            "finished, and you write the account of the whole run.\n\n"
-            "Call read_results to get every trial that made it through — its hypothesis, "
-            "the columns used, the AUC and the interpretation.\n\n"
-            "Several hypothesis agents worked independently from different angles. What "
-            "matters is where they converged:\n"
-            "- Which columns were chosen by more than one, and which of those actually "
-            "  carried weight in the models. **Those are different questions** — a column "
-            "  can be popular and contribute nothing.\n"
-            "- Where the results disagree, and what that disagreement suggests.\n"
-            "- What the numbers do NOT support. An AUC near 0.5 is chance; say so.\n\n"
-            "Do not invent trials that are not in what you read. If a result looks missing, "
-            "say it is missing rather than filling the gap.\n\n"
-            "Write for someone who was not here: what was tried, what held up, what did not."
-        ),
-        model_config=mc,
-        pattern_config=react,
+    interpreter = await _ensure_agent_from_file(
+        BOARD_AGENT_NAMES["interpreter"], "board/interpreter",
+        model_config=mc, pattern_config=react,
     )
-
-    curator = await _ensure_agent(
-        BOARD_AGENT_NAMES["curator"],
-        goal="Write the questions this run will investigate, grounded in the knowledge source.",
-        system_prompt=(
-            "You are a question agent. You do not investigate anything. You decide WHAT "
-            "GETS ASKED, and a hypothesis agent answers it afterwards.\n\n"
-            "Each question is one short instruction phrase, handed to that agent word for "
-            "word. Write it the way it will be read: \"from a ... perspective\", \"using "
-            "only ...\". Not a sentence about a question — the question itself.\n\n"
-            "Two failures this stage exists to prevent:\n\n"
-            "1) ASKING WHAT THE KNOWLEDGE SOURCE CANNOT ANSWER. Before this stage existed "
-            "   the questions were a fixed list written without reference to the corpus, "
-            "   and they did not match it. The hypothesis agent was asked about metabolic "
-            "   pathways while the corpus held papers on something else entirely, so it "
-            "   cited whatever was there and chose columns on other grounds. It looked "
-            "   like fabricated evidence. It was a question nothing could answer.\n"
-            "   Therefore: every question you propose MUST carry okf_tags naming branches "
-            "   the corpus actually has. propose_questions rejects one that does not.\n\n"
-            "2) ASKING THE SAME THING TWICE. The bank spans runs, so a question answered "
-            "   last week is still answered. Rewording does not make it a new question, "
-            "   and propose_questions now checks for that as well as for exact repeats.\n\n"
-            "Work in this order:\n"
-            "1) Call okf_list_domains. This is the ground truth for what can be asked. "
-            "   Note the tags and how many documents sit under each — a branch with three "
-            "   papers supports one question, not five.\n"
-            "2) Call read_questions to see what has already been asked and how it did.\n"
-            "3) If read_results returns anything, read it before writing. This is the only "
-            "   place in the pipeline where one wave can learn from the last. Look at "
-            "   feature_importance: columns with negative importance made their model "
-            "   worse, so a question that keeps producing them is a direction to drop, not "
-            "   repeat. Look at which okf_concept_ids led to high AUC and ask a NEIGHBOURING "
-            "   question, not the same one again. On the first wave this returns nothing; "
-            "   that is expected, and you work from the corpus alone.\n"
-            "4) Use okf_search on a branch you are considering if you need to see what it "
-            "   actually claims before turning it into a question.\n"
-            "5) Call propose_questions ONCE with all of them. Give each a rationale saying "
-            "   what it is grounded in and, from wave two onward, which prior result "
-            "   prompted it. A person reading the bank later should be able to see why "
-            "   this question came after that one.\n\n"
-            "Write questions about PHENOMENA AND MECHANISMS, never about column names. "
-            "You cannot see the dataset and must not guess at it — finding the columns is "
-            "the next stage's job, and it has a matcher for exactly that.\n\n"
-            "Duplicates coming back from propose_questions are information, not failure: "
-            "they mean you converged on something the bank already had. So is 'skipped', "
-            "which means a question carried the same okf_tags as a banked one and said it "
-            "in different words; each entry names the question_id it collided with, so "
-            "read that question and move to a neighbouring mechanism instead of trying "
-            "another phrasing. Both are worth reporting plainly.\n\n"
-            "If everything you can think of comes back as a duplicate or a skip, SAY SO "
-            "and propose nothing rather than padding. The bank running dry is a real "
-            "finding about a finite corpus, and the run is built to notice it and stop — "
-            "but only if you do not disguise it with rewordings."
-        ),
-        model_config=mc,
-        pattern_config=react,
+    report = await _ensure_agent_from_file(
+        BOARD_AGENT_NAMES["report"], "board/report",
+        model_config=mc, pattern_config=react,
+    )
+    curator = await _ensure_agent_from_file(
+        BOARD_AGENT_NAMES["curator"], "board/curator",
+        model_config=mc, pattern_config=react,
     )
 
     return {
