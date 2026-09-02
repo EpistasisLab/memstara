@@ -23,17 +23,44 @@ description = "Memstara sandbox: the agentic ML pipeline, its MCP tool servers, 
 readme = "README.md"
 requires-python = ">=3.12"
 
-# What the sandbox imports directly and motoro does not already bring in.
+# What the sandbox imports directly.
+#
+# This used to read "and motoro does not already bring in", which was the wrong rule.
+# It was true of this machine, where `-e ../motoro` (`environment.yml:36`) installs
+# asyncpg, pydantic, structlog, torch and the rest as a side effect. It is not true
+# anywhere else, and "a neighbouring package happens to install it" is a fact about
+# one environment, not a declaration. That is the same shape as the mistake recorded
+# on the `mcp` line below: a version cap written in one file and relied on from
+# another.
 #
 # `motoro` itself is deliberately absent. It is a local editable checkout at
 # `../motoro`, not something a resolver can fetch, so it stays in `environment.yml`
 # where the relative path belongs. Anyone who installs this package without motoro
 # present will find out at the first `import motoro`, which is the honest failure.
+#
+# Still undeclared, on purpose: structlog, xgboost, PyYAML, sentence-transformers,
+# torch, huggingface_hub. Every one of them is reached only from a module that
+# imports motoro anyway, or is imported lazily inside a function, so declaring them
+# would not make this package standalone — it would only drag torch (~489MB,
+# `environment.yml:20-22`) into every install. When one of those modules stops
+# needing motoro, its dependency moves up here.
 dependencies = [
     "pandas",
     "scikit-learn",
     "numpy",
     "python-dotenv",
+    # `src/memstara/blackboard.py:99` and `src/memstara/mcp_servers/blackboard.py:76`
+    # import this at module top, so it is needed to *import* the MCP server, not just
+    # to connect. Nothing else declared here brings it in — checked, not assumed:
+    # `importlib.metadata.requires` for pandas, numpy, scikit-learn, python-dotenv and
+    # mcp lists it nowhere. Only motoro was supplying it.
+    "asyncpg",
+    # `src/memstara/matcher/config.py:24`. This one does arrive anyway, because `mcp`
+    # requires `pydantic<3.0.0,>=2.11.0`. Declared regardless: the matcher's config
+    # models do not become optional because an unrelated package happens to need the
+    # same library, and a resolver that ever drops that edge would break the matcher
+    # for a reason with no visible connection to it.
+    "pydantic",
     # Capped to match motoro's own cap exactly (`motoro/pyproject.toml:53`). mcp 2.0.0
     # renames FastMCP and changes ClientSession's shutdown so a connected client hangs
     # on exit. Declaring it unpinned here would let a resolver walk this environment
