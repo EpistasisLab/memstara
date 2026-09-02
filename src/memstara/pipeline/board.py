@@ -482,7 +482,7 @@ async def call_agent(
     registry,
     temperature: float | None = None,
     stage: str = "",
-) -> str:
+) -> tuple[str, dict[str, Any]]:
     """Run one agent once and return its text, or "" if the run did not complete.
 
     Call one person, set them to work, and take back what they said.
@@ -494,6 +494,13 @@ async def call_agent(
     Args:
         stage: the label used in the trace file's name ("hypothesis" · "data" ·
             "report" …). Left empty, only the sequence number is used.
+
+    Returns:
+        ``(text, entry)``. `entry` is this call's own row in `_CALLS`, handed back rather
+        than looked up. A caller that wants the record of the call it just made used to
+        read `_CALLS[-1]`, which is only the right row while exactly one call is in
+        flight — with two, the other one's append moves it. Returning it removes the
+        assumption instead of documenting it.
     """
     # Overridden only if a temperature was given. None uses the agent's own default.
     overrides = {"temperature": temperature} if temperature is not None else None
@@ -504,15 +511,20 @@ async def call_agent(
 
     # Written down **before** executing. The run_id has to survive even if it dies
     # mid-execution — a run that died is exactly the one worth retracing.
-    _CALLS.append(
-        {
-            "seq": len(_CALLS),
-            "stage": stage or "?",
-            "run_id": str(run.id),
-            "prompt": prompt,
-            "status": "started",
-        }
-    )
+    #
+    # Bound to a local, and every line below writes through that local rather than
+    # through `_CALLS[-1]`. The two are the same row only while this is the only call in
+    # flight. The moment a second call runs alongside, its append moves the end of the
+    # list, and this call's status, error and trace file all land on the other one's row
+    # — a mis-labelled trace being the worst of the three, because it looks like evidence.
+    entry: dict[str, Any] = {
+        "seq": len(_CALLS),
+        "stage": stage or "?",
+        "run_id": str(run.id),
+        "prompt": prompt,
+        "status": "started",
+    }
+    _CALLS.append(entry)
 
     # ── this is where the LLM runs ─────────────────────────────────────────
     # `execute_run` is a function of motoro. Inside, it repeats reason -> act
@@ -521,9 +533,9 @@ async def call_agent(
     #
     # What happened inside is what _trace_one() below pulls out into a file.
     result = await execute_run(run_id=run.id, registry=registry, available_tools=tools)
-    _CALLS[-1]["status"] = getattr(result.status, "value", str(result.status))
+    entry["status"] = getattr(result.status, "value", str(result.status))
     if result.error:
-        _CALLS[-1]["error"] = str(result.error)
+        entry["error"] = str(result.error)
 
     # The trace file for **this one call** is written the moment the run finishes.
     #
@@ -532,22 +544,26 @@ async def call_agent(
     # instant you stop at a breakpoint on the line after `await call_agent(...)` you can
     # open `trace/00_hypothesis0.txt` and read what just happened — which tool was
     # called with which arguments and what came back.
-    await _trace_one(_CALLS[-1])
+    await _trace_one(entry)
 
     # Spell out on screen what that person actually did. The untruncated version is in
     # the file under trace/.
-    await show_what_agent_did(_CALLS[-1])
+    #
+    # Everything this prints happens after its two awaits above, with no await in
+    # between, so one call's block reaches the screen in a single slice. Two calls
+    # running together interleave block by block, never line by line.
+    await show_what_agent_did(entry)
 
     # An empty string on failure. The caller usually re-reads the result off the board,
     # so rather than throwing here it quietly empties out and leaves it to the next lap.
     if result.error or result.status != "completed":
-        return ""
+        return "", entry
 
     # Agent output is usually JSON shaped like {"result": "..."}. Failing that, the raw text.
     try:
-        return str(json.loads(result.output or "").get("result", ""))
+        return str(json.loads(result.output or "").get("result", "")), entry
     except (json.JSONDecodeError, TypeError, AttributeError):
-        return result.output or ""
+        return result.output or "", entry
 
 
 # The folder the trace files go to. run() sets it when it starts.
@@ -960,6 +976,9 @@ async def questions_for_wave(
              "decide what is worth asking next."
     )
     try:
+        # Neither half of what call_agent returns is wanted here. What the curator did is
+        # read back off the bank below, not taken from what it said — that is the whole
+        # point of the docstring above.
         await call_agent(
             agents["curator"], ask,
             tools=by_stage["curator"], registry=registry, stage=f"curator{wave}",
@@ -1105,7 +1124,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             step("(6)", "wrap up at the end",
                  f"read the finished drawer of '{args.run_tag}' — (4) and (5) are skipped")
             note("call the report agent once (the only LLM call of this run)")
-            text = await call_agent(
+            text, _ = await call_agent(
                 agents["report"],
                 f"Write the report for run '{args.run_tag}'. Call read_results with that run_tag.",
                 tools=by_stage["report"], registry=registry, stage="report",
@@ -1222,7 +1241,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 text = q["text"]
                 # question_id travels with the task so a finished result can be traced
                 # back to what was asked. 0 means the fallback list was used.
-                await call_agent(
+                _, call = await call_agent(
                     agents["hypothesis"],
                     f"The outcome column is '{args.y_column}'. Choose the columns that will predict it, "
                     f"{text}. Then put the task on the board with "
@@ -1236,7 +1255,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 # trace attached after stage (5) would land on a board row whose result had
                 # already been written without it — recorded in the place that gets cleared
                 # and missing from the place that is kept.
-                attached, refused = await harvest_match_trace(registry, _CALLS[-1])
+                attached, refused = await harvest_match_trace(registry, call)
 
                 # Check sheet by sheet that the board really did grow. If it did not, that
                 # person failed.
@@ -1385,7 +1404,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             f"read_results. Say so explicitly."
             if missing_trials else ""
         )
-        text = await call_agent(
+        text, _ = await call_agent(
             agents["report"],
             f"Write the report for run '{args.run_tag}'. Call read_results with that run_tag. "
             f"{seeded_total} trials were seeded across {waves_run} wave(s)"
