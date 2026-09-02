@@ -107,7 +107,7 @@ def do_okf() -> None:
     first = json.loads(okf.okf_search("adherence", k=1))["results"][0]["hits"][0]["id"]
     whole = json.loads(okf.okf_read(first))["documents"][0]
     part = json.loads(okf.okf_read(first, section="Bottom line"))["documents"][0]
-    print(f"\n── reading a section ──────────────────────────────────")
+    print("\n── reading a section ──────────────────────────────────")
     print(f"   {first}")
     print(f"   whole {len(whole['text']):,} chars  vs  Bottom line {len(part['text']):,} chars")
     print(f"   sections: {whole['sections']}")

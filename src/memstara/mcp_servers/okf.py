@@ -149,7 +149,12 @@ def disable_yaml_timestamps() -> int:
 # This is a child process, so the parent's debugger cannot reach it. It waits for a
 # debugger only when MEMSTARA_DEBUGPY contains "okf" — otherwise it does nothing at
 # all. See src/memstara/mcp_servers/debug_hook.py.
-from memstara.mcp_servers.debug_hook import quiet_child, wait_for_debugger
+#
+# The E402 is silenced rather than fixed: this import belongs after
+# disable_yaml_timestamps() is defined and before core's server is imported,
+# which is the ordering the next comment block describes. Moving it to the top of
+# the file would satisfy the linter and break what the ordering is for.
+from memstara.mcp_servers.debug_hook import quiet_child, wait_for_debugger  # noqa: E402
 
 quiet_child()          # silences the three startup messages a child prints
 wait_for_debugger("okf")

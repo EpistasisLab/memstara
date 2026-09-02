@@ -92,7 +92,6 @@ import asyncio        # asyncpg is async, so the CLI wraps calls in asyncio.run
 import contextlib     # what makes run_lock usable with `with`
 import os             # reads the database address from the environment
 import re             # tidies up the postgresql+asyncpg:// form
-import sys
 import zlib           # holds crc32, which turns a run_tag into a lock number (an integer)
 from collections.abc import AsyncIterator
 

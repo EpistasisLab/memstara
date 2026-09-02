@@ -173,10 +173,10 @@ def build(source: Path, top: int) -> tuple[pd.DataFrame, dict[str, list[tuple[st
         freq = Counter(v for lst in parsed for v in lst)   # 전체에서 몇 명에게 있었나
         picked = freq.most_common(top)                     # 가장 흔한 top 개
         chosen[src] = picked
-        # `l=label` 로 값을 그 자리에서 붙잡아 둔다. 이것을 빼면 반복이 끝난 뒤의
+        # `bound=label` 로 값을 그 자리에서 붙잡아 둔다. 이것을 빼면 반복이 끝난 뒤의
         # label 값 하나만 쓰이게 되어, 모든 표시 열이 마지막 진단명 하나를 가리킨다.
         for label, _ in picked:
-            out[column_name(prefix, label)] = parsed.map(lambda lst, l=label: int(l in lst))
+            out[column_name(prefix, label)] = parsed.map(lambda lst, bound=label: int(bound in lst))
 
     # ③ 결과변수는 맨 마지막에 붙여 표의 끝에 오게 한다.
     out[OUTCOME] = pd.to_numeric(raw[OUTCOME])
@@ -205,7 +205,7 @@ def main() -> int:
 
     pos = int(df[OUTCOME].sum())
     print(f"source: {source}")
-    print(f"        (read only — nothing is written back there)\n")
+    print("        (read only — nothing is written back there)\n")
     print(f"rows    {len(df):,}   ({dropped} dropped: label was not 0/1)")
     print(f"columns {len(df.columns)}   = {len(FLAT)} as-is + {len(LISTS)} counts "
           f"+ {sum(len(v) for v in chosen.values())} flags + outcome")

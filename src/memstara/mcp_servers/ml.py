@@ -109,13 +109,16 @@ def _importance(model: Any, X: pd.DataFrame, y: pd.Series) -> dict[str, float]:
     """
     if hasattr(model, "feature_importances_"):
         # If the model already carries them, use them as they are.
-        return {c: float(v) for c, v in zip(X.columns, model.feature_importances_)}
+        # strict=True: one score per column, or the model was not fitted on this X.
+        # Without it zip() truncates to the shorter side and the caller gets a
+        # short, plausible, wrong importance table.
+        return {c: float(v) for c, v in zip(X.columns, model.feature_importances_, strict=True)}
 
     from sklearn.inspection import permutation_importance
 
     # n_repeats=5 — shuffle five times and average. A single shuffle is swayed by chance.
     r = permutation_importance(model, X, y, n_repeats=5, random_state=0, scoring="roc_auc")
-    return {c: float(v) for c, v in zip(X.columns, r.importances_mean)}
+    return {c: float(v) for c, v in zip(X.columns, r.importances_mean, strict=True)}
 
 
 @mcp.tool()

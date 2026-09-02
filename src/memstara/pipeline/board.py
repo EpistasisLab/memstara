@@ -168,7 +168,6 @@ from memstara.logging_setup import drain_llm_requests, new_run_dir, setup_loggin
 from memstara.pipeline.core import (
     BOARD_SERVERS,           # the tool servers each stage is allowed to reach
     BOARD_TOOLS,             # the individual tool names each stage is allowed
-    PERSPECTIVES,            # the perspective wording given differently per trial
     perspective_for,         # trial number -> perspective wording
     provision_board_agents,  # creates or fetches the five agents
     temperature_for,         # trial number -> temperature
@@ -1161,7 +1160,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             recycled = False
             if not args.no_curator:
                 step("(3')", "decide what to ask",
-                     f"the curator reads the corpus"
+                     "the curator reads the corpus"
                      + ("" if wave == 0 else " and the previous wave's results")
                      + f" and makes {args.trials} questions")
                 questions, recycled = await questions_for_wave(
@@ -1619,7 +1618,7 @@ async def main() -> int:
             # The board is a database; whatever was written stays written. Say what to
             # do next rather than leaving a bare traceback.
             print("\n\ninterrupted. the board is still there.")
-            print(f"  see the state:  python -m memstara.blackboard --show")
+            print("  see the state:  python -m memstara.blackboard --show")
             print(f"  report only:    python -m memstara.pipeline.board --report-only --run-tag {args.run_tag}")
             return 130
 

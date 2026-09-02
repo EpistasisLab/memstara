@@ -380,7 +380,7 @@ def render(run_dir: Path, data: dict[str, Any], verdict: str, reasons: list[str]
             "On this run only 9 calls out of 41 were caught in the log. "
             "Later runs are accurate because `execute_run`'s return value is put into "
             "the trial records. "
-            f"The real values can be seen in `trace/`."
+            "The real values can be seen in `trace/`."
         )
     L.append("")
 

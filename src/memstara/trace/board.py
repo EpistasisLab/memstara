@@ -108,7 +108,6 @@ async def runs_between(lo: object, hi: object) -> list[tuple[str, uuid.UUID]]:
 
 async def latest(n: int) -> list[tuple[str, uuid.UUID]]:
     """The n most recent runs, straight from core and independent of the board."""
-    lo = hi = None
     import os
     import re
 

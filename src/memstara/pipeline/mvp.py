@@ -621,8 +621,8 @@ async def _run_pipeline(
             print(summary["overall_interpretation"])
 
         print(f"\nrun directory: {run_dir}")
-        print(f"  REPORT.md  ← start here")
-        print(f"  console.log · manifest.json · todo_rows.json · summary.json")
+        print("  REPORT.md  ← start here")
+        print("  console.log · manifest.json · todo_rows.json · summary.json")
         if log_path:
             print(f"  {log_path.name}  (structured, DEBUG, tagged with trial/stage)")
         print(f"  trace/  {len(traces)} files — every step, tool arguments and results")
