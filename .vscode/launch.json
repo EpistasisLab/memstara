@@ -1,17 +1,20 @@
 {
-  // 맨 위가 기본값이다. VS Code 는 마지막으로 고른 구성 이름을 기억하는데, 그
-  // 이름이 여기 없으면 첫 번째로 되돌아간다.
+  // The top entry is the default. VS Code remembers the name of the configuration
+  // last chosen, and falls back to the first one when that name is not here.
   //
-  // ── 기본을 "전체 1시행" 으로 둔 이유 ────────────────────────────────────
-  //  ①②③⑥ 만 도는 --report-only 로는 **사람 한 명(보고 담당)** 밖에 안 보인다.
-  //  가설·데이터·학습·해석 담당이 무엇을 했는지 따라가려면 ④⑤ 가 돌아야 한다.
+  // ── Why the default is "full, 1 trial" ─────────────────────────────────
+  //  --report-only runs stages (1)(2)(3)(6) only, which shows **one person** — the
+  //  one who reports. Following what the hypothesis, data, training and
+  //  interpretation roles did takes stages (4) and (5).
   //
-  //  --run-tag 를 **일부러 안 준다.** 안 주면 실행할 때마다 시각으로 이름이
-  //  자동 생성되므로(board_20260820T094148), 매번 빈 게시판에서 시작한다.
-  //  같은 이름을 재사용하면 지난 실행의 종이가 섞여 헷갈린다.
+  //  --run-tag is **deliberately left off.** Without it the name is generated from
+  //  the clock on every run (board_20260820T094148), so every run starts from an
+  //  empty board. Reusing one name mixes the previous run's notes in with this
+  //  one's, and they become hard to tell apart.
   //
-  //  시행 1회로 둔 것도 의도다 — 다섯 명이 한 번씩 나오는 것이 흐름을 보기에
-  //  가장 좋고, 3시행은 같은 장면이 세 번 반복될 뿐이다. 돈도 세 배 든다.
+  //  One trial is also deliberate — five people appearing once each is the clearest
+  //  way to watch the flow, whereas 3 trials only repeats the same scene three
+  //  times. It also costs three times as much.
   // ─────────────────────────────────────────────────────────────────────
   "version": "0.2.0",
   "configurations": [
@@ -23,7 +26,7 @@
       "justMyCode": true,
       "cwd": "${workspaceFolder}",
       "python": "${workspaceFolder}/.venv/bin/python",
-      "name": "판 파이프라인 · 전체 1시행 (기본)",
+      "name": "board pipeline · full, 1 trial (default)",
       "args": [
         "--trials",
         "1",
@@ -43,7 +46,7 @@
       "justMyCode": true,
       "cwd": "${workspaceFolder}",
       "python": "${workspaceFolder}/.venv/bin/python",
-      "name": "판 파이프라인 · 전체 3시행",
+      "name": "board pipeline · full, 3 trials",
       "args": [
         "--trials",
         "3",
@@ -63,7 +66,7 @@
       "justMyCode": true,
       "cwd": "${workspaceFolder}",
       "python": "${workspaceFolder}/.venv/bin/python",
-      "name": "판 파이프라인 · 전체 1시행 · litellm 원문 전부 (거의 안 씀)",
+      "name": "board pipeline · full, 1 trial · every litellm raw message (rarely used)",
       "args": [
         "--trials",
         "1",
@@ -84,7 +87,7 @@
       "justMyCode": true,
       "cwd": "${workspaceFolder}",
       "python": "${workspaceFolder}/.venv/bin/python",
-      "name": "판 파이프라인 · 보고만 (빠름, LLM 1회)",
+      "name": "board pipeline · report only (fast, one LLM call)",
       "args": [
         "--report-only",
         "--run-tag",
@@ -103,7 +106,7 @@
       "justMyCode": false,
       "cwd": "${workspaceFolder}",
       "python": "${workspaceFolder}/.venv/bin/python",
-      "name": "판 파이프라인 · 보고만 (motoro 안까지 — 예비)",
+      "name": "board pipeline · report only (stepping into motoro — spare)",
       "args": [
         "--report-only",
         "--run-tag",
@@ -196,7 +199,7 @@
     {
       "id": "harnessMode",
       "type": "pickString",
-      "description": "어느 도구를 볼까",
+      "description": "which tool to look at",
       "options": [
         "okf",
         "data",
