@@ -48,6 +48,9 @@ What main() confirms, in order:
       now that --data-agents may be more than 1
  (11) the same one table over: two hypothesis workers claiming out of the question
       bank, and the driver handing back what the run held
+ (12) **two waves** out of one bank — wave 2 setting out from wave 2's questions
+      rather than the ones wave 1 gave back, the score crossing the boundary between
+      them, and a spent question dropping out of the next wave's list
 
 Easy to miss:
 
@@ -100,9 +103,10 @@ async def cleanup() -> None:
         await conn.execute("DELETE FROM memstara_blackboard WHERE run_tag = $1", RUN_TAG)
         # A claim is the one mark this check can leave on a row it does **not** own.
         # Item (11) claims a third question to show that a claimed one is not handed out
-        # twice, and that third question belongs to whoever filed it. Releasing before
-        # the delete repairs a run that died holding it; the delete below would not,
-        # because origin_run is not this check's tag.
+        # twice, and item (12) claims one more after retiring the question it spent;
+        # either may land on a row somebody else filed. Releasing before the delete
+        # repairs a run that died holding one; the delete below would not, because
+        # origin_run is not this check's tag.
         await conn.execute(
             "UPDATE memstara_questions SET claimed_run = '', claimed_by = '', claimed_at = NULL "
             "WHERE claimed_run = $1", RUN_TAG)
@@ -783,6 +787,132 @@ async def main() -> int:
                       and all(now_open[qid] == ("", "") for qid in touched),
                       "the driver hands back every question the run was holding",
                       f"freed {freed} of {len(touched)} · holders after {[now_open[qid] for qid in touched]}"))
+
+    # ---- (12) two waves out of one bank ----------------------------------
+    #
+    # Everything above is one wave. The driver's outer loop is `for wave in
+    # range(args.waves)` (`src/memstara/pipeline/board.py:1172`) and it has never run at
+    # more than one, because `--waves` defaults to 1 (`src/memstara/pipeline/board.py:1704`).
+    # What a second wave asks of the bank is three things, and this item is all three of
+    # them with no model in the way: wave 2 has to set out from the questions wave 2
+    # grounded rather than re-claim the ones wave 1 gave back; wave 1's score has to reach
+    # the bank in between; and a question that has been spent has to stop being handed out.
+    #
+    # These four get tags of their own — `adherence` and `care-access`. `_near_duplicate`
+    # compares wording only within one tag set (`src/memstara/mcp_servers/blackboard.py:686`),
+    # so a branch nothing above uses puts every question in this item out of reach of the
+    # reword block. That matters because a blocked proposal here would arrive as an empty
+    # `added` list and read exactly like the wave logic failing.
+    p6 = json.loads(await bb.propose_questions(json.dumps([
+        {"text": f"whether missed refills in the year before precede a rebound ({RUN_TAG} w1)",
+         "okf_tags": ["adherence"], "rationale": "wave 1, for the first worker"},
+        {"text": f"whether seeing several prescribers at once tracks with poorer control ({RUN_TAG} w1)",
+         "okf_tags": ["adherence"], "rationale": "wave 1, for the second worker"},
+    ], ensure_ascii=False), origin_run=RUN_TAG, origin_wave=3))
+    wave1 = sorted(q["question_id"] for q in p6.get("added", []))
+
+    got1 = [json.loads(g) for g in await asyncio.gather(
+        *(bb.claim_question(RUN_TAG, worker=w) for w in ("hypothesis#1", "hypothesis#2")))]
+    took1 = sorted(g.get("question_id") for g in got1)
+    results.append(ok(len(wave1) == 2 and took1 == wave1,
+                      "wave 1's two workers take the two questions wave 1 banked",
+                      f"banked {wave1} · taken {took1}"))
+
+    # The wave finishes seeding and the driver hands the questions back
+    # (`src/memstara/pipeline/board.py:1347`). (11) is where that release is the claim
+    # being checked; here it is only the setup for the line after it.
+    await bbm.release_questions(RUN_TAG)
+
+    # Wave 2's curator grounds two fresh questions and wave 2's workers claim. The
+    # property: they get the **new** pair, not the pair wave 1 just gave back. Nothing
+    # enforces that except `ORDER BY question_id DESC` in `claim_question`
+    # (`src/memstara/mcp_servers/blackboard.py:833`) — a released row is open and unclaimed
+    # again, every bit as available as a new one, and the only thing telling the two apart
+    # is which is newer. Lose that ordering and a two-wave run spends its second wave
+    # re-asking its first, with no error, no empty result and nothing in the trace that
+    # looks wrong.
+    p7 = json.loads(await bb.propose_questions(json.dumps([
+        {"text": f"whether winter months carry a different rebound rate than summer ({RUN_TAG} w2)",
+         "okf_tags": ["care-access"], "rationale": "wave 2, grounded after wave 1 reported"},
+        {"text": f"whether a housing-instability code comes before a lapse in care ({RUN_TAG} w2)",
+         "okf_tags": ["care-access"], "rationale": "wave 2, its neighbour"},
+    ], ensure_ascii=False), origin_run=RUN_TAG, origin_wave=4))
+    wave2 = sorted(q["question_id"] for q in p7.get("added", []))
+
+    got2 = [json.loads(g) for g in await asyncio.gather(
+        *(bb.claim_question(RUN_TAG, worker=w) for w in ("hypothesis#1", "hypothesis#2")))]
+    took2 = sorted(g.get("question_id") for g in got2)
+    results.append(ok(len(wave2) == 2 and took2 == wave2 and not set(took2) & set(wave1),
+                      "wave 2 sets out from wave 2's questions, not the ones wave 1 gave back",
+                      f"wave 1 held {wave1} · wave 2 banked {wave2} · wave 2 took {took2}"))
+
+    # ---- the score that has to cross the boundary ------------------------
+    #
+    # `record_question_outcomes` runs at the end of every wave
+    # (`src/memstara/pipeline/board.py:1506`), and it is the only path by which wave 2's
+    # curator can know what wave 1 was worth. For there to be a score there has to be a
+    # finished trial, so one is walked here.
+    #
+    # The board is cleared for this tag first. (10) left four `ml` rows waiting under it
+    # and `claim_task` takes the oldest of the type, so the ml claim below would take
+    # trial 93's row rather than the one this item just made, and the AUC would be folded
+    # onto the wrong question. Deleting is what `blackboard.py --drop` does, and (12) is
+    # the last item, so nothing after this depends on those rows.
+    conn = await asyncpg.connect(bb._dsn())
+    try:
+        await conn.execute("DELETE FROM memstara_blackboard WHERE run_tag=$1", RUN_TAG)
+    finally:
+        await conn.close()
+
+    # The **newest** of wave 2's two is the one spent, deliberately. It is the one
+    # `claim_question` would hand out first, so a retirement that does not work shows up
+    # as the last claim in this item coming back holding it. Spend the older one instead
+    # and a broken retirement leaves no trace here at all.
+    spent = max(wave2)
+    await bb.create_task(RUN_TAG, 97, "perspective 97", "hypothesis 97",
+                         COLUMNS, "HIV_DETECTABLE", question_id=spent)
+    c = json.loads(await bb.claim_task("data", RUN_TAG))
+    await bb.submit_result(c["task_id"], subset_path="outputs/sub_x.csv", columns_used=COLUMNS)
+    c = json.loads(await bb.claim_task("ml", RUN_TAG))
+    await bb.submit_result(c["task_id"], auc=0.63)
+    c = json.loads(await bb.claim_task("interpret", RUN_TAG))
+    await bb.submit_result(c["task_id"], interpretation="supported")
+
+    # retire_after=1 rather than the driver's 3
+    # (`src/memstara/mcp_servers/blackboard.py:983`), because one trial is what this item
+    # runs. What is under test is the mechanism, not the number — (8) is where 3 itself is
+    # walked.
+    fed3 = json.loads(await bb.record_question_outcomes(RUN_TAG, retire_after=1))
+    bank = {q["question_id"]: q for q in
+            json.loads(await bb.read_questions(status="", limit=500))["questions"]}
+    untouched = wave1 + [min(wave2)]
+    results.append(ok(fed3.get("ok") is True
+                      and bank[spent].get("times_used") == 1
+                      and bank[spent].get("best_auc") == 0.63
+                      and bank[spent].get("status") == "exhausted"
+                      # The other three are left alone: no trial, no score, still open. A
+                      # retirement that swept the wave would hand the next one an empty
+                      # bank, and an empty bank is a run that stops rather than one that
+                      # fails, which is the harder kind to notice.
+                      and all(bank[q].get("status") == "open" and bank[q].get("times_used") == 0
+                              for q in untouched),
+                      "the wave's score reaches the bank and retires only the question that was spent",
+                      f"#{spent} used {bank[spent].get('times_used')} · AUC "
+                      f"{bank[spent].get('best_auc')} · {bank[spent].get('status')} · "
+                      f"the other three {[bank[q].get('status') for q in untouched]}"))
+
+    # A spent question is not handed to the wave after it. The claims are given back
+    # first, and that order is the whole point: while #spent is still claimed it is kept
+    # out by (11)'s property, not by this one. Released, it is open and unclaimed and the
+    # newest id in the bank, so `status` is the only thing left that can keep it out.
+    await bbm.release_questions(RUN_TAG)
+    nxt = json.loads(await bb.claim_question(RUN_TAG, worker="hypothesis#3"))
+    open_ids = {q["question_id"] for q in
+                json.loads(await bb.read_questions(status="open", limit=500))["questions"]}
+    results.append(ok(spent not in open_ids and nxt.get("question_id") != spent,
+                      "a question that has been spent drops out of the next wave's list",
+                      f"#{spent} is not in the open bank · the next worker got "
+                      f"#{nxt.get('question_id')}"))
 
     # What the check made is not left behind. The second tag made above goes too.
     await cleanup()
