@@ -28,32 +28,34 @@ Usage::
 
 
 ==============================================================================
- 이 파일을 읽는 법
+ How to read this file
 ==============================================================================
 
- reviewer 이 공유한 **HIV 코호트**를 파이프라인이 쓸 수 있는 CSV 한 장으로 펴 낸다.
- 받은 파일은 한 칸 안에 목록이 통째로 들어 있어(진단명이 파이프 `|` 로 이어져
- 환자마다 1개에서 1,143개까지) 그대로는 학습에 못 쓴다. 결과변수는
- `HIV_DETECTABLE`(바이러스가 검출되는가).
+ It flattens **the HIV cohort Shared document** into a single CSV the pipeline can
+ use. The file as received holds a whole list inside one cell (diagnosis names
+ joined by a pipe `|`, from 1 to 1,143 of them per patient), which cannot be
+ trained on as it stands. The outcome is `HIV_DETECTABLE` — whether the virus is
+ detectable.
 
- 함수는 넷이다.
+ There are four functions.
 
-   items(cell)                 파이프로 이어 붙은 한 칸을 **중복 없는 목록**으로 쪼갠다
-   column_name(prefix, label)  진단명 같은 긴 이름을 열 이름으로 다듬는다
-   build(source, top)          펴 내기 전체. **이 파일의 본체**
-   main()                      읽고 · build 부르고 · 저장하고 · 무엇이 나왔는지 찍는다
+   items(cell)                 splits one pipe-joined cell into a **duplicate-free list**
+   column_name(prefix, label)  turns a long name like a diagnosis into a column name
+   build(source, top)          the whole flattening. **The body of this file**
+   main()                      reads, calls build, saves, and prints what came out
 
- 나오는 것: 그대로 쓰는 9열 + 개수 4열 + 있음/없음 표시 16열 + 결과변수 1열.
+ What comes out: 9 columns as-is + 4 counts + 16 present/absent flags + 1 outcome.
 
- 놓치기 쉬운 것:
+ Easy to miss:
 
-   · **개수와 있음/없음 표시는 일부러 가장 단순한 것만** 만든다. 이보다 나아가면
-     그것은 변수 만들기(feature construction)이고, 이 프로젝트가 정한 범위는
-     이미 있는 변수 중에서 **고르는 것**이다. 이 파일은 고를 거리를 마련할 뿐이다.
-   · 원본 폴더는 **읽기만 한다.** 결과는 이 폴더의 outputs/ 로 나간다.
-   · 열 이름을 사람이 읽을 수 있게 만드는 것이 중요하다. 지식원의 개념과 데이터의
-     열을 이어 붙이는 쪽이 **둘 다 읽는 LLM** 이라, `dx_f329` 로는 "우울증" 과
-     연결하지 못한다.
+   · **The counts and the flags are deliberately the simplest thing derivable**
+     from the lists. Anything beyond them is feature construction, and the scope
+     this project fixed is **selecting** among features that already exist. This
+     file only lays out something to select from.
+   · The source directory is **read only.** Output goes to this repository's outputs/.
+   · Making the column names readable by a person matters. What has to connect a
+     knowledge-source concept to a data column is **an LLM reading both**, and it
+     cannot get from `dx_f329` to "depression".
 """
 
 from __future__ import annotations
@@ -71,11 +73,10 @@ from memstara.paths import DEFAULT_OUTPUT_DIR, SHARED_ROOT
 SOURCE = SHARED_ROOT / "Agentic-Clinical-Feature-Construction-Demo" / "cohort_v1_latest_no_PHI.csv"
 DEFAULT_OUT = DEFAULT_OUTPUT_DIR / "hiv_cohort.csv"
 
-OUTCOME = "HIV_DETECTABLE"   # 맞히려는 것 — 바이러스가 검출되는가
+OUTCOME = "HIV_DETECTABLE"   # what we are trying to predict — is the virus detectable
 
-# Columns that already hold one value per patient.
-#
-# ↑ 환자 한 명당 값이 이미 하나뿐인 열들. 손댈 것이 없어 그대로 옮긴다.
+# Columns that already hold one value per patient. Nothing to unpack, so they are
+# carried across untouched.
 FLAT = [
     "CURRENT_AGE",
     "BMI",
@@ -90,10 +91,9 @@ FLAT = [
 
 # (source column, count column name, flag prefix or None)
 #
-# ↑ (원본 열 이름, 개수를 담을 열 이름, 표시 열 앞머리 또는 None)
-#   앞머리가 None 인 둘은 **개수만** 만들고 있음/없음 표시는 만들지 않는다.
-#   수술과 검사 항목은 종류가 너무 흩어져 있어, 가장 흔한 8개를 뽑아도 대부분의
-#   환자에게 0 만 찍히는 열이 되기 때문이다.
+# The two with a prefix of None get **a count only**, no present/absent flags.
+# Surgeries and lab components are spread too thin: even the eight most common
+# would be columns of zeros for most patients.
 LISTS = [
     ("DX_NAME_LIST", "n_diagnoses", "dx"),
     ("MED_NAME_LIST", "n_medications", "med"),
@@ -105,11 +105,10 @@ LISTS = [
 def items(cell: object) -> list[str]:
     """Split one pipe-delimited cell into its distinct entries.
 
-    ↑ 파이프(`|`)로 이어 붙은 한 칸을 **중복 없는** 목록으로 쪼갠다.
-
-      중복을 없애는 것이 요점이다. 같은 진단이 방문마다 다시 적혀 있으면, 그대로
-      세었을 때 "진단 개수" 가 병의 가짓수가 아니라 **방문 횟수**를 재게 된다.
-      빈 칸이나 글자가 아닌 값은 빈 목록으로 돌려준다.
+    Dropping the duplicates is the point. The same diagnosis is written again at
+    every visit, so counting the raw entries would make "number of diagnoses"
+    measure **how many visits** the patient had rather than how many conditions
+    they have. A blank cell, or anything that is not a string, returns an empty list.
     """
     if not isinstance(cell, str) or not cell.strip():
         return []
@@ -122,23 +121,24 @@ def column_name(prefix: str, label: str) -> str:
     Readable on purpose. The thing that has to connect a knowledge-source concept to a
     column is an LLM reading both, and it cannot connect `dx_f329` to "depression".
 
-    ↑ **일부러** 사람이 읽을 수 있게 만든다. 지식원의 개념과 데이터의 열을 이어
-      붙이는 쪽은 둘 다 읽는 LLM 이고, `dx_f329` 를 보고 "우울증" 을 떠올리지는
-      못한다. 그래서 진단명을 소문자로 바꾸고 기호를 밑줄로 바꾼 뒤 앞머리를 붙여
-      `dx_major_depressive_disorder` 같은 이름을 만든다. 40자에서 자른다.
+    So the diagnosis name is lowercased, every symbol becomes an underscore, and
+    the prefix goes in front — producing names like `dx_major_depressive_disorder`.
+    Cut at 40 characters.
     """
     slug = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
     return f"{prefix}_{slug[:40]}".rstrip("_")
 
 
 def build(source: Path, top: int) -> tuple[pd.DataFrame, dict[str, list[tuple[str, int]]]]:
-    """받은 코호트를 펴 낸다. **이 파일의 본체.**
+    """Flatten the cohort as received. **The body of this file.**
 
-    돌려주는 것은 둘 — 정리된 표와, 어떤 진단·약이 뽑혔는지의 기록.
+    It returns two things — the cleaned table, and a record of which diagnoses and
+    medications were picked.
 
-    모든 열을 글자(dtype=str)로 읽고 `keep_default_na=False` 를 준다. pandas 가
-    알아서 숫자로 바꾸거나 빈 칸을 NaN 으로 만들면, 목록을 쪼개는 단계에서 값이
-    글자인지 아닌지를 매번 따져야 한다. 필요한 열만 나중에 숫자로 바꾼다.
+    Every column is read as text (dtype=str) with `keep_default_na=False`. If
+    pandas were allowed to convert to numbers or turn blanks into NaN on its own,
+    the list-splitting step would have to check whether each value is a string
+    every time. Only the columns that need it are converted to numbers afterwards.
     """
     raw = pd.read_csv(source, dtype=str, keep_default_na=False)
 
@@ -146,39 +146,36 @@ def build(source: Path, top: int) -> tuple[pd.DataFrame, dict[str, list[tuple[st
     # column — an unescaped delimiter upstream. Keep only rows whose label is 0 or 1
     # and say how many were dropped; silently losing rows is how row counts stop
     # matching between steps.
-    #
-    # ↑ 받은 파일에는 진단명이 **결과변수 칸으로 흘러 들어간** 행이 몇 개 있다.
-    #   위쪽 어딘가에서 구분 기호를 제대로 감싸지 않아 생긴 일이다. 결과변수가
-    #   0 이나 1 인 행만 남기고, **몇 행을 버렸는지 반드시 찍는다.** 말없이 행이
-    #   줄어드는 것이 단계마다 행 수가 안 맞기 시작하는 출발점이다.
     keep = raw[OUTCOME].isin(["0", "1"])
     dropped = int((~keep).sum())
     raw = raw[keep].reset_index(drop=True)
 
-    # ① 이미 한 값짜리인 열은 그대로 옮긴다. 빈 글자는 결측으로 바꿔 두어야
-    #    "비어 있음" 과 "빈 문자열" 이 뒤섞이지 않는다. 나이와 BMI 만 숫자로.
+    # (1) The columns that already hold one value are carried across as they are. An
+    #     empty string has to become missing, or "blank" and "the empty string" end up
+    #     mixed together. Only age and BMI become numbers.
     out = pd.DataFrame(index=raw.index)
     for c in FLAT:
         s = raw[c].replace("", pd.NA)
         out[c] = pd.to_numeric(s) if c in ("CURRENT_AGE", "BMI") else s
 
-    # ② 목록 열을 편다. 열마다 개수 하나를 만들고, 앞머리가 있는 것만 가장 흔한
-    #    top 개를 골라 있음/없음(1/0) 열을 더 만든다.
+    # (2) Unpack the list columns. Each one gets a count; the ones with a prefix also
+    #     get present/absent (1/0) columns for the `top` most common entries.
     chosen: dict[str, list[tuple[str, int]]] = {}
     for src, count_col, prefix in LISTS:
-        parsed = raw[src].map(items)          # 각 칸을 목록으로
-        out[count_col] = parsed.map(len)      # 그 목록의 길이 = 개수
+        parsed = raw[src].map(items)          # each cell becomes a list
+        out[count_col] = parsed.map(len)      # the length of that list = the count
         if prefix is None:
             continue
-        freq = Counter(v for lst in parsed for v in lst)   # 전체에서 몇 명에게 있었나
-        picked = freq.most_common(top)                     # 가장 흔한 top 개
+        freq = Counter(v for lst in parsed for v in lst)   # how many patients had it at all
+        picked = freq.most_common(top)                     # the `top` most common
         chosen[src] = picked
-        # `bound=label` 로 값을 그 자리에서 붙잡아 둔다. 이것을 빼면 반복이 끝난 뒤의
-        # label 값 하나만 쓰이게 되어, 모든 표시 열이 마지막 진단명 하나를 가리킨다.
+        # `bound=label` pins the value down here and now. Without it only the value
+        # label holds after the loop ends is used, and every flag column would point
+        # at that one last diagnosis.
         for label, _ in picked:
             out[column_name(prefix, label)] = parsed.map(lambda lst, bound=label: int(bound in lst))
 
-    # ③ 결과변수는 맨 마지막에 붙여 표의 끝에 오게 한다.
+    # (3) The outcome is attached last so that it sits at the end of the table.
     out[OUTCOME] = pd.to_numeric(raw[OUTCOME])
     return out, {"__dropped__": dropped, **chosen}  # type: ignore[dict-item]
 
@@ -195,7 +192,8 @@ def main() -> int:
         print(f"!! not found: {source}", file=sys.stderr)
         return 1
 
-    # build 는 뽑힌 진단·약 기록에 버린 행 수를 함께 실어 돌려준다. 여기서 꺼낸다.
+    # build returns the number of dropped rows inside the record of what was picked.
+    # Take it back out here.
     df, chosen = build(source, args.top)
     dropped = chosen.pop("__dropped__")
 
@@ -218,11 +216,8 @@ def main() -> int:
         print()
 
     # Missingness is the one property a column name cannot convey, and the hypothesis
-    # agent decides from names. Print it so the number is on the record here too.
-    #
-    # ↑ 결측률은 **열 이름만 봐서는 절대 알 수 없는** 유일한 성질이다. 그런데 가설
-    #   에이전트는 이름만 보고 고른다. 그래서 여기서도 숫자를 찍어 기록에 남긴다
-    #   — 나중에 어떤 열이 왜 쓸모없었는지 되짚을 근거가 된다.
+    # agent decides from names. Print it so the number is on the record here too — it
+    # is what makes it possible to work out later why a column turned out to be useless.
     miss = df.isna().mean().sort_values(ascending=False)
     miss = miss[miss > 0]
     if len(miss):
