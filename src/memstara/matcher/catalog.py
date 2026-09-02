@@ -321,9 +321,10 @@ def build_catalog(columns: list[str], outcome_col: str) -> list[CatalogEntry]:
 
 
 # SOURCE: SANDBOX-ORIGINAL, upstream name reused. afc-forge's catalog_fingerprint
-#   (catalog.py:587) hashes a CohortDescriptor and a leakage RuleSet and stores
-#   `leakage_rules_sha1`. This one hashes a column list. The MISSING field is the
-#   visible sign that the leakage layer did not come across — see __init__.py.
+#   (ade_forge/tools/impl/catalog.py:587) hashes a CohortDescriptor and a leakage
+#   RuleSet and stores `leakage_rules_sha1`. This one hashes a column list. The
+#   MISSING field is the visible sign that the leakage layer did not come across
+#   — see __init__.py.
 def catalog_fingerprint(
     *,
     cohort_file: str | Path,

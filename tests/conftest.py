@@ -4,9 +4,9 @@
 #   one. Anything else in this file is sandbox-original.
 """Shared test fixtures.
 
-`bag_of_words_encoder` and `fake_encoder` are ported verbatim from afc-forge
-`tests/conftest.py:220-272`. The rest of that file builds a mock cohort out of the
-descriptor system, which this sandbox does not carry.
+`bag_of_words_encoder` and `fake_encoder` are ported verbatim from
+`shared/afc-forge/tests/conftest.py:220-272`. The rest of that file builds a
+mock cohort out of the descriptor system, which this sandbox does not carry.
 """
 
 from __future__ import annotations
