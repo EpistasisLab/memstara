@@ -731,7 +731,14 @@ async def read_questions(status: str = "open", limit: int = 200) -> str:
         JSON list. Each entry carries the question ``text``, the ``okf_tags`` it was
         grounded in, the ``rationale`` for asking it, and how it has done so far —
         ``times_used`` and ``best_auc``. The last two are empty until a question has
-        been through a wave.
+        been through a wave. ``claimed_run`` and ``claimed_by`` say whether some run is
+        working it right now; both empty means nobody is.
+
+        **A claimed question is still listed here.** This tool answers "what has this
+        project thought to ask", which does not stop being true while somebody is asking
+        it. Hiding claimed rows would make the bank look emptier than it is to the
+        curator, which is exactly how it would propose a duplicate of the question
+        another worker has in hand.
     """
     try:
         conn = await asyncpg.connect(_dsn())
@@ -739,7 +746,12 @@ async def read_questions(status: str = "open", limit: int = 200) -> str:
             rows = await conn.fetch(
                 """
                 SELECT question_id, text, okf_tags, rationale, origin_run, origin_wave,
-                       times_used, best_auc, status, created_at
+                       times_used, best_auc, status, created_at,
+                       -- Shown for the same reason claimed_by is shown on the board: a
+                       -- claim nobody can see is a claim nobody trusts, and "who is
+                       -- working this" is the question worth asking the moment there are
+                       -- two hypothesis workers. Plain TEXT, so no unpacking below.
+                       claimed_run, claimed_by
                 FROM memstara_questions
                 WHERE ($1 = '' OR status = $1)
                 ORDER BY question_id DESC
@@ -759,6 +771,87 @@ async def read_questions(status: str = "open", limit: int = 200) -> str:
         d["okf_tags"] = json.loads(d["okf_tags"]) if d["okf_tags"] else []
         out.append(d)
     return json.dumps({"count": len(out), "questions": out}, ensure_ascii=False, default=str)
+
+
+@mcp.tool()
+async def claim_question(run_tag: str = "", worker: str = "", stale_after: int = 600) -> str:
+    """Take one open question out of the bank, so no other agent sets out from it.
+
+    The hypothesis stage's equivalent of ``claim_task``. The other three stages take work
+    off the board; this stage **creates** the work, and what it needs to not collide over
+    is the question it starts from. With two hypothesis agents seeding one wave, both
+    would otherwise reach for the newest question in the bank and the wave would spend
+    twice to investigate one thing.
+
+    Args:
+        run_tag: the run you are working. It is recorded as the holder, because the
+            driver gives a whole run's questions back at once when its wave has finished
+            seeding.
+        worker: who you are — the name you were given in your instructions. Recorded
+            beside the run so a person reading the bank can see which of that run's
+            workers took which question.
+        stale_after: seconds a claim may stand before it is treated as abandoned and the
+            question may be taken again. This is what keeps a run that died mid-wave from
+            removing its questions from the bank for good.
+
+    Returns:
+        JSON with ``question_id``, the question ``text``, and the ``okf_tags`` it is
+        grounded in — pass the id and the text on to ``create_task``. When the bank has
+        nothing open left it returns ``{"question_id": null}``: there is nothing to ask,
+        so stop. Do not invent a question, and do not re-use one you were not handed.
+    """
+    try:
+        conn = await asyncpg.connect(_dsn())
+        try:
+            # The same statement shape as claim_task, for the same reason: FOR UPDATE
+            # SKIP LOCKED makes a second claimer step over the row the first one picked
+            # rather than queue behind it and take the very same one.
+            #
+            # ORDER BY question_id DESC is read_questions' own order, and it matters here
+            # rather than being a detail — the curator's freshly grounded questions are
+            # the highest ids, so this hands out the new ones before falling back on the
+            # bank's older stock. Claiming ascending would spend a wave re-asking the
+            # oldest questions in the project while the ones just proposed sat untouched.
+            #
+            # The staleness arm of the WHERE is the crash path. release_questions() is
+            # the normal ending and the driver calls it when a wave finishes seeding; a
+            # run that dies in between would otherwise hold its questions for ever, and
+            # this table has no run_tag to scope a cleanup by, so nothing else would ever
+            # find them.
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """
+                    UPDATE memstara_questions SET
+                        claimed_run = $1,
+                        claimed_by  = $2,
+                        claimed_at  = now()
+                    WHERE question_id = (
+                        SELECT question_id FROM memstara_questions
+                        WHERE status = 'open'
+                          AND (claimed_at IS NULL
+                               OR claimed_at < now() - make_interval(secs => $3))
+                        ORDER BY question_id DESC
+                        FOR UPDATE SKIP LOCKED
+                        LIMIT 1
+                    )
+                    RETURNING question_id, text, okf_tags, rationale,
+                              times_used, best_auc, claimed_run, claimed_by
+                    """,
+                    run_tag, worker, max(0, int(stale_after)),
+                )
+        finally:
+            await conn.close()
+    except Exception as e:  # noqa: BLE001
+        return _err(e)
+
+    # None means the bank is empty of open, unclaimed questions. A normal state, not an
+    # error — same contract as claim_task's null task_id, and the agent stops here.
+    if row is None:
+        return json.dumps({"question_id": None})
+
+    out: dict[str, Any] = dict(row)
+    out["okf_tags"] = json.loads(out["okf_tags"]) if out["okf_tags"] else []
+    return json.dumps(out, ensure_ascii=False, default=str)
 
 
 @mcp.tool()

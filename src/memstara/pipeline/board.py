@@ -161,7 +161,7 @@ import asyncpg    # PostgreSQL async driver. Used only to query the board direct
 from memstara.env import load_env
 
 # memstara/blackboard.py — the board table's definition and connection details
-from memstara.blackboard import BoardBusy, dsn, run_lock
+from memstara.blackboard import BoardBusy, dsn, release_questions, run_lock
 # memstara/logging_setup.py — makes a directory per run and also keeps the log in a file
 from memstara.logging_setup import drain_llm_requests, new_run_dir, setup_logging, tee_console
 # memstara/pipeline/core.py — the part the two pipelines (mvp, board) share
@@ -1229,24 +1229,52 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             # from different angles and arrived at the same place".
             step("(4)", "pin the first instruction to the board",
                  f"call the hypothesis agent {len(questions)} times — a different question "
-                 f"each time")
-            # A trial that never calls `create_task` leaves nothing behind: no board row,
-            # no result, no error. On 2026-08-30 one of four trials spent 31 steps and
-            # $1.88 that way and the run ended looking successful — the only thing that
-            # noticed was the report agent, in prose, by luck. The count was already
-            # being printed below; it was never compared, so nothing could notice.
-            seeded = (await board_state(registry, args.run_tag))["count"]
-            for k, q in enumerate(questions):
-                i = base + k                       # trial number, carrying on across waves
+                 f"each time"
+                 + (f", {args.hypothesis_agents} at a time"
+                    if args.hypothesis_agents > 1 else ""))
+
+            # Whether the question comes from the bank or from the built-in list decides
+            # how the workers are told what to ask, and the two are genuinely different.
+            #
+            #   from the bank  — the worker calls claim_question and is handed one. The
+            #       bank row records who took it, so two workers cannot set out from one
+            #       question even if this driver is not the only thing reading the bank.
+            #   the fallback   — the curator grounded nothing (questions_for_wave returned
+            #       empty) and these perspectives are not in the bank at all, so there is
+            #       nothing to claim. Worker k is handed perspectives[k] directly, which
+            #       is distinct by construction because the driver deals them out itself.
+            #
+            # The fallback keeps the old prompt exactly. It is the degraded path and it
+            # already prints a warning; giving it a second, subtly different failure mode
+            # to reason about would buy nothing.
+            from_bank = any(q["question_id"] for q in questions)
+
+            async def seed_one(i: int, q: dict[str, Any], *, from_bank: bool = from_bank):
+                """Call one hypothesis worker and attach what its matcher calls saw."""
                 text = q["text"]
-                # question_id travels with the task so a finished result can be traced
-                # back to what was asked. 0 means the fallback list was used.
+                wid = f"hypothesis#{i}"
+                if from_bank:
+                    ask = (
+                        f"You are worker '{wid}'. Call claim_question with "
+                        f"run_tag='{args.run_tag}' and worker='{wid}' to be given your "
+                        f"question; if it hands you nothing, stop. The outcome column is "
+                        f"'{args.y_column}'. Choose the columns that will predict it from "
+                        f"the perspective of the question you were handed. Then put the "
+                        f"task on the board with run_tag='{args.run_tag}', trial={i}, "
+                        f"perspective set to that question's text, and question_id set to "
+                        f"the question_id you were handed."
+                    )
+                else:
+                    # question_id travels with the task so a finished result can be traced
+                    # back to what was asked. 0 means the fallback list was used.
+                    ask = (
+                        f"The outcome column is '{args.y_column}'. Choose the columns that will predict it, "
+                        f"{text}. Then put the task on the board with "
+                        f"run_tag='{args.run_tag}', trial={i}, perspective='{text}', "
+                        f"question_id={q['question_id']}."
+                    )
                 _, call = await call_agent(
-                    agents["hypothesis"],
-                    f"The outcome column is '{args.y_column}'. Choose the columns that will predict it, "
-                    f"{text}. Then put the task on the board with "
-                    f"run_tag='{args.run_tag}', trial={i}, perspective='{text}', "
-                    f"question_id={q['question_id']}.",
+                    agents["hypothesis"], ask,
                     tools=by_stage["hypothesis"], registry=registry, temperature=temperature_for(i),
                     stage=f"hypothesis{i}",
                 )
@@ -1255,27 +1283,70 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 # trace attached after stage (5) would land on a board row whose result had
                 # already been written without it — recorded in the place that gets cleared
                 # and missing from the place that is kept.
-                attached, refused = await harvest_match_trace(registry, call)
+                return i, await harvest_match_trace(registry, call)
 
-                # Check sheet by sheet that the board really did grow. If it did not, that
-                # person failed.
+            # A trial that never calls `create_task` leaves nothing behind: no board row,
+            # no result, no error. On 2026-08-30 one of four trials spent 31 steps and
+            # $1.88 that way and the run ended looking successful — the only thing that
+            # noticed was the report agent, in prose, by luck. The count was already
+            # being printed below; it was never compared, so nothing could notice.
+            #
+            # **How that is caught changed with this loop.** It used to read the whole
+            # board's count before and after each call and blame the current trial for the
+            # difference. Attributing a delta to one worker only works while exactly one
+            # worker is running, and it was never quite right even then — any row from
+            # anywhere would have counted as this trial's. The board carries the trial
+            # number, so what is asked below is the direct question: is there a row for
+            # trial i? That is concurrency-safe and strictly more truthful.
+            for chunk_start in range(0, len(questions), args.hypothesis_agents):
+                chunk = questions[chunk_start:chunk_start + args.hypothesis_agents]
+                outcomes = await asyncio.gather(
+                    *(seed_one(base + chunk_start + k, q) for k, q in enumerate(chunk)),
+                    return_exceptions=True,
+                )
                 state = await board_state(registry, args.run_tag)
-                extra = ""
-                if attached:
-                    extra += f" · attached the matcher record to {attached} sheets"
-                if refused:
-                    # Reported, not hidden. All-refused and never-called are different
-                    # failures with different fixes, and they look the same if this is
-                    # silent.
-                    extra += (f" · {refused} matcher calls were refused and left out of "
-                              f"the evidence")
-                note(f"trial {i} ({text}) → {state['count']} sheets on the board" + extra)
+                for outcome in outcomes:
+                    if isinstance(outcome, BaseException):
+                        # Reported, not swallowed, and not fatal to the wave. The other
+                        # workers in this chunk finished; their trials are on the board and
+                        # the missing one is found by the presence test below like any
+                        # other trial that produced nothing.
+                        note(f"⚠ a hypothesis worker died: {type(outcome).__name__}: {outcome}")
+                        continue
+                    i, (attached, refused) = outcome
+                    extra = ""
+                    if attached:
+                        extra += f" · attached the matcher record to {attached} sheets"
+                    if refused:
+                        # Reported, not hidden. All-refused and never-called are different
+                        # failures with different fixes, and they look the same if this is
+                        # silent.
+                        extra += (f" · {refused} matcher calls were refused and left out of "
+                                  f"the evidence")
+                    note(f"trial {i} → {state['count']} sheets on the board" + extra)
 
-                if state["count"] <= seeded:
+            # The presence test. One read of the board, and a trial with no row of its own
+            # is one whose worker never called create_task.
+            state = await board_state(registry, args.run_tag)
+            on_board = {t["trial"] for t in state["tasks"]}
+            for k in range(len(questions)):
+                i = base + k
+                if i not in on_board:
                     note(f"⚠ trial {i} left nothing on the board "
                          f"— create_task was never called")
                     missing_trials.append(i)
-                seeded = state["count"]
+
+            # Give the wave's questions back to the bank now that seeding is over. Not at
+            # the end of the run: the claim exists to keep two workers of *this* wave off
+            # one question, and the moment they have all called create_task that job is
+            # done — what they produced is on the board under its own question_id and no
+            # longer needs the bank row held. Held any longer, and because
+            # memstara_questions has no run_tag to scope a cleanup by, the questions this
+            # run used would be missing from the next run's bank.
+            if from_bank:
+                freed = await release_questions(args.run_tag)
+                if freed:
+                    note(f"gave {freed} question(s) back to the bank")
 
             # -- work it down ----------------------------------------------
             # -- (5) run until the board is empty ----------------------------
@@ -1672,6 +1743,15 @@ async def main() -> int:
             f"--{stage_flag}-agents", type=int, default=1,
             help=f"how many {what} workers claim from the board at once (default 1)",
         )
+    # The seeding stage's own count. It is separate from the three above because it is not
+    # the same kind of number: those three are how many workers stand at the board through
+    # a whole run, this is how many of a wave's trials are seeded at once. --trials still
+    # decides how many trials there are; this only decides how many are in flight.
+    ap.add_argument(
+        "--hypothesis-agents", type=int, default=1,
+        help="how many hypothesis workers seed the board at once. Each claims its own "
+             "question out of the bank, so two never set out from one question (default 1)",
+    )
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--run-dir", default=None)
     args = ap.parse_args()
@@ -1681,7 +1761,8 @@ async def main() -> int:
     # that was asked for, and quietly turning it into 0 workers hangs on a board that
     # never empties.
     bad = [f"--{s}-agents={getattr(args, f'{s}_agents')}"
-           for s in ("data", "ml", "interpret") if getattr(args, f"{s}_agents") < 1]
+           for s in ("hypothesis", "data", "ml", "interpret")
+           if getattr(args, f"{s}_agents") < 1]
     if bad:
         ap.error("a stage needs at least one worker: " + ", ".join(bad))
 

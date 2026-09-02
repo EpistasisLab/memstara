@@ -517,8 +517,15 @@ BOARD_TOOLS = {
     # bookkeeping about a wave having ended, which the driver knows and no agent does.
     "curator": {"okf_list_domains", "okf_search", "okf_read",
                 "read_questions", "read_results", "propose_questions"},
+    # `claim_question` is the one thing this stage takes rather than makes. It is not a
+    # softening of the rule below — the stage still claims no *task*, and it is still the
+    # only stage that puts work on the board. What it claims is the question it sets out
+    # from, which stops two hypothesis workers of one wave both investigating the newest
+    # question in the bank. `read_questions` stays with the curator: this stage is handed
+    # one question, and a stage that can read the whole bank is a stage that can pick a
+    # second one for itself.
     "hypothesis": {"okf_list_domains", "okf_search", "okf_read", "describe_dataset",
-                   "match_concepts", "match_concept", "create_task"},
+                   "match_concepts", "match_concept", "claim_question", "create_task"},
     "data": {"describe_dataset", "slice_columns", "claim_task", "submit_result"},
     "ml": {"train_and_score", "claim_task", "submit_result"},
     "interpreter": {"claim_task", "submit_result"},
@@ -589,8 +596,16 @@ async def provision_board_agents(
             "You are a hypothesis agent. Decide which columns to pull from the dataset in "
             "order to predict the outcome, then put that decision on the shared board as a "
             "new task.\n\n"
-            "You are the only stage that creates work. You never claim anything — there is "
-            "nothing on the board for you to take.\n\n"
+            "You are the only stage that creates work. You take nothing off the board — "
+            "there is nothing on it for you.\n\n"
+            "The one thing you do claim is the QUESTION you set out from. There may be "
+            "another hypothesis agent working the same wave beside you, and a question is "
+            "worth investigating once, not twice. So if your instructions do not already "
+            "contain your question, call claim_question with the run_tag and the worker "
+            "name you were given, and work on what it hands back. It marks that question "
+            "as yours, so the other agent is given a different one. If it answers with a "
+            "null question_id there is nothing left to ask: stop there, and do not invent "
+            "a question or re-use one you were not handed.\n\n"
             "The knowledge source (OKF) tells you WHICH PHENOMENA matter for this outcome "
             "and how strong the evidence is. The dataset tells you WHICH COLUMNS EXIST. "
             "Neither one alone is enough, and nothing connects them for you — making that "
