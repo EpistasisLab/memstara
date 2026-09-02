@@ -462,7 +462,7 @@ async def setup_tools() -> MCPServerRegistry:
 # Collects the agents called in this run, in the order they were called.
 #
 # Why a list and why not per trial — on the 02 path one trial passes through the four
-# stages in turn, so it groups by `TodoRow.run_ids[stage]` (src/memstara/pipeline/core.py:664). The
+# stages in turn, so it groups by `TodoRow.run_ids[stage]` (src/memstara/pipeline/core.py:184). The
 # board path is different. **Which task a single `call_agent(data, ...)` picks up is
 # decided by the board at that moment.** So it cannot be grouped by trial, and keeping
 # the order they were called in is what matches the facts.
