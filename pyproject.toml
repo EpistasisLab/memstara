@@ -138,10 +138,6 @@ markers = [
 # they were not written to, for no gain.
 # --------------------------------------------------------------------------- #
 [tool.ruff]
-# isort's notion of a first-party import, which is what makes `memstara.*` sort
-# into its own block rather than alongside numpy.
-src = ["src"]
-
 # Measured, not chosen. The distribution of line lengths across `src/` on
 # 2026-09-01: median 45, p90 87, p95 90, p99 106, longest 182. At 100 ruff
 # reports 85 lines; at 110, 20; at 120, exactly one
@@ -152,12 +148,22 @@ src = ["src"]
 line-length = 120
 
 [tool.ruff.lint]
-# E/F are pyflakes and pycodestyle: undefined names, unused imports, unreachable
-# code — the findings that are bugs rather than style. I sorts imports. B is
-# flake8-bugbear, which is where `zip()` without `strict=` gets caught. UP is
-# pyupgrade; it currently reports nothing, and is listed so that it keeps
-# reporting nothing as files are edited.
-select = ["E", "F", "I", "UP", "B"]
+# E/F are pycodestyle and pyflakes: undefined names, unused imports, unreachable
+# code — the findings that are bugs rather than taste. B is flake8-bugbear, which
+# is where `zip()` without `strict=` gets caught. UP is pyupgrade; it reports
+# nothing today, and is listed so that it keeps reporting nothing.
+#
+# `I` (isort) was selected, tried, and dropped. It found 14 files, and fixing
+# them was not an improvement: the import blocks in this repository are grouped
+# by hand under prose headers (`# ---- motoro (the repo next door) ----`), carry
+# an aligned trailing comment per line explaining what each import is for, and in
+# `src/memstara/pipeline/board.py` the comment above `from memstara.env import
+# load_env` states that the order is load-bearing. isort moved two imports above
+# that comment, orphaning it, and collapsed every alignment column in the file.
+# Nothing isort reports here is a bug; what it costs is the one thing these files
+# were written for, which is being readable by someone who does not write Python
+# for a living.
+select = ["E", "F", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
 # The three files below are `SOURCE: PORTED FROM afc-forge`, and
@@ -167,19 +173,20 @@ select = ["E", "F", "I", "UP", "B"]
 # (`src/memstara/matcher/__init__.py:44-48`), and a tidied import block is
 # indistinguishable from a divergence in that diff.
 #
-# So the two findings here are upstream's, and both are correct as they stand:
-# `matcher.py:64` orders its imports the way afc-forge does, and the `torch` at
-# `embedder.py:154` is imported for its side effect — it must be loaded after
-# the offline flag is flipped and before `sentence_transformers`, which is why
-# it is never referenced by name.
+# The one finding here is upstream's, and it is correct as it stands: the `torch`
+# at `embedder.py:154` is imported for its side effect — it must load after the
+# offline flag is flipped and before `sentence_transformers`, which is exactly
+# why it is never referenced by name afterwards.
 #
-# `vocab.py` is clean today and is listed anyway, because the rule is about
-# where the file came from, not about what ruff happens to say this month.
+# `matcher.py` and `vocab.py` are clean today and are listed anyway, because the
+# rule is about where the file came from rather than about what ruff happens to
+# say this month. F401 is the code most likely to fire next on ported code, for
+# the same reason it fired here.
 #
-# If a new rule fires on one of these files, the fix is to add its code to this
-# list with a line explaining what upstream does. It is never to edit the file.
+# If some other rule fires on one of these files, the fix is to add its code to
+# this list with a line saying what upstream does. It is never to edit the file.
 # `catalog.py` is deliberately absent: it is `SOURCE: MIXED`, and its
-# sandbox-original half from `catalog.py:190` onward should be linted normally.
-"src/memstara/matcher/matcher.py" = ["I001"]
+# sandbox-original half from `catalog.py:190` onward is linted normally.
+"src/memstara/matcher/matcher.py" = ["F401"]
 "src/memstara/matcher/embedder.py" = ["F401"]
-"src/memstara/matcher/vocab.py" = ["I001", "F401"]
+"src/memstara/matcher/vocab.py" = ["F401"]
