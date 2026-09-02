@@ -190,7 +190,7 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
 
 
 @mcp.tool()
-async def claim_task(task_type: str, run_tag: str = "") -> str:
+async def claim_task(task_type: str, run_tag: str = "", worker: str = "") -> str:
     """Take one waiting task of your type, so nobody else can take it.
 
     Args:
@@ -200,11 +200,18 @@ async def claim_task(task_type: str, run_tag: str = "") -> str:
             waiting task of your type from *any* run — which is how a task abandoned
             by some earlier, unrelated run ends up being done, and paid for, by this
             one. Do not leave it empty when you were given a run tag.
+        worker: who you are — the name you were given in your instructions. It is
+            written onto the task and is what ``submit_result`` compares against, so
+            pass the **same** string to both. When two workers of one type are running
+            it is the only thing that tells them apart: leave it empty and the board
+            records the task as held by nobody, and a result submitted late, after the
+            task was handed to somebody else, is no longer refused.
 
     Returns:
         JSON with the task and everything earlier stages left on it, including
         ``y_column`` — the outcome to predict, carried on the task so no stage has to be
-        told it separately. When the board has nothing waiting for you it returns
+        told it separately, and ``claimed_by``, the identity it was recorded under.
+        When the board has nothing waiting for you it returns
         ``{"task_id": null}`` — that means
         there is no work for you right now, so stop. Do not invent a task and do not
         take one of another type.
@@ -234,6 +241,11 @@ async def claim_task(task_type: str, run_tag: str = "") -> str:
                         status     = 'in_progress',
                         attempts   = attempts + 1,
                         claimed_at = now(),
+                        -- Written in the same statement that takes the row, not in a
+                        -- second one afterwards. Between two statements there is a
+                        -- moment where the task is in_progress and held by nobody,
+                        -- and that moment is exactly what the column exists to close.
+                        claimed_by = $3,
                         updated_at = now()
                     WHERE task_id = (
                         SELECT task_id FROM memstara_blackboard
@@ -247,9 +259,9 @@ async def claim_task(task_type: str, run_tag: str = "") -> str:
                     )
                     RETURNING task_id, run_tag, trial, perspective, hypothesis,
                               columns, y_column, okf_concept_ids, subset_path,
-                              columns_used, auc, feature_importance
+                              columns_used, auc, feature_importance, claimed_by
                     """,
-                    task_type, run_tag,
+                    task_type, run_tag, worker,
                 )
         finally:
             await conn.close()
@@ -277,7 +289,8 @@ async def claim_task(task_type: str, run_tag: str = "") -> str:
 async def submit_result(task_id: int, subset_path: str = "",
                         columns_used: list[str] | None = None,
                         columns_missing: list[str] | None = None, auc: float | None = None,
-                        feature_importance: str = "", interpretation: str = "") -> str:
+                        feature_importance: str = "", interpretation: str = "",
+                        worker: str = "") -> str:
     """Write what you produced and hand the task to the next stage.
 
     Pass only the fields your stage produces; leave the rest out.
@@ -293,10 +306,15 @@ async def submit_result(task_id: int, subset_path: str = "",
         auc: ml stage — the test AUC.
         feature_importance: ml stage — JSON object of column to importance.
         interpretation: interpretation stage — the write-up.
+        worker: who you are — **the same string you passed to claim_task.** If the task
+            is now held by somebody else this is refused and nothing is written, which
+            is what stops a late result from landing on work that was handed on while
+            you were still busy. Leave it empty and that comparison cannot be made.
 
     Returns:
         JSON with the task's new status and whose turn it is now. After the
         interpretation stage the task is done and a row is added to the results table.
+        On a refusal, JSON with ``error`` and nothing written.
     """
     if isinstance(columns_used, str) or isinstance(columns_missing, str):
         return json.dumps(
@@ -319,17 +337,32 @@ async def submit_result(task_id: int, subset_path: str = "",
         try:
             async with conn.transaction():
                 cur = await conn.fetchrow(
-                    "SELECT task_type, status FROM memstara_blackboard WHERE task_id = $1 FOR UPDATE",
+                    "SELECT task_type, status, claimed_by FROM memstara_blackboard "
+                    "WHERE task_id = $1 FOR UPDATE",
                     task_id,
                 )
                 if cur is None:
                     return json.dumps({"error": f"no task {task_id}"})
-                # Blocks writing a result to a task that was never claimed. Without
-                # this check, one agent could overwrite its own result onto work
-                # somebody else is holding.
+                # Blocks writing a result to a task that was never claimed.
                 if cur["status"] != "in_progress":
                     return json.dumps(
                         {"error": f"task {task_id} is '{cur['status']}', not in_progress — claim it first"}
+                    )
+                # And blocks writing it onto work somebody else is now holding, which
+                # the status check above cannot do on its own — a task reclaimed after
+                # a stall and taken by a second worker is in_progress again, and looks
+                # from here exactly like the task the first worker still thinks is its
+                # own. Comparing the holder is the only thing that tells those apart.
+                #
+                # **The guard is exactly as strong as the identities it is given.**
+                # Both sides empty and this is a no-op, which is what keeps every
+                # existing caller working — but it is a no-op, not a weaker check, and
+                # a stage that does not name itself has no ownership protection at all.
+                if cur["claimed_by"] and worker and cur["claimed_by"] != worker:
+                    return json.dumps(
+                        {"error": f"task {task_id} is held by '{cur['claimed_by']}', not '{worker}' "
+                                  f"— it was reclaimed and taken by somebody else while you worked. "
+                                  f"Do not resubmit; claim a new task."}
                     )
 
                 stage = cur["task_type"]          # the stage this task is at now
@@ -356,6 +389,12 @@ async def submit_result(task_id: int, subset_path: str = "",
                         status             = $8,
                         task_type          = $9,
                         claimed_at         = NULL,
+                        -- Released with claimed_at. The task is either waiting for the
+                        -- next stage or finished; either way the worker that just
+                        -- submitted is no longer holding it, and a row that went back
+                        -- to 'ready' still naming somebody would refuse that next
+                        -- stage's own submission.
+                        claimed_by         = '',
                         updated_at         = now()
                     WHERE task_id = $1
                     """,
@@ -526,6 +565,13 @@ async def read_board(run_tag: str = "") -> str:
                 SELECT task_id, run_tag, trial, perspective, status, task_type,
                        hypothesis, columns, okf_concept_ids, match_trace, question_id,
                        y_column, columns_used, columns_missing,
+                       -- Who is holding it. This is the only window a person has onto
+                       -- the board, so a status of 'in_progress' with no name beside it
+                       -- says "somebody is working on this" without saying who — which
+                       -- is the question worth asking the moment there are two workers
+                       -- of one type. A plain TEXT column, so it needs no unpacking
+                       -- below.
+                       claimed_by,
                        auc, feature_importance, interpretation, attempts, error
                 FROM memstara_blackboard
                 WHERE ($1 = '' OR run_tag = $1)

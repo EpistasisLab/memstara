@@ -1442,7 +1442,10 @@ async def reclaim_stalled(registry: MCPServerRegistry, run_tag: str, stale_after
     nothing else to do — but "nothing waiting for me" and "nothing being worked on"
     are different statements, and the gap between them is where a stage that simply
     takes a long time gets its task yanked away mid-run. It then submits against a
-    task somebody else has since claimed.
+    task somebody else has since claimed — which `submit_result` now refuses by name,
+    provided both workers identified themselves when they claimed. That refusal turns
+    a silent overwrite into a visible error; it does not make the reclaim above any
+    less premature, so *stale_after* still has to be right.
 
     Returns:
         How many were returned to the queue. Zero means everything still in progress
@@ -1457,7 +1460,14 @@ async def reclaim_stalled(registry: MCPServerRegistry, run_tag: str, stale_after
             """
             WITH returned AS (
                 UPDATE memstara_blackboard
-                SET status = 'ready', claimed_at = NULL, updated_at = now()
+                -- claimed_by is released with claimed_at. Not for the next claimer's
+                -- sake — claim_task overwrites the name anyway — but for the window
+                -- in between, which is exactly the window somebody looks at when a
+                -- run is behaving oddly. A row reading 'ready' while still naming a
+                -- holder says two contradictory things at once, and this reclaim is
+                -- the only thing that ever produces that state.
+                SET status = 'ready', claimed_at = NULL, claimed_by = '',
+                    updated_at = now()
                 WHERE run_tag = $1 AND status = 'in_progress'
                   AND claimed_at IS NOT NULL
                   -- only what was claimed more than stale_after seconds ago. This line

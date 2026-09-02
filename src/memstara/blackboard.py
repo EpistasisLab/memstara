@@ -599,10 +599,10 @@ async def reclaim(run_tag: str) -> int:
             """
             WITH returned AS (
                 UPDATE memstara_blackboard
-                   -- claimed_by is cleared with claimed_at. A row back in the queue
-                   -- that still names its old holder is a false statement in every
-                   -- window onto the board, and the next claimer would be compared
-                   -- against a name that no longer means anything.
+                   -- claimed_by is cleared with claimed_at. Not for the next claimer's
+                   -- sake — claim_task overwrites the name anyway — but because a row
+                   -- reading 'ready' while still naming a holder says two contradictory
+                   -- things at once to whoever reads the board next.
                    SET status = 'ready', claimed_at = NULL, claimed_by = '',
                        updated_at = now()
                  WHERE run_tag = $1 AND status = 'in_progress'
