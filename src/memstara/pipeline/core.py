@@ -235,9 +235,9 @@ async def _ensure_agent(name: str, **kwargs: Any) -> Any:
     """Idempotent by name, but refresh the definition when it has drifted.
 
     Returning the existing agent untouched makes the --provider / --model flags
-    silently ineffective, and it also means an edited prompt in this file never
-    reaches the running agent: an agent is a durable resource and its configuration
-    was frozen at creation time.
+    silently ineffective, and it also means an edited file under `src/memstara/prompts/`
+    never reaches the running agent: an agent is a durable resource and its
+    configuration was frozen at creation time. See `_ensure_agent_from_file` below.
 
     An agent's identity is its role (its name), not its model or its wording, so the
     right move is to keep the name and update what changed.
