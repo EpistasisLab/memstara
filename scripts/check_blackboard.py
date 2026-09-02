@@ -42,6 +42,12 @@ What main() confirms, in order:
       board being cleared
   (8) does a question used three times retire and drop out of the open list — while
       the record and the reword block stay
+  (9) does a claimed row name its holder, and is another worker's result refused —
+      including the stalled-worker overwrite, end to end
+ (10) two named workers claiming **at the same time**, which is what the driver does
+      now that --data-agents may be more than 1
+ (11) the same one table over: two hypothesis workers claiming out of the question
+      bank, and the driver handing back what the run held
 
 Easy to miss:
 
@@ -92,6 +98,14 @@ async def cleanup() -> None:
     try:
         await conn.execute("DELETE FROM memstara_results WHERE run_tag = $1", RUN_TAG)
         await conn.execute("DELETE FROM memstara_blackboard WHERE run_tag = $1", RUN_TAG)
+        # A claim is the one mark this check can leave on a row it does **not** own.
+        # Item (11) claims a third question to show that a claimed one is not handed out
+        # twice, and that third question belongs to whoever filed it. Releasing before
+        # the delete repairs a run that died holding it; the delete below would not,
+        # because origin_run is not this check's tag.
+        await conn.execute(
+            "UPDATE memstara_questions SET claimed_run = '', claimed_by = '', claimed_at = NULL "
+            "WHERE claimed_run = $1", RUN_TAG)
         await conn.execute("DELETE FROM memstara_questions WHERE origin_run = $1", RUN_TAG)
     finally:
         await conn.close()
@@ -125,7 +139,7 @@ def ok(passed: bool, label: str, detail: str = "") -> bool:
 
 
 async def main() -> int:
-    """The body of the check. Steps (0)-(8) from the header above are here, in order."""
+    """The body of the check. Steps (0)-(11) from the header above are here, in order."""
     results: list[bool] = []   # each item's verdict, piled up
     await cleanup()            # clear an earlier check's debris first
     await cleanup_tag(f"{RUN_TAG}_other")   # and the second tag that (7) uses
@@ -698,6 +712,77 @@ async def main() -> int:
                       "each worker's own result goes through and hands the task on, naming nobody",
                       f"{sum('error' not in json.loads(s) for s in sent)}/{len(sent)} accepted · "
                       f"holders after {[moved[tid]['claimed_by'] for _w, tid in taken]}"))
+
+    # ---- (11) two hypothesis workers, one question bank -------------------
+    #
+    # (10) is the board. This is the same shape one table over, and it is the half the
+    # board's claim could never cover: the bank has **no run_tag**, on purpose, because it
+    # accumulates across runs. So two hypothesis agents seeding one wave both read it top
+    # down and both set out from the newest question unless something marks it taken.
+    # A wave of two then spends two agents to ask one thing.
+    #
+    # ORDER BY question_id DESC is also what makes this checkable against a bank this
+    # check does not own: the two filed here are the newest rows in it, so they are
+    # exactly the two the next two claims have to take. Any other pair and the ordering
+    # is not what the tool says it is.
+    #
+    # Neither text uses the "from a ... perspective" frame the items above file under this
+    # same tag. Written that way one of the two is blocked as a reword of them — measured,
+    # not guessed — and then only one question reaches the bank and there is nothing for
+    # the second worker to take. The dedup gate working is what item (2) checks; here it
+    # is only in the way, so the two are written far from it and far from each other.
+    p5 = json.loads(await bb.propose_questions(json.dumps([
+        {"text": f"which laboratory chemistry values move together before a rebound ({RUN_TAG} claim)",
+         "okf_tags": ["metapath"], "rationale": "one to be claimed"},
+        {"text": f"whether distance to the nearest clinic changes appointment adherence ({RUN_TAG} claim)",
+         "okf_tags": ["metapath"], "rationale": "a second, far enough from the first not to read as a reword"},
+    ], ensure_ascii=False), origin_run=RUN_TAG, origin_wave=2))
+    banked = sorted(q["question_id"] for q in p5.get("added", []))
+    results.append(ok(len(banked) == 2, "two questions are banked for the workers to claim", str(banked)))
+
+    workers = ["hypothesis#1", "hypothesis#2"]
+    got = [json.loads(g) for g in
+           await asyncio.gather(*(bb.claim_question(RUN_TAG, worker=w) for w in workers))]
+    # strict=True for the reason given in (10): a length mismatch would mean a claim
+    # vanished, and that is the worker this item exists to notice.
+    claimed = [(w, g.get("question_id")) for w, g in zip(workers, got, strict=True)]
+    held = {q["question_id"]: q for q in json.loads(await bb.read_questions(limit=500))["questions"]}
+    results.append(ok(sorted(qid for _w, qid in claimed) == banked
+                      and len({qid for _w, qid in claimed}) == 2
+                      # The row names the worker that was handed it, and the run that
+                      # worker belongs to — the run is what release_questions works from.
+                      and all(held[qid]["claimed_by"] == w for w, qid in claimed)
+                      and all(held[qid]["claimed_run"] == RUN_TAG for _w, qid in claimed)
+                      # The question itself comes back with the claim. Without the text
+                      # the worker holds an id and has nothing to set out from.
+                      and all(g.get("text") for g in got),
+                      "two hypothesis workers claiming together get the two newest questions, "
+                      "each under its own name",
+                      " · ".join(f"{w}→#{qid}" for w, qid in claimed)))
+
+    # A question already claimed is not handed out again. The bank is shared, so a third
+    # worker does not come back empty here — it comes back holding somebody else's
+    # question, and what is being checked is that it is **not** one of these two.
+    # The empty-bank branch (question_id null) is deliberately not exercised: reaching it
+    # would mean claiming every open row in a bank this check did not fill.
+    third = json.loads(await bb.claim_question(RUN_TAG, worker="hypothesis#3"))
+    results.append(ok(third.get("question_id") not in {qid for _w, qid in claimed},
+                      "a question one worker holds is not handed to the next",
+                      f"the third worker got #{third.get('question_id')}, not "
+                      f"{sorted(qid for _w, qid in claimed)}"))
+
+    # Releasing is the driver's, not an agent's — the same split reclaim() above keeps.
+    # It matters more here than on the board: a board row is scoped to a run and dies with
+    # it, but a claim left on a bank row is permanent, so this check alone would take
+    # three questions away from every run that came after it.
+    freed = await bbm.release_questions(RUN_TAG)
+    now_open = {q["question_id"]: (q["claimed_run"], q["claimed_by"])
+                for q in json.loads(await bb.read_questions(limit=500))["questions"]}
+    touched = [qid for _w, qid in claimed] + ([third["question_id"]] if third.get("question_id") else [])
+    results.append(ok(freed == len(touched)
+                      and all(now_open[qid] == ("", "") for qid in touched),
+                      "the driver hands back every question the run was holding",
+                      f"freed {freed} of {len(touched)} · holders after {[now_open[qid] for qid in touched]}"))
 
     # What the check made is not left behind. The second tag made above goes too.
     await cleanup()
