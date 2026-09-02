@@ -1332,29 +1332,84 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                         continue
 
                 # Was anyone called at all this lap? If nobody was, fall through below.
+                #
+                # The calls are collected first and started together, rather than awaited
+                # one at a time as they were before. Two consequences worth being explicit
+                # about:
+                #
+                #   * Stages overlap as well as workers. data#1, data#2 and ml#1 all run
+                #     at once. There is nothing to serialise for — each one claims only
+                #     its own task_type, and claim_task takes its row in a single
+                #     FOR UPDATE SKIP LOCKED statement, so two claimers cannot take one
+                #     row (proved under 12-for-8 contention in scripts/check_blackboard.py).
+                #   * The sweep order in CLAIMING_STAGES no longer decides anything within
+                #     a lap. It still decides the order the launches are built in, which
+                #     is what keeps the printed output roughly in pipeline order.
                 worked = False
+                launches = []
                 for stage in CLAIMING_STAGES:                 # data → ml → interpreter order
-                    waiting = counts.get(f"{STAGE_TASK_TYPE[stage]}/ready", 0)
+                    ttype = STAGE_TASK_TYPE[stage]
+                    waiting = counts.get(f"{ttype}/ready", 0)
                     if not waiting:
                         continue                              # no sheet for this person to take
 
-                    # No outcome column in this message on purpose. It is on the task, put
-                    # there by the hypothesis stage, and a task has to carry everything its
-                    # stage needs. Saying it here as well would leave two sources for one
-                    # fact — and the one in the prompt is the one that goes unrecorded, so
-                    # if the two ever disagree there is no way to check.
+                    # Never more workers than there are sheets. An extra worker claims
+                    # nothing, is told "nothing to claim", and reaches that conclusion at
+                    # the price of a whole model call. The flag is a ceiling on how many
+                    # may run, not an instruction to run that many.
                     #
-                    # The run_tag is the exception, and not a contradiction of the rule
-                    # above: it does not describe the task, it decides *which* task to
-                    # pick. That has to come from the prompt because the agent is choosing
-                    # before it holds a task to read it from.
-                    await call_agent(
-                        agents[stage],
-                        f"Claim a '{STAGE_TASK_TYPE[stage]}' task from run_tag "
-                        f"'{args.run_tag}' and do your part.",
-                        tools=by_stage[stage], registry=registry, stage=stage,
-                    )
+                    # `interpreter` is the stage's name and `interpret` is the name on the
+                    # sheet; the flag is spelled --interpret-agents, after the sheet, which
+                    # is what STAGE_TASK_TYPE is for.
+                    for k in range(1, min(waiting, getattr(args, f"{ttype}_agents")) + 1):
+                        # The worker's name. It goes in the prompt because the guard on the
+                        # board compares names, and a name the agent was never given is a
+                        # comparison that cannot fire — submit_result treats an empty
+                        # worker as "no opinion", not as a failure.
+                        wid = f"{ttype}#{k}"
+
+                        # No outcome column in this message on purpose. It is on the task,
+                        # put there by the hypothesis stage, and a task has to carry
+                        # everything its stage needs. Saying it here as well would leave two
+                        # sources for one fact — and the one in the prompt is the one that
+                        # goes unrecorded, so if the two ever disagree there is no way to
+                        # check.
+                        #
+                        # The run_tag is the exception, and not a contradiction of the rule
+                        # above: it does not describe the task, it decides *which* task to
+                        # pick. That has to come from the prompt because the agent is
+                        # choosing before it holds a task to read it from. The worker name
+                        # is here for the same reason — it is not a property of the task,
+                        # it is who is asking.
+                        launches.append(call_agent(
+                            agents[stage],
+                            f"You are worker '{wid}'. Claim a '{ttype}' task from run_tag "
+                            f"'{args.run_tag}' and do your part. Pass worker='{wid}' to "
+                            f"both claim_task and submit_result.",
+                            tools=by_stage[stage], registry=registry,
+                            # Each worker gets its own trace file. Left as `stage`, two
+                            # workers of one type would write trace/NN_data.txt over each
+                            # other and the losing one's record would simply be absent.
+                            stage=wid,
+                        ))
                     worked = True
+
+                if launches:
+                    # return_exceptions=True, deliberately. Before this, one call_agent
+                    # raising ended the whole run. With N workers in flight that would
+                    # throw away the other N-1's finished work for one crash. Here the
+                    # failure is printed and the lap goes on: the crashed worker's task
+                    # stays in_progress and --stale-after takes it back, which is the
+                    # mechanism that already exists for a worker that stops answering.
+                    #
+                    # It is reported rather than swallowed. A crash that only shows up as
+                    # a task quietly reclaimed 600 seconds later is a crash nobody can
+                    # attribute to anything.
+                    for outcome in await asyncio.gather(*launches, return_exceptions=True):
+                        if isinstance(outcome, BaseException):
+                            note(f"⚠ a worker died: {type(outcome).__name__}: {outcome} "
+                                 f"— its task stays in progress until --stale-after "
+                                 f"({args.stale_after}s) takes it back")
 
                 if not worked:
                     # Nothing is waiting for any stage, so what is left is in_progress.
@@ -1600,9 +1655,35 @@ async def main() -> int:
              "failed and go on without it. 0 retries forever, which means only a person "
              "watching can end a run whose task can never succeed (default 5)",
     )
+    # How many workers of each claiming stage run at once.
+    #
+    # One flag per stage rather than a single --agents N, because the right number is not
+    # the same for all three. A `data` worker spends its time in the model and in a CSV
+    # slice; a second one genuinely doubles throughput. An `ml` worker ends in
+    # train_and_score, which is a **sync** tool, and FastMCP calls sync tools straight on
+    # the server's event loop (mcp/server/fastmcp/utilities/func_metadata.py:93-96) — so
+    # two ml workers overlap their reasoning turns and their fits still run one after the
+    # other. Rolling the three into one number would hide that.
+    #
+    # Default 1 everywhere: that is exactly the behaviour before this flag existed, so a
+    # command line that does not mention them runs as it always did.
+    for stage_flag, what in (("data", "data"), ("ml", "ml"), ("interpret", "interpretation")):
+        ap.add_argument(
+            f"--{stage_flag}-agents", type=int, default=1,
+            help=f"how many {what} workers claim from the board at once (default 1)",
+        )
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--run-dir", default=None)
     args = ap.parse_args()
+
+    # Rejected here rather than clamped. A run started with --data-agents 0 asked for
+    # something specific; quietly turning it into 1 gives back a run that is not the one
+    # that was asked for, and quietly turning it into 0 workers hangs on a board that
+    # never empties.
+    bad = [f"--{s}-agents={getattr(args, f'{s}_agents')}"
+           for s in ("data", "ml", "interpret") if getattr(args, f"{s}_agents") < 1]
+    if bad:
+        ap.error("a stage needs at least one worker: " + ", ".join(bad))
 
     # If the prerequisites are missing it ends **without doing anything.** Stopping
     # before the start leaves the board cleaner than dying halfway through.
