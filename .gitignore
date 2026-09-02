@@ -43,6 +43,23 @@ __pycache__/
 .mypy_cache/
 
 # ---------------------------------------------------------------------------
+# The rule files, which the global ignore would otherwise swallow.
+#
+
+# the grounds that it is local-only assistant tooling. In this repository it is
+# not. These five files are the rules themselves — they cite line numbers that
+# `scripts/check_citations.py` verifies on every run, and a citation in an
+# untracked file is never checked, because the checker indexes `git ls-files`.
+# `CLAUDE_KR.md` is a tracked Korean edition like `BACKLOG_KR.md`.
+#
+# ASAREE and motoro both track theirs, and are unaffected by the global rule
+# only because a file already tracked stays tracked. This repository has to say
+# so out loud. The negation is deliberately un-anchored, so it covers the three
+
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
 # macOS and Office leavings
 # ---------------------------------------------------------------------------
 .DS_Store

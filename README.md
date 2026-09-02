@@ -315,3 +315,23 @@ at resolving credentials.
 - The original examples core ships: `../motoro/examples/` (provision / run /
   memory_run / mcp_run)
 
+
+## The rule files
+
+
+
+is loaded automatically in every session here.
+
+Rules that used to live only in this README — `-m` is not a matter of taste,
+`AGENTIC_OKF_BUNDLE_DIR` cannot be renamed, the outcome column is never a feature — are
+**cited there by line number rather than copied**, so the two cannot quietly disagree:
+`scripts/check_citations.py` checks every one of those citations on every run.
+
+`CLAUDE_KR.md` is its full Korean edition, on the same terms as `BACKLOG_KR.md` — English
+is correct if the two disagree. Three more rule files load only inside the directory they
+
+
+
+This section is at the end of the file on purpose. Inserting it higher up would have moved
+
+this README by line number.
