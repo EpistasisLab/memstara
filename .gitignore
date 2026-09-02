@@ -50,7 +50,8 @@ __pycache__/
 # not. These five files are the rules themselves — they cite line numbers that
 # `scripts/check_citations.py` verifies on every run, and a citation in an
 # untracked file is never checked, because the checker indexes `git ls-files`.
-# `CLAUDE_KR.md` is a tracked Korean edition like `BACKLOG_KR.md`.
+# `CLAUDE_KR.md` is a Korean edition and is ignored by the `*_KR*` rule below,
+# which is a separate decision from this one.
 #
 # ASAREE and motoro both track theirs, and are unaffected by the global rule
 # only because a file already tracked stays tracked. This repository has to say
@@ -58,6 +59,32 @@ __pycache__/
 
 # ---------------------------------------------------------------------------
 
+
+# ---------------------------------------------------------------------------
+# The Korean editions. Local only, as of 2026-09-02.
+#
+# Every Korean file in this project carries `_KR` in its name — that is the
+
+# judgement about content, precisely so a pattern like this one can enforce it.
+# The pattern is `*_KR*`, unanchored and open at both ends, because the marker
+# lands in three different places: before the suffix (`BACKLOG_KR.md`), in the
+# middle of a compound name (`..._KR_expanded.tex`, `..._KR_fig1.png`), and
+# inside a versioned name (`EcoXAI_SRS_KR_v0.2_원본.pdf`). Anchoring it to
+# `*_KR.*` would have caught 102 of the 108 and quietly let 6 through.
+#
+# **What this costs, stated once so nobody rediscovers it as a surprise.** All
+# 108 files stay on disk and leave the repository, so a clone does not have
+
+
+# to them from the English files still read correctly and resolve to nothing on
+# GitHub. `scripts/check_citations.py` reports citations into them as *not
+# verifiable here* rather than broken, by name (`KR_EDITION`).
+#
+# `outputs/` is ignored because its contents must not be published;
+# these are ignored because the user asked for a repository whose tracked
+# surface is English. The mechanism is the same, the reason is not.
+# ---------------------------------------------------------------------------
+*_KR*
 
 # ---------------------------------------------------------------------------
 # macOS and Office leavings
