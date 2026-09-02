@@ -161,7 +161,7 @@ import asyncpg    # PostgreSQL async driver. Used only to query the board direct
 from memstara.env import load_env
 
 # memstara/blackboard.py — the board table's definition and connection details
-from memstara.blackboard import BoardBusy, dsn, run_lock
+from memstara.blackboard import BoardBusy, dsn, release_questions, run_lock
 # memstara/logging_setup.py — makes a directory per run and also keeps the log in a file
 from memstara.logging_setup import drain_llm_requests, new_run_dir, setup_logging, tee_console
 # memstara/pipeline/core.py — the part the two pipelines (mvp, board) share
@@ -482,7 +482,7 @@ async def call_agent(
     registry,
     temperature: float | None = None,
     stage: str = "",
-) -> str:
+) -> tuple[str, dict[str, Any]]:
     """Run one agent once and return its text, or "" if the run did not complete.
 
     Call one person, set them to work, and take back what they said.
@@ -494,6 +494,13 @@ async def call_agent(
     Args:
         stage: the label used in the trace file's name ("hypothesis" · "data" ·
             "report" …). Left empty, only the sequence number is used.
+
+    Returns:
+        ``(text, entry)``. `entry` is this call's own row in `_CALLS`, handed back rather
+        than looked up. A caller that wants the record of the call it just made used to
+        read `_CALLS[-1]`, which is only the right row while exactly one call is in
+        flight — with two, the other one's append moves it. Returning it removes the
+        assumption instead of documenting it.
     """
     # Overridden only if a temperature was given. None uses the agent's own default.
     overrides = {"temperature": temperature} if temperature is not None else None
@@ -504,15 +511,20 @@ async def call_agent(
 
     # Written down **before** executing. The run_id has to survive even if it dies
     # mid-execution — a run that died is exactly the one worth retracing.
-    _CALLS.append(
-        {
-            "seq": len(_CALLS),
-            "stage": stage or "?",
-            "run_id": str(run.id),
-            "prompt": prompt,
-            "status": "started",
-        }
-    )
+    #
+    # Bound to a local, and every line below writes through that local rather than
+    # through `_CALLS[-1]`. The two are the same row only while this is the only call in
+    # flight. The moment a second call runs alongside, its append moves the end of the
+    # list, and this call's status, error and trace file all land on the other one's row
+    # — a mis-labelled trace being the worst of the three, because it looks like evidence.
+    entry: dict[str, Any] = {
+        "seq": len(_CALLS),
+        "stage": stage or "?",
+        "run_id": str(run.id),
+        "prompt": prompt,
+        "status": "started",
+    }
+    _CALLS.append(entry)
 
     # ── this is where the LLM runs ─────────────────────────────────────────
     # `execute_run` is a function of motoro. Inside, it repeats reason -> act
@@ -521,9 +533,9 @@ async def call_agent(
     #
     # What happened inside is what _trace_one() below pulls out into a file.
     result = await execute_run(run_id=run.id, registry=registry, available_tools=tools)
-    _CALLS[-1]["status"] = getattr(result.status, "value", str(result.status))
+    entry["status"] = getattr(result.status, "value", str(result.status))
     if result.error:
-        _CALLS[-1]["error"] = str(result.error)
+        entry["error"] = str(result.error)
 
     # The trace file for **this one call** is written the moment the run finishes.
     #
@@ -532,22 +544,26 @@ async def call_agent(
     # instant you stop at a breakpoint on the line after `await call_agent(...)` you can
     # open `trace/00_hypothesis0.txt` and read what just happened — which tool was
     # called with which arguments and what came back.
-    await _trace_one(_CALLS[-1])
+    await _trace_one(entry)
 
     # Spell out on screen what that person actually did. The untruncated version is in
     # the file under trace/.
-    await show_what_agent_did(_CALLS[-1])
+    #
+    # Everything this prints happens after its two awaits above, with no await in
+    # between, so one call's block reaches the screen in a single slice. Two calls
+    # running together interleave block by block, never line by line.
+    await show_what_agent_did(entry)
 
     # An empty string on failure. The caller usually re-reads the result off the board,
     # so rather than throwing here it quietly empties out and leaves it to the next lap.
     if result.error or result.status != "completed":
-        return ""
+        return "", entry
 
     # Agent output is usually JSON shaped like {"result": "..."}. Failing that, the raw text.
     try:
-        return str(json.loads(result.output or "").get("result", ""))
+        return str(json.loads(result.output or "").get("result", "")), entry
     except (json.JSONDecodeError, TypeError, AttributeError):
-        return result.output or ""
+        return result.output or "", entry
 
 
 # The folder the trace files go to. run() sets it when it starts.
@@ -960,6 +976,9 @@ async def questions_for_wave(
              "decide what is worth asking next."
     )
     try:
+        # Neither half of what call_agent returns is wanted here. What the curator did is
+        # read back off the bank below, not taken from what it said — that is the whole
+        # point of the docstring above.
         await call_agent(
             agents["curator"], ask,
             tools=by_stage["curator"], registry=registry, stage=f"curator{wave}",
@@ -1105,7 +1124,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             step("(6)", "wrap up at the end",
                  f"read the finished drawer of '{args.run_tag}' — (4) and (5) are skipped")
             note("call the report agent once (the only LLM call of this run)")
-            text = await call_agent(
+            text, _ = await call_agent(
                 agents["report"],
                 f"Write the report for run '{args.run_tag}'. Call read_results with that run_tag.",
                 tools=by_stage["report"], registry=registry, stage="report",
@@ -1210,24 +1229,52 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             # from different angles and arrived at the same place".
             step("(4)", "pin the first instruction to the board",
                  f"call the hypothesis agent {len(questions)} times — a different question "
-                 f"each time")
-            # A trial that never calls `create_task` leaves nothing behind: no board row,
-            # no result, no error. On 2026-08-30 one of four trials spent 31 steps and
-            # $1.88 that way and the run ended looking successful — the only thing that
-            # noticed was the report agent, in prose, by luck. The count was already
-            # being printed below; it was never compared, so nothing could notice.
-            seeded = (await board_state(registry, args.run_tag))["count"]
-            for k, q in enumerate(questions):
-                i = base + k                       # trial number, carrying on across waves
+                 f"each time"
+                 + (f", {args.hypothesis_agents} at a time"
+                    if args.hypothesis_agents > 1 else ""))
+
+            # Whether the question comes from the bank or from the built-in list decides
+            # how the workers are told what to ask, and the two are genuinely different.
+            #
+            #   from the bank  — the worker calls claim_question and is handed one. The
+            #       bank row records who took it, so two workers cannot set out from one
+            #       question even if this driver is not the only thing reading the bank.
+            #   the fallback   — the curator grounded nothing (questions_for_wave returned
+            #       empty) and these perspectives are not in the bank at all, so there is
+            #       nothing to claim. Worker k is handed perspectives[k] directly, which
+            #       is distinct by construction because the driver deals them out itself.
+            #
+            # The fallback keeps the old prompt exactly. It is the degraded path and it
+            # already prints a warning; giving it a second, subtly different failure mode
+            # to reason about would buy nothing.
+            from_bank = any(q["question_id"] for q in questions)
+
+            async def seed_one(i: int, q: dict[str, Any], *, from_bank: bool = from_bank):
+                """Call one hypothesis worker and attach what its matcher calls saw."""
                 text = q["text"]
-                # question_id travels with the task so a finished result can be traced
-                # back to what was asked. 0 means the fallback list was used.
-                await call_agent(
-                    agents["hypothesis"],
-                    f"The outcome column is '{args.y_column}'. Choose the columns that will predict it, "
-                    f"{text}. Then put the task on the board with "
-                    f"run_tag='{args.run_tag}', trial={i}, perspective='{text}', "
-                    f"question_id={q['question_id']}.",
+                wid = f"hypothesis#{i}"
+                if from_bank:
+                    ask = (
+                        f"You are worker '{wid}'. Call claim_question with "
+                        f"run_tag='{args.run_tag}' and worker='{wid}' to be given your "
+                        f"question; if it hands you nothing, stop. The outcome column is "
+                        f"'{args.y_column}'. Choose the columns that will predict it from "
+                        f"the perspective of the question you were handed. Then put the "
+                        f"task on the board with run_tag='{args.run_tag}', trial={i}, "
+                        f"perspective set to that question's text, and question_id set to "
+                        f"the question_id you were handed."
+                    )
+                else:
+                    # question_id travels with the task so a finished result can be traced
+                    # back to what was asked. 0 means the fallback list was used.
+                    ask = (
+                        f"The outcome column is '{args.y_column}'. Choose the columns that will predict it, "
+                        f"{text}. Then put the task on the board with "
+                        f"run_tag='{args.run_tag}', trial={i}, perspective='{text}', "
+                        f"question_id={q['question_id']}."
+                    )
+                _, call = await call_agent(
+                    agents["hypothesis"], ask,
                     tools=by_stage["hypothesis"], registry=registry, temperature=temperature_for(i),
                     stage=f"hypothesis{i}",
                 )
@@ -1236,27 +1283,70 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 # trace attached after stage (5) would land on a board row whose result had
                 # already been written without it — recorded in the place that gets cleared
                 # and missing from the place that is kept.
-                attached, refused = await harvest_match_trace(registry, _CALLS[-1])
+                return i, await harvest_match_trace(registry, call)
 
-                # Check sheet by sheet that the board really did grow. If it did not, that
-                # person failed.
+            # A trial that never calls `create_task` leaves nothing behind: no board row,
+            # no result, no error. On 2026-08-30 one of four trials spent 31 steps and
+            # $1.88 that way and the run ended looking successful — the only thing that
+            # noticed was the report agent, in prose, by luck. The count was already
+            # being printed below; it was never compared, so nothing could notice.
+            #
+            # **How that is caught changed with this loop.** It used to read the whole
+            # board's count before and after each call and blame the current trial for the
+            # difference. Attributing a delta to one worker only works while exactly one
+            # worker is running, and it was never quite right even then — any row from
+            # anywhere would have counted as this trial's. The board carries the trial
+            # number, so what is asked below is the direct question: is there a row for
+            # trial i? That is concurrency-safe and strictly more truthful.
+            for chunk_start in range(0, len(questions), args.hypothesis_agents):
+                chunk = questions[chunk_start:chunk_start + args.hypothesis_agents]
+                outcomes = await asyncio.gather(
+                    *(seed_one(base + chunk_start + k, q) for k, q in enumerate(chunk)),
+                    return_exceptions=True,
+                )
                 state = await board_state(registry, args.run_tag)
-                extra = ""
-                if attached:
-                    extra += f" · attached the matcher record to {attached} sheets"
-                if refused:
-                    # Reported, not hidden. All-refused and never-called are different
-                    # failures with different fixes, and they look the same if this is
-                    # silent.
-                    extra += (f" · {refused} matcher calls were refused and left out of "
-                              f"the evidence")
-                note(f"trial {i} ({text}) → {state['count']} sheets on the board" + extra)
+                for outcome in outcomes:
+                    if isinstance(outcome, BaseException):
+                        # Reported, not swallowed, and not fatal to the wave. The other
+                        # workers in this chunk finished; their trials are on the board and
+                        # the missing one is found by the presence test below like any
+                        # other trial that produced nothing.
+                        note(f"⚠ a hypothesis worker died: {type(outcome).__name__}: {outcome}")
+                        continue
+                    i, (attached, refused) = outcome
+                    extra = ""
+                    if attached:
+                        extra += f" · attached the matcher record to {attached} sheets"
+                    if refused:
+                        # Reported, not hidden. All-refused and never-called are different
+                        # failures with different fixes, and they look the same if this is
+                        # silent.
+                        extra += (f" · {refused} matcher calls were refused and left out of "
+                                  f"the evidence")
+                    note(f"trial {i} → {state['count']} sheets on the board" + extra)
 
-                if state["count"] <= seeded:
+            # The presence test. One read of the board, and a trial with no row of its own
+            # is one whose worker never called create_task.
+            state = await board_state(registry, args.run_tag)
+            on_board = {t["trial"] for t in state["tasks"]}
+            for k in range(len(questions)):
+                i = base + k
+                if i not in on_board:
                     note(f"⚠ trial {i} left nothing on the board "
                          f"— create_task was never called")
                     missing_trials.append(i)
-                seeded = state["count"]
+
+            # Give the wave's questions back to the bank now that seeding is over. Not at
+            # the end of the run: the claim exists to keep two workers of *this* wave off
+            # one question, and the moment they have all called create_task that job is
+            # done — what they produced is on the board under its own question_id and no
+            # longer needs the bank row held. Held any longer, and because
+            # memstara_questions has no run_tag to scope a cleanup by, the questions this
+            # run used would be missing from the next run's bank.
+            if from_bank:
+                freed = await release_questions(args.run_tag)
+                if freed:
+                    note(f"gave {freed} question(s) back to the bank")
 
             # -- work it down ----------------------------------------------
             # -- (5) run until the board is empty ----------------------------
@@ -1313,29 +1403,84 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                         continue
 
                 # Was anyone called at all this lap? If nobody was, fall through below.
+                #
+                # The calls are collected first and started together, rather than awaited
+                # one at a time as they were before. Two consequences worth being explicit
+                # about:
+                #
+                #   * Stages overlap as well as workers. data#1, data#2 and ml#1 all run
+                #     at once. There is nothing to serialise for — each one claims only
+                #     its own task_type, and claim_task takes its row in a single
+                #     FOR UPDATE SKIP LOCKED statement, so two claimers cannot take one
+                #     row (proved under 12-for-8 contention in scripts/check_blackboard.py).
+                #   * The sweep order in CLAIMING_STAGES no longer decides anything within
+                #     a lap. It still decides the order the launches are built in, which
+                #     is what keeps the printed output roughly in pipeline order.
                 worked = False
+                launches = []
                 for stage in CLAIMING_STAGES:                 # data → ml → interpreter order
-                    waiting = counts.get(f"{STAGE_TASK_TYPE[stage]}/ready", 0)
+                    ttype = STAGE_TASK_TYPE[stage]
+                    waiting = counts.get(f"{ttype}/ready", 0)
                     if not waiting:
                         continue                              # no sheet for this person to take
 
-                    # No outcome column in this message on purpose. It is on the task, put
-                    # there by the hypothesis stage, and a task has to carry everything its
-                    # stage needs. Saying it here as well would leave two sources for one
-                    # fact — and the one in the prompt is the one that goes unrecorded, so
-                    # if the two ever disagree there is no way to check.
+                    # Never more workers than there are sheets. An extra worker claims
+                    # nothing, is told "nothing to claim", and reaches that conclusion at
+                    # the price of a whole model call. The flag is a ceiling on how many
+                    # may run, not an instruction to run that many.
                     #
-                    # The run_tag is the exception, and not a contradiction of the rule
-                    # above: it does not describe the task, it decides *which* task to
-                    # pick. That has to come from the prompt because the agent is choosing
-                    # before it holds a task to read it from.
-                    await call_agent(
-                        agents[stage],
-                        f"Claim a '{STAGE_TASK_TYPE[stage]}' task from run_tag "
-                        f"'{args.run_tag}' and do your part.",
-                        tools=by_stage[stage], registry=registry, stage=stage,
-                    )
+                    # `interpreter` is the stage's name and `interpret` is the name on the
+                    # sheet; the flag is spelled --interpret-agents, after the sheet, which
+                    # is what STAGE_TASK_TYPE is for.
+                    for k in range(1, min(waiting, getattr(args, f"{ttype}_agents")) + 1):
+                        # The worker's name. It goes in the prompt because the guard on the
+                        # board compares names, and a name the agent was never given is a
+                        # comparison that cannot fire — submit_result treats an empty
+                        # worker as "no opinion", not as a failure.
+                        wid = f"{ttype}#{k}"
+
+                        # No outcome column in this message on purpose. It is on the task,
+                        # put there by the hypothesis stage, and a task has to carry
+                        # everything its stage needs. Saying it here as well would leave two
+                        # sources for one fact — and the one in the prompt is the one that
+                        # goes unrecorded, so if the two ever disagree there is no way to
+                        # check.
+                        #
+                        # The run_tag is the exception, and not a contradiction of the rule
+                        # above: it does not describe the task, it decides *which* task to
+                        # pick. That has to come from the prompt because the agent is
+                        # choosing before it holds a task to read it from. The worker name
+                        # is here for the same reason — it is not a property of the task,
+                        # it is who is asking.
+                        launches.append(call_agent(
+                            agents[stage],
+                            f"You are worker '{wid}'. Claim a '{ttype}' task from run_tag "
+                            f"'{args.run_tag}' and do your part. Pass worker='{wid}' to "
+                            f"both claim_task and submit_result.",
+                            tools=by_stage[stage], registry=registry,
+                            # Each worker gets its own trace file. Left as `stage`, two
+                            # workers of one type would write trace/NN_data.txt over each
+                            # other and the losing one's record would simply be absent.
+                            stage=wid,
+                        ))
                     worked = True
+
+                if launches:
+                    # return_exceptions=True, deliberately. Before this, one call_agent
+                    # raising ended the whole run. With N workers in flight that would
+                    # throw away the other N-1's finished work for one crash. Here the
+                    # failure is printed and the lap goes on: the crashed worker's task
+                    # stays in_progress and --stale-after takes it back, which is the
+                    # mechanism that already exists for a worker that stops answering.
+                    #
+                    # It is reported rather than swallowed. A crash that only shows up as
+                    # a task quietly reclaimed 600 seconds later is a crash nobody can
+                    # attribute to anything.
+                    for outcome in await asyncio.gather(*launches, return_exceptions=True):
+                        if isinstance(outcome, BaseException):
+                            note(f"⚠ a worker died: {type(outcome).__name__}: {outcome} "
+                                 f"— its task stays in progress until --stale-after "
+                                 f"({args.stale_after}s) takes it back")
 
                 if not worked:
                     # Nothing is waiting for any stage, so what is left is in_progress.
@@ -1385,7 +1530,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             f"read_results. Say so explicitly."
             if missing_trials else ""
         )
-        text = await call_agent(
+        text, _ = await call_agent(
             agents["report"],
             f"Write the report for run '{args.run_tag}'. Call read_results with that run_tag. "
             f"{seeded_total} trials were seeded across {waves_run} wave(s)"
@@ -1442,7 +1587,10 @@ async def reclaim_stalled(registry: MCPServerRegistry, run_tag: str, stale_after
     nothing else to do — but "nothing waiting for me" and "nothing being worked on"
     are different statements, and the gap between them is where a stage that simply
     takes a long time gets its task yanked away mid-run. It then submits against a
-    task somebody else has since claimed.
+    task somebody else has since claimed — which `submit_result` now refuses by name,
+    provided both workers identified themselves when they claimed. That refusal turns
+    a silent overwrite into a visible error; it does not make the reclaim above any
+    less premature, so *stale_after* still has to be right.
 
     Returns:
         How many were returned to the queue. Zero means everything still in progress
@@ -1457,7 +1605,14 @@ async def reclaim_stalled(registry: MCPServerRegistry, run_tag: str, stale_after
             """
             WITH returned AS (
                 UPDATE memstara_blackboard
-                SET status = 'ready', claimed_at = NULL, updated_at = now()
+                -- claimed_by is released with claimed_at. Not for the next claimer's
+                -- sake — claim_task overwrites the name anyway — but for the window
+                -- in between, which is exactly the window somebody looks at when a
+                -- run is behaving oddly. A row reading 'ready' while still naming a
+                -- holder says two contradictory things at once, and this reclaim is
+                -- the only thing that ever produces that state.
+                SET status = 'ready', claimed_at = NULL, claimed_by = '',
+                    updated_at = now()
                 WHERE run_tag = $1 AND status = 'in_progress'
                   AND claimed_at IS NOT NULL
                   -- only what was claimed more than stale_after seconds ago. This line
@@ -1571,9 +1726,45 @@ async def main() -> int:
              "failed and go on without it. 0 retries forever, which means only a person "
              "watching can end a run whose task can never succeed (default 5)",
     )
+    # How many workers of each claiming stage run at once.
+    #
+    # One flag per stage rather than a single --agents N, because the right number is not
+    # the same for all three. A `data` worker spends its time in the model and in a CSV
+    # slice; a second one genuinely doubles throughput. An `ml` worker ends in
+    # train_and_score, which is a **sync** tool, and FastMCP calls sync tools straight on
+    # the server's event loop (mcp/server/fastmcp/utilities/func_metadata.py:93-96) — so
+    # two ml workers overlap their reasoning turns and their fits still run one after the
+    # other. Rolling the three into one number would hide that.
+    #
+    # Default 1 everywhere: that is exactly the behaviour before this flag existed, so a
+    # command line that does not mention them runs as it always did.
+    for stage_flag, what in (("data", "data"), ("ml", "ml"), ("interpret", "interpretation")):
+        ap.add_argument(
+            f"--{stage_flag}-agents", type=int, default=1,
+            help=f"how many {what} workers claim from the board at once (default 1)",
+        )
+    # The seeding stage's own count. It is separate from the three above because it is not
+    # the same kind of number: those three are how many workers stand at the board through
+    # a whole run, this is how many of a wave's trials are seeded at once. --trials still
+    # decides how many trials there are; this only decides how many are in flight.
+    ap.add_argument(
+        "--hypothesis-agents", type=int, default=1,
+        help="how many hypothesis workers seed the board at once. Each claims its own "
+             "question out of the bank, so two never set out from one question (default 1)",
+    )
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--run-dir", default=None)
     args = ap.parse_args()
+
+    # Rejected here rather than clamped. A run started with --data-agents 0 asked for
+    # something specific; quietly turning it into 1 gives back a run that is not the one
+    # that was asked for, and quietly turning it into 0 workers hangs on a board that
+    # never empties.
+    bad = [f"--{s}-agents={getattr(args, f'{s}_agents')}"
+           for s in ("hypothesis", "data", "ml", "interpret")
+           if getattr(args, f"{s}_agents") < 1]
+    if bad:
+        ap.error("a stage needs at least one worker: " + ", ".join(bad))
 
     # If the prerequisites are missing it ends **without doing anything.** Stopping
     # before the start leaves the board cleaner than dying halfway through.

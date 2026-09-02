@@ -517,8 +517,15 @@ BOARD_TOOLS = {
     # bookkeeping about a wave having ended, which the driver knows and no agent does.
     "curator": {"okf_list_domains", "okf_search", "okf_read",
                 "read_questions", "read_results", "propose_questions"},
+    # `claim_question` is the one thing this stage takes rather than makes. It is not a
+    # softening of the rule below — the stage still claims no *task*, and it is still the
+    # only stage that puts work on the board. What it claims is the question it sets out
+    # from, which stops two hypothesis workers of one wave both investigating the newest
+    # question in the bank. `read_questions` stays with the curator: this stage is handed
+    # one question, and a stage that can read the whole bank is a stage that can pick a
+    # second one for itself.
     "hypothesis": {"okf_list_domains", "okf_search", "okf_read", "describe_dataset",
-                   "match_concepts", "match_concept", "create_task"},
+                   "match_concepts", "match_concept", "claim_question", "create_task"},
     "data": {"describe_dataset", "slice_columns", "claim_task", "submit_result"},
     "ml": {"train_and_score", "claim_task", "submit_result"},
     "interpreter": {"claim_task", "submit_result"},
@@ -547,17 +554,24 @@ BOARD_SERVERS = {
 # of somebody else's type.
 _CLAIM_PREAMBLE = (
     "Your work comes from a shared board, not from this message.\n\n"
-    "1) Call claim_task with your own type **and the run_tag you were given in this "
-    "   message**. It hands you one task from that run and marks it taken so nobody "
-    "   else picks it up. Passing the run_tag matters: without it you may be handed a "
-    "   task left behind by an unrelated run, and the work you do will be filed under "
-    "   that run instead of this one.\n"
+    "1) Call claim_task with your own type, **the run_tag you were given in this "
+    "   message**, and **the worker name you were given in this message**. It hands you "
+    "   one task from that run and marks it taken, under your name, so nobody else picks "
+    "   it up. Passing the run_tag matters: without it you may be handed a task left "
+    "   behind by an unrelated run, and the work you do will be filed under that run "
+    "   instead of this one.\n"
     "2) If it answers with a null task_id, there is nothing for you. **Stop there.** Do "
     "   not invent work, and do not claim a task of another type — that is somebody "
     "   else's job and taking it breaks the arrangement.\n"
     "3) Do your part on the task you were handed.\n"
-    "4) Call submit_result with what you produced. That records it and passes the task "
-    "   to whoever comes next.\n\n"
+    "4) Call submit_result with what you produced, **and with the same worker name**. "
+    "   That records it and passes the task to whoever comes next.\n\n"
+    "There may be several of you working the same board at the same time, which is why "
+    "the name in step 1 and the name in step 4 must be the same one. If a task of yours "
+    "sat untouched long enough to be presumed abandoned, it is returned to the queue and "
+    "somebody else may already be doing it. The name is how submit_result can tell you "
+    "that instead of letting you write over their work. Give no name and it cannot tell "
+    "you anything.\n\n"
 )
 
 
@@ -582,8 +596,16 @@ async def provision_board_agents(
             "You are a hypothesis agent. Decide which columns to pull from the dataset in "
             "order to predict the outcome, then put that decision on the shared board as a "
             "new task.\n\n"
-            "You are the only stage that creates work. You never claim anything — there is "
-            "nothing on the board for you to take.\n\n"
+            "You are the only stage that creates work. You take nothing off the board — "
+            "there is nothing on it for you.\n\n"
+            "The one thing you do claim is the QUESTION you set out from. There may be "
+            "another hypothesis agent working the same wave beside you, and a question is "
+            "worth investigating once, not twice. So if your instructions do not already "
+            "contain your question, call claim_question with the run_tag and the worker "
+            "name you were given, and work on what it hands back. It marks that question "
+            "as yours, so the other agent is given a different one. If it answers with a "
+            "null question_id there is nothing left to ask: stop there, and do not invent "
+            "a question or re-use one you were not handed.\n\n"
             "The knowledge source (OKF) tells you WHICH PHENOMENA matter for this outcome "
             "and how strong the evidence is. The dataset tells you WHICH COLUMNS EXIST. "
             "Neither one alone is enough, and nothing connects them for you — making that "

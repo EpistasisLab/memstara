@@ -42,6 +42,12 @@ What main() confirms, in order:
       board being cleared
   (8) does a question used three times retire and drop out of the open list — while
       the record and the reword block stay
+  (9) does a claimed row name its holder, and is another worker's result refused —
+      including the stalled-worker overwrite, end to end
+ (10) two named workers claiming **at the same time**, which is what the driver does
+      now that --data-agents may be more than 1
+ (11) the same one table over: two hypothesis workers claiming out of the question
+      bank, and the driver handing back what the run held
 
 Easy to miss:
 
@@ -92,6 +98,14 @@ async def cleanup() -> None:
     try:
         await conn.execute("DELETE FROM memstara_results WHERE run_tag = $1", RUN_TAG)
         await conn.execute("DELETE FROM memstara_blackboard WHERE run_tag = $1", RUN_TAG)
+        # A claim is the one mark this check can leave on a row it does **not** own.
+        # Item (11) claims a third question to show that a claimed one is not handed out
+        # twice, and that third question belongs to whoever filed it. Releasing before
+        # the delete repairs a run that died holding it; the delete below would not,
+        # because origin_run is not this check's tag.
+        await conn.execute(
+            "UPDATE memstara_questions SET claimed_run = '', claimed_by = '', claimed_at = NULL "
+            "WHERE claimed_run = $1", RUN_TAG)
         await conn.execute("DELETE FROM memstara_questions WHERE origin_run = $1", RUN_TAG)
     finally:
         await conn.close()
@@ -125,7 +139,7 @@ def ok(passed: bool, label: str, detail: str = "") -> bool:
 
 
 async def main() -> int:
-    """The body of the check. Steps (0)-(8) from the header above are here, in order."""
+    """The body of the check. Steps (0)-(11) from the header above are here, in order."""
     results: list[bool] = []   # each item's verdict, piled up
     await cleanup()            # clear an earlier check's debris first
     await cleanup_tag(f"{RUN_TAG}_other")   # and the second tag that (7) uses
@@ -565,6 +579,210 @@ async def main() -> int:
     results.append(ok(closed >= 1 and len(failed) == closed,
                       "--close only closes as failed, it does not delete rows (why there is no result stays)",
                       f"closed {closed} · failed rows left {len(failed)}"))
+
+    # ---- (9) ⭐ THE GATE: is the holder recorded, and does the record hold -
+    #
+    # The gate at the top proves two workers cannot **take** the same task. This one is
+    # about what happens after: a worker that has already taken one and is slow.
+    #
+    # `submit_result` used to check the status and nothing else, and a status cannot tell
+    # these two apart — "the task I am holding" and "the task that was taken away from me
+    # and given to somebody else" are both `in_progress` when you look at them. So a
+    # worker that overran `--stale-after`, had its row requeued and handed on, and then
+    # finished, wrote its result straight over the top of whoever now held it. Nothing
+    # errored and nothing looked wrong; the results table simply held the wrong run of
+    # the wrong worker's work.
+    #
+    # This never happened, because there has only ever been one worker per stage. It is
+    # the ordinary case with two, which is the whole point of adding a second.
+    #
+    # RUN_TAG's rows are all `failed` by now (--close, just above), so the task made here
+    # is the only one this claims, and no earlier item is disturbed.
+    await bb.create_task(RUN_TAG, 92, "perspective C", "hypothesis C", COLUMNS, "HIV_DETECTABLE")
+    held = json.loads(await bb.claim_task("data", RUN_TAG, worker="data-1"))
+    owned = held["task_id"]
+    shown = next(t for t in json.loads(await bb.read_board(RUN_TAG))["tasks"]
+                 if t["task_id"] == owned)
+    results.append(ok(held.get("claimed_by") == "data-1" and shown.get("claimed_by") == "data-1",
+                      "a claimed task records who is holding it, and the board shows it",
+                      f"claim returned {held.get('claimed_by')!r} · board shows {shown.get('claimed_by')!r}"))
+
+    # Somebody else's result, on a task that is legitimately in_progress. The status check
+    # passes here — it has to, the task really is in progress — so if this goes through,
+    # the only guard that could have stopped it is the one being checked.
+    wrong = json.loads(await bb.submit_result(owned, subset_path="outputs/sub_wrong.csv",
+                                              columns_used=COLUMNS, worker="data-2"))
+    intact = next(t for t in json.loads(await bb.read_board(RUN_TAG))["tasks"]
+                  if t["task_id"] == owned)
+    results.append(ok("error" in wrong and "data-1" in wrong.get("error", "")
+                      and intact.get("status") == "in_progress"
+                      and intact.get("task_type") == "data"
+                      # Refused means nothing was written, not written and rolled back
+                      # later. columns_used is what that submit would have filled.
+                      and intact.get("columns_used") == [],
+                      "another worker's result is refused by name and nothing is written",
+                      wrong.get("error", "ALLOWED")[:56]))
+
+    # And the holder's own result still goes through — a guard that refuses everybody is
+    # not a guard, it is an outage.
+    rightful = json.loads(await bb.submit_result(owned, subset_path="outputs/sub_x.csv",
+                                                 columns_used=COLUMNS, worker="data-1"))
+    freed = next(t for t in json.loads(await bb.read_board(RUN_TAG))["tasks"]
+                 if t["task_id"] == owned)
+    results.append(ok(rightful.get("task_type") == "ml" and freed.get("claimed_by") == "",
+                      "the holder's own result goes through, and submitting releases the task",
+                      f"{rightful.get('status')} · {rightful.get('task_type')} · "
+                      f"holder now {freed.get('claimed_by')!r}"))
+
+    # ---- the whole thing, end to end -----------------------------------
+    #
+    # The three items above check the pieces. This one walks the accident itself: claim,
+    # stall, requeue, somebody else takes it, the slow one finishes and submits. `reclaim`
+    # stands in for `reclaim_stalled` — same UPDATE without the time condition, so the
+    # stall does not have to be waited out.
+    slow = json.loads(await bb.claim_task("ml", RUN_TAG, worker="ml-1"))["task_id"]
+    await bbm.reclaim(RUN_TAG)
+    requeued = next(t for t in json.loads(await bb.read_board(RUN_TAG))["tasks"]
+                    if t["task_id"] == slow)
+    retaken = json.loads(await bb.claim_task("ml", RUN_TAG, worker="ml-2"))
+    late = json.loads(await bb.submit_result(slow, auc=0.99, worker="ml-1"))
+    results.append(ok(requeued.get("claimed_by") == ""
+                      and retaken.get("task_id") == slow
+                      and retaken.get("claimed_by") == "ml-2"
+                      and "error" in late and "ml-2" in late.get("error", ""),
+                      "the stalled-worker overwrite: requeued names nobody, the second worker "
+                      "takes it, the first one's late result is refused",
+                      f"requeued holder {requeued.get('claimed_by')!r} → retaken by "
+                      f"{retaken.get('claimed_by')!r} · late submit "
+                      f"{late.get('error', 'ALLOWED — the overwrite happened')[:40]}"))
+
+    # ---- (10) two named workers on one run, at the same time -------------
+    #
+    # (9) proves the contract one call at a time. This is the shape the driver actually
+    # produces now that --data-agents may be more than 1: the work loop collects a lap's
+    # calls and starts them with asyncio.gather, so two `data` workers reach claim_task
+    # together rather than in turn.
+    #
+    # The gate at the top of this file already fires 12 claimers at 8 tasks and proves no
+    # row is taken twice. What that one cannot show is the **name**: it claims without a
+    # worker, so every row it takes is held by "". Here each claimer carries the identity
+    # the driver mints (`data#1`, `data#2`), and the thing being checked is that the name
+    # on the row is the name of the worker that was handed the row — not merely that some
+    # name is there. Mix those up and the guard in (9) starts refusing the right worker.
+    #
+    # Two rounds of two rather than one round of four, because that is the driver's own
+    # rhythm: the lap launches min(waiting, N) workers, they finish, the next lap looks at
+    # the board again. A worker name is reused across laps and must not be a problem.
+    made = []
+    for trial in range(93, 97):
+        r = json.loads(await bb.create_task(RUN_TAG, trial, f"perspective {trial}",
+                                            f"hypothesis {trial}", COLUMNS, "HIV_DETECTABLE"))
+        made.append(r["task_id"])
+
+    taken: list[tuple[str, int]] = []          # (worker, task_id), in claim order
+    for _lap in range(2):
+        names = ["data#1", "data#2"]
+        got = await asyncio.gather(*(bb.claim_task("data", RUN_TAG, worker=w) for w in names))
+        # strict=True on purpose: gather returns one result per coroutine, so a length
+        # mismatch here would mean a claim silently vanished, and zip's default would
+        # hide exactly the worker whose disappearance this item exists to catch.
+        taken += [(w, json.loads(g).get("task_id")) for w, g in zip(names, got, strict=True)]
+
+    rows = {t["task_id"]: t for t in json.loads(await bb.read_board(RUN_TAG))["tasks"]}
+    ids = [tid for _w, tid in taken]
+    results.append(ok(sorted(i for i in ids if i is not None) == sorted(made)
+                      and len(set(ids)) == len(ids)
+                      # The row names the worker that was handed it — not just somebody.
+                      and all(rows[tid]["claimed_by"] == w for w, tid in taken),
+                      "two workers claiming together take four different tasks, each under its own name",
+                      " · ".join(f"{w}→#{tid}" for w, tid in taken)))
+
+    # Both submit, together, each naming itself. Every one has to go through: (9) showed
+    # the guard refusing a stranger, and a guard that also refuses the holder under load
+    # would look identical from the outside until a real run stalled on it.
+    sent = await asyncio.gather(*(bb.submit_result(tid, subset_path="outputs/sub_x.csv",
+                                                   columns_used=COLUMNS, worker=w)
+                                  for w, tid in taken))
+    moved = {t["task_id"]: t for t in json.loads(await bb.read_board(RUN_TAG))["tasks"]}
+    results.append(ok(all("error" not in json.loads(s) for s in sent)
+                      and all(moved[tid]["task_type"] == "ml" for _w, tid in taken)
+                      # Handing the task on releases it, or the ml worker that picks it up
+                      # next is refused by a data worker's name left behind on the row.
+                      and all(moved[tid]["claimed_by"] == "" for _w, tid in taken),
+                      "each worker's own result goes through and hands the task on, naming nobody",
+                      f"{sum('error' not in json.loads(s) for s in sent)}/{len(sent)} accepted · "
+                      f"holders after {[moved[tid]['claimed_by'] for _w, tid in taken]}"))
+
+    # ---- (11) two hypothesis workers, one question bank -------------------
+    #
+    # (10) is the board. This is the same shape one table over, and it is the half the
+    # board's claim could never cover: the bank has **no run_tag**, on purpose, because it
+    # accumulates across runs. So two hypothesis agents seeding one wave both read it top
+    # down and both set out from the newest question unless something marks it taken.
+    # A wave of two then spends two agents to ask one thing.
+    #
+    # ORDER BY question_id DESC is also what makes this checkable against a bank this
+    # check does not own: the two filed here are the newest rows in it, so they are
+    # exactly the two the next two claims have to take. Any other pair and the ordering
+    # is not what the tool says it is.
+    #
+    # Neither text uses the "from a ... perspective" frame the items above file under this
+    # same tag. Written that way one of the two is blocked as a reword of them — measured,
+    # not guessed — and then only one question reaches the bank and there is nothing for
+    # the second worker to take. The dedup gate working is what item (2) checks; here it
+    # is only in the way, so the two are written far from it and far from each other.
+    p5 = json.loads(await bb.propose_questions(json.dumps([
+        {"text": f"which laboratory chemistry values move together before a rebound ({RUN_TAG} claim)",
+         "okf_tags": ["metapath"], "rationale": "one to be claimed"},
+        {"text": f"whether distance to the nearest clinic changes appointment adherence ({RUN_TAG} claim)",
+         "okf_tags": ["metapath"], "rationale": "a second, far enough from the first not to read as a reword"},
+    ], ensure_ascii=False), origin_run=RUN_TAG, origin_wave=2))
+    banked = sorted(q["question_id"] for q in p5.get("added", []))
+    results.append(ok(len(banked) == 2, "two questions are banked for the workers to claim", str(banked)))
+
+    workers = ["hypothesis#1", "hypothesis#2"]
+    got = [json.loads(g) for g in
+           await asyncio.gather(*(bb.claim_question(RUN_TAG, worker=w) for w in workers))]
+    # strict=True for the reason given in (10): a length mismatch would mean a claim
+    # vanished, and that is the worker this item exists to notice.
+    claimed = [(w, g.get("question_id")) for w, g in zip(workers, got, strict=True)]
+    held = {q["question_id"]: q for q in json.loads(await bb.read_questions(limit=500))["questions"]}
+    results.append(ok(sorted(qid for _w, qid in claimed) == banked
+                      and len({qid for _w, qid in claimed}) == 2
+                      # The row names the worker that was handed it, and the run that
+                      # worker belongs to — the run is what release_questions works from.
+                      and all(held[qid]["claimed_by"] == w for w, qid in claimed)
+                      and all(held[qid]["claimed_run"] == RUN_TAG for _w, qid in claimed)
+                      # The question itself comes back with the claim. Without the text
+                      # the worker holds an id and has nothing to set out from.
+                      and all(g.get("text") for g in got),
+                      "two hypothesis workers claiming together get the two newest questions, "
+                      "each under its own name",
+                      " · ".join(f"{w}→#{qid}" for w, qid in claimed)))
+
+    # A question already claimed is not handed out again. The bank is shared, so a third
+    # worker does not come back empty here — it comes back holding somebody else's
+    # question, and what is being checked is that it is **not** one of these two.
+    # The empty-bank branch (question_id null) is deliberately not exercised: reaching it
+    # would mean claiming every open row in a bank this check did not fill.
+    third = json.loads(await bb.claim_question(RUN_TAG, worker="hypothesis#3"))
+    results.append(ok(third.get("question_id") not in {qid for _w, qid in claimed},
+                      "a question one worker holds is not handed to the next",
+                      f"the third worker got #{third.get('question_id')}, not "
+                      f"{sorted(qid for _w, qid in claimed)}"))
+
+    # Releasing is the driver's, not an agent's — the same split reclaim() above keeps.
+    # It matters more here than on the board: a board row is scoped to a run and dies with
+    # it, but a claim left on a bank row is permanent, so this check alone would take
+    # three questions away from every run that came after it.
+    freed = await bbm.release_questions(RUN_TAG)
+    now_open = {q["question_id"]: (q["claimed_run"], q["claimed_by"])
+                for q in json.loads(await bb.read_questions(limit=500))["questions"]}
+    touched = [qid for _w, qid in claimed] + ([third["question_id"]] if third.get("question_id") else [])
+    results.append(ok(freed == len(touched)
+                      and all(now_open[qid] == ("", "") for qid in touched),
+                      "the driver hands back every question the run was holding",
+                      f"freed {freed} of {len(touched)} · holders after {[now_open[qid] for qid in touched]}"))
 
     # What the check made is not left behind. The second tag made above goes too.
     await cleanup()
