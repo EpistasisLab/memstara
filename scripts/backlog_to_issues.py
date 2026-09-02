@@ -5,6 +5,7 @@
 
     python scripts/backlog_to_issues.py plan       # build the manifest, create nothing
     python scripts/backlog_to_issues.py create     # create (and close) the issues
+    python scripts/backlog_to_issues.py labels     # make the area:* labels and apply them
     python scripts/backlog_to_issues.py link       # append issue numbers to id references
     python scripts/backlog_to_issues.py board      # add every issue to the project
     python scripts/backlog_to_issues.py annotate   # write the numbers back into the files
@@ -68,10 +69,52 @@ DROP_IDS = {"MEMO-09": "H-08"}
 #: worth keeping, so it is folded in rather than dropped.
 FOLD_IDS = {"MEMO-08": "A-02"}
 
+#: THE BOARD HAS TWO LABEL AXES, AND THEY ARE NOT THE SAME KIND OF THING.
+#:
+#: `KIND_LABELS` says what *sort* of work an item is. It is still five, and the
 
-#: `.github/ISSUE_TEMPLATE/task.yml:80-92`). A label outside this set is a bug in
-#: the source file, not something to pass through to GitHub.
-ALLOWED_LABELS = {"bug", "enhancement", "research-decision", "verification", "housekeeping"}
+#: maintain than it explains" — is a statement about this axis only.
+#:
+#: `AREAS` says which *part of the code* the work is about. It is a different
+#: question, so it gets a different axis rather than a sixth kind. Every area
+#: reaches GitHub prefixed, `area:matcher`, which is what stops the two sets
+#: being read as one: nobody mistakes `area:matcher` for a sibling of `bug`.
+#: The convention is Kubernetes' (`kind/`, `area/`, `priority/`), narrowed to
+#: the one axis this repository was missing.
+
+
+#: label outside this set is a bug in the source file, not something to pass
+#: through to GitHub.
+KIND_LABELS = {"bug", "enhancement", "research-decision", "verification", "housekeeping"}
+
+#: Area -> the sentence that becomes the GitHub label's description, which is the
+#: only place a developer opening the label picker can read what it covers.
+#:
+#: NOT INVENTED. Each one was read off the `**Evidence**` paths the items already
+#: carry. An area with no item behind it would be a guess about future work.
+#:
+#: The area is the subsystem the work is **about**, not the directory the diff
+#: lands in. "Document the databases" is `blackboard`, not `docs`; that its
+#: deliverable is a document is already said by its `housekeeping` kind label.
+#: `docs` is for work whose subject genuinely is the documentation machinery.
+#:
+#: `viewer-web` and `viewer-api` stay apart rather than one `viewer`, because
+#: "is the frontend separable" is a question the board should answer by itself.
+AREAS = {
+    "blackboard": "The board itself and its MCP surface — rows, DSN, run lock",
+    "infra": "compose.yml, .env, .vscode, CI, repo settings, the motoro dependency",
+    "pipeline": "src/memstara/pipeline — orchestration, the agents, the waves",
+    "docs": "The documentation set itself — the index, build_pdf.sh, the EN/KR mirrors",
+    "matcher": "src/memstara/matcher — the afc-forge port, scoring, leakage",
+    "okf": "The OKF corpus and its server",
+    "data": "src/memstara/prep and the data/ml tool servers",
+    "viewer-web": "viewer/web — React, TypeScript, Vite",
+    "viewer-api": "viewer/api — the service behind the viewer",
+}
+
+#: One colour for all nine, and it is not any of the five kind colours. Two axes
+#: that look alike in the label list are two axes nobody keeps apart.
+AREA_COLOR = "1d76db"
 
 #: Board vocabulary, copied from the ASAREE Roadmap so the two boards read the
 
@@ -90,8 +133,18 @@ MANIFEST_PATH = _ROOT / "outputs" / "issues_manifest.json"
 _ITEM_RE = re.compile(r"^### ([A-Z]+-\d+) · (.+)$")
 
 #: The field line under every heading. `Priority` is absent on the `D-*` items,
-#: so it is optional here and defaults later.
-_FIELD_RE = re.compile(r"^`Status: ([^`]+)`(?: · `Priority: ([^`]+)`)? · `Size: ([^`]+)` · `Labels: ([^`]+)`$")
+#: so it is optional here and defaults later. `Area` is optional for the same
+#: shape of reason and none of the substance: it is being added to fifty field
+#: lines across four files, and the `$` anchor means a parser that demanded it
+#: would refuse to read the very files the edit is halfway through. It stops
+#: being optional in the commit after those files are complete.
+_FIELD_RE = re.compile(
+    r"^`Status: ([^`]+)`"
+    r"(?: · `Priority: ([^`]+)`)?"
+    r" · `Size: ([^`]+)`"
+    r"(?: · `Area: ([^`]+)`)?"
+    r" · `Labels: ([^`]+)`$"
+)
 
 #: A bold field opener at the start of a line — `**What** — text`. Rewritten into
 #: a `### What` heading so a scripted issue and one filed through the template
@@ -138,8 +191,9 @@ def parse_file(path: Path) -> list[dict[str, Any]]:
 
     Raises:
         ValueError: If an item's field line is missing or malformed, or if it
-            carries a label outside the five. Both mean the file is wrong, and
-            filing 45 issues off a wrong file is not something to do quietly.
+            carries a label outside the five, or an area outside the nine. All
+            mean the file is wrong, and filing 48 issues off a wrong file is not
+            something to do quietly.
     """
     lines = (_ROOT / path).read_text(encoding="utf-8").splitlines()
     items: list[dict[str, Any]] = []
@@ -177,11 +231,17 @@ def parse_file(path: Path) -> list[dict[str, Any]]:
         status = fields.group(1).strip()
         priority = (fields.group(2) or "P2").strip()
         size = fields.group(3).strip()
-        labels = [label.strip() for label in fields.group(4).split(",")]
+        area = (fields.group(4) or "").strip()
+        labels = [label.strip() for label in fields.group(5).split(",")]
 
-        bad = set(labels) - ALLOWED_LABELS
+        bad = set(labels) - KIND_LABELS
         if bad:
             raise ValueError(f"{path} — {item_id} carries {sorted(bad)}, outside the five")
+        # An area is checked against the vocabulary whenever one is given. A typo
+        # would otherwise become a real GitHub label with one issue on it, which
+        # reads as a tenth area rather than as the mistake it is.
+        if area and area not in AREAS:
+            raise ValueError(f"{path} — {item_id} has area {area!r}, outside {sorted(AREAS)}")
         if status not in STATUSES:
             raise ValueError(f"{path} — {item_id} has status {status!r}")
         if size not in SIZES:
@@ -204,6 +264,7 @@ def parse_file(path: Path) -> list[dict[str, Any]]:
                 "status": status,
                 "priority": priority,
                 "size": size,
+                "area": area,
                 "labels": labels,
                 "state": "closed" if status == "Done" else "open",
                 "body_md": _to_headings(body),
@@ -339,14 +400,19 @@ def cmd_plan(manifest: list[dict[str, Any]]) -> int:
     opened = [i for i in manifest if i["state"] == "open"]
     closed = [i for i in manifest if i["state"] == "closed"]
     labels: dict[str, int] = {}
+    areas: dict[str, int] = {}
     for item in manifest:
         for label in item["labels"]:
             labels[label] = labels.get(label, 0) + 1
+        areas[item["area"] or "(none)"] = areas.get(item["area"] or "(none)", 0) + 1
 
     print(f"manifest  {MANIFEST_PATH.relative_to(_ROOT)}")
     print(f"items     {len(manifest)}  ({len(opened)} open, {len(closed)} closed)")
     print(f"dropped   {', '.join(f'{d} → {k}' for d, k in {**DROP_IDS, **FOLD_IDS}.items())}")
     print(f"labels    {', '.join(f'{k} {v}' for k, v in sorted(labels.items()))}")
+    # Printed largest-first, because the question this line answers is "does any
+    # one area hold most of the board", and sorting by name hides that.
+    print(f"areas     {', '.join(f'{k} {v}' for k, v in sorted(areas.items(), key=lambda kv: -kv[1]))}")
     print(f"first     {manifest[0]['id']} · {manifest[0]['title'][:60]}")
     print()
     for item in manifest:
@@ -381,7 +447,7 @@ def cmd_create(manifest: list[dict[str, Any]]) -> int:
         args = ["issue", "create", "--repo", REPO,
                 "--title", f"{item['id']} · {item['title']}",
                 "--body", item["issue_body"]]
-        for label in item["labels"]:
+        for label in issue_labels(item):
             args += ["--label", label]
         url = gh(*args)
         number = int(url.rstrip("/").rsplit("/", 1)[-1])
@@ -451,6 +517,72 @@ def cmd_link(manifest: list[dict[str, Any]]) -> int:
     return 0
 
 
+def issue_labels(item: dict[str, Any]) -> list[str]:
+    """Every label an issue carries: its kind, and its area if it has one.
+
+    One function so `create` and `labels` cannot disagree about what an issue is
+    supposed to have — the two would otherwise drift the first time either grew a
+    condition.
+
+    Args:
+        item: A manifest entry.
+
+    Returns:
+        Label names, kind first.
+    """
+    return [*item["labels"], *([f"area:{item['area']}"] if item.get("area") else [])]
+
+
+def cmd_labels(manifest: list[dict[str, Any]]) -> int:
+    """Make the `area:*` labels exist, then put the right one on every issue.
+
+    This is the step that carries the area axis from the backlog files onto
+    GitHub. It exists separately from `create` because `create` skips any id that
+    already has an issue, by design (`:22-26`) — so on a board that is already
+    filed, `create` would never apply an area to anything.
+
+    IDEMPOTENT, like every other subcommand. `gh label create --force` updates a
+    label that exists instead of failing, and an issue that already carries its
+    area is left alone rather than edited to the same value.
+
+    Args:
+        manifest: The resolved items, with issue numbers.
+
+    Returns:
+        Process exit code.
+    """
+    for name, description in AREAS.items():
+        gh("label", "create", f"area:{name}", "--repo", REPO,
+           "--color", AREA_COLOR, "--description", description, "--force")
+    print(f"labels    {len(AREAS)} area:* labels exist\n")
+
+    # One read of what is already on GitHub, rather than one per issue. 48 issues
+    # is 48 round trips otherwise, and the answer is the same for all of them.
+    current = {
+        issue["title"].split(" · ", 1)[0].strip(): {label["name"] for label in issue["labels"]}
+        for issue in json.loads(gh("issue", "list", "--repo", REPO, "--state", "all",
+                                   "--limit", "300", "--json", "title,labels") or "[]")
+    }
+
+    applied = unchanged = 0
+    for item in manifest:
+        if not item.get("issue") or not item.get("area"):
+            continue
+        wanted = f"area:{item['area']}"
+        if wanted in current.get(item["id"], set()):
+            unchanged += 1
+            continue
+        gh("issue", "edit", str(item["issue"]), "--repo", REPO, "--add-label", wanted)
+        applied += 1
+        print(f"  label  {item['id']:<8} #{item['issue']:<3} {wanted}")
+
+    missing = [i["id"] for i in manifest if i.get("issue") and not i.get("area")]
+    if missing:
+        print(f"\n  !      no area on {len(missing)}: {', '.join(missing)}")
+    print(f"\napplied {applied}, already correct {unchanged}")
+    return 0
+
+
 def _project_number() -> str:
     """Find the `Memstara` project's number under the owner.
 
@@ -468,7 +600,12 @@ def _project_number() -> str:
 
 
 def cmd_board(manifest: list[dict[str, Any]]) -> int:
-    """Add every issue to the project and set `Status`, `Priority` and `Size`.
+    """Add every issue to the project and set `Status`, `Priority`, `Size` and `Area`.
+
+    `Area` is the only one of the four this script creates. The other three came
+    with GitHub's project template; nothing else was going to supply an Area
+    field, and a board that can filter by area but not group by it does half the
+    job the axis exists for.
 
     Args:
         manifest: The resolved items, with issue numbers.
@@ -477,8 +614,22 @@ def cmd_board(manifest: list[dict[str, Any]]) -> int:
         Process exit code.
     """
     number = _project_number()
-    fields = {f["name"]: f for f in json.loads(
-        gh("project", "field-list", number, "--owner", PROJECT_OWNER, "--format", "json"))["fields"]}
+
+    def read_fields() -> dict[str, Any]:
+        return {f["name"]: f for f in json.loads(
+            gh("project", "field-list", number, "--owner", PROJECT_OWNER, "--format", "json"))["fields"]}
+
+    fields = read_fields()
+    if "Area" not in fields:
+        # Created in the vocabulary's own order, which is the order the options
+        # appear in on the board. Alphabetical would put `blackboard` first and
+        # `viewer-web` last for no reason a reader could recover.
+        gh("project", "field-create", number, "--owner", PROJECT_OWNER,
+           "--name", "Area", "--data-type", "SINGLE_SELECT",
+           "--single-select-options", ",".join(AREAS))
+        print(f"field     created Area with {len(AREAS)} options")
+        fields = read_fields()
+
     project_id = json.loads(
         gh("project", "view", number, "--owner", PROJECT_OWNER, "--format", "json"))["id"]
 
@@ -509,7 +660,10 @@ def cmd_board(manifest: list[dict[str, Any]]) -> int:
 
         for field_name, value in (("Status", item["status"]),
                                   ("Priority", item["priority"]),
-                                  ("Size", item["size"])):
+                                  ("Size", item["size"]),
+                                  ("Area", item["area"])):
+            if not value:
+                continue   # an item with no area yet; `labels` reports which
             field = fields.get(field_name)
             option = option_id(field_name, value)
             if field is None or option is None:
@@ -689,7 +843,7 @@ def main() -> int:
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("command",
-                        choices=("plan", "create", "link", "board", "annotate", "sync"))
+                        choices=("plan", "create", "labels", "link", "board", "annotate", "sync"))
     parser.add_argument("--only", default="",
                         help="sync: restrict to these ids, comma-separated")
     parser.add_argument("--dry-run", action="store_true",
@@ -714,7 +868,7 @@ def main() -> int:
     if args.command == "sync":
         return cmd_sync(manifest, only=args.only, dry_run=args.dry_run)
 
-    return {"plan": cmd_plan, "create": cmd_create, "link": cmd_link,
+    return {"plan": cmd_plan, "create": cmd_create, "labels": cmd_labels, "link": cmd_link,
             "board": cmd_board, "annotate": cmd_annotate}[args.command](manifest)
 
 
