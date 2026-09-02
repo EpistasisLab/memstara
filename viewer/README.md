@@ -1,79 +1,82 @@
 # Memstara Viewer
 
-에이전트 다섯이 **캐릭터**로 존재하고, 판·지식원·데이터셋·학습기·결과 표가 각자
-**자리**를 가지는 살아 있는 장면. 파이프라인을 돌리면 캐릭터가 판으로 가서 표를
-집어 들고 자기 자리로 옮겨 일한 뒤 판에 돌려놓는 것이 실시간으로 보인다.
+A living scene in which the five agents exist as **characters** and the board, knowledge
+source, dataset, trainer and results table each have a **place**. Run the pipeline and you
+watch, in real time, a character walk to the board, pick up a row, carry it to their own
+place, work on it and put it back.
 
 ```bash
 docker compose up -d --build     # → http://localhost:8070
-python3 verify.py                # 검증 25항목
+python3 verify.py                # 25 verification items
 ```
 
-개발 중에는 둘을 따로 띄운다.
+During development the two are started separately.
 
 ```bash
 .venv/bin/uvicorn main:app --app-dir api --port 8071 --reload
-cd web && npm run dev            # → http://localhost:5173 (/api 는 8071 로 프록시)
+cd web && npm run dev            # → http://localhost:5173 (/api proxies to 8071)
 ```
 
-## 화면
+## The screens
 
-| | 무엇 |
+| | What |
 |---|---|
-| **장면** | 장소 다섯과 캐릭터 다섯. 게시판·결과 표를 누르면 그 탭, 캐릭터를 누르면 그 에이전트로 |
-| **판** | 대기/진행 중/완료 레인. 카드에 `attempts` 와 되돌아온 횟수 |
-| **일의 일생** | 한 일이 네 단계를 지난 자취와 각 단계를 처리한 실행 id |
-| **에이전트** | 실행·반복·토큰·비용, 그리고 각 단계가 받는 창구 |
-| **접근 지도** | 누가 어느 창구로 어느 저장소를 몇 번 |
-| **결과** | AUC · 기여도 · 해석 |
+| **Scene** | Five places and five characters. Click the board or the results table for that tab, click a character for that agent |
+| **Board** | Waiting / in progress / done lanes. Cards carry `attempts` and how many times the row came back |
+| **Life of a row** | The trail of one row through the four stages, and the run id that handled each |
+| **Agents** | Runs, iterations, tokens, cost, and the tools each stage is given |
+| **Access map** | Who reached which store, through which tool, how many times |
+| **Results** | AUC · importances · interpretation |
 
-## 읽기 전용은 권한이다
+## Read-only is a permission, not a habit
 
-접속 계정 `memstara_viewer` 는 `SELECT` 만 가진다. 코드가 조심해서가 아니라
-**데이터베이스가 거부해서** 읽기 전용이다 — `UPDATE`·`DELETE` 시도가 막히는 것을
-`verify.py` 가 매번 확인한다. 판을 바꾸는 것은 여전히 창구(MCP)와 구동 스크립트뿐이다.
+The connecting account `memstara_viewer` holds `SELECT` and nothing else. It is read-only
+not because the code is careful but because **the database refuses** — `verify.py` checks
+on every run that an attempted `UPDATE` or `DELETE` is blocked. Changing the board is
+still the tools (MCP) and the driving script, and only those.
 
-## ⚠️ 기록의 모양이 셋이다
+## ⚠️ The record comes in three shapes
 
-`run_steps.tool_call` 을 그냥 읽으면 **그럴듯하게 틀린** 숫자가 나온다.
+Read `run_steps.tool_call` naively and you get numbers that are **plausibly wrong**.
 
-| 함정 | 그냥 읽으면 |
+| The trap | Read naively |
 |---|---|
-| 컬럼이 `json` 이고 값이 **JSON 리터럴 `null`** 인 행 | 도구 호출 없는 걸음이 호출로 세어진다 |
-| 단건 `{server,tool,…}` 과 **묶음 `{"calls":[…]}`** 두 모양 | `search_concepts` 가 0회로 보인다 (실제 수백 회) |
-| 옛 행의 `ecoxai-*` 서버 이름 | 같은 서버가 둘로 갈린다 |
+| Rows where the column is `json` and the value is the **JSON literal `null`** | Steps with no tool call get counted as calls |
+| Two shapes: single `{server,tool,…}` and **batched `{"calls":[…]}`** | `search_concepts` appears to run 0 times (really hundreds) |
+| The `ecoxai-*` server name on older rows | One server splits into two |
 
-셋 다 `api/queries.py` 의 `FLAT_CALLS` 한 곳에서 처리한다. `verify.py` 는 **순진한
-집계와 올바른 집계가 서로 달라야 한다**는 것까지 확인한다 — 우연히 같아지면 함정
-처리가 사라져도 시험이 통과해 버리기 때문이다.
+All three are handled in one place, `FLAT_CALLS` in `api/queries.py`. `verify.py` goes as
+far as checking that **the naive aggregate and the correct one must differ** — if they
+happened to agree, the tests would still pass after the trap handling was deleted.
 
-`llm_call` 도 같은 문제를 갖고 있다.
+## Why there is a backend
 
-## 왜 백엔드가 있나
+A browser cannot connect to Postgres directly. And if six screens each interpreted
+`tool_call` themselves, they would draw the same run differently. A single
+`/api/snapshot` hands over the data for every screen **at once**, and the front end picks
+from it — one request every two seconds.
 
-브라우저는 Postgres 에 직접 못 붙는다. 그리고 화면 여섯이 각자 `tool_call` 을
-해석하면 같은 실행을 서로 다르게 그리게 된다. `/api/snapshot` 하나가 모든 화면의
-데이터를 **한 번에** 주고, 프런트는 거기서 골라 쓴다 — 2초마다 요청 한 건.
+## The board is still visible when core is down
 
-## core 가 꺼져도 판은 보인다
+The board (`memstara-postgres:5463`) and the agent records (`motoro-postgres:5453`) are
+different servers. If one dies, only that part shows a notice and the rest is drawn as
+usual — a character becomes **`unknown`**, not `idle`. So as not to claim to know
+something we do not.
 
-판(`memstara-postgres:5463`)과 에이전트 기록(`motoro-postgres:5453`)은 다른
-서버다. 한쪽이 죽으면 그 부분만 안내를 띄우고 나머지는 그대로 그린다 — 캐릭터는
-`쉼` 이 아니라 **`알 수 없음`** 이 된다. 모르는 것을 안다고 말하지 않기 위해서다.
+## The definitions come from the pipeline
 
-## 정의는 파이프라인에서 온다
-
-`api/stores.py` 는 `pipeline_core.BOARD_TOOLS` / `BOARD_SERVERS` 를 쓴다. 뷰어가 자기
-virtualenv 에서 도니 import 가 안 될 때는 적어 둔 사본으로 넘어가는데, 그 사본이
-낡으면 화면만 조용히 틀리게 된다. 그래서 대조 검사를 따로 둔다.
+`api/stores.py` uses `pipeline_core.BOARD_TOOLS` / `BOARD_SERVERS`. When the viewer runs
+in its own virtualenv and the import fails, it falls back to a written-down copy — and
+once that copy goes stale, only the screen is wrong, quietly. Hence a separate
+cross-check.
 
 ```bash
-# viewer/ 에서. pipeline_core 와 motoro 를 둘 다 임포트할 수 있는 인터프리터라야 한다.
+# From viewer/. Needs an interpreter that can import both pipeline_core and motoro.
 ../.venv/bin/python check_definitions.py
 ```
 
-## 안 하는 것
+## What it does not do
 
-- **조작** — 읽기 전용이다
-- 게임 엔진·캔버스·픽셀 에셋 — SVG 와 CSS transition 이면 충분하다
-- 인증 — localhost 전용
+- **Control anything** — it is read-only
+- Game engine, canvas, pixel assets — SVG and CSS transitions are enough
+- Authentication — localhost only

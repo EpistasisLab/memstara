@@ -1,53 +1,57 @@
-# outputs — 스크립트가 만들어내는 것들
+# outputs — what the scripts produce
 
-여기 있는 것은 전부 **생성물**이다. 손으로 고치지 말 것 — 다시 만들면 덮어쓰인다.
+Everything here is **generated**. Do not edit it by hand — the next run overwrites it.
 
-## OKF 번들 이름 규칙
+## How an OKF bundle is named
 
 ```
-okf_<출처>_<무엇을 담았는가>
+okf_<source>_<what it holds>
 ```
 
-- **`okf_`로 시작** — 형식이 무엇인지 먼저 말한다
-- **출처** — 어느 지식원에서 왔는가 (`alzkb`, `synthetic`)
-- **무엇을 담았는가** — 같은 지식원에서 **여러 번들**이 나오기 때문에 반드시 붙인다.
-  같은 그래프라도 가설이 다르면 담기는 것이 달라진다
+- **Starts with `okf_`** — say what the format is first
+- **Source** — which knowledge source it came from (`alzkb`, `synthetic`)
+- **What it holds** — always present, because **several bundles** come out of the same
+  knowledge source. The same graph under a different hypothesis holds different things
 
-`okf` 한 단어로 두면 두 번째 번들이 생겼을 때 앞의 것이 무엇이었는지 알 수 없다.
+Left as the single word `okf`, a second bundle makes it impossible to tell what the first
+one was.
 
-## 지금 있는 번들
+## The bundles that exist now
 
-| 폴더 | 출처 | 무엇이 들어 있나 | 만드는 것 |
+| Folder | Source | What is in it | What makes it |
 |---|---|---|---|
-| `okf_synthetic_sample/` | 합성 | 개념 29개 — 임상 측정 변수를 설명하는 가짜 지식. `variables:`가 `dataset.csv`의 컬럼을 가리킨다 | `make_sample_data.py` |
+| `okf_synthetic_sample/` | synthetic | 29 concepts — fake knowledge describing clinical measurement variables. `variables:` points at columns of `dataset.csv` | `make_sample_data.py` |
 
-## 만들 예정인 번들
+## The bundles that are planned
 
-| 폴더 | 출처 | 무엇이 들어갈 예정인가 |
+| Folder | Source | What will go in it |
 |---|---|---|
-| `okf_alzkb_druggable_non_ad_targets/` | AlzKB v2.0.0 | 유전자 1,162개 — AD 유전자(앵커) 76 + 약물화 가능한 비-AD 상대 1,086. 관계 1,781개 |
+| `okf_alzkb_druggable_non_ad_targets/` | AlzKB v2.0.0 | 1,162 genes — 76 AD genes (the anchors) plus 1,086 druggable non-AD counterparts. 1,781 relationships |
 
 
-그 문서 마지막 절의 결정 세 개가 정해지기 전에는 변환 스크립트를 쓰지 않는다.
+yet** — the conversion script is not written until the three decisions in that document's
+last section are settled.
 
-같은 그래프에서 다른 가설로 만들면 `okf_alzkb_shared_pathways/` 처럼 나란히 붙는다.
+Built from the same graph under a different hypothesis, it sits alongside as something
+like `okf_alzkb_shared_pathways/`.
 
-## 번들을 바꿔 끼우는 법
+## Swapping one bundle for another
 
-OKF 서버는 **한 번에 번들 하나만** 읽는다. 어느 것을 읽을지는 환경변수가 정한다.
+The OKF server reads **one bundle at a time**. Which one is decided by an environment
+variable.
 
 ```bash
 export AGENTIC_OKF_BUNDLE_DIR="$PWD/outputs/okf_synthetic_sample"
 ```
 
-경로를 다른 번들로 바꾸면 파이프라인이 다른 지식원을 보게 된다.
-**코드는 고칠 필요가 없다.**
+Point the path at a different bundle and the pipeline sees a different knowledge source.
+**No code has to change.**
 
-## 나머지 파일
+## The rest of the files
 
 | | |
 |---|---|
-| `dataset.csv` | 합성 데이터셋 (컬럼 41개). `make_sample_data.py`가 만든다 |
-| `sub_*.csv` | 시행 중 data 단계가 잘라낸 부분집합 |
-| `summary.json` · `todo_rows.json` | 시행 집계 결과 |
-| `logs/` | 실행 로그 (콘솔 + JSONL) |
+| `dataset.csv` | the synthetic dataset (41 columns). `make_sample_data.py` makes it |
+| `sub_*.csv` | the subsets the data stage cut during a trial |
+| `summary.json` · `todo_rows.json` | the trial's aggregated results |
+| `logs/` | run logs (console + JSONL) |
