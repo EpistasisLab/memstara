@@ -35,7 +35,7 @@ that nobody is watching.
 `outputs/*` — it contains a slash, so git anchors it to the repository root. An
 `outputs/` produced anywhere else is **not ignored**, and run records from the HIV
 cohort would sit untracked inside the source tree waiting to be committed by
-
+accident. See README.md:28-35 and V-01.
 
 So the layout is asserted once, here, and every other module asks.
 

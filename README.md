@@ -65,7 +65,7 @@ never the real constraint — six sites did it, and `Settings`' `env_file=".env"
 resolves against the working directory, not the module — while the flat layout did
 cost something: `tests/` resolved its imports only when pytest happened to be started
 
-since 2026-09-02, so it carries the full move table on this machine and in no clone.
+
 
 **Documents do not sit at the top level.** `README.md` is the only one; everything
 else goes into the folder that matches what it is — with eight documents lying flat

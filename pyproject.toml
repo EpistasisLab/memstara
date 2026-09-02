@@ -9,7 +9,7 @@
 # repository root that collects 67 tests; run from anywhere else it is 5 collection
 # errors. Nothing was broken to repair — something was missing to add.
 #
-# This file is step 1 of MEMO-05 (issue #33). It moves nothing. The move into
+# This file is step 1 of `H-20` (issue #33). It moves nothing. The move into
 # `src/memstara/` comes afterwards, and lands in a commit of its own.
 
 [project]
