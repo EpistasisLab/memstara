@@ -8,7 +8,7 @@ import {
   type Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Workflow } from "lucide-react";
+import { AlertTriangle, Workflow } from "lucide-react";
 import FitOnResize from "../components/FitOnResize";
 import Panel from "../components/Panel";
 import { chainEdgeTypes, chainNodeTypes } from "../components/chain";
@@ -51,6 +51,14 @@ export default function ChainPanel() {
   // Read separately so an empty canvas can say *which* of the three reasons it is empty
   // for. The store has carried `error` since it was written (`store/viewer.ts:106-107`);
   // no panel had ever read it, so every failure reached the reader as "Loading".
+  //
+  // Neither of them may pre-empt a scene we already have. The store keeps the last good
+  // snapshot through a failure on purpose (it sets `error` beside it, not instead of
+  // it), and a panel that reads `error` first throws that away: one dropped poll — which
+  // at p90 1.09s against a 2s interval is a routine event, not an outage — wiped a
+  // correctly drawn pipeline and put a sentence in its place for a tick. So these two
+  // decide the *header badge* whenever there is a scene, and the body only when there
+  // has never been one.
   const error = useViewer((s) => s.error);
   const loading = useViewer((s) => s.loading);
 
@@ -114,6 +122,18 @@ export default function ChainPanel() {
       status={
         scene ? (
           <>
+            {/* The whole message goes in `title`, not on screen: the header has room for
+                a few words, and "why" is what someone hovers for. `age` beside it is
+                already counting up, so the two together say "stale, and this stale". */}
+            {error !== null && (
+              <span
+                className="flex items-center gap-1 font-medium text-amber-700"
+                title={`The API did not answer: ${error}`}
+              >
+                <AlertTriangle className="h-3 w-3" strokeWidth={2.4} />
+                not updating
+              </span>
+            )}
             <span>{working} working</span>
             {age !== null && <span className="font-mono">{age}s ago</span>}
           </>
@@ -121,19 +141,24 @@ export default function ChainPanel() {
       }
       bodyClassName="overflow-hidden"
     >
-      {error ? (
-        <div className="p-8 text-amber-700">The API did not answer: {error}</div>
-      ) : loading ? (
-        <div className="p-8 text-ink-faint">Loading the pipeline…</div>
-      ) : !scene ? (
-        // `snapshot()` always puts a `scene` in a 200 response (`viewer/api/scene.py:463-474`,
-        // and `_build_scene` returns a dict on every path including core-down). So a
-        // successful fetch with no scene means the answer did not come from this code —
-        // in practice a container older than the source.
-        <div className="p-8 text-amber-700">
-          The API answered without a scene — the running container is probably older than
-          the code.
-        </div>
+      {/* These three only ever run before the first successful response. After that
+          there is a scene, and a scene is drawn whatever else is going on — an old
+          picture with a badge saying so beats a blank one. */}
+      {!scene ? (
+        error ? (
+          <div className="p-8 text-amber-700">The API did not answer: {error}</div>
+        ) : loading ? (
+          <div className="p-8 text-ink-faint">Loading the pipeline…</div>
+        ) : (
+          // `snapshot()` always puts a `scene` in a 200 response (`viewer/api/scene.py:453-481`,
+          // and `_build_scene` returns a dict on every path including core-down). So a
+          // successful fetch with no scene means the answer did not come from this code —
+          // in practice a container older than the source.
+          <div className="p-8 text-amber-700">
+            The API answered without a scene — the running container is probably older than
+            the code.
+          </div>
+        )
       ) : agents.length < CHAIN.length ? (
         // Not padded with placeholders: a stage the API did not send is a definitions
         // problem, and inventing a grey card for it would hide exactly that.
