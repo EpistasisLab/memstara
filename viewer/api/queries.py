@@ -262,7 +262,13 @@ JOIN agent_runs r ON r.id = f.run_id
 JOIN agents a ON a.id = r.agent_id
 WHERE a.name LIKE 'memstara%'
 GROUP BY a.name, f.server, f.tool
-ORDER BY a.name, count(*) DESC
+-- `f.server, f.tool` is the tie-break, and it is not decoration. `a.name, count(*) DESC`
+-- alone leaves rows with equal counts in whatever order the plan happened to produce, so
+-- the access map re-shuffled its own rows between two polls that had found no new calls.
+-- Caught by diffing this query's output against the previous definition of `flat`: same
+-- 43 rows as a multiset, different order, and the only rows that moved were three tied
+-- at 18 calls each.
+ORDER BY a.name, count(*) DESC, f.server, f.tool
 """
 
 # The board-to-run bridge. The board carries no run id, but claim_task's *result* does
