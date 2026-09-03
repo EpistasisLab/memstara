@@ -176,6 +176,10 @@ from memstara.pipeline.core import (
 )
 # memstara/pipeline/prompts.py — what each agent is told, and its fingerprint
 from memstara.pipeline.prompts import prompt_digest
+# memstara/mcp_servers/frontmatter.py — the same reader the okf server uses for --skill.
+# Imported so a malformed skill is refused here, by the same code that will enforce it,
+# rather than a second parser that could come to disagree with it.
+from memstara.mcp_servers.frontmatter import parse_field_filter
 from memstara.config import Settings   # the settings object that reads .env and hands it to core
 
 # memstara/paths.py, memstara/servers.py — where things are, and how the five tool
@@ -946,6 +950,7 @@ async def questions_for_wave(
     run_tag: str,
     wave: int,
     want: int,
+    skill: str = "",
 ) -> tuple[list[dict[str, Any]], bool]:
     """Ask the curator for this wave's questions, then read back what it banked.
 
@@ -978,6 +983,15 @@ async def questions_for_wave(
         else f"Call read_results with run_tag='{run_tag}' first and let those results "
              "decide what is worth asking next."
     )
+    # The curator is the first agent to touch the corpus, and under a skill it is
+    # reading one branch of it. Left unsaid, "work from the corpus" asks it to ground
+    # questions in what looks like a very small literature, and the reasonable response
+    # to that is to search wider — which the server will refuse, call after call.
+    if skill:
+        ask += (
+            f" The corpus is confined to {skill} for this run; okf_search and okf_read "
+            f"return that branch and nothing else, so ask what that branch can answer."
+        )
     try:
         # Neither half of what call_agent returns is wanted here. What the curator did is
         # read back off the bank below, not taken from what it said — that is the whole
@@ -1077,6 +1091,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     print(f"   outcome     {args.y_column}")
     print(f"   data        {os.environ.get('MEMSTARA_DATASET_PATH','(none)')}")
     print(f"   knowledge   {os.environ.get('AGENTIC_OKF_BUNDLE_DIR','(none)')}")
+    print(f"   skill       {args.skill or '(whole bundle)'}")
     print(f"   record dir  {run_dir}")
     print(f"   trace files {_TRACE_DIR.name}/  (one more each time a person is called)")
 
@@ -1102,16 +1117,24 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     # Keyed off `agents` rather than off `BOARD_AGENT_NAMES` so the record cannot come
     # to describe a stage that was not provisioned; the prompt path is the stage name
     # by construction (`provision_board_agents`).
+    #
+    # `_run` is not a stage, and the underscore is what says so. The skill belongs in
+    # this file rather than in a new one because it answers the same question the
+    # digests answer — *what produced this run* — and a branch of the corpus decides
+    # what could be found at least as much as a wording decides what was asked.
     (run_dir / "prompts.json").write_text(
         json.dumps(
             {
-                stage: {
-                    "agent": BOARD_AGENT_NAMES[stage],
-                    "agent_id": str(agent_id),
-                    "file": f"src/memstara/prompts/board/{stage}.md",
-                    **prompt_digest(f"board/{stage}"),
-                }
-                for stage, agent_id in agents.items()
+                "_run": {"run_tag": args.run_tag, "skill": args.skill or None},
+                **{
+                    stage: {
+                        "agent": BOARD_AGENT_NAMES[stage],
+                        "agent_id": str(agent_id),
+                        "file": f"src/memstara/prompts/board/{stage}.md",
+                        **prompt_digest(f"board/{stage}"),
+                    }
+                    for stage, agent_id in agents.items()
+                },
             },
             ensure_ascii=False, indent=2,
         ),
@@ -1217,7 +1240,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                      + f" and makes {args.trials} questions")
                 questions, recycled = await questions_for_wave(
                     registry, agents, by_stage,
-                    run_tag=args.run_tag, wave=wave, want=args.trials,
+                    run_tag=args.run_tag, wave=wave, want=args.trials, skill=args.skill,
                 )
                 for q in questions:
                     note(f"question #{q['question_id']} {q['text']}"
@@ -1282,7 +1305,25 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             # to reason about would buy nothing.
             from_bank = any(q["question_id"] for q in questions)
 
-            async def seed_one(i: int, q: dict[str, Any], *, from_bank: bool = from_bank):
+            # The branch is enforced in the okf server whether or not this sentence is
+            # written, so saying it buys nothing in safety — it buys the agent an
+            # explanation. Without it, a search that returns 52 documents where the
+            # bundle holds 312 reads as a thin literature, and the sensible response to a
+            # thin literature is to search again more broadly. Told what it is looking
+            # at, it spends those calls on the branch instead.
+            #
+            # It is written here, in the driver's per-call message, and not into
+            # `prompts/board/hypothesis.md`: a prompt file is the same for every run, and
+            # the branch is the one thing about this run that the user chose
+
+            skill_note = (
+                f" The knowledge bundle is confined to {args.skill} for this run; "
+                f"okf_search and okf_read return that branch and nothing else."
+                if args.skill else ""
+            )
+
+            async def seed_one(i: int, q: dict[str, Any], *, from_bank: bool = from_bank,
+                               skill_note: str = skill_note):
                 """Call one hypothesis worker and attach what its matcher calls saw."""
                 text = q["text"]
                 wid = f"hypothesis#{i}"
@@ -1295,7 +1336,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                         f"the perspective of the question you were handed. Then put the "
                         f"task on the board with run_tag='{args.run_tag}', trial={i}, "
                         f"perspective set to that question's text, and question_id set to "
-                        f"the question_id you were handed."
+                        f"the question_id you were handed.{skill_note}"
                     )
                 else:
                     # question_id travels with the task so a finished result can be traced
@@ -1304,7 +1345,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                         f"The outcome column is '{args.y_column}'. Choose the columns that will predict it, "
                         f"{text}. Then put the task on the board with "
                         f"run_tag='{args.run_tag}', trial={i}, perspective='{text}', "
-                        f"question_id={q['question_id']}."
+                        f"question_id={q['question_id']}.{skill_note}"
                     )
                 _, call = await call_agent(
                     agents["hypothesis"], ask,
@@ -1745,6 +1786,18 @@ async def main() -> int:
     ap.add_argument("--no-curator", action="store_true",
                     help="skip question generation and use the built-in perspective list")
     ap.add_argument("--y-column", default="outcome")
+    # The user's chosen skill: one branch of the knowledge bundle, named the way the
+    # bundle files it. This flag does not ask the agents to stay inside it — it sets
+    # MEMSTARA_OKF_FIELDS, which the okf server reads and enforces on every search and
+    # every read (src/memstara/mcp_servers/okf.py). Empty is the whole bundle, which is
+    # how every run before this flag existed behaved.
+    ap.add_argument(
+        "--skill", default="",
+        help="confine the knowledge bundle to one branch for this run, as front matter "
+             "equalities: \"terminus_kind=sud\" or "
+             "\"mechanism_family=treatment-toxicity,terminus_kind=sud\". Empty (the "
+             "default) leaves the whole bundle readable",
+    )
     ap.add_argument("--provider", default="azure_foundry", choices=["anthropic", "azure_foundry", "openai"])
     ap.add_argument("--model", default="claude-sonnet-4-6")
     ap.add_argument("--run-tag", default=None, help="names this run on the board")
@@ -1798,6 +1851,21 @@ async def main() -> int:
            if getattr(args, f"{s}_agents") < 1]
     if bad:
         ap.error("a stage needs at least one worker: " + ", ".join(bad))
+
+    # The skill is read here, before Postgres is touched or a server is started, so a
+    # mistyped branch costs a second rather than a provisioned run. It is then written
+    # into the environment the tool servers inherit — the same route
+    # AGENTIC_OKF_BUNDLE_DIR already takes to the okf child.
+    #
+    # Written **unconditionally**, so that the flag is the whole answer: with a value
+    # left over in a shell or in .env, an unflagged run would otherwise be confined to a
+    # branch that nothing on screen and nothing in the run directory mentions.
+    if args.skill:
+        try:
+            parse_field_filter(args.skill)
+        except ValueError as e:
+            ap.error(f"--skill {args.skill!r}: {e}")
+    os.environ["MEMSTARA_OKF_FIELDS"] = args.skill
 
     # If the prerequisites are missing it ends **without doing anything.** Stopping
     # before the start leaves the board cleaner than dying halfway through.
