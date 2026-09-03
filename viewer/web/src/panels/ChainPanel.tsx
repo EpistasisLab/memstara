@@ -61,6 +61,10 @@ export default function ChainPanel() {
   // has never been one.
   const error = useViewer((s) => s.error);
   const loading = useViewer((s) => s.loading);
+  // A 200 the API filled from its own previous answer because it gave up waiting for a
+  // fresh one. It is not an error — nothing failed — but the picture is older than the
+  // response, so it earns the same badge for the same reason.
+  const stale = useViewer((s) => s.snapshot?.stale ?? false);
 
   const agents = useMemo(() => chainAgents(scene?.agents ?? []), [scene]);
 
@@ -125,10 +129,14 @@ export default function ChainPanel() {
             {/* The whole message goes in `title`, not on screen: the header has room for
                 a few words, and "why" is what someone hovers for. `age` beside it is
                 already counting up, so the two together say "stale, and this stale". */}
-            {error !== null && (
+            {(error !== null || stale) && (
               <span
                 className="flex items-center gap-1 font-medium text-amber-700"
-                title={`The API did not answer: ${error}`}
+                title={
+                  error !== null
+                    ? `The API did not answer: ${error}`
+                    : "The API gave up waiting for fresh data and re-sent its previous answer."
+                }
               >
                 <AlertTriangle className="h-3 w-3" strokeWidth={2.4} />
                 not updating

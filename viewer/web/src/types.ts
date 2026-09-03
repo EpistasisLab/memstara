@@ -150,6 +150,10 @@ export interface Health {
 export interface Snapshot {
   run_tag: string;
   runs: RunSummary[];
+  /** The API gave up waiting for a fresh computation and re-sent its previous answer.
+   *  A 200 whose contents are older than `generated_at` suggests — so a screen that
+   *  ignores this reports a stale picture as current. See api/scene.snapshot. */
+  stale: boolean;
   generated_at: string;
   health: Health;
   scene: { places: Place[]; agents: SceneAgent[]; flashes: Flash[] };

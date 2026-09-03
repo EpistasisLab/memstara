@@ -65,6 +65,19 @@ from db import pools
 #: the same cadence, so without this each one pays for its own copy of the same work.
 SNAPSHOT_TTL = 1.5
 
+#: Seconds to wait for whoever is already computing this run's snapshot. Without a bound
+#: here the lock below is an unbounded wait, and one slow computation holds every other
+#: tab on the same run until nginx gives up at 60s and returns a 504 to all of them —
+#: which is how one slow database turns into every screen going blank at once. `db.py`
+#: had exactly this bug in `pool.acquire()`; this is the same mistake in a lock.
+LOCK_WAIT = 3.0
+
+#: Seconds a single computation may take before the caller stops waiting for it. Well
+#: under nginx's 60s so the ceiling is ours and is explainable, and above the slowest
+#: healthy snapshot measured (2.5-6.2s while a pipeline was running) so an honestly busy
+#: database is not called a failure.
+SNAPSHOT_DEADLINE = 12.0
+
 _snapshot_cache: dict[str | None, tuple[float, dict[str, Any]]] = {}
 _snapshot_locks: dict[str | None, asyncio.Lock] = {}
 
@@ -459,26 +472,57 @@ async def snapshot(run_tag: str | None) -> dict[str, Any]:
     separately per screen and one screen can be showing the state before an update
     while another shows the state after it.
 
-    **Why this is cached and single-flighted.** `_core_facts` runs seven queries that all
-    begin with `queries.FLAT_CALLS`, and that CTE reads the whole of `run_steps` with no
-    bound on run or time — measured at 2.7s against a poll interval of 2s. Slower than
-    the interval means each tick starts before the last has finished, so copies pile up:
-    the core DB was seen at 208% CPU running several of the same query at once, which
-    made it slower still, until the connection pool drained and requests stopped
-    returning at all. The lock collapses concurrent callers onto one computation and the
-    TTL keeps a second tab from doubling the work. Neither changes a displayed value —
-    the screen already shows data up to one poll old.
+    **Why this is cached and single-flighted.** Every open tab asks for the same object
+    on the same cadence. The lock collapses concurrent callers onto one computation and
+    the TTL keeps a second tab from doubling the work. Neither changes a displayed value:
+    the screen already shows data up to one poll old, and the TTL is under the interval.
 
-    The **real** fix is to bound that CTE. This keeps the screen alive until then.
+    **Why both waits are bounded, and why a stale answer beats no answer.** This function
+    is the last thing between a slow database and a blank screen, so it must not be
+    capable of hanging. It was: `async with lock` had no timeout, so one slow computation
+    held every other tab on the same run until nginx returned 504 to all of them at once.
+    A screen a few seconds behind is worth far more than an error, and the previous
+    answer is already sitting in `_snapshot_cache` — so when either wait runs out, that is
+    what goes back, flagged `stale` so the screen can say so rather than quietly lie about
+    how fresh it is. Only a caller that has no previous answer at all sees a failure.
     """
     lock = _snapshot_locks.setdefault(run_tag, asyncio.Lock())
-    async with lock:
+    try:
+        await asyncio.wait_for(lock.acquire(), LOCK_WAIT)
+    except TimeoutError:
+        # Someone else is computing this and is taking too long. Their result would have
+        # been ours; the previous one is close enough and is here now.
+        stale = _stale(run_tag)
+        if stale is None:
+            raise
+        return stale
+    try:
         hit = _snapshot_cache.get(run_tag)
         if hit is not None and (time.monotonic() - hit[0]) < SNAPSHOT_TTL:
             return hit[1]
-        fresh = await _snapshot_uncached(run_tag)
+        try:
+            fresh = await asyncio.wait_for(_snapshot_uncached(run_tag), SNAPSHOT_DEADLINE)
+        except TimeoutError:
+            stale = _stale(run_tag)
+            if stale is None:
+                raise
+            return stale
         _snapshot_cache[run_tag] = (time.monotonic(), fresh)
         return fresh
+    finally:
+        lock.release()
+
+
+def _stale(run_tag: str | None) -> dict[str, Any] | None:
+    """The last snapshot for *run_tag* marked stale, or None if there has never been one.
+
+    Shallow-copied so the flag is never written into the cached object: the next caller
+    to arrive in time deserves an answer that does not claim to be stale. Returning None
+    rather than raising keeps the decision to give up at the two call sites, where the
+    exception that prompted it is still the live one.
+    """
+    hit = _snapshot_cache.get(run_tag)
+    return None if hit is None else {**hit[1], "stale": True}
 
 
 async def _snapshot_uncached(run_tag: str | None) -> dict[str, Any]:
@@ -507,6 +551,10 @@ async def _snapshot_uncached(run_tag: str | None) -> dict[str, Any]:
     return {
         "run_tag": tag,
         "runs": runs,
+        # Always present, so the screen never has to read "key missing" as "fresh".
+        # `snapshot` flips it on the copy it hands back when it gave up waiting; see
+        # `_stale`.
+        "stale": False,
         "generated_at": _iso(datetime.now(timezone.utc)),
         "health": pools.health.as_dict(),
         "scene": _build_scene(core, core_up),
