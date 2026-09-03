@@ -97,9 +97,15 @@ class Settings(CoreSettings):
     # Unset means unchanged behaviour: the hook returns immediately and nothing is
     # imported. Verified — a normal run shows four servers connected and no mention of
     # debugpy anywhere.
+    #
+    # MEMSTARA_OKF_FIELDS is the branch of the knowledge bundle a run may read — the
+    # user's chosen skill, set by `--skill` on the driver and enforced inside the okf
+    # server (`src/memstara/mcp_servers/okf.py`). It is on this list for the reason the
+    # whole list exists: left off, the server reads no lock, every run silently sees the
+    # whole corpus, and the screen still says which skill was picked.
     mcp_allowed_env_vars: str = (
         "MEMSTARA_DATASET_PATH,MEMSTARA_OUTPUT_DIR,MEMSTARA_ML_ENGINE,MEMSTARA_DATABASE_URL,"
-        "MEMSTARA_OUTCOME_COLUMN,"
+        "MEMSTARA_OUTCOME_COLUMN,MEMSTARA_OKF_FIELDS,"
         "MEMSTARA_DEBUGPY,MEMSTARA_DEBUGPY_WAIT,"
         # debugpy runs its check and prints its warning **the moment** the child
         # Python starts. Switching it off from inside the code is already too late

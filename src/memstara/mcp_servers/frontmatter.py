@@ -114,6 +114,36 @@ def matches(doc_fields: Mapping[str, Any], wanted: Mapping[str, str]) -> bool:
     return True
 
 
+def merge_locked(locked: Mapping[str, str], asked: Mapping[str, str]) -> dict[str, str]:
+    """One filter from the branch a run is confined to and the one a caller wrote.
+
+    Args:
+        locked: the confinement, from outside the caller's reach.
+        asked: what the caller passed. May narrow further inside the branch — a second
+            key, or the same key with the same value — and may not leave it.
+
+    Returns:
+        Both sets of constraints together.
+
+    Raises:
+        ValueError: the caller asked for a different value of a key the lock holds. That
+            is reported rather than silently overruled in either direction: honouring it
+            would let a run reach outside its branch, and dropping it would answer a
+            question the caller did not ask while looking like a successful call.
+    """
+    merged = dict(locked)
+    for key, value in asked.items():
+        if key in merged:
+            if merged[key].casefold() != value.casefold():
+                raise ValueError(
+                    f"field {key!r} is locked to {merged[key]!r} for this run; "
+                    f"{value!r} is outside it"
+                )
+            continue   # the same constraint written twice — the lock's spelling stands
+        merged[key] = value
+    return merged
+
+
 def values_for(all_fields: Iterable[Mapping[str, Any]], key: str) -> list[str]:
     """Every value that `key` actually takes across the bundle, sorted.
 

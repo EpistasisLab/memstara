@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from memstara.mcp_servers.frontmatter import matches, parse_field_filter, values_for
+from memstara.mcp_servers.frontmatter import matches, merge_locked, parse_field_filter, values_for
 
 # Three documents standing in for the shape the real bundle has: a structured field per
 # axis, and a `tags` list that does not fully agree with them — which is the finding
@@ -126,6 +126,42 @@ def test_a_non_string_value_compares_as_written():
     written as. The filter arrives as text either way."""
     assert matches({"n": 240}, parse_field_filter("n=240"))
     assert matches({"published": "2026-08-10"}, parse_field_filter("published=2026-08-10"))
+
+
+# --------------------------------------------------------------------------- #
+#  The branch a run is confined to
+# --------------------------------------------------------------------------- #
+
+
+def test_no_lock_leaves_the_caller_alone():
+    """Every run made before the lock existed takes this path."""
+    assert merge_locked({}, parse_field_filter("terminus_kind=sud")) == {"terminus_kind": "sud"}
+    assert merge_locked({}, {}) == {}
+
+
+def test_a_caller_asking_for_nothing_still_gets_the_lock():
+    """The point of the whole mechanism: the confinement does not depend on the agent
+    passing anything, because an agent that passes nothing is the normal case."""
+    assert merge_locked({"terminus_kind": "sud"}, {}) == {"terminus_kind": "sud"}
+
+
+def test_a_caller_may_narrow_further_inside_the_branch():
+    merged = merge_locked({"terminus_kind": "sud"},
+                          parse_field_filter("mechanism_family=treatment-toxicity"))
+    assert merged == {"terminus_kind": "sud", "mechanism_family": "treatment-toxicity"}
+    assert matches(SUD, merged)
+
+
+def test_repeating_the_lock_is_not_an_error():
+    """`fields="terminus_kind=sud"` under the same lock is agreement, not conflict."""
+    assert merge_locked({"terminus_kind": "sud"}, {"terminus_kind": "SUD"}) == {"terminus_kind": "sud"}
+
+
+def test_reaching_outside_the_branch_raises_and_names_both_values():
+    """Not silently overruled in either direction. Honouring it would leave the branch;
+    dropping it would answer a different question and still look like a hit."""
+    with pytest.raises(ValueError, match="locked to 'sud'"):
+        merge_locked({"terminus_kind": "sud"}, parse_field_filter("terminus_kind=psychiatric"))
 
 
 # --------------------------------------------------------------------------- #
