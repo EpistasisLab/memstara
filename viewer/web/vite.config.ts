@@ -20,6 +20,14 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    proxy: { "/api": { target: "http://localhost:8071", changeOrigin: true } },
+    proxy: {
+      "/api": { target: "http://localhost:8071", changeOrigin: true },
+      // The control service runs on the host directly, not in a container, so in
+      // development it is simply another port on localhost. `changeOrigin` is off: it
+      // would rewrite Host to `localhost:8072`, which this service does accept, but the
+      // header it must not lose is Origin — that is what tells it the request came from
+      // this dev server and not from a page on the open web.
+      "/control": { target: "http://localhost:8072" },
+    },
   },
 });

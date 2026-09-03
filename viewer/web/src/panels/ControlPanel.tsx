@@ -2,7 +2,9 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { Activity, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "../lib/cn";
 import { VIEWS, VIEW_ORDER } from "../lib/views";
+import { useControl } from "../store/control";
 import { POLL_MS, useHealth, useViewer } from "../store/viewer";
+import StartRun from "./StartRun";
 
 /**
  * The control panel — the left column, and the only place on screen that *changes*
@@ -10,9 +12,13 @@ import { POLL_MS, useHealth, useViewer } from "../store/viewer";
  *
  * It owns three decisions and nothing else: which run is being looked at, which view
  * fills the top-right slot, and how wide this rail is. Everything else here is status:
- * the two health dots and the poll counter. Those are not decoration. A database being
+ * the three health dots and the poll counter. Those are not decoration. A database being
  * down and a poller being stuck both look exactly like a quiet system unless the screen
  * says otherwise, so this panel says so.
+ *
+ * Starting a run is `StartRun`, in its own file. It is the one control here that changes
+ * something outside the browser, and it talks to a different service — see
+ * `store/control.ts` for why that is a second process rather than a route on `/api/`.
  *
  * Note what is *not* in the nav: Results. `ResultsPanel` is permanently on screen at
  * bottom-right, so a nav entry for it would be a second door to a room that is already
@@ -64,6 +70,7 @@ export default function ControlPanel() {
   const collapsed = useViewer((s) => s.railCollapsed);
   const toggleRail = useViewer((s) => s.toggleRail);
   const health = useHealth();
+  const controlUp = useControl((s) => s.up);
 
   /** Hidden only once the rail is narrow, which only happens at `lg` and up. */
   const wide = collapsed ? "lg:hidden" : undefined;
@@ -109,6 +116,10 @@ export default function ControlPanel() {
               ))}
             </select>
           </label>
+        </section>
+
+        <section className={cn("border-b border-paper-line px-3 py-3", wide)}>
+          <StartRun />
         </section>
 
         <nav className="flex flex-col gap-0.5 p-2">
@@ -187,6 +198,14 @@ export default function ControlPanel() {
           <div className={cn("flex gap-3", collapsed && "lg:flex-col lg:gap-2")}>
             <HealthDot up={health.memstara.up} label="memstara" error={health.memstara.error} />
             <HealthDot up={health.core.up} label="core" error={health.core.error} />
+            {/* The third dot is a different service from the other two, and the only one
+                whose absence is normal: the viewer is complete without it, minus the
+                ability to start anything. */}
+            <HealthDot
+              up={controlUp === true}
+              label="control"
+              error="Not running — `python -m memstara.control` on the host"
+            />
           </div>
         )}
 

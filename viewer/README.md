@@ -35,6 +35,26 @@ not because the code is careful but because **the database refuses** — `verify
 on every run that an attempted `UPDATE` or `DELETE` is blocked. Changing the board is
 still the tools (MCP) and the driving script, and only those.
 
+## The Start button is a different service
+
+The control panel can start a run, and **nothing above changes because of it.** The
+button does not talk to `/api/`; it talks to `/control/`, which nginx proxies to a
+separate process on the host (`python -m memstara.control`, 127.0.0.1:8072). That
+process is in the sandbox's own environment, which is the only place a pipeline can be
+launched from — this container has no `.venv`, no `../motoro` and no `.env`, and it is
+not going to get them.
+
+So the two failure modes stay apart. The viewer with no control service is the ordinary
+state: everything is drawn, the third health dot is red, and the panel says which command
+to run. The control service can also be up while a database is down, and the screen says
+that too.
+
+It binds the loopback interface and refuses a request that arrives under an unfamiliar
+host name, from an origin that is not this viewer, or without a JSON content type. It
+starts processes; those three are what keeps a page on the open web from starting one.
+Exposing it beyond localhost needs an answer about authentication first, and there isn't
+one.
+
 ## ⚠️ The record comes in three shapes
 
 Read `run_steps.tool_call` naively and you get numbers that are **plausibly wrong**.
@@ -77,6 +97,7 @@ cross-check.
 
 ## What it does not do
 
-- **Control anything** — it is read-only
+- **Change anything it shows** — the databases refuse it. Starting a run is the one
+  exception and it goes through a different process; see above
 - Game engine, canvas, pixel assets — SVG and CSS transitions are enough
 - Authentication — localhost only
