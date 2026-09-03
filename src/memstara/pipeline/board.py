@@ -1071,6 +1071,26 @@ def summarise(tasks: list[dict]) -> tuple[dict[str, int], list[tuple[int, int]]]
     return counts, retried
 
 
+def report_skill_note(skill: str) -> str:
+    """What the report agent is told about the branch this run was confined to.
+
+    A function rather than a variable because the report agent is called from two
+    places — `--report-only`, which rescues a run that was interrupted, and the end of a
+    full run — and the rescue path is the one that is used when something has already
+    gone wrong. A note written into only one of them would be missing exactly then.
+
+    Empty when there is no skill, which is every run made before `--skill` existed.
+    """
+    if not skill:
+        return ""
+    return (
+        f" The knowledge bundle is confined to {skill} for this run. okf_search and "
+        f"okf_read return that branch and nothing else, so use them to check a claim "
+        f"against what that branch says — and say plainly that the reading was that "
+        f"branch, not the whole corpus."
+    )
+
+
 async def run(args: argparse.Namespace, run_dir: Path) -> int:
     """The body of the run. (1) through (6) of "How to read this file" at the top are
     here, in that order."""
@@ -1182,7 +1202,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             note("call the report agent once (the only LLM call of this run)")
             text, _ = await call_agent(
                 agents["report"],
-                f"Write the report for run '{args.run_tag}'. Call read_results with that run_tag.",
+                f"Write the report for run '{args.run_tag}'. Call read_results with that "
+                f"run_tag.{report_skill_note(args.skill)}",
                 tools=by_stage["report"], registry=registry, stage="report",
             )
             (run_dir / "report.md").write_text(text, encoding="utf-8")
@@ -1610,7 +1631,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             f"{seeded_total} trials were seeded across {waves_run} wave(s)"
             + (f" (of {args.waves} requested; the run stopped early because the question "
                f"bank ran dry)" if waves_run < args.waves else "")
-            + f". State how many of those {seeded_total} produced a result.{lost_note}",
+            + f". State how many of those {seeded_total} produced a result.{lost_note}"
+            + report_skill_note(args.skill),
             tools=by_stage["report"], registry=registry, stage="report",
         )
         (run_dir / "report.md").write_text(text, encoding="utf-8")

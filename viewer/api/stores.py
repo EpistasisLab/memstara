@@ -89,7 +89,7 @@ def _pipeline_definitions() -> tuple[dict[str, set[str]], dict[str, set[str]], d
                 "data": {"describe_dataset", "slice_columns", "claim_task", "submit_result"},
                 "ml": {"train_and_score", "claim_task", "submit_result"},
                 "interpreter": {"claim_task", "submit_result"},
-                "report": {"read_results"},
+                "report": {"read_results", "okf_search", "okf_read"},
             },
             {
                 "curator": {"okf", "memstara-blackboard"},
@@ -98,7 +98,7 @@ def _pipeline_definitions() -> tuple[dict[str, set[str]], dict[str, set[str]], d
                 "data": {"memstara-data", "memstara-blackboard"},
                 "ml": {"memstara-ml", "memstara-blackboard"},
                 "interpreter": {"memstara-blackboard"},
-                "report": {"memstara-blackboard"},
+                "report": {"okf", "memstara-blackboard"},
             },
             {
                 "curator": "memstara-board-curator",

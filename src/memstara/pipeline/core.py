@@ -399,7 +399,21 @@ BOARD_TOOLS = {
     "data": {"describe_dataset", "slice_columns", "claim_task", "submit_result"},
     "ml": {"train_and_score", "claim_task", "submit_result"},
     "interpreter": {"claim_task", "submit_result"},
-    "report": {"read_results"},
+    # This is the stage `spec/components/05_에이전트_구현계획_KR.md:121` calls the insight
+    # agent: 완성된 board 입력 → 리포트 출력. It is given the corpus so that a claim in the
+    # report can be grounded in the branch the run was confined to, rather than in the
+    # model's memory of the literature. `read_results` stays what it works from; the two
+    # okf tools are for checking a number against what the branch actually says.
+    #
+    # `okf_list_domains` is deliberately not here. It is the tool for finding your way
+    # around a bundle before searching it, and this stage arrives with results in hand —
+    # it has something to look up, not a shelf to browse.
+    #
+    # This contradicts that same spec file's allow-list at :135, which gives insight no
+    # knowledge tools at all. The spec is a plan and this is the decision that supersedes
+
+    # diffing.
+    "report": {"read_results", "okf_search", "okf_read"},
 }
 
 # Which servers may be reached **at all.** Together with BOARD_TOOLS above this filters
@@ -410,7 +424,7 @@ BOARD_SERVERS = {
     "data": {"memstara-data", "memstara-blackboard"},
     "ml": {"memstara-ml", "memstara-blackboard"},
     "interpreter": {"memstara-blackboard"},
-    "report": {"memstara-blackboard"},
+    "report": {"okf", "memstara-blackboard"},
 }
 
 
