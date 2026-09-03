@@ -62,6 +62,14 @@ T = TypeVar("T")
 
 MEMSTARA_DSN_DEFAULT = "postgresql://memstara_viewer:viewer@localhost:5463/memstara"
 CORE_DSN_DEFAULT = "postgresql://memstara_viewer:viewer@localhost:5453/motoro"
+
+#: Connections per pool. Two pools, so the servers see at most 2 x this.
+POOL_MAX = 10
+#: Seconds to wait for a free connection before calling the pool exhausted. Above the
+#: slowest measured query (FLAT_CALLS at 2.7s on a loaded core DB) so that a slow answer
+#: is not reported as a dead database, and far below nginx's 60s so a real jam surfaces
+#: as "core is unreachable" on the screen rather than as a 504 with no explanation.
+ACQUIRE_TIMEOUT = 5.0
 # The default connection strings for the two DBs. That the ports differ is exactly what
 # "completely different servers" means. 5463 = board and results table (memstara) /
 # 5453 = agents and run history (motoro). Started under Docker, environment
@@ -134,13 +142,18 @@ class Pools:
                 if which == "memstara"
                 else _dsn("CORE_VIEWER_DSN", CORE_DSN_DEFAULT)
             )
-            pool = await asyncpg.create_pool(dsn, min_size=1, max_size=4, timeout=5,
+            pool = await asyncpg.create_pool(dsn, min_size=1, max_size=POOL_MAX, timeout=5,
                                              command_timeout=10)
-            # The create_pool above: the pool is kept small, 1 to 4. The viewer is a
-            # read-only app that polls once every 2 seconds, so it does not need many
-            # connections. timeout=5 is the limit on "getting connected",
+            # The create_pool above: timeout=5 is the limit on "getting connected",
             # command_timeout=10 the limit on "one query" — both are needed to stop a
             # slow DB from holding up the whole screen.
+            #
+            # POOL_MAX was 4, on the reasoning that a read-only app polling every 2
+            # seconds needs few connections. That reasoning assumed one reader and a
+            # snapshot faster than the interval, and both turned out to be false: a
+            # snapshot measured 1.6-1.8s against a 2s poll, one browser tab per open
+            # window, and each snapshot acquires four times (runs, board, results, core).
+            # Overlapping polls then drained the pool.
             setattr(self, attr, pool)
         return pool
 
@@ -155,7 +168,14 @@ class Pools:
         """
         try:
             pool = await self._pool(which)
-            async with pool.acquire() as conn:
+            # `timeout=` is the load-bearing argument, not a tidying detail. Without it
+            # `acquire()` is the one unbounded wait in this file, and an exhausted pool
+            # therefore never raises — so this `except` never runs, the screen never
+            # degrades, and the request hangs until nginx gives up with a 504. That is
+            # the opposite of what this function exists to do. With it, pool exhaustion
+            # arrives here like any other failure: the DB is marked down, the pool is
+            # dropped, and the next poll rebuilds it.
+            async with pool.acquire(timeout=ACQUIRE_TIMEOUT) as conn:
                 result = await fn(conn)
         except Exception as e:  # noqa: BLE001 - every failure is the same to a reader
             # The kind of exception is not distinguished. To the person looking, whether
