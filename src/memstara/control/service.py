@@ -5,18 +5,20 @@
 ==============================================================================
 
  What this file does
-   Five routes on 127.0.0.1:8072. Four of them answer questions; one starts
+   Six routes on 127.0.0.1:8072. Five of them answer questions; one starts
    `python -m memstara.pipeline.board` as a child process. That is the whole
    service — everything else here is about making sure the one dangerous route
    can only be reached from this machine, by the viewer, with a body that says
    exactly what a run takes.
 
- The five routes
+ The six routes
    GET  /control/health          the service is up, and which bundle it reads
    GET  /control/skills          the branches this bundle actually has, with a
                                  document count each. Generated, never listed
    POST /control/runs            start one run. Returns its tag immediately
    GET  /control/runs            what is running, and what recently finished
+   GET  /control/runs/{tag}/log  that run's console output, from a byte offset.
+                                 `{tag}` may be `latest`
    POST /control/runs/{tag}/stop SIGINT to that child
 
  Easy things to miss
@@ -54,7 +56,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from memstara.control.request import build_argv
 from memstara.env import load_env
@@ -89,6 +91,12 @@ _ALLOWED_ORIGINS = frozenset({
 #: How many finished runs `GET /control/runs` remembers. This is a convenience for the
 #: screen, not a record — the record is `outputs/runs/`.
 _KEEP = 10
+
+#: How much console output one log response may carry. A run's log reaches megabytes, and
+#: handing all of it to a browser that asked for everything since byte 0 would lock the
+#: tab up and tell nobody anything. Past this the answer starts near the end and says how
+#: much it stepped over, which is a fact the screen can show rather than a silent gap.
+_MAX_LOG = 64_000
 
 
 class _Runs:
@@ -129,6 +137,31 @@ class _Runs:
         with self._lock:
             self._reap()
             return list(self._done)
+
+    def locate(self, run_tag: str) -> tuple[str, Path] | None:
+        """The tag and directory of a run this service started, or None.
+
+        This lookup is the whole of the log route's safety. The tag arrives from a
+        browser and is **never joined onto a path**: it either matches a run this process
+        launched — in which case the directory is one this process chose itself — or
+        there is nothing to read. A tag containing `../` therefore fails by not matching,
+        not by being sanitised, which is the failure mode that cannot be got subtly wrong.
+
+        `latest` means the run going now, or the most recent one to finish. It saves the
+        screen from having to track a tag of its own just to ask "what is happening", and
+        the answer names the tag it actually read.
+        """
+        with self._lock:
+            self._reap()
+            if run_tag == "latest":
+                found = self._live or (self._done[0] if self._done else None)
+                return (found["run_tag"], Path(found["run_dir"])) if found else None
+            if self._live is not None and self._live["run_tag"] == run_tag:
+                return run_tag, Path(self._live["run_dir"])
+            for record in self._done:
+                if record["run_tag"] == run_tag:
+                    return run_tag, Path(record["run_dir"])
+        return None
 
     def start(self, argv: list[str], run_tag: str, run_dir: Path, skill: str) -> dict[str, Any]:
         """Launch one run, or raise `RuntimeError` naming the one already going.
@@ -212,6 +245,49 @@ def skills() -> list[dict[str, Any]]:
                 out.append({"skill": f"mechanism_family={mech},terminus_kind={kind}",
                             "label": f"{mech} × {kind}", "field": "both", "documents": n})
     return out
+
+
+def read_log(run_dir: Path, offset: int) -> dict[str, Any]:
+    """One run's console output from `offset` bytes in, capped at `_MAX_LOG`.
+
+    Which file, and why it matters. `board.py` tees its own output into
+    `<run_dir>/console.log`, but only once it has got far enough to set the tee up: an
+    argument it refuses and a missing prerequisite are both printed and gone before that.
+    `control.log` is this service's capture of the child's stdout and stderr from the
+    first byte, so it is the superset and it is what is read here. `console.log` is the
+    fallback, for a run directory written by a board somebody started by hand.
+
+    The caller sends back the `offset` it was last given, so a screen watching a live run
+    fetches only what has been written since — the log grows, the responses do not.
+
+    Two things the shape of this admits rather than hides. A slice can begin in the middle
+    of a multi-byte character, so decoding is `errors="replace"` and one glyph at a seam
+    may come through as U+FFFD. And when the log has outrun the cap, the answer jumps to
+    the end rather than truncating from the front, because what someone watching a run
+    wants is the part still being written; `skipped` says how many bytes went past.
+    """
+    path = run_dir / "control.log"
+    if not path.exists():
+        path = run_dir / "console.log"
+    if not path.exists():
+        # Not an error. Between `Popen` returning and the child's first flush there is a
+        # real moment where the run exists and its log does not.
+        return {"offset": 0, "size": 0, "skipped": 0, "text": ""}
+
+    size = path.stat().st_size
+    # A file that shrank was replaced under us; start again rather than seek past the end.
+    start = 0 if offset > size else offset
+    skipped = 0
+    if size - start > _MAX_LOG:
+        skipped = size - _MAX_LOG - start
+        start = size - _MAX_LOG
+
+    with path.open("rb") as handle:
+        handle.seek(start)
+        raw = handle.read(size - start)
+
+    return {"offset": size, "size": size, "skipped": skipped,
+            "text": raw.decode("utf-8", errors="replace")}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -302,6 +378,23 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"running": RUNS.running(), "finished": RUNS.finished()})
             return
 
+        if path.startswith("/control/runs/") and path.endswith("/log"):
+            found = RUNS.locate(path[len("/control/runs/"):-len("/log")])
+            if found is None:
+                # 404 rather than an empty log: "this service did not start that run" and
+                # "that run has printed nothing yet" are different answers, and a screen
+                # that cannot tell them apart shows a blank box for both.
+                self._send(404, {"error": "this service has no such run"})
+                return
+            run_tag, run_dir = found
+            query = parse_qs(urlsplit(self.path).query)
+            try:
+                offset = max(0, int(query.get("offset", ["0"])[0]))
+            except ValueError:
+                offset = 0
+            self._send(200, {"run_tag": run_tag, **read_log(run_dir, offset)})
+            return
+
         self._send(404, {"error": f"no route {path}", "routes": _ROUTES})
 
     def do_POST(self) -> None:     # noqa: N802 - the name http.server dispatches on
@@ -363,7 +456,7 @@ class Handler(BaseHTTPRequestHandler):
 
 _ROUTES = [
     "GET /control/health", "GET /control/skills", "POST /control/runs",
-    "GET /control/runs", "POST /control/runs/{tag}/stop",
+    "GET /control/runs", "GET /control/runs/{tag}/log", "POST /control/runs/{tag}/stop",
 ]
 
 
