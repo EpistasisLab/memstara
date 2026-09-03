@@ -116,6 +116,13 @@ from typing import Any
 
 import yaml         # the frontmatter is YAML
 
+# The `fields=` predicate lives in its own module so it can be tested. This file cannot
+# be imported on a CI runner — `yaml` above and `motoro` below are both absent there —
+# and `frontmatter.py` imports the standard library and nothing else. Placed here, with
+# the imports, rather than beside the two `noqa: E402` imports further down: it has no
+# ordering requirement, so it should not sit among the ones that do.
+from memstara.mcp_servers.frontmatter import matches, parse_field_filter, values_for
+
 #: The name of the tag PyYAML attaches when it decides "this is a date". Below,
 #: only the rules that attach this tag are picked out and removed.
 _TIMESTAMP_TAG = "tag:yaml.org,2002:timestamp"
@@ -636,7 +643,9 @@ def okf_list_domains() -> str:
 
 
 @mcp.tool()
-def okf_search(queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = "") -> str:
+def okf_search(
+    queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = "", fields: str = ""
+) -> str:
     """Search the bundle by what its authors said each document is about.
 
     Titles, tags, descriptions and journals are searched. **Bodies are not.** A hit
@@ -654,6 +663,14 @@ def okf_search(queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = 
         k: results per query. Default 8, raised to at most 20.
         domain: restrict to one domain slug; "" = all. See okf_list_domains.
         tags: comma-separated; keep only documents carrying ANY of these tags.
+        fields: front matter equalities, `key=value` separated by commas — e.g.
+            "terminus_kind=sud" or "mechanism_family=treatment-toxicity,terminus_kind=sud".
+            **ALL of them must hold**, which is what names one branch of the bundle.
+            Use this and not `tags` to ask for a branch: this bundle's `terminus_kind`
+            field says `psychiatric` on 212 documents and only 81 of them carry the
+            matching tag, so the same question asked through `tags` quietly shows a
+            third of the answer. Which keys exist is a property of the bundle, not of
+            this tool; okf_list_domains and okf_read show what a document carries.
 
     Returns:
         JSON with one entry per query: its hits as catalogue rows (id, title, domain,
@@ -678,7 +695,7 @@ def okf_search(queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = 
         # that this is not all of it.
         notes.append(f"k={k} was clamped to the ceiling {_MAX_K}.")
 
-    # Narrowing what gets searched — by domain, and by tags.
+    # Narrowing what gets searched — by domain, by tags, and by front matter field.
     pool = docs
     if domain:
         pool = [d for d in pool if d.domain == domain]
@@ -691,6 +708,30 @@ def okf_search(queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = 
     if keep_tags:
         # Kept when the intersection is not empty = ANY one tag in common passes (not AND).
         pool = [d for d in pool if keep_tags & {t.lower() for t in _tag_list(d.fields.get("tags"))}]
+
+    if fields:
+        try:
+            wanted_fields = parse_field_filter(fields)
+        except ValueError as e:
+            # A malformed filter is not an empty one. Narrowing to nothing and reporting
+            # zero hits would look exactly like a question the bundle cannot answer.
+            return json.dumps({"error": str(e)})
+        pool = [d for d in pool if matches(d.fields, wanted_fields)]
+        if not pool:
+            # Same distinction the `no domain` branch above draws, for the same reason:
+            # "nothing matched your words" and "no document is filed that way" call for
+            # different next moves, and an agent told only "0" cannot tell which it got.
+            # The values are taken from `docs` — the whole bundle — so a key really is
+            # reported as absent only when the bundle never uses it.
+            return json.dumps(
+                {
+                    "error": f"no document matches {fields!r}",
+                    "values": {
+                        key: values_for((d.fields for d in docs), key)
+                        for key in wanted_fields
+                    },
+                }
+            )
 
     idf = _idf(docs)  # weights come from the whole bundle, not the filtered slice
                       # Taken from the filtered slice instead, the same word would be
@@ -722,7 +763,7 @@ def okf_search(queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = 
         )
 
     # searched = how many documents were actually swept this time (the count after
-    # narrowing by domain and tags).
+    # narrowing by domain, tags and fields).
     out: dict[str, Any] = {"results": results, "searched": len(pool)}
     if notes:
         out["notes"] = notes
