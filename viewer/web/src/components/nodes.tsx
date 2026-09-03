@@ -1,23 +1,18 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { motion } from "framer-motion";
-import { Database, FileSpreadsheet, BookOpen, Cpu, ClipboardList } from "lucide-react";
+import { STAGE_ICON, STORE_ICON } from "../lib/icons";
 import { STAGE_COLOR, STATE_LABEL } from "../lib/stage";
 import type { SceneAgent, Place, StageId } from "../types";
 
 /** Custom React Flow nodes: the places agents reach, and the agents themselves. */
 
-const PLACE_ICON = {
-  okf: BookOpen,
-  board: ClipboardList,
-  results: FileSpreadsheet,
-  dataset: Database,
-  ml: Cpu,
-} as const;
-
 export function PlaceNode({ data }: NodeProps) {
   const place = data.place as Place;
   const count = data.count as number | undefined;
-  const Icon = PLACE_ICON[place.id as keyof typeof PLACE_ICON] ?? Database;
+  // From the shared vocabulary, and exhaustive over StoreId — the table this replaced
+  // had no `matcher` entry and fell through to the dataset's icon, drawing two different
+  // places with one picture.
+  const Icon = STORE_ICON[place.id];
 
   return (
     <div
@@ -52,6 +47,7 @@ export function AgentNode({ data }: NodeProps) {
   const color = STAGE_COLOR[agent.id as StageId];
   const busy = agent.state === "working";
   const unknown = agent.state === "unknown";
+  const Icon = STAGE_ICON[agent.id as StageId];
 
   return (
     <div className="flex w-32 flex-col items-center">
@@ -75,7 +71,10 @@ export function AgentNode({ data }: NodeProps) {
           animate={busy ? { y: [0, -3, 0] } : { y: 0 }}
           transition={busy ? { duration: 1.4, repeat: Infinity } : { duration: 0.3 }}
         >
-          {agent.label.slice(0, 2)}
+          {/* The stage's own pictogram, not two letters of its name. "In" and "Re" were
+              the interpreter and the report agent, which is a thing to be worked out
+              rather than seen. */}
+          <Icon className="h-6 w-6" strokeWidth={1.8} />
         </motion.div>
 
         {/* The card it is holding: claimed but not yet submitted. */}
