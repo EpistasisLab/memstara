@@ -85,7 +85,7 @@ def _pipeline_definitions() -> tuple[dict[str, set[str]], dict[str, set[str]], d
                             "read_questions", "read_results", "propose_questions"},
                 "hypothesis": {"okf_list_domains", "okf_search", "okf_read",
                                "describe_dataset", "match_concepts", "match_concept",
-                               "create_task"},
+                               "claim_question", "create_task"},
                 "data": {"describe_dataset", "slice_columns", "claim_task", "submit_result"},
                 "ml": {"train_and_score", "claim_task", "submit_result"},
                 "interpreter": {"claim_task", "submit_result"},
@@ -214,6 +214,9 @@ TOOL_STORE: dict[str, str] = {
     # STORE_LABEL on the web side.
     "read_questions": "board",
     "propose_questions": "board",
+    # The hypothesis stage's one claim against the bank — the same third store as the
+    # two above, drawn as the board for the same reason.
+    "claim_question": "board",
 }
 
 
