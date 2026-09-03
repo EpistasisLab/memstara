@@ -1,5 +1,5 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { Activity, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Activity, Compass, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "../lib/cn";
 import { VIEWS, VIEW_ORDER } from "../lib/views";
 import { useControl } from "../store/control";
@@ -69,6 +69,8 @@ export default function ControlPanel() {
   const ticks = useViewer((s) => s.ticks);
   const collapsed = useViewer((s) => s.railCollapsed);
   const toggleRail = useViewer((s) => s.toggleRail);
+  const navOpen = useViewer((s) => s.navOpen);
+  const toggleNav = useViewer((s) => s.toggleNav);
   const health = useHealth();
   const controlUp = useControl((s) => s.up);
 
@@ -185,6 +187,28 @@ export default function ControlPanel() {
               <div key={id}>{button}</div>
             );
           })}
+
+          {/* Not a view. The navigator is a column of its own that stays beside whichever
+              view is showing, so it toggles rather than selects — putting it in the list
+              above would make it look like a seventh thing that replaces the others. */}
+          <button
+            type="button"
+            onClick={toggleNav}
+            aria-pressed={navOpen}
+            title="Show or hide the run navigator"
+            className={cn(
+              "mt-1 flex w-full items-center gap-2 rounded-md border border-paper-line px-2",
+              "py-1.5 text-sm transition",
+              collapsed && "lg:justify-center",
+              navOpen ? "text-ink" : "text-ink-faint hover:text-ink",
+            )}
+          >
+            <Compass className="h-4 w-4 shrink-0" />
+            <span className={cn("truncate", wide)}>Navigator</span>
+            <span className={cn("ml-auto shrink-0 text-[11px] text-ink-faint", wide)}>
+              {navOpen ? "on" : "off"}
+            </span>
+          </button>
         </nav>
       </div>
 

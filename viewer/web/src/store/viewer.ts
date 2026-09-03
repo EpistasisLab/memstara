@@ -39,9 +39,15 @@ interface ViewerState {
   fetchedAt: number | null;
   /** Collapses the control panel to an icon rail. */
   railCollapsed: boolean;
+  /** Whether the run navigator has a column of its own. On by default: it is the only
+   *  place the run's shape — trials, and the stages inside them — is drawn, and a panel
+   *  nobody knows to switch on may as well not exist. It is closable because three
+   *  columns plus the main area is a lot of width to spend on a laptop. */
+  navOpen: boolean;
 
   setView: (v: ViewId) => void;
   toggleRail: () => void;
+  toggleNav: () => void;
   setRunTag: (t: string | null) => void;
   selectTask: (id: number | null) => void;
   selectAgent: (id: string | null) => void;
@@ -66,9 +72,11 @@ export const useViewer = create<ViewerState>((set, get) => ({
   ticks: 0,
   fetchedAt: null,
   railCollapsed: false,
+  navOpen: true,
 
   setView: (view) => set({ view }),
   toggleRail: () => set((s) => ({ railCollapsed: !s.railCollapsed })),
+  toggleNav: () => set((s) => ({ navOpen: !s.navOpen })),
   setRunTag: (runTag) => {
     set({ runTag, loading: true, selectedTask: null });
     void get().fetchOnce();
