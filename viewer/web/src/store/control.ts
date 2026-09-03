@@ -42,11 +42,24 @@ export interface RunRequest {
   model: string;
 }
 
+/** `y_column` is the cohort's real outcome column, not `board.py:1810`'s CLI default.
+ *
+ *  That default is the string `outcome`, which is a placeholder rather than a column: the
+ *  dataset's 1394 headers are the matcher catalogue's 1393 features plus `HIV_DETECTABLE`,
+ *  and nothing is called `outcome`. On the command line the placeholder is defensible —
+ *  `check_environment` (`src/memstara/pipeline/board.py:390-410`) refuses the run and names
+ *  the file, which forces the choice to be made explicitly. Copied into a form's initial
+ *  value it is not: pressing Start with the field untouched failed every time with
+ *  "--y-column 'outcome' is not a column in the dataset".
+ *
+ *  This is the one place it is legitimate to name that column. It is the target, and it is
+ *  never a feature — the catalogue the data stage picks columns from does not contain it,
+ *  which is what keeps it out of every agent's reach. */
 export const DEFAULT_REQUEST: RunRequest = {
   skill: "",
   trials: 3,
   waves: 1,
-  y_column: "outcome",
+  y_column: "HIV_DETECTABLE",
   provider: "azure_foundry",
   model: "claude-sonnet-4-6",
 };
