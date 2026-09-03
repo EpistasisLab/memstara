@@ -49,7 +49,9 @@ doing.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -58,6 +60,13 @@ import asyncpg
 import queries
 import stores
 from db import pools
+
+#: Seconds a computed snapshot may be reused. Every open tab asks for the same object at
+#: the same cadence, so without this each one pays for its own copy of the same work.
+SNAPSHOT_TTL = 1.5
+
+_snapshot_cache: dict[str | None, tuple[float, dict[str, Any]]] = {}
+_snapshot_locks: dict[str | None, asyncio.Lock] = {}
 
 # How long a tool call keeps lighting up its line. Long enough to notice at a 2s poll,
 # short enough that the scene does not look permanently busy. The value goes straight
@@ -438,7 +447,31 @@ async def snapshot(run_tag: str | None) -> dict[str, Any]:
     The reason there is one endpoint is not performance but **consistency.** Fetch
     separately per screen and one screen can be showing the state before an update
     while another shows the state after it.
+
+    **Why this is cached and single-flighted.** `_core_facts` runs seven queries that all
+    begin with `queries.FLAT_CALLS`, and that CTE reads the whole of `run_steps` with no
+    bound on run or time — measured at 2.7s against a poll interval of 2s. Slower than
+    the interval means each tick starts before the last has finished, so copies pile up:
+    the core DB was seen at 208% CPU running several of the same query at once, which
+    made it slower still, until the connection pool drained and requests stopped
+    returning at all. The lock collapses concurrent callers onto one computation and the
+    TTL keeps a second tab from doubling the work. Neither changes a displayed value —
+    the screen already shows data up to one poll old.
+
+    The **real** fix is to bound that CTE. This keeps the screen alive until then.
     """
+    lock = _snapshot_locks.setdefault(run_tag, asyncio.Lock())
+    async with lock:
+        hit = _snapshot_cache.get(run_tag)
+        if hit is not None and (time.monotonic() - hit[0]) < SNAPSHOT_TTL:
+            return hit[1]
+        fresh = await _snapshot_uncached(run_tag)
+        _snapshot_cache[run_tag] = (time.monotonic(), fresh)
+        return fresh
+
+
+async def _snapshot_uncached(run_tag: str | None) -> dict[str, Any]:
+    """The real work. Call `snapshot` instead — it is the one that bounds the load."""
     runs = await list_runs()
     tag = run_tag or (runs[0]["run_tag"] if runs else "")
 
