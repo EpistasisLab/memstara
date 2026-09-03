@@ -1,15 +1,15 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import {
   Background,
   BackgroundVariant,
   MarkerType,
   ReactFlow,
-  useReactFlow,
   type Edge,
   type Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Workflow } from "lucide-react";
+import FitOnResize from "../components/FitOnResize";
 import Panel from "../components/Panel";
 import { chainEdgeTypes, chainNodeTypes } from "../components/chain";
 import { CHAIN, chainAgents, elapsedSince, linkIsLive } from "../lib/chain";
@@ -42,20 +42,6 @@ import type { StageId } from "../types";
 /** Card width plus the gap. Nothing else depends on it — `fitView` scales the row to
  *  whatever the panel is, so this only sets how the cards sit relative to each other. */
 const STEP_X = 232;
-
-/** `fitView` fits once, at mount. The panel is inside a responsive grid that restacks at
- *  `lg`, so without this the row keeps the width it had when it first drew. */
-function FitOnResize() {
-  const { fitView } = useReactFlow();
-
-  useEffect(() => {
-    const refit = () => void fitView({ padding: 0.08, duration: 0 });
-    window.addEventListener("resize", refit);
-    return () => window.removeEventListener("resize", refit);
-  }, [fitView]);
-
-  return null;
-}
 
 export default function ChainPanel() {
   const scene = useScene();
