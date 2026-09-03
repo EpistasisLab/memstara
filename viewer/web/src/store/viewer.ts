@@ -60,6 +60,12 @@ let timer: ReturnType<typeof setInterval> | null = null;
 let visibilityBound = false;
 /** Guards against overlapping requests when a tick is slower than the interval. */
 let inFlight = false;
+/** Set when the store is knowingly holding data for the wrong run, so the fetch that is
+ *  open right now re-runs the moment it finishes instead of waiting out the interval.
+ *  Deliberately *not* set by an ordinary dropped tick: under load a snapshot can take
+ *  several times POLL_MS, and re-firing for every tick it swallowed would turn a busy
+ *  database into a continuously polled one. Only a run switch sets it. */
+let refetchWanted = false;
 
 export const useViewer = create<ViewerState>((set, get) => ({
   snapshot: null,
@@ -79,6 +85,11 @@ export const useViewer = create<ViewerState>((set, get) => ({
   toggleNav: () => set((s) => ({ navOpen: !s.navOpen })),
   setRunTag: (runTag) => {
     set({ runTag, loading: true, selectedTask: null });
+    // A user action, so it must actually happen. If a request for the run being left is
+    // still open, the call below is swallowed by `inFlight` and the new run would not be
+    // asked for until the next tick — up to POLL_MS of the old run's board, results and
+    // feed sitting under the new run's label.
+    refetchWanted = true;
     void get().fetchOnce();
   },
   selectTask: (selectedTask) => set({ selectedTask, view: selectedTask ? "task" : get().view }),
@@ -87,12 +98,27 @@ export const useViewer = create<ViewerState>((set, get) => ({
   fetchOnce: async () => {
     if (inFlight) return;
     inFlight = true;
+    // Cleared here rather than after the request: a switch that arrives *during* this
+    // fetch must still be honoured when it finishes.
+    refetchWanted = false;
+    // The run this request is for. `runTag` can change while it is open — that is exactly
+    // what clicking the run selector does — and the response carries nothing that says
+    // which of the two it answered, so the question has to be asked before sending.
+    const askedFor = get().runTag;
     try {
-      const { runTag } = get();
-      const url = runTag ? `/api/snapshot?run_tag=${encodeURIComponent(runTag)}` : "/api/snapshot";
+      const url = askedFor
+        ? `/api/snapshot?run_tag=${encodeURIComponent(askedFor)}`
+        : "/api/snapshot";
       const res = await fetch(url);
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       const snapshot: Snapshot = await res.json();
+      // Left this run while its answer was in the air. Applying it would draw one run's
+      // board, results and feed under another run's label, which reads as a wrong run
+      // rather than as a late one.
+      if (get().runTag !== askedFor) {
+        refetchWanted = true;
+        return;
+      }
       set((s) => ({
         snapshot,
         loading: false,
@@ -100,13 +126,24 @@ export const useViewer = create<ViewerState>((set, get) => ({
         ticks: s.ticks + 1,
         fetchedAt: Date.now(),
         // Adopt whichever run the API settled on, so the selector shows the truth
-        // rather than staying null forever.
+        // rather than staying null forever. `s.runTag` is `askedFor` by the check
+        // above, so this only ever fires on the very first response.
         runTag: s.runTag ?? snapshot.run_tag,
       }));
     } catch (e) {
+      // A failure belonging to a run nobody is looking at any more is not worth putting
+      // a badge on the screen for; the retry below will produce a current one if the
+      // API really is down.
+      if (get().runTag !== askedFor) {
+        refetchWanted = true;
+        return;
+      }
       set({ error: e instanceof Error ? e.message : String(e), loading: false });
     } finally {
       inFlight = false;
+      // Terminates: the recursive call clears the flag before doing anything, and only a
+      // user switching runs can set it again.
+      if (refetchWanted) void get().fetchOnce();
     }
   },
 
