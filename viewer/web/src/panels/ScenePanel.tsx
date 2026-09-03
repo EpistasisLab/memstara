@@ -17,7 +17,10 @@ import { useBoard, useScene, useViewer } from "../store/viewer";
 import type { StageId } from "../types";
 
 /**
- * The agent-state panel: every agent and every store at once, as a floor plan.
+ * The floor plan: every agent and every store at once, laid out by place.
+ *
+ * The second of the two agent-state views, and it answers the second question — who is
+ * touching what. `ChainPanel` leads with how far along the run is.
  *
  * Places and characters are nodes; a tool call is an animated edge from the character to
  * the store it touched. React Flow gives pan, zoom, a minimap and clean edge routing for
@@ -26,8 +29,9 @@ import type { StageId } from "../types";
  * Positions come from the API (`stores.PLACES` / `stores.HOME`), so the layout stays in
  * one place and a character cannot end up somewhere its place no longer is.
  *
- * This is the only panel that swaps out: the control panel's nav replaces it with one of
- * the `tabs/*` views in the same slot. `FeedPanel` and `ResultsPanel` stay put.
+ * This panel shares one slot with `ChainPanel` and the `tabs/*` views: the control panel's
+ * nav decides which of them the top-right region holds. `FeedPanel` and `ResultsPanel`
+ * stay put.
  */
 
 export default function ScenePanel() {
@@ -113,7 +117,7 @@ export default function ScenePanel() {
   return (
     <Panel
       icon={Map}
-      title="Agent state"
+      title="Floor plan"
       count={scene?.agents.length}
       status={scene ? <span>{working} working</span> : undefined}
       // React Flow measures its own container and draws its own scrollbars; the panel's

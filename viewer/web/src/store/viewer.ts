@@ -19,7 +19,7 @@ export const POLL_MS = 2000;
 
 /** What the main area shows. Results is not here on purpose: ResultsPanel is always on
  *  screen at bottom-right, so a nav entry for it would be a second door to one room. */
-export type ViewId = "scene" | "board" | "task" | "agents" | "access";
+export type ViewId = "chain" | "scene" | "board" | "task" | "agents" | "access";
 
 interface ViewerState {
   snapshot: Snapshot | null;
@@ -33,6 +33,10 @@ interface ViewerState {
   selectedAgent: string | null;
   /** Counts responses, so a stuck poller is visible rather than silently frozen. */
   ticks: number;
+  /** `Date.now()` at the last successful response — the browser's clock at both ends, so
+   *  "how stale is this screen" stays answerable when the API container's clock disagrees
+   *  with this machine's. Null until the first response. */
+  fetchedAt: number | null;
   /** Collapses the control panel to an icon rail. */
   railCollapsed: boolean;
 
@@ -56,10 +60,11 @@ export const useViewer = create<ViewerState>((set, get) => ({
   loading: true,
   error: null,
   runTag: null,
-  view: "scene",
+  view: "chain",
   selectedTask: null,
   selectedAgent: null,
   ticks: 0,
+  fetchedAt: null,
   railCollapsed: false,
 
   setView: (view) => set({ view }),
@@ -85,6 +90,7 @@ export const useViewer = create<ViewerState>((set, get) => ({
         loading: false,
         error: null,
         ticks: s.ticks + 1,
+        fetchedAt: Date.now(),
         // Adopt whichever run the API settled on, so the selector shows the truth
         // rather than staying null forever.
         runTag: s.runTag ?? snapshot.run_tag,

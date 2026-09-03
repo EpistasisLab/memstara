@@ -7,6 +7,7 @@ import FeedPanel from "./panels/FeedPanel";
 import ResultsPanel from "./panels/ResultsPanel";
 import ScenePanel from "./panels/ScenePanel";
 import { useViewer, type ViewId } from "./store/viewer";
+import ChainPanel from "./panels/ChainPanel";
 import AccessTab from "./tabs/AccessTab";
 import AgentsTab from "./tabs/AgentsTab";
 import BoardTab from "./tabs/BoardTab";
@@ -19,7 +20,7 @@ import TaskTab from "./tabs/TaskTab";
  * top-right, and the feed and results side by side beneath it.
  *
  *   ┌──────────────┬──────────────────────────────────────────┐
- *   │              │   ScenePanel        (agent state)        │
+ *   │              │   ChainPanel        (agent state)        │
  *   │ ControlPanel │                                          │
  *   │   (left)     ├──────────────────┬───────────────────────┤
  *   │              │   FeedPanel      │   ResultsPanel        │
@@ -33,9 +34,10 @@ import TaskTab from "./tabs/TaskTab";
  * pass down.
  */
 
-/** The views that borrow the top-right slot. `scene` is absent because `ScenePanel`
- *  brings its own chrome; the rest are bodies that this file frames. */
-const SECONDARY: Record<Exclude<ViewId, "scene">, ComponentType> = {
+/** The views that borrow the top-right slot. `chain` and `scene` are absent because both
+ *  own a React Flow canvas and bring their own chrome with it; the rest are bodies that
+ *  this file frames. */
+const SECONDARY: Record<Exclude<ViewId, "chain" | "scene">, ComponentType> = {
   board: BoardTab,
   task: TaskTab,
   agents: AgentsTab,
@@ -46,6 +48,7 @@ function TopRegion() {
   const view = useViewer((s) => s.view);
   const snapshot = useViewer((s) => s.snapshot);
 
+  if (view === "chain") return <ChainPanel />;
   if (view === "scene") return <ScenePanel />;
 
   const meta = VIEWS[view];
