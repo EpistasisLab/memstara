@@ -48,6 +48,11 @@ export default function ChainPanel() {
   const fetchedAt = useViewer((s) => s.fetchedAt);
   const setView = useViewer((s) => s.setView);
   const selectAgent = useViewer((s) => s.selectAgent);
+  // Read separately so an empty canvas can say *which* of the three reasons it is empty
+  // for. The store has carried `error` since it was written (`store/viewer.ts:106-107`);
+  // no panel had ever read it, so every failure reached the reader as "Loading".
+  const error = useViewer((s) => s.error);
+  const loading = useViewer((s) => s.loading);
 
   const agents = useMemo(() => chainAgents(scene?.agents ?? []), [scene]);
 
@@ -116,8 +121,19 @@ export default function ChainPanel() {
       }
       bodyClassName="overflow-hidden"
     >
-      {!scene ? (
+      {error ? (
+        <div className="p-8 text-amber-700">The API did not answer: {error}</div>
+      ) : loading ? (
         <div className="p-8 text-ink-faint">Loading the pipeline…</div>
+      ) : !scene ? (
+        // `snapshot()` always puts a `scene` in a 200 response (`viewer/api/scene.py:463-474`,
+        // and `_build_scene` returns a dict on every path including core-down). So a
+        // successful fetch with no scene means the answer did not come from this code —
+        // in practice a container older than the source.
+        <div className="p-8 text-amber-700">
+          The API answered without a scene — the running container is probably older than
+          the code.
+        </div>
       ) : agents.length < CHAIN.length ? (
         // Not padded with placeholders: a stage the API did not send is a definitions
         // problem, and inventing a grey card for it would hide exactly that.
