@@ -1,6 +1,7 @@
 import { createColumnHelper } from "@tanstack/react-table";
 import { AlertTriangle, Coins, Repeat } from "lucide-react";
 import DataTable from "../components/DataTable";
+import EmptyState from "../components/EmptyState";
 import { STAGE_COLOR } from "../lib/stage";
 import { useAgentTotals, useHealth, useScene, useViewer } from "../store/viewer";
 import type { AgentTotals, StageId } from "../types";
@@ -66,7 +67,7 @@ export default function AgentsTab() {
         <p className="mt-2 font-mono text-xs text-amber-900/60">{health.core.error}</p>
       </div>
     );
-  if (!totals) return <div className="p-8 text-ink-faint">Loading…</div>;
+  if (!totals) return <EmptyState what="the agent totals" />;
 
   const cost = totals.reduce((n, a) => n + a.cost, 0);
   const runs = totals.reduce((n, a) => n + a.runs, 0);

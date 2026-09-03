@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { RotateCcw, AlertCircle } from "lucide-react";
+import EmptyState from "../components/EmptyState";
 import { useBoard, useViewer } from "../store/viewer";
 import { STAGE_COLOR } from "../lib/stage";
 import type { Task } from "../types";
@@ -76,7 +77,7 @@ function Card({ task }: { task: Task }) {
 
 export default function BoardTab() {
   const board = useBoard();
-  if (!board) return <div className="p-8 text-ink-faint">Loading…</div>;
+  if (!board) return <EmptyState what="the board" />;
 
   return (
     <div className="grid grid-cols-3 gap-4 p-6">

@@ -10,6 +10,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Map } from "lucide-react";
+import EmptyState from "../components/EmptyState";
 import Panel from "../components/Panel";
 import { nodeTypes } from "../components/nodes";
 import { STAGE_COLOR } from "../lib/stage";
@@ -125,7 +126,7 @@ export default function ScenePanel() {
       bodyClassName="overflow-hidden"
     >
       {!scene ? (
-        <div className="p-8 text-ink-faint">Loading the scene…</div>
+        <EmptyState what="the floor plan" />
       ) : (
         <div className="h-full w-full">
           <ReactFlow

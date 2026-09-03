@@ -3,6 +3,7 @@ import { CircleSlash, ArrowRight } from "lucide-react";
 import { useMemo } from "react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import DataTable from "../components/DataTable";
+import EmptyState from "../components/EmptyState";
 import { STAGE_COLOR, STORE_LABEL } from "../lib/stage";
 import { useAccess } from "../store/viewer";
 import type { AccessRow, StageId } from "../types";
@@ -48,7 +49,7 @@ export default function AccessTab() {
       .sort((a, b) => b.calls - a.calls);
   }, [access]);
 
-  if (!access) return <div className="p-8 text-ink-faint">Loading…</div>;
+  if (!access) return <EmptyState what="the access map" />;
 
   const board = access.rows.filter((r) => r.path === "board");
   const supervisor = access.rows.filter((r) => r.path === "supervisor");

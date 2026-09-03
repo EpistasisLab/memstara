@@ -1,5 +1,6 @@
 import { BarChart3 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import EmptyState from "../components/EmptyState";
 import Panel from "../components/Panel";
 import { useBoard, useResults } from "../store/viewer";
 
@@ -22,7 +23,7 @@ export default function ResultsPanel() {
   return (
     <Panel id="results-panel" icon={BarChart3} title="Results" count={results?.length}>
       {!results ? (
-        <div className="p-8 text-ink-faint">Loading…</div>
+        <EmptyState what="the results" />
       ) : results.length === 0 ? (
         <div className="p-8 text-ink-faint">No finished results yet.</div>
       ) : (

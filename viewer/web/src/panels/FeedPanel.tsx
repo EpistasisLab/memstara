@@ -1,4 +1,5 @@
 import { Radio } from "lucide-react";
+import EmptyState from "../components/EmptyState";
 import Panel from "../components/Panel";
 import { STAGE_COLOR, STORE_LABEL } from "../lib/stage";
 import { useFeed } from "../store/viewer";
@@ -80,7 +81,7 @@ export default function FeedPanel() {
       bodyClassName="p-0"
     >
       {!feed ? (
-        <div className="p-8 text-ink-faint">Loading…</div>
+        <EmptyState what="the feed" />
       ) : feed.length === 0 ? (
         <div className="p-8 text-ink-faint">No tool calls recorded yet.</div>
       ) : (

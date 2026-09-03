@@ -9,6 +9,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { AlertTriangle, Workflow } from "lucide-react";
+import EmptyState from "../components/EmptyState";
 import FitOnResize from "../components/FitOnResize";
 import Panel from "../components/Panel";
 import { chainEdgeTypes, chainNodeTypes } from "../components/chain";
@@ -48,19 +49,14 @@ export default function ChainPanel() {
   const fetchedAt = useViewer((s) => s.fetchedAt);
   const setView = useViewer((s) => s.setView);
   const selectAgent = useViewer((s) => s.selectAgent);
-  // Read separately so an empty canvas can say *which* of the three reasons it is empty
-  // for. The store has carried `error` since it was written (`store/viewer.ts:106-107`);
-  // no panel had ever read it, so every failure reached the reader as "Loading".
+  // Read for the *badge* only. What an empty canvas says is `EmptyState`'s job now.
   //
-  // Neither of them may pre-empt a scene we already have. The store keeps the last good
-  // snapshot through a failure on purpose (it sets `error` beside it, not instead of
-  // it), and a panel that reads `error` first throws that away: one dropped poll — which
-  // at p90 1.09s against a 2s interval is a routine event, not an outage — wiped a
-  // correctly drawn pipeline and put a sentence in its place for a tick. So these two
-  // decide the *header badge* whenever there is a scene, and the body only when there
-  // has never been one.
+  // It may not pre-empt a scene we already have. The store keeps the last good snapshot
+  // through a failure on purpose (it sets `error` beside it, not instead of it), and a
+  // panel that reads `error` first throws that away: one dropped poll — which at p90
+  // 1.09s against a 2s interval is a routine event, not an outage — wiped a correctly
+  // drawn pipeline and put a sentence in its place for a tick.
   const error = useViewer((s) => s.error);
-  const loading = useViewer((s) => s.loading);
   // A 200 the API filled from its own previous answer because it gave up waiting for a
   // fresh one. It is not an error — nothing failed — but the picture is older than the
   // response, so it earns the same badge for the same reason.
@@ -149,24 +145,11 @@ export default function ChainPanel() {
       }
       bodyClassName="overflow-hidden"
     >
-      {/* These three only ever run before the first successful response. After that
-          there is a scene, and a scene is drawn whatever else is going on — an old
-          picture with a badge saying so beats a blank one. */}
+      {/* Only ever reached before the first successful response. After that there is a
+          scene, and a scene is drawn whatever else is going on — an old picture with a
+          badge saying so beats a blank one. */}
       {!scene ? (
-        error ? (
-          <div className="p-8 text-amber-700">The API did not answer: {error}</div>
-        ) : loading ? (
-          <div className="p-8 text-ink-faint">Loading the pipeline…</div>
-        ) : (
-          // `snapshot()` always puts a `scene` in a 200 response (`viewer/api/scene.py:453-481`,
-          // and `_build_scene` returns a dict on every path including core-down). So a
-          // successful fetch with no scene means the answer did not come from this code —
-          // in practice a container older than the source.
-          <div className="p-8 text-amber-700">
-            The API answered without a scene — the running container is probably older than
-            the code.
-          </div>
-        )
+        <EmptyState what="the pipeline" />
       ) : agents.length < CHAIN.length ? (
         // Not padded with placeholders: a stage the API did not send is a definitions
         // problem, and inventing a grey card for it would hide exactly that.

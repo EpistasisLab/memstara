@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Compass } from "lucide-react";
+import EmptyState from "../components/EmptyState";
 import Panel from "../components/Panel";
 import { cn } from "../lib/cn";
 import { STAGE_ICON } from "../lib/icons";
@@ -202,7 +203,7 @@ export default function NavigatorPanel() {
       bodyClassName="p-0"
     >
       {!board ? (
-        <div className="p-6 text-xs text-ink-faint">Loading the run…</div>
+        <EmptyState what="the run" className="p-6 text-xs" />
       ) : tasks.length === 0 ? (
         <div className="p-6 text-xs text-ink-faint">
           <p className="font-bold text-ink">This run has no board rows yet.</p>
