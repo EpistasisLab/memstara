@@ -1,290 +1,178 @@
-# Memstara — a personal experiment space
+# Memstara
 
-> **The name changed.** `EcoXAI` was a working title; a team decision on 2026-08-18
-> made **Memstara** the official one. Code, documents, databases, Docker and the
+A multi-agent pipeline that reads a literature corpus, proposes which features should
+predict a clinical outcome, tests that proposal against a patient cohort, and writes up
+what held. The agents coordinate through a shared board in Postgres, and every capability
+they have is an MCP tool server — an agent can do exactly what it has been handed a tool
+for, and nothing else.
 
-> were left alone** — rewriting a dated entry to say what we know now would stop it being
-> a record. Their *filenames* took a `_KR` suffix on 2026-09-02; no word inside moved.
+**`memstara` is a working title, not the name.** The folder on disk and the
+repository on GitHub still carry it, which is why every path and link below reads that
+way — the project is Memstara.
 
-Where the experiment scripts and requirements live for the work that **uses `motoro`
-as a library**. **`memstara` is a working title, not the name.** The folder
-on disk and the repository on GitHub still carry it, which is why every path and link
-below reads that way — the project is **Memstara**.
+It builds on **`motoro`** as a library: motoro supplies the agent runtime, the MCP client
+and persistence. Everything under `src/memstara/` is this project.
 
-## What this folder is — a private repository, and a folder that is not backed up
+## Quick start
+
+```bash
+conda activate memstara
+python -m memstara.pipeline.hello --input "What is 17 times 23?"   # does the environment work
+python -m memstara.prep.sample                                     # synthetic cohort + corpus
+python -m memstara.pipeline.board --trials 3                       # a real run, 3 hypotheses
+```
+
+`hello` needs only a provider key. The other two need the environment in **Setup** below.
+
+## Architecture
+
+Two entry points run the same five stages. They differ in **who decides what happens
+next**, and that is the only difference worth knowing:
 
 ```
-EcoXAI_Projects/              ← not a git repository
-├── motoro/                   ← a git repository (upstream + my private fork)
-└── memstara/     ← here. Its own git repository since 2026-08-30
+  board.py  — agents coordinate through the board; the driver only turns the handle
+  mvp.py    — a supervisor calls each stage in turn
+
+  corpus (OKF)                       cohort CSV
+      │                                   │
+      ▼                                   ▼
+  ┌─────────┐   question   ┌────────────┐   task   ┌──────┐   sub-CSV   ┌────┐
+  │ curator │ ───────────▶ │ hypothesis │ ───────▶ │ data │ ──────────▶ │ ml │
+  └─────────┘              └────────────┘          └──────┘             └────┘
+       ▲                          │                                        │
+       │      results of the      │  ┌───────────────┐    AUC + importance │
+       └──── previous wave ───────┘  │  interpreter  │ ◀────────────────────┘
+                                     └───────────────┘
+                                             │
+                                             ▼   once, at the end
+                                        ┌────────┐
+                                        │ report │
+                                        └────────┘
 ```
 
-**This folder is a git repository of its own**, created 2026-08-30 and **private**,
-at `HyunjunA/memstara`. `EcoXAI_Projects/` above it is not a repository,
-so the sandbox is still outside `motoro`'s history and cannot be committed into it by
-accident. That much is structural.
+**The board is the coordination.** A stage claims a row, works, and writes a result back;
+nothing is passed from agent to agent directly. This is what makes a run resumable, lets
+more than one worker of a stage run at once, and leaves a record that can be replayed
+afterwards with `python -m memstara.trace.board`.
 
-**What must not be committed is no longer structural — it is a matter of care.**
-`.gitignore` is the whole of the protection, and it draws three lines:
+**A wave is one turn of that loop.** With `--waves 2` or more, the curator reads the
+previous wave's results before writing the next round of questions — that feedback path
+is the reason `read_results` sits with the curator and not with the hypothesis stage.
 
-| Never tracked | Why |
-|---|---|
-| `.env`, `*.pem`, `*.key` | Credentials. `.env.example` is the tracked template. |
-| `outputs/*` | The cohort CSV, every sub-CSV cut from it, the matcher's catalogue of all 1,394 column names, and one folder per run. **Patient data and everything derived from it.** All of it is regenerable. |
-| `kg/**/*.db`, `kg/**/*.cypherl` | A gigabyte of knowledge-graph exports, published elsewhere. The scripts are tracked; the payloads are not. |
+## The agents
 
-Before it was a repository, it originally sat in `motoro/sandbox/` behind two layers of
-ignore rules (`.gitignore`, `.git/info/exclude`). That was only ever safe while the
-rules stayed correct, and `.git/info/exclude` does not travel with a clone, so the
-protection vanished on any other machine. Moving out removed that dependency, and
-**the library repository was restored to exactly upstream's state.**
+Six agents on the board pipeline. Each one's system prompt is a file, so changing what an
+agent does does not mean touching `core.py`.
 
-This folder holds meeting records and photographs. Do not move it back inside the
-library repository.
+| Agent | What it decides | Tools | Prompt |
+|---|---|---|---|
+| `curator` | **what gets asked** — writes the run's questions from the corpus | 6 | `prompts/board/curator.md` |
+| `hypothesis` | which columns should predict the outcome, and puts the work on the board | 8 | `prompts/board/hypothesis.md` |
+| `data` | cuts the requested columns into a sub-dataset | 4 | `prompts/board/data.md` |
+| `ml` | trains on that sub-dataset, records AUC and feature importance | 3 | `prompts/board/ml.md` |
+| `interpreter` | whether the hypothesis held | 2 | `prompts/board/interpreter.md` |
+| `report` | the account of the whole run, once, after everything else | 3 | `prompts/board/report.md` |
 
-**Where it should live, and who should be able to see it, is not settled** — that is
-the first open item, `V-01` (issue
-[#1](https://github.com/HyunjunA/memstara/issues/1)).
+The allocation is `BOARD_TOOLS` in `src/memstara/pipeline/core.py`, and it is the
+ground truth — the table above is a reading of it, not a second copy to keep in step:
+
+```
+curator      okf_list_domains  okf_search  okf_read  read_questions  read_results  propose_questions
+hypothesis   okf_list_domains  okf_search  okf_read  describe_dataset  match_concepts  match_concept
+             claim_question  create_task
+data         describe_dataset  slice_columns  claim_task  submit_result
+ml           train_and_score  claim_task  submit_result
+interpreter  claim_task  submit_result
+report       read_results  okf_search  okf_read
+```
+
+Three things in that list are deliberate and easy to undo by accident:
+
+- **Only `hypothesis` can `create_task`.** Every other stage takes work rather than making
+  it. That is what lets a result be traced back to whose judgement produced it.
+- **`read_results` is the curator's, not the hypothesis stage's.** It is the whole
+  feedback path between waves. Moving it leaves the hypothesis stage able to pick its own
+  next question, which is the contract it is supposed to keep: one question in, one
+  hypothesis out.
+- **`interpreter` has two tools.** It is meant to reason over what it is handed, not go
+  looking for more.
+
+`mvp.py` runs four of these — `hypothesis`, `data`, `ml`, `interpreter` — under a
+supervisor, with prompts in `prompts/mvp/`. There is no curator and no board.
+
+
+rule file that loads when you do; the short version is that a prompt is an experimental
+condition, so changing one and changing the code are two different commits.
+
+## The tool servers
+
+Five servers, each its own child process, launched with `sys.executable`. They are named
+once in `src/memstara/servers.py` and nowhere else.
+
+| Server | Module | What it exposes |
+|---|---|---|
+| `okf` | `mcp_servers/okf.py` | knowledge lookup over the OKF bundle |
+| `memstara-data` | `mcp_servers/data.py` | the cohort CSV — describe it, slice columns out of it |
+| `memstara-ml` | `mcp_servers/ml.py` | train a model on a subset and score it |
+| `memstara-blackboard` | `mcp_servers/blackboard.py` | the shared work board the agents read and write |
+| `semantic-matcher` | `mcp_servers/matcher.py` | OKF concept name → cohort column name |
+
+Filtering happens in two layers: `BOARD_SERVERS` decides which servers a stage may reach
+at all, then `BOARD_TOOLS` narrows again by tool name inside them.
+
+**A traceback inside a server does not reach the console you are watching.** Read
+
+
+`semantic-matcher` needs its cache built once: `python scripts/build_matcher_cache.py`.
 
 ## Layout
 
-**One package, `src/memstara/`, and no Python at the top level.** This matches
-`EpistasisLab/ASAREE` and `EpistasisLab/motoro`, and it is what `pyproject.toml`
-installs. Every module is reached by its import path, and every entry point is run
-with `-m`:
-
-    python -m memstara.pipeline.board --trials 3 --y-column HIV_DETECTABLE
-
-Running a file by its path instead would skip `src/memstara/__init__.py`, and that is
-where `LITELLM_LOG` is set before litellm can read it. `-m` is not a matter of taste
-here.
-
-Until 2026-09-01 the code was flat, on the stated grounds that scripts read their
-configuration from the same directory with `from settings import Settings`. That was
-never the real constraint — six sites did it, and `Settings`' `env_file=".env"`
-resolves against the working directory, not the module — while the flat layout did
-cost something: `tests/` resolved its imports only when pytest happened to be started
-
-
-
-**Documents do not sit at the top level.** `README.md` is the only one; everything
-else goes into the folder that matches what it is — with eight documents lying flat
-at the top, a reader has to decide where to start every single time. The stated
-
-
-script is local-only since 2026-09-02, and the 45 issues it published are keyed to it.
+One package, `src/memstara/`, and no Python at the top level. Everything is reached by
+import path and every entry point is run with `-m`.
 
 ```
-memstara/
-├── README.md              this file
-
-├── CHECKLIST_KR.md        the pre-run checklist
-├── pyproject.toml         installs src/memstara, and configures pytest
+src/memstara/
+├── __init__.py        one statement, no imports — see its docstring
+├── paths.py           resolves every path in the repository, once
+├── config.py          the Settings subclass everything shares
+├── env.py             the one place the environment is prepared
+├── servers.py         names the five tool servers, once
+├── blackboard.py      the shared board — table definitions
+├── logging_setup.py   console + JSONL
+├── preflight.py       checks everything before a run and says what to fix
+├── debug_harness.py   calls a tool directly, in one process
 │
-├── src/memstara/
-│   ├── __init__.py        one statement, no imports — see its docstring
-│   ├── paths.py           every path in the repository, resolved once
-│   ├── config.py          CoreSettings subclass (shared by everything)
-│   ├── env.py             the single place the environment is set up
-│   ├── servers.py         the five tool servers, named once
-│   ├── blackboard.py      the shared work board — table definitions
-│   ├── logging_setup.py   log output (console + JSONL)
-│   ├── preflight.py       check everything before a run, and say what to fix
-│   ├── debug_harness.py   call the tools directly, in one process
-│   │
-│   ├── pipeline/          ── the pipeline ──
-│   │   ├── hello.py       the first script — a working-or-not check
-│   │   ├── core.py        the six agents · supervisor · aggregation
-│   │   ├── mvp.py         entry point — supervisor-driven, N trials
-│   │   └── board.py       entry point — the same stages driven by the board
-│   │
-│   ├── mcp_servers/       ── MCP tool servers, one process each ──
-│   │   ├── blackboard.py  the only way an agent touches the board
-│   │   ├── data.py        describe_dataset · slice_columns
-│   │   ├── ml.py          train_and_score
-│   │   ├── okf.py         the OKF corpus, with a reading surface for real literature
-│   │   ├── matcher.py     concept names → exact cohort columns
-│   │   └── debug_hook.py  let a debugger attach to a tool server child process
-│   │
-│   ├── trace/             ── looking at what happened ──
-│   │   ├── run.py         replay a stored run
-│   │   ├── board.py       replay a board run — what was asked, and what came back
-│   │   └── report.py      read a run directory, say whether it went normally
-│   │
-│   ├── prep/              sample.py · hiv.py · nhanes.py — building the cohorts
-│   └── matcher/           the semantic matcher — catalogue, embedder, vocabulary
-│
-├── viewer/                the live web viewer (web :8070, API :8071)
-├── scripts/               instruments — cache building, calibration, issues, checks
-├── tests/                 pytest
-│
+├── pipeline/          hello · core (agents, supervisor, aggregation)
+│                      mvp (supervisor-driven) · board (board-driven) · prompts (loader)
+├── prompts/           one system prompt per agent, as files
+├── mcp_servers/       one process per server, plus debug_hook and frontmatter
+├── control/           a host service so the viewer can start a run
+├── trace/             replay a saved run: run · board · report
+├── prep/              build a cohort: sample · hiv · nhanes
+└── matcher/           semantic matcher — catalogue, embedder, vocabulary
 
-├── papers/                papers we obtained (indexed in _INDEX.md)
-├── spec/                  the SRS + 10 component implementation plans + templates
+viewer/                live web viewer (web :8070, API :8071)
+scripts/               cache building, calibration, checks
+tests/                 pytest, fully offline
 
-├── kg/                    AlzKB and AddictionKB dumps + their loading scripts
-└── outputs/               dataset · OKF bundles · run artefacts (indexed in its README.md)
+outputs/               datasets, OKF bundles, run records — never committed
 ```
 
-`blackboard.py` appears twice on purpose. `memstara/blackboard.py` is the board
-itself — the table, the connection, the run lock — and can be tested without starting
-anything; `memstara/mcp_servers/blackboard.py` is the MCP surface in front of it.
-
-
-what we obtained. That can be decided without opening a file, and each needs only one
-index.
-
-
-example `2026-08-12_AlzKB_구조_설명_KR.md`. When it was written shows up in the
-listing itself, and `ls` alone puts them in order.
-
-## This folder becomes the Memstara product
-
-`spec/Memstara_SRS_KR.md` is **the requirements specification for the product**. It
-moved here from `Rebuild_2026/` on 2026-08-11, because the product becomes this.
-
-The specification is a **draft (0.3) awaiting approval**, with 15 unresolved items and
-proposals needing sign-off marked distinctly. **Read that marking convention before
-touching it.**
-
-## What is open right now
-
-
-it got here. Each item answers five questions: what · why · how we'll know it's done ·
-what it depends on · evidence. The shape comes from the four questions in
-
-*Reading order* below is "what are we building", this is "where have we got to".**
-
-All 45 of them are GitHub issues as of 2026-09-01 —
-**[issues](https://github.com/HyunjunA/memstara/issues)** ·
-the file and line it was written from, and every item in the file carries its issue
-number. `scripts/backlog_to_issues.py` did that, and is local-only as of 2026-09-02.
-
-**`BACKLOG_KR.md`** is a full Korean edition of it, not a summary. **The English file
-is the one that becomes issues, and it is the one that is correct if the two
-
-
-## The Korean files are not in this repository
-
-Every Korean file here carries `_KR` in its name, and since 2026-09-02 `.gitignore` matches `*_KR*`,
-
-
-
-
-turns it into issues. The English files still name all of them; the links resolve to nothing here.
-What this repository tracks is the English half, and it is meant to stand on its own.
-
-## Reading order
-
-Items 1 to 4 are Korean and therefore local-only, per the section above — still the reading order.
-
-1. **`spec/Memstara_SRS_KR.pdf`** — **what has to be built.** Start with §2.3 (user
-   characteristics) and §11 (unresolved items) to see what is settled and what is not
-
-   meeting that cut the MVP down to four stages. `_WHITEBOARD.HEIC` of the same date
-   is that meeting's whiteboard
-
-   repository's API. The table in §2 ("what core gives / what I build") sizes the work
-   immediately
-
-   to do first.** The items left incomplete against the 8/12 alignment discussion, in
-   order
-5. **`src/memstara/pipeline/hello.py`** — run this first, to confirm the environment works
-6. **`src/memstara/pipeline/mvp.py`** — the whole four-stage pipeline
-
-
-
-## Running the MVP pipeline
+## Setup
 
 ```bash
-cd /path/to/Documents/GitHub/EcoXAI_Projects/motoro
-
-# Setup (once) — activate the conda environment
-conda activate memstara
-python -m memstara.prep.sample
-
-# Environment variables — without these the MCP tool servers cannot find their paths
-set -a && . ./.env && set +a
-export AGENTIC_OKF_BUNDLE_DIR="$PWD/../memstara/outputs/okf_synthetic_sample"
-export MEMSTARA_DATASET_PATH="$PWD/../memstara/outputs/dataset.csv"
-export MEMSTARA_OUTPUT_DIR="$PWD/../memstara/outputs"
-
-# 3-trial smoke run → 20-trial real run
-python -m memstara.pipeline.mvp --trials 3 --trace
-python -m memstara.pipeline.mvp --trials 20
-```
-
-**The synthetic data has real signal planted in it** — `hba1c` · `bmi` · `age` ·
-`systolic_bp` genuinely predict the outcome (univariate AUC 0.73/0.66/0.63/0.60;
-noise columns sit at 0.51). If those four come out on top across 20 trials the
-pipeline is working; if they do not, something is broken.
-
-### The real operating data (settled 2026-08-23)
-
-Once the synthetic smoke test passes, switch to the data below.
-
-| Role | Path | Contents |
-|---|---|---|
-| Knowledge source (OKF) | `../shared/hiv-suppression/okf/` | 142 papers on HIV suppression, across 8 domain folders |
-| ML dataset | `../attri_shared/ecoxai_dataset_2.5pct_no_PHI.csv` | 1,707 patients × 1,393 features, outcome `HIV_DETECTABLE` |
-
-```bash
-export AGENTIC_OKF_BUNDLE_DIR=../shared/hiv-suppression/okf
-export MEMSTARA_DATASET_PATH=../attri_shared/ecoxai_dataset_2.5pct_no_PHI.csv
-export MEMSTARA_OUTCOME_COLUMN=HIV_DETECTABLE
-python -m memstara.pipeline.board --trials 3
-```
-
-**Who reads what:**
-- OKF → the hypothesis agent reads it and proposes which features to select
-- the cohort CSV → the data and ML agents read it and check the proposal for real
-
-The OKF bundle also contains **four trap concepts that point at variables the dataset
-does not have.** The place this pipeline breaks first is the gap between a concept
-name in the knowledge source and a column name in the dataset, so the examples
-reproduce that on purpose.
-
-## Setup (once)
-
-```bash
-cd /path/to/Documents/GitHub/EcoXAI_Projects/motoro
-
-# 1) Infrastructure — postgres :5453, redis :6381, schema applied
-cp .env.example .env          # then fill in the API keys in .env
+# 1) Infrastructure — postgres, redis, schema applied
+cp .env.example .env          # then fill in an API key
 docker compose up -d
 
-# 2) Python — conda. core goes in as an editable install
-#    (run from the sandbox folder; environment.yml points at ../motoro by relative path)
-conda env create -f ../memstara/environment.yml
+# 2) Python — conda. motoro is installed editable
+conda env create -f environment.yml
 conda activate memstara
 ```
 
-> **core is `motoro` throughout** (2026-09-01, as of `v0.5.2`).
-> Python package `motoro` (`from motoro import ...`), local folder `../motoro/`,
-> environment-variable prefix `MOTORO_`, Docker containers
-> `motoro-postgres`/`motoro-redis`, databases `motoro`/`motoro_test`, alembic version
-> table `alembic_version_motoro`.
-> `environment.yml` and `.vscode/launch.json` point at `../motoro` by relative path,
-> so **renaming the folder means fixing both.**
->
-> **Two names do not follow this rule.**
-> One is **this repository's own name, `memstara`** — a working title the
-> folder and the remote still carry, so paths and links keep spelling it.
-> The other is **`AGENTIC_OKF_BUNDLE_DIR`**, which upstream reads as that literal
-> string without going through the prefix
-> (`motoro/src/motoro/mcp_servers/okf.py:66`, `mcp/client.py:57`) — renaming it to
-> match the prefix means **the OKF server cannot find its bundle.**
->
-> The Postgres role name stays **`agentic`**. Upstream itself uses
-> `POSTGRES_USER=agentic` (`motoro/.env.example:6`), so changing it here would put
-> this repository out of step with upstream.
-
-Python is one conda environment, **`memstara`** (3.12). `motoro` is installed
-editable, so editing its source takes effect without reinstalling. Tool servers are
-launched with `sys.executable`, so child processes use the same environment.
-
-VS Code points at this environment through `.vscode/settings.json`. Choosing conda
-`base` fails as early as `import asyncpg`.
+Python is one conda environment, **`memstara`** (3.12). Tool servers are launched with
+`sys.executable`, so a child process gets the same environment. VS Code points at it
+through `.vscode/settings.json`; picking conda `base` fails as early as `import asyncpg`.
 
 `.env` needs at least one provider credential:
 
@@ -297,53 +185,179 @@ ANTHROPIC_FOUNDRY_RESOURCE=...
 
 ## Running
 
+Every run is launched from the `motoro` checkout, because that is where `.env` and the
+compose file live:
+
 ```bash
 cd /path/to/Documents/GitHub/EcoXAI_Projects/motoro
-set -a && . ./.env && set +a          # load .env into the environment
-python -m memstara.pipeline.hello --input "What is 17 times 23?"
+conda activate memstara
+set -a && . ./.env && set +a          # read .env into the environment
+
+export AGENTIC_OKF_BUNDLE_DIR="$PWD/../memstara/outputs/okf_synthetic_sample"
+export MEMSTARA_DATASET_PATH="$PWD/../memstara/outputs/dataset.csv"
+export MEMSTARA_OUTPUT_DIR="$PWD/../memstara/outputs"
+
+python -m memstara.pipeline.board --trials 3            # board-driven
+python -m memstara.pipeline.mvp --trials 3 --trace      # supervisor-driven
 ```
 
-Forgetting `set -a && . ./.env && set +a` makes it fail at the database connection or
-at resolving credentials.
+Skipping `set -a && . ./.env && set +a` fails at the database connection, or at resolving
+credentials.
 
-## Adding a new experiment script
+**The synthetic data has real signal planted in it** — `hba1c` · `bmi` · `age` ·
+`systolic_bp` genuinely predict the outcome (univariate AUC 0.73 / 0.66 / 0.63 / 0.60;
+the noise columns sit at 0.51). If those four rise to the top over 20 trials the pipeline
+is working; if they do not, something is broken.
 
-1. Create `src/memstara/pipeline/<name>.py`. There is no number in the name any more —
-   a module called `01_hello_agent` cannot be imported. The reading order the numbers
-   used to carry is written down in `src/memstara/pipeline/__init__.py` instead.
-2. At the very top, call `from memstara.config import Settings` →
-   `configure(Settings())` **first, before anything else.** Calling it after a core
-   module has started reading configuration raises `RuntimeError`.
-3. Give it `if __name__ == "__main__":` and run it with
-   `python -m memstara.pipeline.<name>`. Do not run it by path: that skips
-   `src/memstara/__init__.py`, and litellm then reads `LITELLM_LOG` too late to log
-   any request body — with no error to show for it.
-4. Copying `src/memstara/pipeline/hello.py` is the fastest way to start.
+### The real operating data
 
-## Reference
+| Role | Path | What it is |
+|---|---|---|
+| Knowledge source (OKF) | `../shared/hiv-suppression/okf/` | 142 papers on HIV suppression, across 8 branch folders |
+| ML dataset | `../attri_shared/ecoxai_dataset_2.5pct_no_PHI.csv` | 1,707 patients × 1,393 features, outcome `HIV_DETECTABLE` |
 
-- The full public API and usage examples: `../AgenticCore_상세해설_KR.pdf` §4, outside
-  this repository
-- The original examples core ships: `../motoro/examples/` (provision / run /
-  memory_run / mcp_run)
+The OKF bundle also contains **four decoy concepts naming variables the dataset does not
+have.** The first place this pipeline breaks is the gap between concept names in the
+knowledge source and column names in the dataset, so the example reproduces it on purpose.
+
+## Configuration
+
+`board.py` — the board-driven pipeline:
+
+| Flag | Default | What it does |
+|---|---|---|
+| `--trials` | 1 | hypotheses seeded per wave |
+| `--waves` | 1 | question-then-investigate rounds; wave 2 onward reads the previous wave's results |
+| `--stop-after-dry` | 2 | stop early after this many waves in which the curator produced no new question; 0 never stops early |
+| `--no-curator` | off | skip question generation, use the built-in perspective list |
+| `--skill` | *(whole bundle)* | confine the corpus to one branch, as front-matter equalities: `terminus_kind=sud` |
+| `--y-column` | from env | the outcome column |
+| `--provider` | `azure_foundry` | `anthropic` · `azure_foundry` · `openai` |
+| `--model` | `claude-sonnet-4-6` | model id |
+| `--data-agents` `--ml-agents` `--interpret-agents` | 1 | how many workers of that stage claim from the board at once |
+| `--hypothesis-agents` | 1 | how many seed the board at once; each claims its own question |
+| `--max-attempts` | 5 | give up on a task after this many extra returns, mark it failed, go on; 0 retries forever |
+| `--stale-after` | 600 | seconds a task may sit `in_progress` before it is presumed abandoned |
+| `--run-tag` | — | names this run on the board |
+| `--report-only` | off | write the report from what has already finished |
+| `--verbose` `--run-dir` | — | console DEBUG · where to write this run's records |
+
+`mvp.py` — the supervisor-driven pipeline: `--trials`, `--concurrency` (rate-limit cap),
+`--y-column`, `--provider`, `--model`, `--no-overall` (skip the aggregate
+interpretation), `--ablate-okf` (run without the OKF tools), `--trace`, `--verbose`,
+`--run-dir`.
+
+Environment:
+
+| Variable | What it points at |
+|---|---|
+| `AGENTIC_OKF_BUNDLE_DIR` | the knowledge bundle. **Not** `MEMSTARA_*` — see below |
+| `MEMSTARA_DATASET_PATH` | the cohort CSV |
+| `MEMSTARA_OUTPUT_DIR` | where runs, sub-datasets and reports are written |
+| `MEMSTARA_OUTCOME_COLUMN` | default for `--y-column` |
+| `MEMSTARA_DATABASE_URL` | the board's Postgres |
+| `MEMSTARA_ML_ENGINE` | which learner `train_and_score` uses |
+| `MEMSTARA_DEBUGPY` / `_WAIT` | attach a debugger to a tool-server child process |
+
+## What is never committed
+
+`.gitignore` is the whole of the protection, and it draws three lines:
+
+| Never tracked | Why |
+|---|---|
+| `.env`, `*.pem`, `*.key` | credentials. `.env.example` is the tracked template |
+| `outputs/*` | the cohort CSV, every sub-CSV cut from it, the matcher's catalogue of all 1,394 column names, and one folder per run. **Patient data and everything derived from it.** All of it is regenerable |
+| `kg/**/*.db`, `kg/**/*.cypherl` | a gigabyte of knowledge-graph exports, published elsewhere. Scripts tracked, payloads not |
+
+`*_KR*` is also ignored: the Korean editions live on the machine that writes them and in
+no clone. The repository is private.
+
+**`HIV_DETECTABLE` is the target column and is never a feature.** It is legitimate as
+`--y-column`. It must never appear in a column list handed to an agent — a model that can
+see the label does not predict it, it reads it.
+
+## Tests and checks
+
+```bash
+ruff check src/                      # lint
+python -m pytest -q                  # 148 tests, fully offline, ~4s
+python scripts/check_citations.py    # every file.py:NNN cited in prose points somewhere real
+```
+
+Those three are what CI runs. **None of them starts a server, connects to Postgres, or
+calls a model** — any claim about those is made by hand, in a commit's `Verified:` line,
+or it is not made. The citation checker proves a cited line exists, not that it still says
+what the citing text claims.
+
+There is no type checker: `src/` carries no type hints, so `--strict` would produce
+thousands of findings and one habit, which is ignoring the output.
+
+## Conventions that are not obvious
+
+**Always `python -m memstara.<module>`, never by file path.** Running a file by its path
+skips `src/memstara/__init__.py`, the only place `LITELLM_LOG` is set before litellm can
+read it — and litellm reads it *while being imported*, so setting it a moment later logs
+nothing and raises nothing. Under `-m` the ordering cannot be got wrong. `-m` is not a
+matter of taste here.
+
+**`configure(Settings())` first, before anything else in an entry point.** Calling it
+after a motoro module has started reading configuration raises `RuntimeError`. Copy
+`src/memstara/pipeline/hello.py` rather than writing the preamble from memory.
+
+**Three names look like inconsistencies and are not:**
+
+> **`AGENTIC_OKF_BUNDLE_DIR`** — upstream reads that literal string without going through
+> the environment prefix (`motoro/src/motoro/mcp_servers/okf.py:66`,
+> `mcp/client.py:57`). Renaming it to match `MOTORO_*` means **the OKF server cannot find
+> its bundle**, at run time, with no import error to warn you.
+>
+> **The Postgres role stays `agentic`.** Upstream itself sets `POSTGRES_USER=agentic`
+> (`motoro/.env.example:6`), so changing it here puts this repository out of step with the
+> library it consumes.
+>
+> **The repository keeps the folder name `memstara`** — a working title the
+> folder and the remote still carry, so paths and links keep spelling it.
+
+`environment.yml` and `.vscode/launch.json` point at `../motoro` by relative path, so
+renaming that folder means fixing both.
+
+Commits follow `type: short description` and carry a **`Verified:`** line naming a
+
+loads on every session; four more load only inside the directory they apply to.
+
+## Where work is tracked
 
 
-## The rule files
+why, how we will know it is done, what it depends on, and the evidence. All 45 items are
+GitHub issues —
+[issues](https://github.com/HyunjunA/memstara/issues) ·
+line it was written from.
+
+Each item carries two labels on two axes, both required: a **kind** (`bug`,
+`enhancement`, `research-decision`, `verification`, `housekeeping`) and an **area**, which
+reaches GitHub as `area:matcher`. A value outside either vocabulary is a hard error.
+
+Do not open an issue without a backlog item behind it.
+
+## Documents
+
+| Folder | What is in it |
+|---|---|
+
+| `papers/` | what we obtained. Indexed in `papers/_INDEX.md` |
+| `spec/` | the SRS, plus one implementation plan per component |
+
+| `kg/` | AlzKB · AddictionKB load scripts |
 
 
-
-is loaded automatically in every session here.
-
-Rules that used to live only in this README — `-m` is not a matter of taste,
-`AGENTIC_OKF_BUNDLE_DIR` cannot be renamed, the outcome column is never a feature — are
-**cited there by line number rather than copied**, so the two cannot quietly disagree:
-`scripts/check_citations.py` checks every one of those citations on every run.
-
-`CLAUDE_KR.md` is its full Korean edition, on the same terms as `BACKLOG_KR.md` — English
-is correct if the two disagree. Three more rule files load only inside the directory they
+them in order.
 
 
+not to fix a name, not to repair a citation. Rewriting one to say what we know now would
+stop it being a record. `scripts/check_citations.py` skips both by name and prints the
+reason on every run.
 
-This section is at the end of the file on purpose. Inserting it higher up would have moved
-
-this README by line number.
+**Korean editions carry `_KR` and are not in the repository.** A `_KR` file is a full
+mirror, not a summary, and **the English file is the one that is correct if the two
+disagree.** Nothing checks them: they are not scanned for citations and CI never sees
+them, so a citation *into* one is reported as *not verifiable here*.
