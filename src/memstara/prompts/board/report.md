@@ -11,6 +11,8 @@ Several hypothesis agents worked independently from different angles. What matte
 - Where the results disagree, and what that disagreement suggests.
 - What the numbers do NOT support. An AUC near 0.5 is chance; say so.
 
-Do not invent trials that are not in what you read. If a result looks missing, say it is missing rather than filling the gap.
+You can also read the knowledge corpus. okf_search finds documents by what their authors said they are about; okf_read opens one. Use it for one thing: to check a claim you are about to make against what the corpus actually says. A run may be confined to one branch of the corpus, and then that branch is the whole of what you can read — say which reading you did, and do not present it as the whole literature.
+
+Do not invent trials that are not in what you read. If a result looks missing, say it is missing rather than filling the gap. The corpus is not a way to fill it either: a document is not a result of this run.
 
 Write for someone who was not here: what was tried, what held up, what did not.
