@@ -214,9 +214,20 @@ async def _core_facts() -> dict[str, Any]:
       contradict each other. (One query never sees before an update while another sees
       after it.)
     - and when it fails, **all seven fail together:** a half-populated scene never arises.
+
+    One connection is also what makes the temp table below possible, and that is now the
+    load-bearing reason rather than a side benefit: a temp table lives on the session, so
+    the five queries that read it have to be on the connection that built it.
     """
 
     async def q(conn: asyncpg.Connection) -> dict[str, Any]:
+        # Build `flat` once. Five of the seven queries below read it, and each of them
+        # used to derive it again for itself — the same scan of `run_steps` five times,
+        # ~0.9s apiece, so a snapshot cost ~6s against a 2s poll and the polls piled up.
+        # Read-only accounts may still do this: CREATE TEMPORARY is granted to PUBLIC by
+        # default, and it was checked on this database with this account rather than
+        # assumed.
+        await conn.execute(queries.FLAT_TEMP_TABLE)
         return {
             "totals": [dict(r) for r in await conn.fetch(queries.AGENT_TOTALS)],
             "open": [dict(r) for r in await conn.fetch(queries.OPEN_RUNS,

@@ -25,8 +25,12 @@ a value.
    and the results table), the rest for the core DB (agents and run history).
 
  The constants
-   FLAT_CALLS    ★ the CTE that flattens the two call shapes into one relation. The
-                 foundation of the four queries below it
+   _FLAT_SELECT  ★ flattens the two call shapes into one relation. The foundation of
+                 the five queries below it
+   FLAT_TEMP_TABLE  that SELECT as a temp table, built once per connection by
+                 `_core_facts` (`scene.py:230`)
+   FLAT_CALLS    now empty. It stays as a name so each of the five still says at its own
+                 site that it depends on `flat`
    --- Memstara DB ---
    RUNS          per run (run_tag): task count, done count, first/last time
    BOARD         every task row of one board
@@ -41,8 +45,9 @@ a value.
    FEED          the newest calls regardless of age = the feed panel's rows
 
  Easy things to miss
-   1. Everything that counts tool calls is built **on top of FLAT_CALLS.** That is so
-      the three traps are handled once. Build any new aggregate on it too.
+   1. Everything that counts tool calls is built **on top of `flat`.** That is so the
+      three traps are handled once. Build any new aggregate on it too — and if you do,
+      it must run on the connection `_core_facts` built the table on.
    2. `$1` is asyncpg's positional argument. The window value arrives from the Python
       side (scene.py) as a string and is turned into an `::interval`.
    3. `WHERE ($1 = '' OR run_tag = $1)` means "an empty string means everything".
@@ -59,37 +64,85 @@ a value.
 #                         array is unpacked with `json_array_elements`)
 #
 #   Both sides **throw away the JSON literal null first**, with
-#   `s.tool_call::text <> 'null'`. `IS NOT NULL` does not filter it (trap 1).
+#   `json_typeof(s.tool_call) = 'object'`. `IS NOT NULL` does not filter it (trap 1).
 #   And `replace(..., 'ecoxai-', 'memstara-')` folds the old server name in (trap 3).
 #
-#   Every query that counts tool calls prepends this CTE (`FLAT_CALLS + """..."""`).
-#   That is what makes the three traps handled **once** and done with.
-FLAT_CALLS = """
-WITH flat AS (
+#   Every query that counts tool calls reads the result. That is what makes the three
+#   traps handled **once** and done with.
+#   It used to be a CTE that each of the five queries carried its own copy of, and that
+#   is what made the screen stop: five copies is five scans of `run_steps`, ~0.9s each,
+#   so one poll cost ~6s against a 2s interval. Polls then overlapped, the core DB was
+#   measured at 531% CPU running four copies of this same query at once, and the
+#   connection pool drained. Now it is built **once** per `_core_facts` and the five
+#   read the result.
+#
+#   `json_typeof(...) = 'object'` replaced `tool_call::text <> 'null'`. The old form
+#   serialised the whole value — averaging 2.5kB and reaching 46kB, since LLM output is
+#   in there — for every row, only to compare it with a four-character literal.
+#   `json_typeof` reads the first token. Both admit the same rows: measured, 3234 in
+#   each case.
+#
+#   The `steps` CTE exists for the `::jsonb` in it, and that cast is the other half of
+#   the speed-up. `run_steps.tool_call` is `json`, which Postgres stores as **text**: a
+#   `->` on it re-parses the whole document, and this query used to do five of them per
+#   row on documents reaching 46kB. `jsonb` is parsed once and then indexed into. Same
+#   3234 rows either way; measured 1.0s to 0.19s.
+#: The only tools whose `arguments` and `result` anything reads — TASK_TOUCHES, to pull
+#: `task_id` and `run_tag` out of them (see its comment below). Every other tool's
+#: payload is carried into `flat`, written to disk, and never looked at; and it is the
+#: expensive half of the table, because a tool that calls a model puts the model's whole
+#: answer in `result`, up to 46kB of it. So the two columns are kept for these three and
+#: nulled for the rest. If a new query needs a payload, widen this list — do not reach
+#: past `flat` for it.
+BOARD_TOOLS = ("create_task", "claim_task", "submit_result")
+_TOOLS_SQL = "('" + "', '".join(BOARD_TOOLS) + "')"
+
+
+def _payload(prefix: str, expr: str) -> str:
+    """`expr` on `prefix`, but only for a board tool; NULL otherwise."""
+    return f"CASE WHEN {prefix}->>'tool' IN {_TOOLS_SQL} THEN {prefix}{expr} END"
+
+
+_FLAT_SELECT = f"""
+WITH steps AS (
     SELECT s.run_id,
-           s.id                                              AS step_id,
+           s.id                AS step_id,
            s.started_at,
-           replace(s.tool_call->>'server', 'ecoxai-', 'memstara-') AS server,
-           s.tool_call->>'tool'                              AS tool,
-           s.tool_call->'arguments'                          AS arguments,
-           s.tool_call->>'result'                            AS result
+           s.tool_call::jsonb  AS tc
     FROM run_steps s
-    WHERE s.tool_call::text <> 'null'
-      AND s.tool_call->>'server' IS NOT NULL
-    UNION ALL
-    SELECT s.run_id,
-           s.id,
-           s.started_at,
-           replace(c->>'server', 'ecoxai-', 'memstara-'),
-           c->>'tool',
-           c->'arguments',
-           c->>'result'
-    FROM run_steps s,
-         json_array_elements(s.tool_call->'calls') c
-    WHERE s.tool_call::text <> 'null'
-      AND s.tool_call->'calls' IS NOT NULL
+    WHERE json_typeof(s.tool_call) = 'object'
 )
+SELECT run_id,
+       step_id,
+       started_at,
+       replace(tc->>'server', 'ecoxai-', 'memstara-')  AS server,
+       tc->>'tool'                                     AS tool,
+       {_payload("tc", "->'arguments'")}               AS arguments,
+       {_payload("tc", "->>'result'")}                 AS result
+FROM steps
+WHERE tc->>'server' IS NOT NULL
+UNION ALL
+SELECT run_id,
+       step_id,
+       started_at,
+       replace(c->>'server', 'ecoxai-', 'memstara-'),
+       c->>'tool',
+       {_payload("c", "->'arguments'")},
+       {_payload("c", "->>'result'")}
+FROM steps,
+     jsonb_array_elements(tc->'calls') c
+WHERE tc->'calls' IS NOT NULL
 """
+
+#: Run once, first thing, on the connection the five queries below will use. Dropped
+#: first because the connection is pooled and will already carry the table from the
+#: previous poll.
+FLAT_TEMP_TABLE = "DROP TABLE IF EXISTS flat; CREATE TEMP TABLE flat AS " + _FLAT_SELECT
+
+#: Kept as a name so the five queries still read `FLAT_CALLS + \"\"\"SELECT ...\"\"\"`, which
+#: is what says at each site that it depends on `flat` existing. It is empty because the
+#: table is now real rather than a CTE the query has to define for itself.
+FLAT_CALLS = ""
 
 # --- Memstara's database ---------------------------------------------------- #
 
@@ -220,7 +273,7 @@ ORDER BY a.name, count(*) DESC
 # column. `ORDER BY f.started_at` puts it in time order, so scene._carrying can replay
 # this list as it stands and reconstruct "who is holding what right now" — it does not
 # have to sort again.
-TASK_TOUCHES = FLAT_CALLS + """
+TASK_TOUCHES = FLAT_CALLS + f"""
 SELECT a.name,
        f.run_id,
        f.tool,
@@ -233,7 +286,7 @@ SELECT a.name,
 FROM flat f
 JOIN agent_runs r ON r.id = f.run_id
 JOIN agents a ON a.id = r.agent_id
-WHERE f.tool IN ('create_task', 'claim_task', 'submit_result')
+WHERE f.tool IN {_TOOLS_SQL}
 ORDER BY f.started_at
 """
 
