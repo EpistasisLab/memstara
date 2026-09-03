@@ -1,0 +1,187 @@
+"""What the control service will accept as a request to start a run.
+
+This is the boundary between a browser and a process on this machine, so the rules are
+tested rather than trusted. `memstara.control.request` imports the standard library and
+nothing else for exactly this reason — `service.py` next to it reads the bundle through
+`memstara.mcp_servers.okf`, which needs `yaml` and `../motoro`, and neither is on a CI
+
+`tests/test_okf_fields.py`.
+
+What is **not** covered here: that the argument list this builds is one `board.py`
+accepts, and that the HTTP layer refuses a stranger. The first is a `Verified:` line
+(the real driver, `--help` and a rejected `--skill`); the second is a `Verified:` line
+too (curl with a foreign `Host` and a foreign `Origin`).
+"""
+
+from __future__ import annotations
+
+import re
+
+import pytest
+
+from memstara.control.request import DEFAULTS, PROVIDERS, build_argv
+from memstara.paths import REPO_ROOT
+
+# Two of the 26 the real bundle has, enough to test "in the list" and "not in it".
+OFFERED = ["terminus_kind=sud", "mechanism_family=treatment-toxicity,terminus_kind=sud"]
+
+
+def flags(argv: list[str]) -> dict[str, str]:
+    """`["--trials", "3", ...]` as a dict, so a test can name the one field it means."""
+    return dict(zip(argv[::2], argv[1::2], strict=True))
+
+
+# --------------------------------------------------------------------------- #
+#  The empty request is today's run
+# --------------------------------------------------------------------------- #
+
+
+def test_an_empty_body_is_the_default_run():
+    """A form nobody touched starts what the CLI with no flags would start."""
+    got = flags(build_argv({}, OFFERED))
+    assert got == {"--trials": "3", "--waves": "1", "--y-column": "outcome",
+                   "--provider": "azure_foundry", "--model": "claude-sonnet-4-6",
+                   "--skill": ""}
+
+
+def test_the_skill_is_always_passed_even_when_empty():
+    """Never omitted. `board.py:1890` writes the environment variable unconditionally so
+    that the flag is the whole answer; leaving the flag off here would put a value left
+    over in this service's own environment back in charge."""
+    assert "--skill" in flags(build_argv({}, OFFERED))
+
+
+# --------------------------------------------------------------------------- #
+#  An unknown field is an error, not something ignored
+# --------------------------------------------------------------------------- #
+
+
+def test_a_field_that_is_not_a_field_is_refused_by_name():
+    with pytest.raises(ValueError, match="report_only"):
+        build_argv({"report_only": True}, OFFERED)
+
+
+def test_the_refusal_lists_what_a_run_does_take():
+    with pytest.raises(ValueError, match="model"):
+        build_argv({"nonsense": 1}, OFFERED)
+
+
+# --------------------------------------------------------------------------- #
+#  The skill must be one the bundle actually has
+# --------------------------------------------------------------------------- #
+
+
+def test_a_branch_from_the_offered_list_is_accepted():
+    argv = build_argv({"skill": "terminus_kind=sud"}, OFFERED)
+    assert flags(argv)["--skill"] == "terminus_kind=sud"
+
+
+def test_a_crossing_is_accepted_whole():
+    """The two-key form is what gets a run down to single figures, so it has to survive
+    as one argument rather than being split on its comma."""
+    argv = build_argv({"skill": OFFERED[1]}, OFFERED)
+    assert flags(argv)["--skill"] == OFFERED[1]
+
+
+def test_a_branch_the_bundle_does_not_have_is_refused():
+    """`terminus_kind=cardiac` parses perfectly well and selects nothing. A run confined
+    to nothing is a run whose agents can read nothing and will not say so."""
+    with pytest.raises(ValueError, match="not one of the branches"):
+        build_argv({"skill": "terminus_kind=cardiac"}, OFFERED)
+
+
+# --------------------------------------------------------------------------- #
+#  Numbers
+# --------------------------------------------------------------------------- #
+
+
+def test_trials_above_the_ceiling_is_refused_with_the_ceiling_named():
+    with pytest.raises(ValueError, match="between 1 and 20"):
+        build_argv({"trials": 200}, OFFERED)
+
+
+def test_zero_trials_is_refused():
+    """`board.py` would take it and sit on a board that never fills."""
+    with pytest.raises(ValueError, match="between 1 and 20"):
+        build_argv({"trials": 0}, OFFERED)
+
+
+def test_true_is_not_a_number_of_trials():
+    """`isinstance(True, int)` is true in Python, so a JSON `true` would otherwise arrive
+    as `--trials 1` and look like somebody's choice."""
+    with pytest.raises(ValueError, match="whole number"):
+        build_argv({"trials": True}, OFFERED)
+
+
+def test_a_number_written_as_text_is_refused():
+    with pytest.raises(ValueError, match="whole number"):
+        build_argv({"waves": "2"}, OFFERED)
+
+
+# --------------------------------------------------------------------------- #
+#  The rest of the fields
+# --------------------------------------------------------------------------- #
+
+
+def test_a_provider_outside_the_three_is_refused():
+    with pytest.raises(ValueError, match="provider must be one of"):
+        build_argv({"provider": "ollama"}, OFFERED)
+
+
+def test_a_y_column_that_could_not_be_a_column_name_is_refused():
+    with pytest.raises(ValueError, match="not a column name"):
+        build_argv({"y_column": "outcome; drop table"}, OFFERED)
+
+
+def test_a_model_with_a_space_in_it_is_refused():
+    with pytest.raises(ValueError, match="not a model identifier"):
+        build_argv({"model": "claude sonnet"}, OFFERED)
+
+
+def test_surrounding_whitespace_is_forgiven():
+    """A value pasted out of a document arrives with a space on it. That is a typo to
+    absorb, not a run to refuse."""
+    argv = build_argv({"model": "  gpt-4.1  "}, OFFERED)
+    assert flags(argv)["--model"] == "gpt-4.1"
+
+
+# --------------------------------------------------------------------------- #
+#  The copies of board.py's own vocabulary
+# --------------------------------------------------------------------------- #
+
+
+def board_argument(flag: str) -> str:
+    """The one `add_argument` line in `board.py` that declares *flag*.
+
+    The source is read as text rather than imported: `board.py` pulls in asyncpg,
+    litellm and motoro, none of which a CI runner has.
+    """
+    source = (REPO_ROOT / "src/memstara/pipeline/board.py").read_text(encoding="utf-8")
+    return next(ln for ln in source.splitlines() if f'add_argument("{flag}"' in ln)
+
+
+def test_the_providers_are_the_ones_board_py_accepts():
+    """`PROVIDERS` is a copy, and a copy is only safe while something compares it."""
+    line = board_argument("--provider")
+    choices = re.search(r"choices=\[(.*?)\]", line)
+    assert choices, "board.py's --provider no longer has a choices= list"
+    assert tuple(re.findall(r'"([^"]+)"', choices.group(1))) == PROVIDERS, (
+        "board.py's providers changed; PROVIDERS in src/memstara/control/request.py "
+        "has to change with them"
+    )
+
+
+def test_the_defaults_are_board_pys_defaults():
+    """A form nobody touched must start the run the CLI would, which is only true while
+    the two lists of defaults agree."""
+    for flag, key in (("--trials", "trials"), ("--waves", "waves"),
+                      ("--y-column", "y_column"), ("--provider", "provider"),
+                      ("--model", "model")):
+        line = board_argument(flag)
+        written = re.search(r"default=(\d+|\"[^\"]*\")", line)
+        assert written, f"{flag} no longer declares a default in board.py"
+        value = written.group(1).strip('"')
+        assert str(DEFAULTS[key]) == value, (
+            f"{flag} defaults to {value!r} in board.py, but DEFAULTS says "
+            f"{DEFAULTS[key]!r}"
+        )
