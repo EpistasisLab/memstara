@@ -19,7 +19,7 @@ export const POLL_MS = 2000;
 
 /** What the main area shows. Results is not here on purpose: ResultsPanel is always on
  *  screen at bottom-right, so a nav entry for it would be a second door to one room. */
-export type ViewId = "chain" | "scene" | "board" | "task" | "agents" | "access";
+export type ViewId = "chain" | "scene" | "log" | "board" | "task" | "agents" | "access";
 
 interface ViewerState {
   snapshot: Snapshot | null;

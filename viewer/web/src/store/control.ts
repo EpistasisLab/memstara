@@ -62,11 +62,32 @@ interface ControlState {
   /** A request is in flight; the button is disabled so one press is one run. */
   busy: boolean;
 
+  /** Which run the transcript below belongs to. Null when this service has started
+   *  nothing — which is not the same as a run that has printed nothing yet. */
+  logTag: string | null;
+  /** Complete lines only, oldest first, capped at `LOG_LINES`. */
+  logLines: string[];
+  /** The unterminated remainder of the last slice. A response ends on a byte boundary,
+   *  not a line one, so the tail is held back until the newline that finishes it
+   *  arrives — otherwise every poll would append half a line and then a whole one. */
+  logTail: string;
+  /** Bytes the service jumped over because the log outran one response. Shown, never
+   *  swallowed: a gap in a transcript that does not announce itself is a lie. */
+  logSkipped: number;
+  /** Byte offset to ask from next. */
+  logOffset: number;
+
   poll: () => Promise<void>;
   loadSkills: () => Promise<void>;
   startRun: (body: RunRequest) => Promise<void>;
   stopRun: () => Promise<void>;
+  pollLog: () => Promise<void>;
 }
+
+/** How many lines the transcript keeps. A long run prints tens of thousands, and a
+ *  browser holding every one of them in a scroll region is what makes a viewer that was
+ *  fine for ten minutes unusable after an hour. */
+const LOG_LINES = 2000;
 
 /** The service answers every refusal as `{"error": "..."}`, so the message a person
  *  reads is the one the service wrote rather than a status code. */
@@ -87,6 +108,12 @@ export const useControl = create<ControlState>((set, get) => ({
   running: null,
   error: null,
   busy: false,
+
+  logTag: null,
+  logLines: [],
+  logTail: "",
+  logSkipped: 0,
+  logOffset: 0,
 
   poll: async () => {
     try {
@@ -136,6 +163,55 @@ export const useControl = create<ControlState>((set, get) => ({
       set({ error: e instanceof Error ? e.message : String(e) });
     } finally {
       set({ busy: false });
+    }
+  },
+
+  /**
+   * Fetch whatever the newest run has printed since the last time we asked.
+   *
+   * `latest` rather than a tag this store tracks: the service already knows which run is
+   * going and which one finished most recently, and a tag chosen here would be a second
+   * opinion about that — stale for exactly as long as it took the next poll to notice.
+   * The answer names the tag it read, which is what the screen shows.
+   *
+   * The log is only ever the console of a run **this service started**. A pipeline
+   * launched by hand in a terminal has a console.log of its own that this process has no
+   * way to find, and `LogPanel` says so rather than showing an empty box.
+   */
+  pollLog: async () => {
+    try {
+      const res = await fetch(`/control/runs/latest/log?offset=${get().logOffset}`);
+      if (res.status === 404) {
+        // No run at all. Not an error: this is the state of the screen before anyone has
+        // pressed Start, and it must not read as a fault.
+        set({ logTag: null, logLines: [], logTail: "", logSkipped: 0, logOffset: 0 });
+        return;
+      }
+      if (!res.ok) throw new Error(await readError(res));
+      const body = await res.json();
+
+      if (body.run_tag !== get().logTag) {
+        // A different run than the transcript on screen. The offset we just sent was
+        // measured against the previous run's file, so this slice may start anywhere in
+        // the new one — it is dropped, and the next poll asks from the beginning. One
+        // tick of delay, against the alternative of splicing two runs into one column.
+        set({ logTag: body.run_tag, logLines: [], logTail: "", logSkipped: 0, logOffset: 0 });
+        return;
+      }
+
+      set((s) => {
+        const parts = (s.logTail + body.text).split("\n");
+        const tail = parts.pop() ?? "";
+        const lines = parts.length ? [...s.logLines, ...parts] : s.logLines;
+        return {
+          logLines: lines.length > LOG_LINES ? lines.slice(lines.length - LOG_LINES) : lines,
+          logTail: tail,
+          logSkipped: s.logSkipped + (body.skipped ?? 0),
+          logOffset: body.offset ?? s.logOffset,
+        };
+      });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) });
     }
   },
 

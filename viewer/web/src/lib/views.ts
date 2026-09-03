@@ -1,4 +1,13 @@
-import { Boxes, Database, Layers, ListTree, Map, Workflow, type LucideIcon } from "lucide-react";
+import {
+  Boxes,
+  Database,
+  Layers,
+  ListTree,
+  Map,
+  Terminal,
+  Workflow,
+  type LucideIcon,
+} from "lucide-react";
 import type { ViewId } from "../store/viewer";
 import type { Snapshot } from "../types";
 
@@ -24,6 +33,9 @@ export interface ViewMeta {
 export const VIEWS: Record<ViewId, ViewMeta> = {
   chain: { label: "Pipeline", icon: Workflow, count: (s) => s.scene.agents.length },
   scene: { label: "Floor plan", icon: Map, count: (s) => s.scene.agents.length },
+  // No count. The line total lives in the control store, not the snapshot, and a zero
+  // here would say "this run printed nothing" when it means "not asked yet".
+  log: { label: "Run log", icon: Terminal },
   board: { label: "Board", icon: Layers, count: (s) => s.board.tasks.length },
   task: { label: "Task life", icon: ListTree },
   agents: { label: "Agents", icon: Boxes, count: (s) => s.agents.length },
@@ -37,4 +49,4 @@ export const VIEWS: Record<ViewId, ViewMeta> = {
  *  how far along is the run, and then who is touching what. `scene` is called "Floor plan"
  *  here rather than "Agent state" because both views are the agent state — one as a
  *  sequence, one as a place. */
-export const VIEW_ORDER: ViewId[] = ["chain", "scene", "board", "task", "agents", "access"];
+export const VIEW_ORDER: ViewId[] = ["chain", "scene", "log", "board", "task", "agents", "access"];

@@ -8,6 +8,7 @@ import ResultsPanel from "./panels/ResultsPanel";
 import ScenePanel from "./panels/ScenePanel";
 import { useViewer, type ViewId } from "./store/viewer";
 import ChainPanel from "./panels/ChainPanel";
+import LogPanel from "./panels/LogPanel";
 import AccessTab from "./tabs/AccessTab";
 import AgentsTab from "./tabs/AgentsTab";
 import BoardTab from "./tabs/BoardTab";
@@ -34,10 +35,11 @@ import TaskTab from "./tabs/TaskTab";
  * pass down.
  */
 
-/** The views that borrow the top-right slot. `chain` and `scene` are absent because both
- *  own a React Flow canvas and bring their own chrome with it; the rest are bodies that
+/** The views that borrow the top-right slot. Three are absent because they bring their
+ *  own chrome: `chain` and `scene` each own a React Flow canvas, and `log` owns a scroll
+ *  region it has to control itself in order to follow the end. The rest are bodies that
  *  this file frames. */
-const SECONDARY: Record<Exclude<ViewId, "chain" | "scene">, ComponentType> = {
+const SECONDARY: Record<Exclude<ViewId, "chain" | "scene" | "log">, ComponentType> = {
   board: BoardTab,
   task: TaskTab,
   agents: AgentsTab,
@@ -50,6 +52,7 @@ function TopRegion() {
 
   if (view === "chain") return <ChainPanel />;
   if (view === "scene") return <ScenePanel />;
+  if (view === "log") return <LogPanel />;
 
   const meta = VIEWS[view];
   const Body = SECONDARY[view];
