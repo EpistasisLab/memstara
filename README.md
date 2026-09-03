@@ -266,7 +266,7 @@ Environment:
 | Never tracked | Why |
 |---|---|
 | `.env`, `*.pem`, `*.key` | credentials. `.env.example` is the tracked template |
-| `outputs/*` | the cohort CSV, every sub-CSV cut from it, the matcher's catalogue of all 1,394 column names, and one folder per run. **Patient data and everything derived from it.** All of it is regenerable |
+| `outputs/*` | the cohort CSV, every sub-CSV cut from it, the matcher's catalogue of 1,393 column names, and one folder per run. **Patient data and everything derived from it.** All of it is regenerable |
 | `kg/**/*.db`, `kg/**/*.cypherl` | a gigabyte of knowledge-graph exports, published elsewhere. Scripts tracked, payloads not |
 
 `*_KR*` is also ignored: the Korean editions live on the machine that writes them and in

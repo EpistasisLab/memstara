@@ -5,7 +5,10 @@ that look plausible and are not:
 
 1. The column is `json`, and many rows hold the JSON literal `null` rather than SQL
    NULL. `tool_call IS NOT NULL` is therefore true for 424 rows that contain no call at
-   all. Filter on `::text <> 'null'`.
+   all. Filter on `json_typeof(tool_call) = 'object'`, which also excludes anything that
+   is not a call-shaped document. `::text <> 'null'` admits the same rows and is the
+   obvious way to write it, but it serialises the whole value to compare it with four
+   characters; see the note above `_FLAT_SELECT` for what that cost.
 2. A step may hold **one** call `{server,tool,arguments,result}` or a **batch**
    `{"calls":[…]}`. Reading only the first shape reports `search_concepts` as 0 calls
    when the real figure is 458 — the knowledge-source searches all arrive batched.
