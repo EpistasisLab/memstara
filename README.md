@@ -1,4 +1,4 @@
-# memstara — a personal experiment space
+# Memstara — a personal experiment space
 
 > **The name changed.** `EcoXAI` was a working title; a team decision on 2026-08-18
 > made **Memstara** the official one. Code, documents, databases, Docker and the
@@ -7,9 +7,9 @@
 > a record. Their *filenames* took a `_KR` suffix on 2026-09-02; no word inside moved.
 
 Where the experiment scripts and requirements live for the work that **uses `motoro`
-as a library**. The name starts with `agentic-core-` so the folder alone says what the
-experiment is about — the repository kept that name after the library was renamed to
-`motoro`.
+as a library**. **`memstara` is a working title, not the name.** The folder
+on disk and the repository on GitHub still carry it, which is why every path and link
+below reads that way — the project is **Memstara**.
 
 ## What this folder is — a private repository, and a folder that is not backed up
 
@@ -268,8 +268,8 @@ conda activate memstara
 > so **renaming the folder means fixing both.**
 >
 > **Two names do not follow this rule.**
-> One is **this repository's own name, `memstara`**, kept so the folder
-> name alone says what the experiment is about (see the top of this file).
+> One is **this repository's own name, `memstara`** — a working title the
+> folder and the remote still carry, so paths and links keep spelling it.
 > The other is **`AGENTIC_OKF_BUNDLE_DIR`**, which upstream reads as that literal
 > string without going through the prefix
 > (`motoro/src/motoro/mcp_servers/okf.py:66`, `mcp/client.py:57`) — renaming it to
