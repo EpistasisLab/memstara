@@ -173,9 +173,19 @@ HOME: dict[str, dict[str, int]] = {
 
 AGENT_LABELS = {
     # Stage -> the name shown on screen.
+    #
+    # "Report · Insight" is one stage under two names on purpose. The plan calls this the
+    # insight agent (`spec/components/05_에이전트_구현계획_KR.md:121` — 완성된 board 입력,
+    # 리포트 출력) and the code has always called it `report`. Only the label moves: the
+    # stage key stays `report` here and in the pipeline, and the agent stays
+    # `memstara-board-report` in motoro's database, because `_ensure_agent`
+    # (`src/memstara/pipeline/core.py:234-269`) finds an agent by its name. Renaming it
+    # would create a second agent, orphan the first, and leave every run recorded so far
+    # pointing at a name this table no longer knows — which on this screen means a
+    # character with no label.
     "curator": "Curator",
     "hypothesis": "Hypothesis", "data": "Data", "ml": "ML",
-    "interpreter": "Interpreter", "report": "Report",
+    "interpreter": "Interpreter", "report": "Report · Insight",
 }
 
 # A tool touches exactly one store. Keyed by tool, not by server, because the board
