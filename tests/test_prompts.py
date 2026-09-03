@@ -10,6 +10,8 @@ importable anywhere.
 
 from __future__ import annotations
 
+import hashlib
+
 import pytest
 
 from memstara.pipeline import prompts
@@ -141,3 +143,75 @@ def test_include_does_not_fire_inside_prose(prompt_dir):
     """Anchored to a whole line, so a prompt may talk about the syntax."""
     write(prompt_dir, "solo", "---\ngoal: g\n---\n\nWrite {{_shared}} on its own line.\n")
     assert prompts.load_prompt("solo")["system_prompt"] == "Write {{_shared}} on its own line."
+
+
+# --------------------------------------------------------------------------- #
+#  The digest a run records
+# --------------------------------------------------------------------------- #
+#
+#  `board.py` writes these into `prompts.json` so a run directory can answer *which
+#  wording produced this*. What that answer is worth is exactly the two properties
+#  below: an edit the model cannot see must not move the digest, and an edit it can
+#  see must. The `board.py` write itself is not tested — CI has no `../motoro` and no
+#  litellm, so that module is not importable on the runner.
+
+
+def test_digest_is_the_sha256_of_what_load_prompt_returns(prompt_dir):
+    write(prompt_dir, "solo", "---\ngoal: Do the thing.\n---\n\nYou are an agent.\n")
+    loaded = prompts.load_prompt("solo")
+    digest = prompts.prompt_digest("solo")
+
+    assert digest.keys() == loaded.keys()
+    assert digest == {
+        field: hashlib.sha256(text.encode("utf-8")).hexdigest()
+        for field, text in loaded.items()
+    }
+
+
+def test_a_comment_edit_does_not_move_the_digest(prompt_dir):
+    """The reasoning above a prompt is edited often and is stripped before the model
+    sees it. A digest that moved with it would report a changed condition on every
+    such edit, and the record would stop meaning anything."""
+    write(prompt_dir, "solo", (
+        "---\ngoal: g\n---\n\n<!-- because the first draft over-claimed -->\n\nYou are an agent.\n"
+    ))
+    before = prompts.prompt_digest("solo")
+
+    write(prompt_dir, "solo", (
+        "---\ngoal: g\n---\n\n<!-- rewritten, at length, saying something else -->\n\n"
+        "You are an agent.\n"
+    ))
+    assert prompts.prompt_digest("solo") == before
+
+
+def test_editing_an_included_fragment_moves_the_digest(prompt_dir):
+    """And it moves for every prompt that includes it, which is what that edit is."""
+    write(prompt_dir, "_shared", "Claim your work.\n")
+    write(prompt_dir, "data", "---\ngoal: g\n---\n\n{{_shared}}\n\nYour type is \"data\".\n")
+    write(prompt_dir, "ml", "---\ngoal: g\n---\n\n{{_shared}}\n\nYour type is \"ml\".\n")
+    before = {name: prompts.prompt_digest(name) for name in ("data", "ml")}
+
+    write(prompt_dir, "_shared", "Claim your work. Stop when there is none.\n")
+
+    for name in ("data", "ml"):
+        assert prompts.prompt_digest(name)["system_prompt"] != before[name]["system_prompt"]
+        assert prompts.prompt_digest(name)["goal"] == before[name]["goal"]
+
+
+def test_the_two_fields_are_digested_apart(prompt_dir):
+    """Rewording the goal must not read as a changed system prompt, or the record
+    cannot tell the two experiments apart."""
+    write(prompt_dir, "solo", "---\ngoal: Do the thing.\n---\n\nYou are an agent.\n")
+    before = prompts.prompt_digest("solo")
+
+    write(prompt_dir, "solo", "---\ngoal: Do the other thing.\n---\n\nYou are an agent.\n")
+    after = prompts.prompt_digest("solo")
+
+    assert after["goal"] != before["goal"]
+    assert after["system_prompt"] == before["system_prompt"]
+
+
+def test_digest_raises_rather_than_hashing_nothing(prompt_dir):
+    """A digest of "" is a valid-looking hex string, and it would be recorded as one."""
+    with pytest.raises(FileNotFoundError, match="ghost"):
+        prompts.prompt_digest("ghost")

@@ -166,6 +166,7 @@ from memstara.blackboard import BoardBusy, dsn, release_questions, run_lock
 from memstara.logging_setup import drain_llm_requests, new_run_dir, setup_logging, tee_console
 # memstara/pipeline/core.py — the part the two pipelines (mvp, board) share
 from memstara.pipeline.core import (
+    BOARD_AGENT_NAMES,       # stage -> the durable agent's name in motoro's database
     BOARD_SERVERS,           # the tool servers each stage is allowed to reach
     BOARD_TOOLS,             # the individual tool names each stage is allowed
     perspective_for,         # trial number -> perspective wording
@@ -173,6 +174,8 @@ from memstara.pipeline.core import (
     temperature_for,         # trial number -> temperature
     tools_for,               # picks out of the registry only the tools to be used
 )
+# memstara/pipeline/prompts.py — what each agent is told, and its fingerprint
+from memstara.pipeline.prompts import prompt_digest
 from memstara.config import Settings   # the settings object that reads .env and hands it to core
 
 # memstara/paths.py, memstara/servers.py — where things are, and how the five tool
@@ -1086,6 +1089,36 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     agents = await provision_board_agents(provider=args.provider, model=args.model)
     done("(1)", f"{len(agents)} ready — {' · '.join(agents)}")
 
+    # What each of them was told is a file now, and files change between runs. The run
+    # directory does not answer *which wording produced this* by being looked at:
+    # `report.md` is the answer and `board.json` the work; `src/memstara/trace/run.py:344`
+    # records the system prompt's **length** and no more. The text itself is not lost —
+    # it is inside `trace/NN_stage.llm.txt`, written by `_trace_one` — but that file is
+    # the whole request stacked once per call, and it exists only where litellm's log was
+    # intercepted. Comparing two runs there is reading; comparing two digests is looking.
+    # So write the fingerprints down here, right after provisioning and before the first
+    # model call, while what was sent is exactly what was just read.
+    #
+    # Keyed off `agents` rather than off `BOARD_AGENT_NAMES` so the record cannot come
+    # to describe a stage that was not provisioned; the prompt path is the stage name
+    # by construction (`provision_board_agents`).
+    (run_dir / "prompts.json").write_text(
+        json.dumps(
+            {
+                stage: {
+                    "agent": BOARD_AGENT_NAMES[stage],
+                    "agent_id": str(agent_id),
+                    "file": f"src/memstara/prompts/board/{stage}.md",
+                    **prompt_digest(f"board/{stage}"),
+                }
+                for stage, agent_id in agents.items()
+            },
+            ensure_ascii=False, indent=2,
+        ),
+        encoding="utf-8",
+    )
+    note("prompts.json — the sha256 of what each of them was told")
+
     # -- (2) switch on the four machines ---------------------------------
     #
     # This is where there come to be five programs. This one file + four machines.
@@ -1550,7 +1583,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         run_ids = [t.get("task_id") for t in final["tasks"]]
         print(f"\n{'=' * 68}\n{text}\n{'=' * 68}")
         print(f"\nrun directory: {run_dir}")
-        print(f"  report.md · board.json ({len(run_ids)} tasks)")
+        print(f"  report.md · board.json ({len(run_ids)} tasks) · prompts.json")
         if log_path:
             print(f"  {log_path.name}")
         return 0

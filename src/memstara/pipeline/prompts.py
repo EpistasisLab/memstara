@@ -61,6 +61,7 @@ someone to go and check.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 
@@ -174,3 +175,33 @@ def load_prompt(name: str) -> dict[str, str]:
         raise ValueError(f"{path}: the prompt body is empty")
 
     return {"goal": front["goal"], "system_prompt": body}
+
+
+def prompt_digest(name: str) -> dict[str, str]:
+    """The sha256 of each field an agent is given, for a run's record.
+
+    A digest and not the text: what a run directory is read for is *which wording
+    produced this*, and two runs whose digests match were told the same thing — an
+    answer a person gets in one glance and does not get from two copies of 13,000
+    characters. The text is not lost by being left out, because the digest belongs to
+    a commit: one file per agent under `src/memstara/prompts/` means `git log` on that
+    file is the list of every wording it has ever had.
+
+    Digested **after** the comments are stripped and the include resolved, so it is a
+    digest of what the model received. Editing a `<!-- -->` block does not change it,
+    and editing `_claim_preamble.md` changes it for all three stages that include it —
+    both of which are the truth about that edit.
+
+    Args:
+        name: The same path `load_prompt` takes — ``"board/curator"``.
+
+    Returns:
+        ``{"goal": <hex>, "system_prompt": <hex>}``.
+
+    Raises:
+        FileNotFoundError, ValueError: Whatever `load_prompt` raises, unchanged.
+    """
+    return {
+        field: hashlib.sha256(text.encode("utf-8")).hexdigest()
+        for field, text in load_prompt(name).items()
+    }
