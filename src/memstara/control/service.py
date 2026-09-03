@@ -171,6 +171,14 @@ class _Runs:
         missing prerequisite are both printed and gone before the tee is in place. So
         everything is captured here as well, into a second file, which is the one to
         read when a run ends in the first two seconds.
+
+        **`-u` is what makes either file readable while the run is going.** The child's
+        stdout here is a regular file, not a terminal, so CPython block-buffers it at 8 KB
+        — and a pipeline prints a few hundred bytes over its first several minutes, so
+        without this both logs sit at exactly zero bytes while the run is plainly working.
+        That is not a slow start that resolves itself; it is a log that arrives in 8 KB
+        lumps, minutes late, in the wrong order relative to what the screen otherwise
+        shows. The extra write syscalls are the entire cost.
         """
         with self._lock:
             self._reap()
@@ -181,7 +189,7 @@ class _Runs:
                 )
             log = (run_dir / "control.log").open("wb")
             popen = subprocess.Popen(
-                [sys.executable, "-m", "memstara.pipeline.board",
+                [sys.executable, "-u", "-m", "memstara.pipeline.board",
                  "--run-tag", run_tag, "--run-dir", str(run_dir), *argv],
                 cwd=REPO_ROOT,
                 stdout=log,
