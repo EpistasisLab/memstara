@@ -286,6 +286,19 @@ ORDER BY a.name, count(*) DESC, f.server, f.tool
 # column. `ORDER BY f.started_at` puts it in time order, so scene._carrying can replay
 # this list as it stands and reconstruct "who is holding what right now" — it does not
 # have to sort again.
+#
+# The window is not an optimisation, it is a correctness bound, and it is the same
+# argument as OPEN_RUNS above. `_carrying` replays claims against releases and reports
+# whoever is left holding something. An interrupted run leaves a `claim_task` with no
+# matching `submit_result`, and over an unbounded history that orphan never expires:
+# the agent is pinned as `moving` on every screen, under every run tag, permanently.
+# There is no such orphan right now, so this is a trap rather than a live fault — but
+# it is armed by any run that is killed part way, which is an ordinary thing to do.
+# Without the bound the replay also grows without limit; it is at 578 rows reaching
+# back to 2026-08-10, re-read on every 2s poll.
+#
+# ($1 is scene.py's RUN_ALIVE_SECONDS, as a string, exactly as OPEN_RUNS takes it. A
+# claim older than the longest a run may live cannot belong to a run still holding it.)
 TASK_TOUCHES = FLAT_CALLS + f"""
 SELECT a.name,
        f.run_id,
@@ -300,6 +313,7 @@ FROM flat f
 JOIN agent_runs r ON r.id = f.run_id
 JOIN agents a ON a.id = r.agent_id
 WHERE f.tool IN {_TOOLS_SQL}
+  AND f.started_at > now() - ($1::text || ' seconds')::interval
 ORDER BY f.started_at
 """
 
