@@ -28,6 +28,8 @@ mistake.
    _dsn()                reads the connection string from the environment and strips
                          the SQLAlchemy prefix off it
    Health                which DB answered on the last attempt, or why it did not
+   logger                the viewer's own log, so a failure outlives the poll that
+                         overwrites it on screen
    Pools                 the container holding the two pools
    Pools._pool()         builds a pool at first use (lazily)
    Pools.guarded()       ★ the heart of this file. Wraps a query and turns a failure
@@ -51,6 +53,7 @@ mistake.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -59,6 +62,23 @@ from typing import Any, Awaitable, Callable, TypeVar
 import asyncpg
 
 T = TypeVar("T")
+
+#: The viewer's own log. Until this existed, `viewer/api/` wrote nothing at all — no
+#: logging, no print — so the container's 99,608 log lines were pure uvicorn access log,
+#: every one of them a 200. A `guarded` failure is the one event that explains a wrong
+#: screen, and it left no trace: the health flag it sets is overwritten by the next
+#: successful poll two seconds later. That is why intermittent faults here have had to
+#: be diagnosed from scratch every time instead of read off the log.
+#:
+#: The name is a child of uvicorn's own error logger on purpose, and it is the only way
+#: this line is worth writing. uvicorn configures `uvicorn`, `uvicorn.error` and
+#: `uvicorn.access` and leaves the root logger with no handler at all, so a logger named
+#: plainly `viewer` falls through to `logging.lastResort` and prints the bare message
+#: with no level and no formatting — indistinguishable from a stray print in a log that
+#: is otherwise entirely access lines. As a child of `uvicorn.error` it inherits that
+#: handler and comes out marked `WARNING:` alongside everything else. Verified both ways
+#: under uvicorn's real LOGGING_CONFIG.
+logger = logging.getLogger("uvicorn.error.viewer")
 
 MEMSTARA_DSN_DEFAULT = "postgresql://memstara_viewer:viewer@localhost:5463/memstara"
 CORE_DSN_DEFAULT = "postgresql://memstara_viewer:viewer@localhost:5453/motoro"
@@ -184,6 +204,11 @@ class Pools:
             # are lumped together. In exchange the type name and message are kept, up to
             # 200 characters, so the reason can be shown on screen.
             msg = f"{type(e).__name__}: {e}"[:200]
+            # Say it out loud as well as on screen. The screen forgets on the next
+            # successful poll; the log does not, and an intermittent fault is only ever
+            # solvable from a record that outlives it. `which` and the exception are all
+            # that goes out — never the DSN, which carries the password.
+            logger.warning("%s database query failed: %s", which, msg)
             if which == "memstara":
                 self.health.memstara, self.health.memstara_error = False, msg
             else:
