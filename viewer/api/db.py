@@ -281,10 +281,16 @@ class Pools:
             # anything: asyncpg holds its own connections, so an unclosed pool keeps up
             # to POOL_MAX backends open on a server that nothing will ever read from
             # again, and once the attribute is None even `close()` below cannot reach
-            # it. Left as it was, one transient failure leaked ten connections
-            # permanently — pg_stat_activity showed viewer backends older than the
-            # container process holding them, sitting idle for 14-16 hours next to a
-            # live pool polling every 2s.
+            # it. That much is plain from the code; one transient failure could strand
+            # ten connections for the life of the process.
+            #
+            # Orphaned backends are visible on both servers — some older than the
+            # container that started them, idle for days, with no socket left on the
+            # host — but they are *not* evidence for this particular leak, and it would
+            # be wrong to cite them as such. A container killed without a clean shutdown
+            # strands its idle connections in exactly the same way, and this project
+            # rebuilds those containers often. The case for closing here rests on
+            # reading the code, not on those rows.
             await self._discard(which)
             return fallback
         # Getting this far means success. health is **put back** to True. Without these
