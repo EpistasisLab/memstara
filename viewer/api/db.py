@@ -32,6 +32,7 @@ mistake.
                          overwrites it on screen
    Pools                 the container holding the two pools
    Pools._pool()         builds a pool at first use (lazily)
+   Pools._discard()      the only way a pool is let go of — closes it, then forgets it
    Pools.guarded()       ★ the heart of this file. Wraps a query and turns a failure
                          into a fallback
    pools                 the module-global instance. Every other file uses this one
@@ -43,9 +44,11 @@ mistake.
    2. `guarded` **swallows** the exception. That is right. A screen that shows the
       board and says "core is unreachable" is far more useful than a blank page
       because half the data is missing.
-   3. On failure the pool is **dropped to None.** That is so a dead socket is not
-      reused and the next poll connects afresh. Leave this out and the viewer keeps
-      saying the DB is down after it has come back.
+   3. On failure the pool is **closed and then dropped to None.** Dropping it is so a
+      dead socket is not reused and the next poll connects afresh — leave that out and
+      the viewer keeps saying the DB is down after it has come back. Closing it first
+      is so the connections do not outlive the pool: dropping the reference on its own
+      leaks every backend the pool held, with no handle left to close them by.
    4. **There is code that puts health back to True** on success. Without it a DB
       that failed once stays marked dead forever.
 ==============================================================================
@@ -53,6 +56,7 @@ mistake.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -90,6 +94,11 @@ POOL_MAX = 10
 #: is not reported as a dead database, and far below nginx's 60s so a real jam surfaces
 #: as "core is unreachable" on the screen rather than as a 504 with no explanation.
 ACQUIRE_TIMEOUT = 5.0
+#: Seconds to let a pool shut down politely before its sockets are cut. `close()` waits
+#: for every connection to be handed back, and the failure that makes us throw a pool
+#: away is very often a connection that is never coming back — so without a bound here
+#: the cleanup would hang on precisely the case it exists for.
+CLOSE_TIMEOUT = 2.0
 # The default connection strings for the two DBs. That the ports differ is exactly what
 # "completely different servers" means. 5463 = board and results table (memstara) /
 # 5453 = agents and run history (motoro). Started under Docker, environment
@@ -142,10 +151,34 @@ class Pools:
         # Called when the app comes down (the lifespan in main.py). A pool that was
         # never built is None and is skipped. Putting it back to None after closing
         # matters — that is what lets `_pool` build a new one when it comes back up.
-        for pool in (self._memstara, self._core):
-            if pool is not None:
-                await pool.close()
-        self._memstara = self._core = None
+        for which in ("memstara", "core"):
+            await self._discard(which)
+
+    async def _discard(self, which: str) -> None:
+        """Let go of a pool, closing it first so its connections do not outlive it.
+
+        The only way a pool is ever released, whether at shutdown or after a failure.
+        Dropping the reference on its own closes nothing: asyncpg owns the sockets, so
+        an unclosed pool leaves up to POOL_MAX backends open on a server that nothing
+        will read from again, and once the attribute is None there is no longer any
+        handle to close them with.
+        """
+        pool = getattr(self, f"_{which}")
+        # Detached first, and deliberately. Whatever happens below, the next poll must
+        # find None here and build itself a fresh pool — recovery cannot be made to wait
+        # on the tidying up of the thing that already failed.
+        setattr(self, f"_{which}", None)
+        if pool is None:
+            return
+        try:
+            await asyncio.wait_for(pool.close(), CLOSE_TIMEOUT)
+        except Exception as e:  # noqa: BLE001 - tidying up must not raise into a caller
+            # Politeness has had its turn. `terminate()` is synchronous and shuts the
+            # sockets outright, which is the whole point: a pool that will not close is
+            # exactly the pool whose connections would otherwise be leaked.
+            logger.warning("%s pool did not close in %.0fs, terminating: %s: %s",
+                           which, CLOSE_TIMEOUT, type(e).__name__, e)
+            pool.terminate()
 
     async def _pool(self, which: str) -> asyncpg.Pool:
         """Create the pool on first use and keep it.
@@ -217,7 +250,16 @@ class Pools:
             # Keep reusing a dead socket and the viewer marks the DB down forever, even
             # after it comes back. Put back to None, `_pool` builds a new pool on the
             # next poll and it recovers by itself.
-            setattr(self, f"_{which}", None)
+            #
+            # Close it before letting go of it. Dropping the reference does not close
+            # anything: asyncpg holds its own connections, so an unclosed pool keeps up
+            # to POOL_MAX backends open on a server that nothing will ever read from
+            # again, and once the attribute is None even `close()` below cannot reach
+            # it. Left as it was, one transient failure leaked ten connections
+            # permanently — pg_stat_activity showed viewer backends older than the
+            # container process holding them, sitting idle for 14-16 hours next to a
+            # live pool polling every 2s.
+            await self._discard(which)
             return fallback
         # Getting this far means success. health is **put back** to True. Without these
         # two lines a DB that failed once stays on a red light forever.
