@@ -522,6 +522,18 @@ async def snapshot(run_tag: str | None) -> dict[str, Any]:
             if stale is None:
                 raise
             return stale
+        if pools.hiccup():
+            # A store dropped exactly one read while this was computed, so `fresh` is
+            # partly made of empty fallbacks. Empty does not read as "unknown" on the
+            # screen — it reads as an empty board and six idle agents, which is a claim
+            # nothing here is entitled to make. The previous picture is a truer account
+            # of the pipeline than a fabricated one, and `_stale` labels it as old. It
+            # is deliberately not cached: the next tick must compute afresh, and if the
+            # store is genuinely gone that tick is no longer a hiccup and the degraded
+            # snapshot goes out with health down and the agents drawn `unknown`.
+            stale = _stale(run_tag)
+            if stale is not None:
+                return stale
         _snapshot_cache[run_tag] = (time.monotonic(), fresh)
         return fresh
     finally:

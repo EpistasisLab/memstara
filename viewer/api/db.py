@@ -146,6 +146,10 @@ class Pools:
         self._memstara: asyncpg.Pool | None = None
         self._core: asyncpg.Pool | None = None
         self.health = Health()
+        #: Consecutive failed reads per store, reset to 0 by any success. Not a retry
+        #: count and nothing here acts on it — it exists so the caller can tell a single
+        #: dropped read from a database that is actually gone. See `hiccup`.
+        self.fails: dict[str, int] = {"memstara": 0, "core": 0}
 
     async def close(self) -> None:
         # Called when the app comes down (the lifespan in main.py). A pool that was
@@ -179,6 +183,26 @@ class Pools:
             logger.warning("%s pool did not close in %.0fs, terminating: %s: %s",
                            which, CLOSE_TIMEOUT, type(e).__name__, e)
             pool.terminate()
+
+    def hiccup(self) -> bool:
+        """True when a store has just failed for the first time in a row.
+
+        The distinction this draws is between a database that dropped one read and a
+        database that is gone, and the caller needs it because the two deserve opposite
+        answers. `guarded` returns an empty fallback either way, and a snapshot composed
+        from that fallback does not say "unknown" — it says the board has no tasks and
+        every agent is idle. For a real outage that is fine, because health goes down
+        alongside it and `_build_scene` draws `unknown` instead. For one dropped read it
+        is a fabrication, and at a 2s poll it is the flicker of six characters going
+        blank and coming straight back.
+
+        So this is not a threshold before believing a failure — health is still marked
+        down on the first one, immediately and honestly. It only lets `scene.snapshot`
+        prefer the previous picture, plainly flagged stale, for the single tick that a
+        hiccup lasts. If the second read fails too this is False and the degraded
+        snapshot goes out as it always did.
+        """
+        return any(n == 1 for n in self.fails.values())
 
     async def _pool(self, which: str) -> asyncpg.Pool:
         """Create the pool on first use and keep it.
@@ -237,11 +261,13 @@ class Pools:
             # are lumped together. In exchange the type name and message are kept, up to
             # 200 characters, so the reason can be shown on screen.
             msg = f"{type(e).__name__}: {e}"[:200]
+            self.fails[which] = self.fails.get(which, 0) + 1
             # Say it out loud as well as on screen. The screen forgets on the next
             # successful poll; the log does not, and an intermittent fault is only ever
             # solvable from a record that outlives it. `which` and the exception are all
             # that goes out — never the DSN, which carries the password.
-            logger.warning("%s database query failed: %s", which, msg)
+            logger.warning("%s database query failed (%d in a row): %s",
+                           which, self.fails[which], msg)
             if which == "memstara":
                 self.health.memstara, self.health.memstara_error = False, msg
             else:
@@ -263,6 +289,7 @@ class Pools:
             return fallback
         # Getting this far means success. health is **put back** to True. Without these
         # two lines a DB that failed once stays on a red light forever.
+        self.fails[which] = 0
         if which == "memstara":
             self.health.memstara, self.health.memstara_error = True, ""
         else:
