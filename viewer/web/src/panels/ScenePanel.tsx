@@ -120,7 +120,23 @@ export default function ScenePanel() {
       icon={Map}
       title="Floor plan"
       count={scene?.agents.length}
-      status={scene ? <span>{working} working</span> : undefined}
+      status={
+        scene ? (
+          <>
+            {/* Says what the feed already says about itself. The scene is built from
+                who is running *now*, with no run tag anywhere in it — verified: two
+                different run_tags return a byte-identical `scene`. Sitting under a
+                control rail headed "Run", it reads as though the selector governs it,
+                so picking an older run would show the current picture under that run's
+                name. Labelling it is the honest half of the fix; actually scoping the
+                scene to a run is a larger change and is not done here. */}
+            <span title="The floor plan always shows what is running now, not the run selected above.">
+              All runs
+            </span>
+            <span>{working} working</span>
+          </>
+        ) : undefined
+      }
       // React Flow measures its own container and draws its own scrollbars; the panel's
       // scroll region must not add a second set.
       bodyClassName="overflow-hidden"

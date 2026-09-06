@@ -138,6 +138,12 @@ export default function ChainPanel() {
                 not updating
               </span>
             )}
+            {/* Same caveat as the floor plan, and for the same reason: these cards come
+                from `scene`, which carries no run tag at all. The run selector above
+                changes the board and the results beneath it but cannot change this. */}
+            <span title="The pipeline always shows what is running now, not the run selected above.">
+              All runs
+            </span>
             <span>{working} working</span>
             {age !== null && <span className="font-mono">{age}s ago</span>}
           </>
