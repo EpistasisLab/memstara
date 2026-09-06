@@ -32,9 +32,10 @@ doing.
    snapshot()    ★ gathers all of the above into one object
 
  Easy things to miss
-   1. **RUN_ALIVE_SECONDS (120s)** — the time window that stops a dead run from
+   1. **RUN_ALIVE_SECONDS (900s)** — the time window that stops a dead run from
       looking alive. Without it a character stands there "working" forever because of
-      a run whose process died.
+      a run whose process died. Set it too tight, though, and it does the opposite
+      harm: it hides a run that is alive but thinking. See the note on the constant.
    2. **`attempts` is not a retry count.** A task is claimed afresh at every stage
       handover, so even a healthy task ends at attempts 3. `_retried()` subtracts that
       difference out.
@@ -88,12 +89,26 @@ FLASH_SECONDS = 4
 
 # ★ The time window that stops a dead run from looking alive.
 # How long a run may go without a heartbeat before it stops counting as in-flight.
-# Runs heartbeat every few seconds and a stage takes under a minute, so two minutes of
-# silence means the process died — not that the agent is thinking hard.
-# Without this value the ghost runs left sitting with `completed_at IS NULL` (one of
-# them seven days old) leave a character standing there "working" forever.
-# It goes to queries.OPEN_RUNS as its $1.
-RUN_ALIVE_SECONDS = 120
+#
+# This was 120, on the stated reasoning that "runs heartbeat every few seconds and a
+# stage takes under a minute". Both halves are false. The heartbeat is written by
+# `_update_heartbeat` in motoro's orchestrator, and that call sits *inside the phase
+# loop* — so a run heartbeats **once per phase, not on a timer**, and a phase that
+# thinks for a long time is silent for exactly that long. Measured against core: 10
+# gaps between consecutive steps exceed 120s, up to 500.3s, and every one of them
+# belongs to a run that went on to complete normally. For those 380 seconds the run was
+# missing from OPEN_RUNS, so `_build_scene` below drew a working stage as idle and the
+# chain's live link stopped moving. That is the intermittent fault this window caused.
+#
+# 900 clears the measured worst case (500.3s) with 1.8x to spare. It still does the job
+# it was introduced for: the abandoned runs sitting with `completed_at IS NULL` are
+# 381,232s to 2,255,407s stale, so the window has a 425x margin before one of them could
+# reappear as a character standing there "working" forever.
+#
+# The real repair is in motoro — heartbeat on a timer rather than per phase — after
+# which this can come back down. Until then the viewer must not call a thinking agent
+# dead. It goes to queries.OPEN_RUNS as its $1.
+RUN_ALIVE_SECONDS = 900
 
 # A task's stage order, used to tell a genuine retry from normal progress. `attempts`
 # counts *claims*: a task that goes data -> ml -> interpret is claimed three times and

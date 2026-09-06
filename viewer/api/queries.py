@@ -226,17 +226,21 @@ ORDER BY a.name
 
 # Who is mid-flight right now. This is what makes a character "working".
 #
-# `completed_at IS NULL` alone is not enough. Six runs sit in `pending` and never
-# finished — the oldest is seven days old — because the process that started them was
-# killed. Without a freshness bound the ml character stands there "working" forever,
-# which is the same trap `reclaim_stalled` fell into: no time condition makes a dead
-# thing look alive.
+# `completed_at IS NULL` alone is not enough. Nine runs sit in `pending` and never
+# finished — the oldest 26 days old — because the process that started them was killed.
+# Without a freshness bound the ml character stands there "working" forever, which is
+# the same trap `reclaim_stalled` fell into: no time condition makes a dead thing look
+# alive.
 #
-# The bound is on the heartbeat, falling back to creation time. Runs heartbeat every
-# few seconds (observed: 5s), and a stage takes 20-60s, so $1 seconds of silence means
-# the run is gone rather than slow.
+# The bound is on the heartbeat, falling back to creation time. It used to be justified
+# here by "runs heartbeat every few seconds (observed: 5s), and a stage takes 20-60s".
+# That is not what motoro does: `_update_heartbeat` is called inside the phase loop, so
+# a run heartbeats once per phase and a long phase is silent for its whole length —
+# measured up to 500.3s, in runs that completed normally. A window shorter than the
+# longest phase does not hide dead runs, it hides live ones. See the note on
+# RUN_ALIVE_SECONDS in scene.py for the measurement and the margins.
 #
-# ($1 is scene.py's RUN_ALIVE_SECONDS = 120, arriving here as a string.)
+# ($1 is scene.py's RUN_ALIVE_SECONDS = 900, arriving here as a string.)
 OPEN_RUNS = """
 SELECT r.id AS run_id, a.name, r.created_at,
        coalesce(r.last_heartbeat_at, r.created_at) AS alive_at
