@@ -10,8 +10,8 @@ characters, and it sat in the middle of a 1,200-line module.
 
 The reason for moving it is not tidiness. It is that **in this project a prompt is an
 
-records the decision and names the cost of not doing it: *"프롬프트를 이렇게 바꿨더니
-결과가 이렇게 달라졌다"* cannot be traced afterwards while the prompt's history is
+records the decision and names the cost of not doing it: *this prompt changed, so this
+result changed* cannot be traced afterwards while the prompt's history is
 tangled with every unrelated edit to the module it lived in. One file per agent makes
 `git log` on that file the experiment log for that agent.
 

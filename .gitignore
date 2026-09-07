@@ -69,7 +69,7 @@ __pycache__/
 # The pattern is `*_KR*`, unanchored and open at both ends, because the marker
 # lands in three different places: before the suffix (`BACKLOG_KR.md`), in the
 # middle of a compound name (`..._KR_expanded.tex`, `..._KR_fig1.png`), and
-# inside a versioned name (`EcoXAI_SRS_KR_v0.2_원본.pdf`). Anchoring it to
+# inside a versioned name (`EcoXAI_SRS_KR_v0.2_original.pdf`). Anchoring it to
 # `*_KR.*` would have caught 102 of the 108 and quietly let 6 through.
 #
 # **What this costs, stated once so nobody rediscovers it as a surprise.** All

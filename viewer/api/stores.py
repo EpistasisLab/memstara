@@ -175,8 +175,9 @@ AGENT_LABELS = {
     # Stage -> the name shown on screen.
     #
     # "Report · Insight" is one stage under two names on purpose. The plan calls this the
-    # insight agent (`spec/components/05_에이전트_구현계획_KR.md:121` — 완성된 board 입력,
-    # 리포트 출력) and the code has always called it `report`. Only the label moves: the
+    # insight agent (`spec/components/05_agents_implementation_plan_KR.md:121` — a finished
+    # board in, a report out) and the code has always called it `report`. Only the label
+    # moves: the
     # stage key stays `report` here and in the pipeline, and the agent stays
     # `memstara-board-report` in motoro's database, because `_ensure_agent`
     # (`src/memstara/pipeline/core.py:234-269`) finds an agent by its name. Renaming it

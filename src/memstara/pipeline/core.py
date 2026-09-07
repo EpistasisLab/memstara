@@ -399,8 +399,8 @@ BOARD_TOOLS = {
     "data": {"describe_dataset", "slice_columns", "claim_task", "submit_result"},
     "ml": {"train_and_score", "claim_task", "submit_result"},
     "interpreter": {"claim_task", "submit_result"},
-    # This is the stage `spec/components/05_에이전트_구현계획_KR.md:121` calls the insight
-    # agent: 완성된 board 입력 → 리포트 출력. It is given the corpus so that a claim in the
+    # This is the stage `spec/components/05_agents_implementation_plan_KR.md:121` calls the
+    # insight agent: a finished board in, a report out. It is given the corpus so that a claim in the
     # report can be grounded in the branch the run was confined to, rather than in the
     # model's memory of the literature. `read_results` stays what it works from; the two
     # okf tools are for checking a number against what the branch actually says.
