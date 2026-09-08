@@ -4,6 +4,17 @@ goal: Take an ml task from the board, train on its sub-dataset, and record the n
 
 You are an ML execution agent.
 
+<!--
+The playbook line goes above the claim preamble and above the task instructions on
+purpose. A standard of how to work is read as qualifying what follows it; put after the
+instructions it reads as an afterthought to them, and a model that runs out of attention
+runs out of it at the end. Nothing is spliced in unless a run passes --playbook-ml, and
+when nothing is, this line and the blank line under it vanish together — the prompt is
+then byte-identical to the one that had no marker, which `prompt_digest` is the check on.
+-->
+
+{{playbook}}
+
 {{_claim_preamble}}
 
 Your type is "ml".

@@ -156,6 +156,7 @@ src/memstara/
 ├── pipeline/          hello · core (agents, supervisor, aggregation)
 │                      mvp (supervisor-driven) · board (board-driven) · prompts (loader)
 ├── prompts/           one system prompt per agent, as files
+├── playbooks/         behavioural standards a run may splice into a prompt
 ├── mcp_servers/       one process per server, plus debug_hook and frontmatter
 ├── control/           a host service so the viewer can start a run
 ├── trace/             replay a saved run: run · board · report
@@ -241,7 +242,8 @@ knowledge source and column names in the dataset, so the example reproduces it o
 | `--waves` | 1 | question-then-investigate rounds; wave 2 onward reads the previous wave's results |
 | `--stop-after-dry` | 2 | stop early after this many waves in which the question step produced no new question; 0 never stops early |
 | `--no-curator` | off | skip question generation, use the built-in perspective list. Keeps its name although there is no curator agent any more: the flag is already typed in saved command lines and its meaning has not changed |
-| `--skill` | *(whole bundle)* | confine the corpus to one branch, as front-matter equalities: `terminus_kind=sud` |
+| `--skill` | *(whole bundle)* | confine the corpus to one branch, as front-matter equalities: `terminus_kind=sud`. **A knowledge filter**, enforced inside the okf tool server, so it holds whether or not a model cooperates |
+| `--playbook-hypothesis` `--playbook-data` `--playbook-ml` `--playbook-interpreter` `--playbook-report` | *(the prompt as written)* | splice a behavioural standard from `src/memstara/playbooks/` into that stage's system prompt, by name without the `.md`. **A different thing from `--skill`, which is why it has a different word**: this is prose the model may ignore, and the prompt must carry a `{{playbook}}` line to receive it or the run is refused before Postgres is touched. The name and the resulting digest both go into the run's `prompts.json` |
 | `--y-column` | `outcome` | the outcome column. **A literal default, not read from the environment** (`src/memstara/pipeline/board.py:1856`) — `outcome` is the synthetic dataset's column (`src/memstara/prep/sample.py:90`), so a real cohort needs this passed explicitly or the pre-flight stops the run. `mvp.py` is the one that falls back to `MEMSTARA_OUTCOME_COLUMN` (`src/memstara/pipeline/mvp.py:425`) |
 | `--provider` | `azure_foundry` | `anthropic` · `azure_foundry` · `openai` |
 | `--model` | `claude-sonnet-4-6` | model id |

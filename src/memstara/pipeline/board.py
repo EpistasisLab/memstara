@@ -177,7 +177,7 @@ from memstara.pipeline.core import (
     tools_for,               # picks out of the registry only the tools to be used
 )
 # memstara/pipeline/prompts.py — what each agent is told, and its fingerprint
-from memstara.pipeline.prompts import prompt_digest
+from memstara.pipeline.prompts import load_prompt, prompt_digest
 # memstara/mcp_servers/frontmatter.py — the same reader the okf server uses for --skill.
 # Imported so a malformed skill is refused here, by the same code that will enforce it,
 # rather than a second parser that could come to disagree with it.
@@ -1131,6 +1131,26 @@ def report_skill_note(skill: str) -> str:
     )
 
 
+#: The stages `--playbook-*` exists for. Not `BOARD_AGENT_NAMES` and not `stores.HOME`,
+#: although it happens to hold the same five names: this list answers *which prompts may
+#: be given a behavioural standard*, and a stage could be added to the pipeline without
+#: being one. Written out so that adding a stage does not silently add a flag.
+PLAYBOOK_STAGES = ("hypothesis", "data", "ml", "interpreter", "report")
+
+
+def chosen_playbooks(args: argparse.Namespace) -> dict[str, str]:
+    """Stage -> playbook name, for the stages this run gave a standard to.
+
+    Read in two places — `main` checks every one of them before Postgres is touched, and
+    `run` hands them to provisioning and writes them into `prompts.json` — so it is one
+    function rather than the same comprehension twice. Stages with no playbook are left
+    out entirely, so an empty dict and *no standards anywhere* are the same value.
+    """
+    return {stage: getattr(args, f"playbook_{stage}")
+            for stage in PLAYBOOK_STAGES
+            if getattr(args, f"playbook_{stage}")}
+
+
 async def run(args: argparse.Namespace, run_dir: Path) -> int:
     """The body of the run. (1) through (6) of "How to read this file" at the top are
     here, in that order."""
@@ -1152,6 +1172,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     print(f"   data        {os.environ.get('MEMSTARA_DATASET_PATH','(none)')}")
     print(f"   knowledge   {os.environ.get('AGENTIC_OKF_BUNDLE_DIR','(none)')}")
     print(f"   skill       {args.skill or '(whole bundle)'}")
+    print(f"   playbooks   "
+          f"{' · '.join(f'{s}={b}' for s, b in chosen_playbooks(args).items()) or '(none)'}")
     print(f"   record dir  {run_dir}")
     print(f"   trace files {_TRACE_DIR.name}/  (one more each time a person is called)")
 
@@ -1161,7 +1183,10 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     # time, write it. Running it again and again only finds the same people back; it
     # does not multiply them.
     step("(1)", "call the five people", "fetch the role descriptions")
-    agents = await provision_board_agents(provider=args.provider, model=args.model)
+    playbooks = chosen_playbooks(args)
+    agents = await provision_board_agents(
+        provider=args.provider, model=args.model, playbooks=playbooks
+    )
     done("(1)", f"{len(agents)} ready — {' · '.join(agents)}")
 
     # What each of them was told is a file now, and files change between runs. The run
@@ -1182,6 +1207,12 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     # this file rather than in a new one because it answers the same question the
     # digests answer — *what produced this run* — and a branch of the corpus decides
     # what could be found at least as much as a wording decides what was asked.
+    #
+    # The playbook is recorded **per stage and by name**, beside the digest that already
+    # covers it. The digest alone would say *this stage was told something different* and
+    # not *which standard it was told to work to*; the name alone would not survive the
+    # file being edited afterwards. Null where a stage was given none, rather than absent,
+    # so a reader can tell "no standard" from "written before playbooks existed".
     (run_dir / "prompts.json").write_text(
         json.dumps(
             {
@@ -1191,7 +1222,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                         "agent": BOARD_AGENT_NAMES[stage],
                         "agent_id": str(agent_id),
                         "file": f"src/memstara/prompts/board/{stage}.md",
-                        **prompt_digest(f"board/{stage}"),
+                        "playbook": playbooks.get(stage) or None,
+                        **prompt_digest(f"board/{stage}", playbooks.get(stage, "")),
                     }
                     for stage, agent_id in agents.items()
                 },
@@ -1937,6 +1969,26 @@ async def main() -> int:
              "question out of the bank, so two never set out from one question (default 1; "
              "the floor plan is laid out for up to 3 and is not capped)",
     )
+    # A behavioural standard spliced into one stage's system prompt, by name, out of
+    # `src/memstara/playbooks/`. One flag per stage, because the whole point is that a
+    # stage can be given one and the others not — a single --playbook would make every
+    # run a five-stage condition and nothing attributable to any one of them.
+    #
+    # **This is not --skill, and the two words are deliberately different.** --skill
+    # narrows the OKF corpus and is enforced inside the okf tool server, so it holds
+    # whether or not a model cooperates. A playbook is prose the model may ignore. The
+    # meeting of 2026-08-26 called both of them skills; `H-21` is why only one of them
+    # keeps the word here.
+    #
+    # `data` gets a flag although the meeting listed four stages. Leaving it out would be
+    # a rule in the code that nobody decided, and one nobody could find later.
+    for stage_flag in ("hypothesis", "data", "ml", "interpreter", "report"):
+        ap.add_argument(
+            f"--playbook-{stage_flag}", default="",
+            help=f"a behavioural standard for the {stage_flag} stage, named without the "
+                 f".md — the prompt must carry a {{{{playbook}}}} line to receive it "
+                 f"(default: the prompt as written)",
+        )
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--run-dir", default=None)
     args = ap.parse_args()
@@ -1965,6 +2017,17 @@ async def main() -> int:
         except ValueError as e:
             ap.error(f"--skill {args.skill!r}: {e}")
     os.environ["MEMSTARA_OKF_FIELDS"] = args.skill
+
+    # The playbooks are read here for the same reason, and it buys more: `load_prompt`
+    # refuses a playbook whose stage has no `{{playbook}}` line, so a stage that cannot
+    # receive a standard says so now rather than provisioning an agent that quietly
+    # works to no standard at all. Reading is the check — the result is thrown away and
+    # read again at provisioning, which costs a few kilobytes and keeps one loader.
+    for stage, book in chosen_playbooks(args).items():
+        try:
+            load_prompt(f"board/{stage}", book)
+        except (OSError, ValueError) as e:
+            ap.error(f"--playbook-{stage} {book!r}: {e}")
 
     # If the prerequisites are missing it ends **without doing anything.** Stopping
     # before the start leaves the board cleaner than dying halfway through.

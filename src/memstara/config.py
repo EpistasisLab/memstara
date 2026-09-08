@@ -124,7 +124,7 @@ class Settings(CoreSettings):
     # hook_timeout_seconds regardless of which timeout actually fired, which
     # points at the wrong knob.
     #
-    # README.md:153-159 says to keep hook_timeout_seconds "comfortably above"
+    # README.md:153-160 says to keep hook_timeout_seconds "comfortably above"
     # llm_call_timeout_seconds. The defaults contradict that. Observed here: at
     # concurrency 5 against Foundry, reason_act's pre_act hook exceeded 30s on
     # 5 of 8 trials.

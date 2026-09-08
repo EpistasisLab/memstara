@@ -269,12 +269,19 @@ async def _ensure_agent(name: str, **kwargs: Any) -> Any:
     return existing
 
 
-async def _ensure_agent_from_file(name: str, prompt: str, **kwargs: Any) -> Any:
+async def _ensure_agent_from_file(
+    name: str, prompt: str, playbook: str = "", **kwargs: Any
+) -> Any:
     """`_ensure_agent`, with `goal` and `system_prompt` read from a prompt file.
 
     Args:
         name: The agent's name, from `AGENT_NAMES` or `BOARD_AGENT_NAMES`.
         prompt: Path under `PROMPTS_DIR` without the suffix — "board/hypothesis".
+        playbook: A behavioural standard to splice into that prompt, or "" for the
+            prompt as written. Nothing below here needs to know: `_ensure_agent`
+            compares the `system_prompt` it is handed against the stored one and
+            updates it, so a run that attaches a playbook and one that does not
+            reprovision the same agent in the same way.
         **kwargs: Passed straight through; `model_config` and `pattern_config` in
             practice.
 
@@ -283,7 +290,7 @@ async def _ensure_agent_from_file(name: str, prompt: str, **kwargs: Any) -> Any:
         back an empty prompt, so a mis-named or malformed file fails here, loudly,
         before any model is called.
     """
-    return await _ensure_agent(name, **load_prompt(prompt), **kwargs)
+    return await _ensure_agent(name, **load_prompt(prompt, playbook), **kwargs)
 
 
 async def provision_all(
@@ -467,7 +474,8 @@ QUESTION_SERVERS = {"okf", "memstara-blackboard"}
 
 
 async def provision_board_agents(
-    *, provider: str = "azure_foundry", model: str = "claude-sonnet-4-6"
+    *, provider: str = "azure_foundry", model: str = "claude-sonnet-4-6",
+    playbooks: dict[str, str] | None = None,
 ) -> dict[str, uuid.UUID]:
     """Create the five board-driven agents (or find the existing ones).
 
@@ -478,28 +486,38 @@ async def provision_board_agents(
 
     It goes through `_ensure_agent`, so editing a prompt file **updates the existing
     agent** on the next run — the name stays and only the contents change.
+
+    Args:
+        provider: The LLM provider.
+        model: The model id.
+        playbooks: Stage key -> playbook name, for the stages a run chose a
+            behavioural standard for. Absent and empty mean the same thing here, and
+            both mean the prompt as written. The four keys the meeting of 2026-08-26
+            named are `hypothesis`, `ml`, `interpreter` and `report`; `data` takes one
+            too, because refusing it would be a rule in the code that nobody decided.
     """
     mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096)
     react = {"execution_pattern": "reason_act"}
+    books = playbooks or {}
 
     hypothesis = await _ensure_agent_from_file(
-        BOARD_AGENT_NAMES["hypothesis"], "board/hypothesis",
+        BOARD_AGENT_NAMES["hypothesis"], "board/hypothesis", books.get("hypothesis", ""),
         model_config=mc, pattern_config=react,
     )
     data = await _ensure_agent_from_file(
-        BOARD_AGENT_NAMES["data"], "board/data",
+        BOARD_AGENT_NAMES["data"], "board/data", books.get("data", ""),
         model_config=mc, pattern_config=react,
     )
     ml = await _ensure_agent_from_file(
-        BOARD_AGENT_NAMES["ml"], "board/ml",
+        BOARD_AGENT_NAMES["ml"], "board/ml", books.get("ml", ""),
         model_config=mc, pattern_config=react,
     )
     interpreter = await _ensure_agent_from_file(
-        BOARD_AGENT_NAMES["interpreter"], "board/interpreter",
+        BOARD_AGENT_NAMES["interpreter"], "board/interpreter", books.get("interpreter", ""),
         model_config=mc, pattern_config=react,
     )
     report = await _ensure_agent_from_file(
-        BOARD_AGENT_NAMES["report"], "board/report",
+        BOARD_AGENT_NAMES["report"], "board/report", books.get("report", ""),
         model_config=mc, pattern_config=react,
     )
     return {

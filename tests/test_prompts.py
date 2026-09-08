@@ -24,6 +24,17 @@ def prompt_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
+@pytest.fixture
+def playbook_dir(tmp_path, monkeypatch):
+    """The same, for the standards a run may attach. A separate directory in the tests
+    because it is a separate directory in the package: a playbook is chosen at run time
+    and a prompt fragment is not, and one folder holding both would lose that."""
+    directory = tmp_path / "playbooks"
+    directory.mkdir()
+    monkeypatch.setattr(prompts, "PLAYBOOKS_DIR", directory)
+    return directory
+
+
 def write(directory, name: str, text: str) -> None:
     path = directory / f"{name}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -215,3 +226,127 @@ def test_digest_raises_rather_than_hashing_nothing(prompt_dir):
     """A digest of "" is a valid-looking hex string, and it would be recorded as one."""
     with pytest.raises(FileNotFoundError, match="ghost"):
         prompts.prompt_digest("ghost")
+
+
+# --------------------------------------------------------------------------- #
+#  The playbook a run chooses
+# --------------------------------------------------------------------------- #
+#
+#  The second include, and the one whose file is named at run time rather than in the
+#  prompt. What has to hold: it lands where the prompt put it, a marked prompt with no
+#  playbook is the prompt it was before the marker, and both of those are visible in
+#  the digest — because the digest is what `board.py` writes into the run record, and a
+#  standard that reached the model without reaching the record leaves two differently
+#  instructed runs looking identical afterwards.
+
+
+MARKED = "---\ngoal: g\n---\n\nYou are an agent.\n\n{{playbook}}\n\nYour type is \"ml\".\n"
+UNMARKED = "---\ngoal: g\n---\n\nYou are an agent.\n\nYour type is \"ml\".\n"
+
+
+def test_the_playbook_lands_where_the_prompt_put_it(prompt_dir, playbook_dir):
+    write(prompt_dir, "ml", MARKED)
+    write(playbook_dir, "governance", "Report what the tool returned.\n")
+
+    body = prompts.load_prompt("ml", "governance")["system_prompt"]
+    assert body == (
+        'You are an agent.\n\nReport what the tool returned.\n\nYour type is "ml".'
+    )
+
+
+def test_a_marked_prompt_with_no_playbook_is_the_prompt_it_was_before_the_marker(
+    prompt_dir, playbook_dir
+):
+    """Byte-identical, not merely similar. This is what lets a stage be given the marker
+    in one commit and a standard in another without the first commit changing what any
+    default run sends — and it is checked on the digest, because that is the claim."""
+    write(prompt_dir, "ml", UNMARKED)
+    before = prompts.prompt_digest("ml")
+
+    write(prompt_dir, "ml", MARKED)
+    assert prompts.load_prompt("ml")["system_prompt"] == 'You are an agent.\n\nYour type is "ml".'
+    assert prompts.prompt_digest("ml") == before
+
+
+def test_attaching_a_playbook_moves_the_digest(prompt_dir, playbook_dir):
+    """The whole reason `prompt_digest` takes the playbook too. Without this the record
+    would say two runs were told the same thing when one was working to a standard."""
+    write(prompt_dir, "ml", MARKED)
+    write(playbook_dir, "governance", "Report what the tool returned.\n")
+
+    plain = prompts.prompt_digest("ml")
+    under = prompts.prompt_digest("ml", "governance")
+
+    assert under["system_prompt"] != plain["system_prompt"]
+    assert under["goal"] == plain["goal"]
+
+
+def test_editing_a_playbook_moves_the_digest(prompt_dir, playbook_dir):
+    write(prompt_dir, "ml", MARKED)
+    write(playbook_dir, "governance", "Report what the tool returned.\n")
+    before = prompts.prompt_digest("ml", "governance")
+
+    write(playbook_dir, "governance", "Report what the tool returned, and the engine.\n")
+    assert prompts.prompt_digest("ml", "governance") != before
+
+
+def test_two_playbooks_are_two_digests(prompt_dir, playbook_dir):
+    """Otherwise the record cannot tell one condition from another, which is the only
+    thing it is written for."""
+    write(prompt_dir, "ml", MARKED)
+    write(playbook_dir, "strict", "Report what the tool returned.\n")
+    write(playbook_dir, "loose", "Use your judgement.\n")
+
+    assert prompts.prompt_digest("ml", "strict") != prompts.prompt_digest("ml", "loose")
+
+
+def test_a_playbook_for_a_prompt_with_nowhere_to_put_it_raises(prompt_dir, playbook_dir):
+    """The alternative is a run that was asked to work to a standard, did not, and says
+    nowhere that it did not."""
+    write(prompt_dir, "ml", UNMARKED)
+    write(playbook_dir, "governance", "Report what the tool returned.\n")
+
+    with pytest.raises(ValueError, match="no .*playbook.* line"):
+        prompts.load_prompt("ml", "governance")
+
+
+def test_a_playbook_that_is_not_there_raises_and_lists_the_ones_that_are(
+    prompt_dir, playbook_dir
+):
+    write(prompt_dir, "ml", MARKED)
+    write(playbook_dir, "governance", "Report what the tool returned.\n")
+
+    with pytest.raises(FileNotFoundError, match="governance"):
+        prompts.load_prompt("ml", "ghost")
+
+
+def test_an_empty_playbook_raises(prompt_dir, playbook_dir):
+    """Same rule as an empty prompt body. A run recorded as working to a standard, whose
+    standard was a blank file, is worse than one recorded as working to none."""
+    write(prompt_dir, "ml", MARKED)
+    write(playbook_dir, "hollow", "<!-- notes and nothing else -->\n")
+
+    with pytest.raises(ValueError, match="empty"):
+        prompts.load_prompt("ml", "hollow")
+
+
+def test_a_playbook_comment_does_not_reach_the_model(prompt_dir, playbook_dir):
+    """A playbook is read by the same reader as a prompt, so the reasoning above it stays
+    with it rather than moving to a commit message nobody opens."""
+    write(prompt_dir, "ml", MARKED)
+    write(playbook_dir, "governance", "<!-- why -->\n\nReport what the tool returned.\n")
+
+    assert "why" not in prompts.load_prompt("ml", "governance")["system_prompt"]
+
+
+def test_the_marker_does_not_fire_inside_prose(prompt_dir, playbook_dir):
+    """Anchored to a whole line, exactly like the fragment include, so a prompt may talk
+    about the syntax — and this file's own ml.md comment does."""
+    write(prompt_dir, "ml", '---\ngoal: g\n---\n\nA {{playbook}} line is spliced.\n')
+    assert prompts.load_prompt("ml")["system_prompt"] == "A {{playbook}} line is spliced."
+
+
+def test_playbook_names_lists_what_is_there(playbook_dir):
+    write(playbook_dir, "governance", "x\n")
+    write(playbook_dir, "reporting", "x\n")
+    assert prompts.playbook_names() == ["governance", "reporting"]

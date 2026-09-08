@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import pytest
 
-from memstara.paths import PROMPTS_DIR
-from memstara.pipeline.prompts import load_prompt
+from memstara.paths import PLAYBOOKS_DIR, PROMPTS_DIR
+from memstara.pipeline.prompts import load_prompt, playbook_names
 
 #: Every agent, by the path `provision_all` and `provision_board_agents` pass to
 #: `_ensure_agent_from_file`. Four on the 02 (supervisor) path, five on the 03 (board) one.
@@ -100,6 +100,59 @@ def test_the_shared_preamble_reaches_exactly_the_three_claimers():
     for stage in ("data", "ml", "interpreter"):
         assert marker in load_prompt(f"board/{stage}")["system_prompt"], stage
     assert marker not in load_prompt("board/hypothesis")["system_prompt"]
+
+
+# --------------------------------------------------------------------------- #
+#  The playbooks, which are prompt text by another route
+# --------------------------------------------------------------------------- #
+#
+#  A playbook is spliced into a system prompt, so every rule above applies to it. It is
+#  checked separately because it is loaded differently: `load_prompt` is given its name
+#  at run time, so a playbook nothing points at is still shipped and still reachable by
+#  anyone who types its stem. The stage it is attached to is deliberately not fixed — a
+#  reporting standard is legitimate on more than one — so these run against every
+#  playbook through the one prompt that carries the marker.
+#
+#  `board/ml` is that prompt today. If a second stage takes the marker, this list grows;
+#  it is written out rather than discovered so that adding a marker is a visible act.
+MARKED_STAGES = ["board/ml"]
+
+
+def test_every_playbook_loads_into_a_marked_prompt():
+    """A playbook that raises does so at parse time on a real run (`board.py` reads them
+    before Postgres is touched), which is cheap. This is cheaper and needs neither."""
+    assert playbook_names(), "no playbooks — this test would then check nothing"
+    for stage in MARKED_STAGES:
+        for book in playbook_names():
+            body = load_prompt(stage, book)["system_prompt"]
+            assert body, f"{stage} + {book}: empty"
+            assert body != load_prompt(stage)["system_prompt"], (
+                f"{stage} + {book}: the playbook did not change the prompt"
+            )
+
+
+def test_the_outcome_column_is_never_named_in_a_playbook():
+    """Same rule as the prompts, same reason. A playbook reaches a model the same way a
+    prompt does, and it is the newer of the two routes, so it is the one likely to be
+
+    for book in playbook_names():
+        text = (PLAYBOOKS_DIR / f"{book}.md").read_text(encoding="utf-8")
+        assert "HIV_DETECTABLE" not in text, book
+
+
+def test_no_comment_survives_into_a_playbook():
+    for stage in MARKED_STAGES:
+        for book in playbook_names():
+            body = load_prompt(stage, book)["system_prompt"]
+            assert "<!--" not in body and "-->" not in body, f"{stage} + {book}"
+
+
+def test_a_playbook_carries_no_front_matter():
+    """It is read by the same splitter as a prompt, which knows one key — `goal` — and
+    would either raise on a playbook's keys or silently drop them into nothing."""
+    for book in playbook_names():
+        text = (PLAYBOOKS_DIR / f"{book}.md").read_text(encoding="utf-8")
+        assert not text.startswith("---"), book
 
 
 def test_no_comment_survives_into_a_prompt():

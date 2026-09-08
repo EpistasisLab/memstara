@@ -35,7 +35,7 @@ that nobody is watching.
 `outputs/*` — it contains a slash, so git anchors it to the repository root. An
 `outputs/` produced anywhere else is **not ignored**, and run records from the HIV
 cohort would sit untracked inside the source tree waiting to be committed by
-accident. See README.md:264-270 and V-01.
+accident. See README.md:266-272 and V-01.
 
 So the layout is asserted once, here, and every other module asks.
 
@@ -68,6 +68,20 @@ PACKAGE_ROOT = Path(__file__).resolve().parent
 #: it belongs inside the package. `pyproject.toml:94-95` gives hatchling
 #: `packages = ["src/memstara"]`, which puts these files in the wheel already.
 PROMPTS_DIR = PACKAGE_ROOT / "prompts"
+
+#: The behavioural standards a run may attach to a stage's prompt — one `.md` file per
+#: playbook, read by `memstara.pipeline.prompts.load_prompt`.
+#:
+#: **A playbook is not a skill**, although the meeting of 2026-08-26 used that word for it.
+#: `--skill` narrows the OKF corpus and is enforced inside the okf tool server, so it holds
+#: whether or not a model cooperates; a playbook is prose spliced into a system prompt and
+#: holds only as far as the model follows it. One word covering both would hide exactly that
+#: difference, which is why they have two.
+#:
+#: Beside `prompts/` and inside the package for the same reason `PROMPTS_DIR` is: a run
+#: record names a playbook and stores the digest of the text the model actually received, and
+#: that only answers *which wording produced this* while the file is versioned with the code.
+PLAYBOOKS_DIR = PACKAGE_ROOT / "playbooks"
 
 #: The folder holding this checkout and its siblings. `motoro` and `shared`
 #: are checked out beside this repository, not inside it, and several paths are

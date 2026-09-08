@@ -46,26 +46,39 @@ Three rules, and they are the whole of it:
    behind. This is where the reasoning lives. It stays with the text it explains
    rather than in a comment beside a call site, because those two drift apart and the
    text is the thing people edit.
-3. **One include.** A line that is exactly ``{{_claim_preamble}}`` is replaced by the
-   body of `_claim_preamble.md` in the same directory. It exists because the data, ml
-   and interpreter stages share a passage *in the middle* of their prompts — the one
-   that tells a worker to claim from the board and to stop when there is nothing to
-   claim. Three copies of it would defeat the point of their sharing it. There is no
-   nesting and no second directive.
+3. **Two includes, and the leading underscore is what tells them apart.** A line that is
+   exactly ``{{_claim_preamble}}`` is replaced by the body of `_claim_preamble.md` in
+   the same directory: a fixed fragment, chosen when the prompt was written. It exists
+   because the data, ml and interpreter stages share a passage *in the middle* of their
+   prompts — the one that tells a worker to claim from the board and to stop when there
+   is nothing to claim. Three copies of it would defeat the point of their sharing it.
+
+   A line that is exactly ``{{playbook}}`` is replaced by the behavioural standard **this
+   run** chose for this stage, out of `PLAYBOOKS_DIR`, and by nothing at all when the run
+   chose none. No underscore, because the file is not beside this one and its name is not
+   in this file — it arrives as an argument. That is the whole of the difference, and it
+   is worth a character: everything else about the two directives is the same.
+
+   There is no nesting and no third directive.
 
 Failure is loud on purpose. A missing file, an empty body or an unknown key raises;
 none of them returns "". An agent provisioned with an empty system prompt does not
 fail, it behaves strangely, and it looks like a model problem for as long as it takes
 someone to go and check.
+
+**A playbook handed to a prompt with no ``{{playbook}}`` line raises too**, for the same
+reason an unknown front matter key does. The alternative is a run that was asked to work
+to a standard, did not, and says nowhere that it did not.
 """
 
 from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Callable
 from pathlib import Path
 
-from memstara.paths import PROMPTS_DIR
+from memstara.paths import PLAYBOOKS_DIR, PROMPTS_DIR
 
 #: A whole `<!-- ... -->` block plus the newlines directly after it. Removing the
 #: trailing newlines as part of the match is what keeps the paragraph spacing of the
@@ -73,8 +86,20 @@ from memstara.paths import PROMPTS_DIR
 #: blank line that was already between them, not three.
 _COMMENT = re.compile(r"<!--.*?-->\n*", re.DOTALL)
 
-#: The one include. Anchored to a whole line so it cannot fire inside prose.
+#: The fixed include. Anchored to a whole line so it cannot fire inside prose.
 _INCLUDE = re.compile(r"^\{\{(\w+)\}\}$", re.MULTILINE)
+
+#: The run-chosen include, with the blank lines after it, exactly like `_COMMENT`.
+#:
+#: Swallowing them is what makes **a marked prompt with no playbook byte-identical to the
+#: same prompt before the marker was added**: `A.\n\n{{playbook}}\n\nB.` becomes `A.\n\nB.`,
+#: not `A.\n\n\n\nB.`. That property is the reason a stage can be given the marker in one
+#: commit and a playbook in another without the first commit changing what any default run
+#: sends — and `prompt_digest` is what makes the claim checkable rather than hopeful.
+#:
+#: Substituted **before** `_INCLUDE`, so `{{playbook}}` never reaches the fragment resolver
+#: and is never looked for as `playbook.md` beside the prompt.
+_PLAYBOOK = re.compile(r"^\{\{playbook\}\}\n*", re.MULTILINE)
 
 #: The keys a prompt file may declare. Adding one means deciding what passes it to
 #: the agent; until then, an unknown key is a mistake and is reported as one.
@@ -141,12 +166,27 @@ def _read(path: Path) -> tuple[dict[str, str], str]:
     return front, _body(rest)
 
 
-def load_prompt(name: str) -> dict[str, str]:
-    """Read one agent's prompt.
+def playbook_names() -> list[str]:
+    """Every playbook this checkout has, sorted, for an error message or a menu.
+
+    Returns an empty list when the directory does not exist, which is the state before
+    the first playbook is written and is not a failure.
+    """
+    if not PLAYBOOKS_DIR.is_dir():
+        return []
+    return sorted(p.stem for p in PLAYBOOKS_DIR.glob("*.md"))
+
+
+def load_prompt(name: str, playbook: str = "") -> dict[str, str]:
+    """Read one agent's prompt, optionally with a playbook spliced into it.
 
     Args:
         name: Path under `PROMPTS_DIR` without the suffix — ``"board/hypothesis"``,
             ``"mvp/hypothesis"``.
+        playbook: The stem of a file in `PLAYBOOKS_DIR` — ``"governance"`` — or ``""``
+            for a prompt as written. The prompt must carry a ``{{playbook}}`` line to
+            receive one; see the module docstring for why that is an error and not a
+            place to append.
 
     Returns:
         ``{"goal": ..., "system_prompt": ...}``, shaped to be passed straight into
@@ -154,9 +194,10 @@ def load_prompt(name: str) -> dict[str, str]:
         and updates it when either has changed.
 
     Raises:
-        FileNotFoundError: No such prompt file, or an include naming a fragment that
-            is not beside it.
-        ValueError: No `goal`, an empty body, or malformed front matter.
+        FileNotFoundError: No such prompt file, no such playbook, or an include naming
+            a fragment that is not beside it.
+        ValueError: No `goal`, an empty body, malformed front matter, or a playbook
+            given to a prompt with nowhere to put it.
     """
     path = (PROMPTS_DIR / name).with_suffix(".md")
     front, body = _read(path)
@@ -164,12 +205,28 @@ def load_prompt(name: str) -> dict[str, str]:
     if "goal" not in front:
         raise ValueError(f"{path}: no 'goal' in front matter")
 
-    def _include(match: re.Match[str]) -> str:
-        fragment = path.parent / f"{match.group(1)}.md"
-        _, text = _read(fragment)
-        return text
+    if playbook:
+        if not _PLAYBOOK.search(body):
+            raise ValueError(
+                f"{path}: asked for the {playbook!r} playbook and has no "
+                f"{{{{playbook}}}} line to put it on"
+            )
+        book = (PLAYBOOKS_DIR / playbook).with_suffix(".md")
+        if not book.is_file():
+            raise FileNotFoundError(
+                f"no playbook at {book}. This checkout has: "
+                f"{', '.join(playbook_names()) or '(none)'}"
+            )
+        _, text = _read(book)
+        if not text:
+            raise ValueError(f"{book}: the playbook is empty")
+        body = _PLAYBOOK.sub(lambda _: f"{text}\n\n", body, count=1)
 
-    body = _INCLUDE.sub(_include, body)
+    # Whatever is left goes, playbook or not: a marker nobody filled is a line of syntax
+    # for the model to puzzle over, and a second marker is a stage asking for two
+    # standards, which is a prompt to fix rather than a case to support.
+    body = _PLAYBOOK.sub("", body)
+    body = _INCLUDE.sub(_include_beside(path), body)
 
     if not body:
         raise ValueError(f"{path}: the prompt body is empty")
@@ -177,7 +234,17 @@ def load_prompt(name: str) -> dict[str, str]:
     return {"goal": front["goal"], "system_prompt": body}
 
 
-def prompt_digest(name: str) -> dict[str, str]:
+def _include_beside(path: Path) -> Callable[[re.Match[str]], str]:
+    """The `{{_fragment}}` resolver for one prompt: a file of that name beside it."""
+
+    def _include(match: re.Match[str]) -> str:
+        _, text = _read(path.parent / f"{match.group(1)}.md")
+        return text
+
+    return _include
+
+
+def prompt_digest(name: str, playbook: str = "") -> dict[str, str]:
     """The sha256 of each field an agent is given, for a run's record.
 
     A digest and not the text: what a run directory is read for is *which wording
@@ -187,13 +254,21 @@ def prompt_digest(name: str) -> dict[str, str]:
     a commit: one file per agent under `src/memstara/prompts/` means `git log` on that
     file is the list of every wording it has ever had.
 
-    Digested **after** the comments are stripped and the include resolved, so it is a
+    Digested **after** the comments are stripped and both includes resolved, so it is a
     digest of what the model received. Editing a `<!-- -->` block does not change it,
     and editing `_claim_preamble.md` changes it for all three stages that include it —
     both of which are the truth about that edit.
 
+    **This is why `playbook` is an argument here and not only on `load_prompt`.** The run
+    record is written from these digests (`src/memstara/pipeline/board.py`), so a playbook
+    that reached the model without reaching the digest would leave the record unable to
+    say which condition the run was — two runs told different things and recorded as
+    having been told the same. The name is stored beside the digest as well, because a
+    changed hash says *something moved* and not *which standard was applied*.
+
     Args:
         name: The same path `load_prompt` takes — ``"board/hypothesis"``.
+        playbook: The same playbook `load_prompt` takes, and it must be the same one.
 
     Returns:
         ``{"goal": <hex>, "system_prompt": <hex>}``.
@@ -203,5 +278,5 @@ def prompt_digest(name: str) -> dict[str, str]:
     """
     return {
         field: hashlib.sha256(text.encode("utf-8")).hexdigest()
-        for field, text in load_prompt(name).items()
+        for field, text in load_prompt(name, playbook).items()
     }
