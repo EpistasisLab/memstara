@@ -15,6 +15,32 @@ import { useResults } from "../store/viewer";
  * Read-only, always. Nothing here writes to the store.
  */
 
+/** What the numbers under Contributions actually measure, given the engine that made them.
+ *
+ *  Three states reach here and they are said differently on purpose:
+ *
+ *    a name we know   the engine and the quantity, so two results can be compared or not
+ *                     compared knowingly
+ *    a name we do not the engine alone. A new engine added to `ml._make_model` and not to
+ *                     this table should read as unfamiliar, never as unrecorded
+ *    `""`             not recorded. Every result from before 2026-09-08 says this, and it
+ *                     cannot be backfilled: the engine was an environment variable read
+ *                     inside the call and nothing wrote it down
+ *                     (`src/memstara/mcp_servers/ml.py:194`)
+ *
+ *  The wording comes from `_importance`'s own docstring, which measured it: random_forest
+ *  sums to exactly 1.0000 on all four sub-datasets, sklearn_hgb's permutation maps sum to
+ *  0.0819 and 0.2572 with a minimum entry of -0.0131. */
+function scaleNote(model: string): string {
+  if (model === "") return "scale not recorded — this result predates the engine being stored";
+  const measure: Record<string, string> = {
+    sklearn_hgb: "mean AUC drop under permutation, no fixed scale, negative is possible",
+    random_forest: "impurity decrease, non-negative, sums to about 1",
+    xgboost: "gain, non-negative, sums to about 1",
+  };
+  return measure[model] ? `${model} · ${measure[model]}` : `${model} · scale not described here`;
+}
+
 export default function ResultsPanel() {
   const results = useResults();
 
@@ -94,7 +120,16 @@ export default function ResultsPanel() {
 
                 {imp.length > 0 && (
                   <div className="mt-4">
-                    <h4 className="mb-2 text-sm font-bold">Contributions</h4>
+                    <h4 className="text-sm font-bold">Contributions</h4>
+                    {/* The scale, beside the bars. Two engines produce two quantities and
+                        neither the chart nor the tooltip could say which: gain sums to
+                        about 1 and is never negative, permutation is an AUC delta on no
+                        fixed scale and goes negative. Drawn without a scale, one result's
+                        bar looks directly comparable to another's, and for two engines it
+                        is not — the same reading `ml._importance` warns against. */}
+                    <p className="mb-2 font-mono text-[11px] text-ink-faint">
+                      {scaleNote(r.model)}
+                    </p>
                     <ResponsiveContainer width="100%" height={Math.max(140, imp.length * 26)}>
                       <BarChart data={imp} layout="vertical" margin={{ left: 12, right: 24 }}>
                         <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />

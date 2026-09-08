@@ -234,6 +234,13 @@ async def _results(run_tag: str) -> list[dict[str, Any]]:
              "importance": _jsonb(r["feature_importance"], {}),
              "okf_concept_ids": _jsonb(r["okf_concept_ids"], []),
              "y_column": r["y_column"], "auc": r["auc"],
+             # The engine that produced `importance`, and it travels with it because the
+             # two engines do not measure the same thing — gain for the boosted trees,
+             # mean AUC drop under permutation for the forest. Passed through exactly as
+             # stored, empty string included: `''` is *not recorded*, which is what every
+             # result from before 2026-09-08 says, and turning it into "unknown" here
+             # would put a word in the database's mouth on the screen's behalf.
+             "model": r["model"],
              "interpretation": r["interpretation"], "created_at": _iso(r["created_at"])}
             for r in rows
         ]
@@ -326,6 +333,9 @@ async def result_detail(result_id: int) -> dict[str, Any] | None:
             "importance": _jsonb(r["feature_importance"], {}),
             "okf_concept_ids": _jsonb(r["okf_concept_ids"], []),
             "y_column": r["y_column"], "auc": r["auc"],
+            # Same field and same reasoning as `_results` above: the scale the numbers in
+            # `importance` are on. `''` means it was never written down.
+            "model": r["model"],
             "interpretation": r["interpretation"], "created_at": _iso(r["created_at"]),
             "match_trace": _trace_groups(r["match_trace"], asked, used),
             # `match_trace_calls` is the number of calls **stored**, before flattening,

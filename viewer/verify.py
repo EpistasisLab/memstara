@@ -33,7 +33,8 @@ be trusted about what actually happened.
    2  do the per-tool call counts match the DB + are the two windows nobody uses at 0
    3  are the three traps (JSON-null / batched calls) **really** being handled
    4  have the old `ecoxai-*` server names been normalised
-   5  do the board row count, the AUCs and the results row count match the DB
+   5  do the board row count, the AUCs, the results row count, the number of
+      importances per result and the engine each was measured by match the DB
    6  is a character holding a card really in_progress + does a dead run not look alive
       + does only the hypothesis station show more than one figure
    7  does the feed hold the newest calls the DB holds — and is it non-empty at all
@@ -323,6 +324,20 @@ def main() -> int:
                 f"FROM memstara_results WHERE run_tag='{tag}') t")
     screen_imps = ",".join(str(len(res["importance"])) for res in snap["results"])
     chk("5 importances per result", screen_imps == imps, f"screen {screen_imps} / DB {imps}")
+
+    # …and with the scale they are on. A contribution map is not a quantity on its own —
+    # gain and permutation are different units, so a screen drawing bars from either
+    # without naming the engine invites a comparison that cannot be made. Compared as the
+    # whole string in result_id order, empty strings included, because `''` is the load-
+    # bearing value here: it means *not recorded* and every result stored before
+    # 2026-09-08 has it. A check that skipped the empties would pass on a snapshot that
+    # had dropped a real engine name.
+    models = psql("memstara-postgres", "memstara", "memstara",
+                  f"SELECT string_agg(model, ',' ORDER BY result_id) "
+                  f"FROM memstara_results WHERE run_tag='{tag}'")
+    screen_models = ",".join(res["model"] for res in snap["results"])
+    chk("5 engine per result", screen_models == models,
+        f"screen {screen_models!r} / DB {models!r}")
 
     # 6 — a character holding a card must be holding a card the board agrees is held.
     # The scene's carrying is a value obtained by replaying the record of tool calls

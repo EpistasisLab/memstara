@@ -176,6 +176,17 @@ export interface Result {
   /** What the AUC is an AUC *of*. Carried over from the board. */
   y_column: string;
   auc: number | null;
+  /** The engine that produced `importance`, and therefore the **scale those numbers are
+   *  on**. `sklearn_hgb` reaches the permutation route and its numbers are AUC deltas;
+   *  `random_forest` and `xgboost` carry `feature_importances_` and theirs are impurity
+   *  or gain, summing to about 1. Ranking one against the other is reading an AUC delta
+   *  against a fraction of impurity, which is why this field travels with the map.
+   *
+   *  `""` means **not recorded**, not "unknown engine" — the column is
+   *  `TEXT NOT NULL DEFAULT ''` and every result stored before 2026-09-08 takes it,
+   *  because the engine was read from the environment inside the call and never written
+   *  down. It cannot be backfilled and the screen says so rather than guessing. */
+  model: string;
   interpretation: string;
   created_at: string;
 }

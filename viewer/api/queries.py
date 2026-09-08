@@ -216,10 +216,19 @@ ORDER BY task_id
 #   81 results now stored against 89 kB for the explanation columns above — one row
 #   reaches 23.6 kB on its own. The snapshot is polled every two seconds and nothing draws
 #   a trace yet, so it belongs to a per-result endpoint, not to this one.
+#
+#   `model` is selected because `feature_importance` is **not one quantity**. The two
+#   engines this project runs produce numbers on different scales — gain for the boosted
+#   trees, mean AUC drop for permutation — so a bar chart of contributions with no engine
+#   beside it invites a comparison that is not there to make. The column is
+#   `TEXT NOT NULL DEFAULT ''` and the empty string means *not recorded*: the 81 results
+#   stored before 2026-09-08 take it and cannot be backfilled, because the engine was an
+#   environment variable read inside the call and was never written down
+#   (`src/memstara/mcp_servers/ml.py:194`). Three states reach the screen, not two.
 RESULTS = """
 SELECT result_id, task_id, run_tag, trial, perspective, hypothesis,
        columns_used, columns_missing, feature_importance, okf_concept_ids,
-       y_column, auc, interpretation, created_at
+       y_column, auc, model, interpretation, created_at
 FROM memstara_results
 WHERE ($1 = '' OR run_tag = $1)
 ORDER BY result_id
@@ -240,7 +249,7 @@ ORDER BY result_id
 RESULT_ONE = """
 SELECT result_id, task_id, run_tag, trial, perspective, hypothesis,
        columns, columns_used, columns_missing, feature_importance, okf_concept_ids,
-       match_trace, y_column, auc, interpretation, created_at
+       match_trace, y_column, auc, model, interpretation, created_at
 FROM memstara_results
 WHERE result_id = $1
 """
