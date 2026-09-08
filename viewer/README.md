@@ -1,14 +1,23 @@
 # Memstara Viewer
 
-A living scene in which the five agents exist as **characters** and the board, knowledge
-source, dataset, trainer and results table each have a **place**. Run the pipeline and you
-watch, in real time, a character walk to the board, pick up a row, carry it to their own
-place, work on it and put it back.
+A living scene in which the pipeline's agents exist as **characters** and the board,
+knowledge source, dataset, trainer and results table each have a **place**. Run the
+pipeline and you watch, in real time, a character walk to the board, pick up a row, carry
+it to their own place, work on it and put it back.
+
+**Six stages, five characters.** The curator and the hypothesis stage are drawn as one,
+labelled "Hypothesis · Curator", because they spend most of a run at the same shelf and
+the picture could not tell them apart (`viewer/api/stores.py:182-202`). Only the drawing
+is folded: the curator is still its own stage with its own agent, and the Agents tab, the
+access map and the feed all still list it separately.
 
 ```bash
 docker compose up -d --build     # → http://localhost:8070
-python3 verify.py                # 25 verification items
+python3 verify.py                # every screen value, compared against the DBs
 ```
+
+`verify.py` prints its own tally at the end — read that rather than trusting a count
+written here, which goes stale the next time a check is added.
 
 During development the two are started separately.
 
@@ -21,7 +30,7 @@ cd web && npm run dev            # → http://localhost:5173 (/api proxies to 80
 
 | | What |
 |---|---|
-| **Scene** | Five places and five characters. Click the board or the results table for that tab, click a character for that agent |
+| **Scene** | Six places and five characters. Click the board or the results table for that tab, click a character for that agent |
 | **Board** | Waiting / in progress / done lanes. Cards carry `attempts` and how many times the row came back |
 | **Life of a row** | The trail of one row through the four stages, and the run id that handled each |
 | **Agents** | Runs, iterations, tokens, cost, and the tools each stage is given |
