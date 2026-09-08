@@ -22,7 +22,7 @@ import type { SceneAgent, StageId } from "../types";
  * the order would be whatever the API's dict iteration happened to give, which is right
  * today by accident rather than by contract.
  *
- * **Five links for six stages.** The curator is not here because it is not drawn as a
+ * **Five cards for six stages.** The curator is not here because it is not drawn as a
  * character of its own: `viewer/api/stores.py:202` (`DRAWN_AS`) folds it into the
  * hypothesis stage, which is why that link is labelled "Hypothesis · Curator". The
  * curator stage is still in the pipeline, still has its own agent, and still appears

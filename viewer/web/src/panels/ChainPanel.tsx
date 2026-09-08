@@ -19,9 +19,10 @@ import { useScene, useViewer } from "../store/viewer";
 import type { StageId } from "../types";
 
 /**
- * The pipeline as a left-to-right chain: six stages in the order they run, five links
- * between them, and a dot travelling along a link while work is flowing into the stage on
- * its right.
+ * The pipeline as a left-to-right chain: six stages drawn as five cards in the order they
+ * run, four links between them, and a dot travelling along a link while work is flowing
+ * into the stage on its right. The curator shares the first card with the hypothesis
+ * stage — `lib/chain.ts:CHAIN` says why.
  *
  * This is the default view because it is the one that answers the first question anyone
  * asks of a running pipeline — how far along is it. The floor plan answers "who is
@@ -36,13 +37,18 @@ import type { StageId } from "../types";
  *    started yet", so both are `idle`, and both are drawn as `idle`.
  *
  * The canvas keeps React Flow's edge routing and drops everything else: no panning, no
- * zooming, no minimap. Six cards in a fixed row are not a map to be explored, and a reader
+ * zooming, no minimap. Five cards in a fixed row are not a map to be explored, and a reader
  * who has dragged the layout off-screen has only lost the picture.
  */
 
 /** Card width plus the gap. Nothing else depends on it — `fitView` scales the row to
- *  whatever the panel is, so this only sets how the cards sit relative to each other. */
-const STEP_X = 232;
+ *  whatever the panel is, so this only sets how the cards sit relative to each other.
+ *
+ *  It has to move whenever the card does. The card is `w-56` (224px), so this leaves the
+ *  same 56px between cards it always did; left at its old 232 the cards would sit 8px
+ *  apart and read as one block. The card grew because the merged label
+ *  "Hypothesis · Curator" did not fit the old 176px — see `components/chain.tsx`. */
+const STEP_X = 280;
 
 export default function ChainPanel() {
   const scene = useScene();

@@ -17,7 +17,7 @@ import type { SceneAgent, StageId } from "../types";
  *
  * Separate from `components/nodes.tsx` on purpose. Those are floor-plan pieces — a
  * character standing somewhere, a store it can walk to — and they are drawn small because
- * a dozen of them share a canvas. Here there are six cards and nothing else, so each can
+ * a dozen of them share a canvas. Here there are five cards and nothing else, so each can
  * afford to say what the stage is doing, since when, and what it last touched. Merging the
  * two would mean one component with a mode flag and two layouts inside it.
  *
@@ -55,7 +55,7 @@ export function ChainNode({ data }: NodeProps) {
 
   return (
     <div
-      className={`w-44 rounded-xl border-2 bg-white px-3 py-2.5 shadow-sm transition
+      className={`w-56 rounded-xl border-2 bg-white px-3 py-2.5 shadow-sm transition
                   hover:shadow-md ${tone.ring}`}
       style={busy ? { borderColor: color } : undefined}
     >
@@ -83,7 +83,13 @@ export function ChainNode({ data }: NodeProps) {
 
         <div className="min-w-0">
           <div className="font-mono text-[10px] leading-none text-ink-faint">{step}</div>
-          <div className="truncate text-[13px] font-bold leading-tight">{agent.label}</div>
+          {/* `truncate` stays, so the label is one Tailwind class away from being cut
+              short again with nothing raised anywhere — `w-56` is sized for the longest
+              label there is today and not a character more. The tooltip is what makes
+              that failure visible rather than silent. */}
+          <div className="truncate text-[13px] font-bold leading-tight" title={agent.label}>
+            {agent.label}
+          </div>
         </div>
       </div>
 
