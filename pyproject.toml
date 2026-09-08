@@ -38,16 +38,30 @@ requires-python = ">=3.12"
 # where the relative path belongs. Anyone who installs this package without motoro
 # present will find out at the first `import motoro`, which is the honest failure.
 #
-# Still undeclared, on purpose: structlog, xgboost, PyYAML, sentence-transformers,
-# torch, huggingface_hub. Every one of them is reached only from a module that
+# Still undeclared, on purpose: structlog, PyYAML, sentence-transformers, torch,
+# huggingface_hub. Every one of them is reached only from a module that
 # imports motoro anyway, or is imported lazily inside a function, so declaring them
 # would not make this package standalone — it would only drag torch (~489MB,
 # `environment.yml:20-22`) into every install. When one of those modules stops
 # needing motoro, its dependency moves up here.
+#
+# **xgboost left that list on 2026-09-08** and is declared below. It was optional
+# while the default engine was scikit-learn; it is not optional now that it *is* the
+# default, and an undeclared package that every run needs is a checkout that installs
+# cleanly and dies at the third stage.
 dependencies = [
     "pandas",
     "scikit-learn",
     "numpy",
+    # The default ML engine since 2026-09-08 (`src/memstara/mcp_servers/ml.py:93`).
+    # The 2.4MB arm64 wheel is why this is affordable where torch is not — it pulls
+    # only numpy and scipy, both of which scikit-learn already requires.
+    #
+    # scikit-learn stays declared above it and is not a fallback: `train_and_score`
+    # uses it for the split, the AUC and the permutation route, whichever engine runs,
+    # and `sklearn_hgb` and `random_forest` remain selectable through
+    # MEMSTARA_ML_ENGINE.
+    "xgboost",
     "python-dotenv",
     # `src/memstara/blackboard.py:99` and `src/memstara/mcp_servers/blackboard.py:76`
     # import this at module top, so it is needed to *import* the MCP server, not just
