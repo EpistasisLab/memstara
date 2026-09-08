@@ -20,8 +20,27 @@ export interface Place {
 }
 
 export interface SceneAgent {
-  id: StageId;
+  /** One **worker**, not one stage — so this is not a `StageId`.
+   *
+   *  A stage that runs a single worker keeps the stage's own id (`hypothesis`), which is
+   *  what makes a default run look exactly as it did before `--hypothesis-agents` could
+   *  put more than one figure on the floor. Run two or more and each gets the name it
+   *  called itself by on the board instead: `hypothesis#1`, `hypothesis#2`.
+   *
+   *  Unique across the scene, and React Flow depends on that — two nodes with one id
+   *  draw as one node, silently. Use `stage` for anything keyed by the five stages. */
+  id: string;
+  /** Which of the five stages this figure is one of. Every `Record<StageId, ...>` table
+   *  — the colours, the pictograms — is keyed by this and not by `id`. */
+  stage: StageId;
   label: string;
+  /** The name this worker called itself, or null when it never said. It is the same
+   *  string the board records in `claimed_by`, which is what makes a figure on the floor
+   *  traceable to a row in the task list. Null for a single-worker stage. */
+  worker: string | null;
+  /** Which of its stage's figures this is, from 0. The floor plan offsets by it so two
+   *  workers of one stage do not stand on the same spot. */
+  slot: number;
   name: string;
   state: AgentState;
   /** Which place it is standing at, or null when resting at home. */
@@ -37,7 +56,10 @@ export interface SceneAgent {
 }
 
 export interface Flash {
-  agent: StageId;
+  /** A `SceneAgent["id"]`, so a worker rather than a stage — the line has to land on the
+   *  figure that made the call, and with several workers at one station there is no
+   *  figure called `hypothesis` for a stage-keyed flash to reach. */
+  agent: string;
   place: StoreId;
   tool: string;
   server: string;

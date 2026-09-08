@@ -16,7 +16,6 @@ import { chainEdgeTypes, chainNodeTypes } from "../components/chain";
 import { CHAIN, chainAgents, elapsedSince, linkIsLive } from "../lib/chain";
 import { STAGE_COLOR } from "../lib/stage";
 import { useScene, useViewer } from "../store/viewer";
-import type { StageId } from "../types";
 
 /**
  * The pipeline as a left-to-right chain: six stages drawn as five cards in the order they
@@ -66,15 +65,16 @@ export default function ChainPanel() {
   // response, so it earns the same badge for the same reason.
   const stale = useViewer((s) => s.snapshot?.stale ?? false);
 
-  const agents = useMemo(() => chainAgents(scene?.agents ?? []), [scene]);
+  // One step per stage, however many workers are running it — see `chainAgents`.
+  const steps = useMemo(() => chainAgents(scene?.agents ?? []), [scene]);
 
   const nodes: Node[] = useMemo(() => {
     // One `now` for the whole frame, so two cards can never disagree about the time by a
     // millisecond and render "3s" beside "2s" for the same instant.
     const now = Date.now();
 
-    return agents.map((agent, i) => ({
-      id: `chain-${agent.id}`,
+    return steps.map(({ agent, workers }, i) => ({
+      id: `chain-${agent.stage}`,
       type: "chain",
       position: { x: i * STEP_X, y: 0 },
       // While a run is open, `since` is when it opened; otherwise the freshest thing the
@@ -82,25 +82,26 @@ export default function ChainPanel() {
       // the two is being counted.
       data: {
         agent,
+        workers,
         step: i + 1,
         elapsed: elapsedSince(agent.since ?? agent.last_tool?.at ?? null, now),
       },
       draggable: false,
       selectable: false,
     }));
-  }, [agents, fetchedAt]);
+  }, [steps, fetchedAt]);
 
   const edges: Edge[] = useMemo(
     () =>
-      agents.slice(0, -1).map((from, i) => {
-        const to = agents[i + 1];
+      steps.slice(0, -1).map(({ agent: from }, i) => {
+        const to = steps[i + 1].agent;
         const live = linkIsLive(to);
-        const color = STAGE_COLOR[to.id as StageId];
+        const color = STAGE_COLOR[to.stage];
         return {
-          id: `link-${from.id}-${to.id}`,
+          id: `link-${from.stage}-${to.stage}`,
           type: "chain",
-          source: `chain-${from.id}`,
-          target: `chain-${to.id}`,
+          source: `chain-${from.stage}`,
+          target: `chain-${to.stage}`,
           data: { live, color },
           markerEnd: {
             type: MarkerType.ArrowClosed,
@@ -110,10 +111,13 @@ export default function ChainPanel() {
           },
         };
       }),
-    [agents],
+    [steps],
   );
 
-  const working = agents.filter((a) => a.state === "working").length;
+  // Counted over the workers the scene sent, not over the five cards: with three
+  // hypothesis workers running, "1 working" would be true of the cards and wrong about
+  // the pipeline.
+  const working = scene?.agents.filter((a) => a.state === "working").length ?? 0;
   // Measured browser-clock to browser-clock, unlike the ages on the cards. "Is this screen
   // still live" must not be answerable only when two machines' clocks agree.
   const age = fetchedAt === null ? null : Math.max(0, Math.round((Date.now() - fetchedAt) / 1000));
@@ -122,7 +126,7 @@ export default function ChainPanel() {
     <Panel
       icon={Workflow}
       title="Pipeline"
-      count={agents.length || undefined}
+      count={steps.length || undefined}
       status={
         scene ? (
           <>
@@ -160,11 +164,11 @@ export default function ChainPanel() {
           badge saying so beats a blank one. */}
       {!scene ? (
         <EmptyState what="the pipeline" />
-      ) : agents.length < CHAIN.length ? (
+      ) : steps.length < CHAIN.length ? (
         // Not padded with placeholders: a stage the API did not send is a definitions
         // problem, and inventing a grey card for it would hide exactly that.
         <div className="p-8 text-ink-faint">
-          Only {agents.length} of {CHAIN.length} stages came back from the API.
+          Only {steps.length} of {CHAIN.length} stages came back from the API.
         </div>
       ) : (
         <div className="h-full w-full">
@@ -188,9 +192,9 @@ export default function ChainPanel() {
             zoomOnDoubleClick={false}
             preventScrolling={false}
             onNodeClick={(_, node) => {
-              const agent = agents.find((a) => `chain-${a.id}` === node.id);
-              if (!agent) return;
-              selectAgent(agent.name);
+              const step = steps.find((s) => `chain-${s.agent.stage}` === node.id);
+              if (!step) return;
+              selectAgent(step.agent.name);
               setView("agents");
             }}
           >

@@ -40,10 +40,44 @@ export const CHAIN: StageId[] = [
   "report",
 ];
 
-/** The agents in chain order, skipping any the API did not send. */
-export function chainAgents(agents: SceneAgent[]): SceneAgent[] {
-  const byId = new Map(agents.map((a) => [a.id, a]));
-  return CHAIN.map((id) => byId.get(id)).filter((a): a is SceneAgent => a !== undefined);
+/** One entry per chain stage: the figure that stands for it, and how many are running. */
+export interface ChainStep {
+  agent: SceneAgent;
+  /** How many workers of this stage the scene sent. 1 for an ordinary run. */
+  workers: number;
+}
+
+/**
+ * The stages in chain order, skipping any the API did not send.
+ *
+ * **The chain stays five cards however many workers run.** It answers "how far along is
+ * the work", and three hypothesis workers are three hands on one step of the pipeline,
+ * not three steps — laid out in a row they would push `data`, `ml`, `interpreter` and
+ * `report` off to the right and make the picture say the pipeline had grown. The floor
+ * plan is the screen that draws one figure per worker; this one counts them.
+ *
+ * Grouping by `stage` and not by `id` is also what keeps the hypothesis card on screen at
+ * all: since 2026-09-08 a stage running several workers sends no agent whose id is
+ * `hypothesis`, so a lookup by id would silently return nothing for exactly the stage
+ * `--hypothesis-agents` multiplies.
+ *
+ * The representative is whichever worker is furthest along the state order — a stage with
+ * one worker working and two idle is a stage that is working, and a card that showed
+ * `idle` because that happened to be the first worker in the array would be wrong about
+ * the only thing this panel is for.
+ */
+const STATE_RANK: Record<SceneAgent["state"], number> = {
+  unknown: 3, working: 2, moving: 1, idle: 0,
+};
+
+export function chainAgents(agents: SceneAgent[]): ChainStep[] {
+  return CHAIN.map((stage) => {
+    const mine = agents.filter((a) => a.stage === stage);
+    if (mine.length === 0) return null;
+    const agent = mine.reduce((best, a) =>
+      STATE_RANK[a.state] > STATE_RANK[best.state] ? a : best);
+    return { agent, workers: mine.length };
+  }).filter((s): s is ChainStep => s !== null);
 }
 
 /**
@@ -65,7 +99,7 @@ export function linkIsLive(target: SceneAgent): boolean {
 /**
  * "4s", "1m 20s", "2h 5m" — or null when there is no time to measure from.
  *
- * The API sends UTC (`viewer/api/scene.py:99-103`), so the arithmetic is unambiguous, but
+ * The API sends UTC (`viewer/api/scene.py:139-143`), so the arithmetic is unambiguous, but
  * `now` is the browser's clock and the timestamp is the API container's. A machine whose
  * clock is behind would otherwise produce a negative age, so the seconds are floored at
  * zero rather than shown as a countdown.

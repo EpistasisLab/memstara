@@ -9,7 +9,7 @@ import {
 import { motion } from "framer-motion";
 import { STAGE_ICON, STATE_ICON, STORE_ICON } from "../lib/icons";
 import { STAGE_COLOR, STATE_LABEL } from "../lib/stage";
-import type { SceneAgent, StageId } from "../types";
+import type { SceneAgent } from "../types";
 
 /**
  * The two custom React Flow parts the chain view is made of: one stage as a card, and one
@@ -35,7 +35,12 @@ const STATE_TONE: Record<SceneAgent["state"], { text: string; ring: string }> = 
 };
 
 export interface ChainNodeData extends Record<string, unknown> {
+  /** The worker that stands for the stage on this card — the one furthest along the
+   *  state order, not an arbitrary one. See `chainAgents`. */
   agent: SceneAgent;
+  /** How many workers of this stage are on the floor. 1 for an ordinary run; the card
+   *  says so only when it is more, because "1 worker" beside every stage is noise. */
+  workers: number;
   /** 1-based, shown on the card. Steps read as a sequence far more readily when they are
    *  numbered — the one convention every stepper in the wild agrees on. */
   step: number;
@@ -44,12 +49,12 @@ export interface ChainNodeData extends Record<string, unknown> {
 }
 
 export function ChainNode({ data }: NodeProps) {
-  const { agent, step, elapsed } = data as ChainNodeData;
-  const color = STAGE_COLOR[agent.id as StageId];
+  const { agent, workers, step, elapsed } = data as ChainNodeData;
+  const color = STAGE_COLOR[agent.stage];
   const busy = agent.state === "working";
   const tone = STATE_TONE[agent.state];
 
-  const StageGlyph = STAGE_ICON[agent.id as StageId];
+  const StageGlyph = STAGE_ICON[agent.stage];
   const StateGlyph = STATE_ICON[agent.state];
   const StoreGlyph = agent.last_tool ? STORE_ICON[agent.last_tool.store] : null;
 
@@ -98,6 +103,17 @@ export function ChainNode({ data }: NodeProps) {
       <div className={`mt-2 flex items-center gap-1.5 text-[11px] font-bold ${tone.text}`}>
         <StateGlyph className={`h-3.5 w-3.5 shrink-0 ${busy ? "animate-spin" : ""}`} strokeWidth={2.2} />
         <span className="truncate">{STATE_LABEL[agent.state]}</span>
+        {/* The one thing this card would otherwise lose by staying a five-card chain: the
+            state word is one worker's, so without the count a stage running three of them
+            reads exactly like a stage running one. The floor plan draws them; this says
+            how many there are to look for. */}
+        {workers > 1 && (
+          <span className="shrink-0 rounded-full px-1.5 font-mono text-[10px] font-bold"
+                style={{ backgroundColor: `${color}22`, color }}
+                title={`${workers} workers of this stage are on the floor plan`}>
+            x{workers}
+          </span>
+        )}
         {/* Elapsed time is what separates "working" from "wedged". Without it a stuck run
             and a healthy one look identical for as long as anyone cares to watch. */}
         {elapsed && <span className="ml-auto shrink-0 font-mono font-normal">{elapsed}</span>}

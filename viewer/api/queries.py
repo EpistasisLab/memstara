@@ -91,13 +91,23 @@ a value.
 #   row on documents reaching 46kB. `jsonb` is parsed once and then indexed into. Same
 #   3234 rows either way; measured 1.0s to 0.19s.
 #: The only tools whose `arguments` and `result` anything reads — TASK_TOUCHES, to pull
-#: `task_id` and `run_tag` out of them (see its comment below). Every other tool's
-#: payload is carried into `flat`, written to disk, and never looked at; and it is the
-#: expensive half of the table, because a tool that calls a model puts the model's whole
-#: answer in `result`, up to 46kB of it. So the two columns are kept for these three and
-#: nulled for the rest. If a new query needs a payload, widen this list — do not reach
-#: past `flat` for it.
-BOARD_TOOLS = ("create_task", "claim_task", "submit_result")
+#: `task_id`, `run_tag` and `worker` out of them (see its comment below). Every other
+#: tool's payload is carried into `flat`, written to disk, and never looked at; and it is
+#: the expensive half of the table, because a tool that calls a model puts the model's
+#: whole answer in `result`, up to 46kB of it. So the two columns are kept for these four
+#: and nulled for the rest. If a new query needs a payload, widen this list — do not
+#: reach past `flat` for it.
+#:
+#: `claim_question` was added on 2026-09-08, and this is the sanctioned widening the
+#: paragraph above describes rather than an exception to it. **It is the only place a
+#: hypothesis worker writes its own name down.** The other three stages take their work
+#: off the board and so pass `worker=` to `claim_task`; the hypothesis stage creates the
+#: work instead, and the tool it passes `worker=` to is this one
+#: (`src/memstara/mcp_servers/blackboard.py:799`) — `create_task` has no such argument.
+#: Leave it out and the one stage `--hypothesis-agents` actually multiplies is the one
+#: stage whose workers cannot be told apart. Its payload is cheap: the result is a single
+#: question row, not model output.
+BOARD_TOOLS = ("create_task", "claim_task", "claim_question", "submit_result")
 _TOOLS_SQL = "('" + "', '".join(BOARD_TOOLS) + "')"
 
 
@@ -349,7 +359,17 @@ SELECT a.name,
            (f.result::json)->>'task_id',
            f.arguments->>'task_id'
        ) AS task_id,
-       (f.result::json)->>'run_tag' AS run_tag
+       (f.result::json)->>'run_tag' AS run_tag,
+       -- Which of a stage's workers made this call. Only the arguments side has it:
+       -- the worker names itself when it asks for work, and no board row this query
+       -- reads is keyed by it.
+       --
+       -- NULL on every call the tool lets omit it, which is most of them: `create_task`
+       -- has no such argument at all, and `submit_result` defaults it to '' and treats
+       -- that as "no opinion" (`src/memstara/mcp_servers/blackboard.py:293`). So this is
+       -- read as "a name where there is one", never as "the name of this run" — one
+       -- named call anywhere in a run is enough, and no named call is not a failure.
+       f.arguments->>'worker' AS worker
 FROM flat f
 JOIN agent_runs r ON r.id = f.run_id
 JOIN agents a ON a.id = r.agent_id
@@ -358,20 +378,32 @@ WHERE f.tool IN {_TOOLS_SQL}
 ORDER BY f.started_at
 """
 
-# The most recent tool call per agent, for "where is this character standing".
+# The most recent tool call per agent **run**, for "where is this character standing".
 #
-# `DISTINCT ON (a.name)` is PostgreSQL-only syntax: paired with the leading part of the
-# ORDER BY, it keeps only "the first row per name". That is what makes
-# `ORDER BY a.name, f.started_at DESC` mean "the most recent one per name". Change the
-# order and the wrong row is kept, silently.
+# `DISTINCT ON (a.name, f.run_id)` is PostgreSQL-only syntax: paired with the leading
+# part of the ORDER BY, it keeps only "the first row per name and run". That is what
+# makes `ORDER BY a.name, f.run_id, f.started_at DESC` mean "the most recent one per
+# run". Change the order and the wrong row is kept, silently.
+#
+# It was `DISTINCT ON (a.name)` until 2026-09-08, and that is what made the viewer draw
+# one character however many workers were running. `--hypothesis-agents 3` starts three
+# `call_agent`s against **one** agent (`src/memstara/pipeline/board.py:1412`), so the
+# three are three `agent_runs` rows sharing a name: keyed by name, two of the three were
+# dropped here before scene.py ever saw them. `run_id` is the axis that separates them,
+# and it is the axis `OPEN_RUNS` was already keyed by, which is why that query needed no
+# change at all.
+#
+# This returns one row per run rather than per live worker, so it holds finished runs
+# too. That is not waste — scene.py looks each run up by id, and a character whose run
+# has ended still has to say what it last did.
 LAST_CALL = FLAT_CALLS + """
-SELECT DISTINCT ON (a.name)
+SELECT DISTINCT ON (a.name, f.run_id)
        a.name, f.server, f.tool, f.started_at, f.run_id
 FROM flat f
 JOIN agent_runs r ON r.id = f.run_id
 JOIN agents a ON a.id = r.agent_id
 WHERE a.name LIKE 'memstara%'
-ORDER BY a.name, f.started_at DESC
+ORDER BY a.name, f.run_id, f.started_at DESC
 """
 
 # Recent calls, for the flashing lines. Window is applied in Python so the value lives
@@ -382,8 +414,13 @@ ORDER BY a.name, f.started_at DESC
 # is **kept right next to the code that depends on it.**
 # `LIMIT 40` is a safeguard: even in a burst, only as much is drawn as the screen can
 # take.
+#
+# `f.run_id` is here so a flash can be attributed to the **worker** that made the call
+# and not merely to its stage. With N workers of one stage on the floor, a flash keyed by
+# stage names no character on screen and the line is simply not drawn (`ScenePanel.tsx`
+# builds each edge as `source: agent-${f.agent}`).
 RECENT_CALLS = FLAT_CALLS + """
-SELECT a.name, f.server, f.tool, f.started_at
+SELECT a.name, f.server, f.tool, f.started_at, f.run_id
 FROM flat f
 JOIN agent_runs r ON r.id = f.run_id
 JOIN agents a ON a.id = r.agent_id

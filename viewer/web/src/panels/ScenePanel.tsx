@@ -62,7 +62,17 @@ export default function ScenePanel() {
       const at = a.state === "working" && a.at
         ? scene.places.find((p) => p.id === a.at)
         : null;
-      const pos = at ? { x: at.x - 64, y: at.y + 80 } : { x: a.home.x - 64, y: a.home.y };
+      const base = at ? { x: at.x - 64, y: at.y + 80 } : { x: a.home.x - 64, y: a.home.y };
+      // Several workers of one stage would otherwise be drawn on the same spot — the
+      // position is settled by the station or the store, and every worker of a stage
+      // shares both. Stacking upwards rather than sideways: the five homes sit 175 apart
+      // on one row (`stores.HOME`), so a sideways fan walks into the next stage's slot,
+      // whereas the space above the row is empty down to y=300. The small x step keeps
+      // the figures from looking like one column and hiding the one behind.
+      //
+      // `slot` is 0 for a stage running a single worker, so this is a no-op for a
+      // default run and the floor plan is pixel-identical to what it was.
+      const pos = { x: base.x + a.slot * 22, y: base.y - a.slot * 62 };
       return {
         id: `agent-${a.id}`,
         type: "agent",
@@ -78,21 +88,34 @@ export default function ScenePanel() {
   const edges: Edge[] = useMemo(() => {
     if (!scene) return [];
 
-    // Only the newest call per agent. Several at once turns the floor into a cat's
-    // cradle and stops meaning anything.
+    // A flash is keyed by **worker**, and the colour table is keyed by stage, so the
+    // stage has to be looked up rather than cast to. `STAGE_COLOR["hypothesis#2"]` is
+    // undefined, which React Flow accepts and draws as a black line — a wrong colour
+    // that raises nothing.
+    // A plain object rather than a `Map`, because `Map` in this file is the lucide icon
+    // this panel's header is drawn with — `new Map(...)` here compiles to a `new` on a
+    // React component.
+    const stageOf: Record<string, StageId> = {};
+    for (const a of scene.agents) stageOf[a.id] = a.stage;
+
+    // Only the newest call per worker. Several at once turns the floor into a cat's
+    // cradle and stops meaning anything. Per worker rather than per stage: with three
+    // hypothesis workers running, keying this by stage would draw one line and drop two,
+    // which is the very thing the scene stopped doing.
     const seen = new Set<string>();
     const live: Edge[] = [];
     for (const f of scene.flashes) {
       if (seen.has(f.agent) || f.place === "unknown") continue;
       seen.add(f.agent);
+      const color = STAGE_COLOR[stageOf[f.agent]];
       live.push({
         id: `flash-${f.agent}-${f.at}`,
         source: `agent-${f.agent}`,
         target: `place-${f.place}`,
         label: f.tool,
         animated: true,
-        style: { stroke: STAGE_COLOR[f.agent as StageId], strokeWidth: 2.5 },
-        labelStyle: { fill: STAGE_COLOR[f.agent as StageId], fontSize: 11, fontWeight: 700 },
+        style: { stroke: color, strokeWidth: 2.5 },
+        labelStyle: { fill: color, fontSize: 11, fontWeight: 700 },
         labelBgStyle: { fill: "#fff" },
         labelBgPadding: [4, 2] as [number, number],
       });
@@ -106,7 +129,7 @@ export default function ScenePanel() {
         id: `hold-${a.id}`,
         source: `agent-${a.id}`,
         target: "place-board",
-        style: { stroke: STAGE_COLOR[a.id], strokeWidth: 1.5, strokeDasharray: "4 4" },
+        style: { stroke: STAGE_COLOR[a.stage], strokeWidth: 1.5, strokeDasharray: "4 4" },
       });
     }
 
@@ -174,7 +197,9 @@ export default function ScenePanel() {
               pannable
               zoomable
               nodeColor={(n) =>
-                n.type === "agent" ? STAGE_COLOR[(n.data.agent as { id: StageId }).id] : "#dcdbd4"
+                n.type === "agent"
+                  ? STAGE_COLOR[(n.data.agent as { stage: StageId }).stage]
+                  : "#dcdbd4"
               }
               className="!bg-white"
             />

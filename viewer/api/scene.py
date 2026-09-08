@@ -387,30 +387,89 @@ async def _core_facts() -> dict[str, Any]:
 
 
 def _carrying(touches: list[dict[str, Any]]) -> dict[str, int]:
-    """Which agent currently holds which task, replayed from the board windows.
+    """Which agent **run** currently holds which task, replayed from the board windows.
 
     A `claim_task` puts a task in an agent's hands; the matching `submit_result` takes
     it back. Replaying in time order leaves exactly what is still held — the board's own
     `in_progress` rows say a task is held but not by whom, and "by whom" is the thing
     the scene needs to draw.
+
+    **Keyed by run id, not by stage.** It was keyed by stage until 2026-09-08, on the
+    stated assumption that one stage holds one thing at a time. That is false the moment
+    `--data-agents 2` is passed: two workers of one stage claim two tasks, the second
+    claim overwrote the first here, and the floor showed one card where there were two.
+    A *run* really does hold one task at a time — `call_agent` is given one task to do
+    (`src/memstara/pipeline/board.py:1591`) — so the assumption is true at this key and
+    was only ever approximately true at the old one.
     """
     held: dict[str, int] = {}
-    # Stage -> the number of the task it is holding. One stage is taken to be able to
-    # hold only one thing at a time.
     for t in touches:
-        stage = stores.AGENT_BY_NAME.get(t["name"])
-        if stage is None or not t.get("task_id"):
+        # The stage is not the key any more, but it is still the filter: only board-path
+        # runs are drawn, and a supervisor-path claim must not put a card in anyone's
+        # hand.
+        if t["name"] not in stores.AGENT_BY_NAME or not t.get("task_id"):
             continue
+        run_id = str(t["run_id"])
         task_id = int(t["task_id"])
         if t["tool"] == "claim_task":
-            # Picked up, it goes in; submitted, it comes out.
-            # Taking it out only when `held.get(stage) == task_id` — **the very task it
-            # was holding** — matters. Simply clearing instead would let an old
-            # submit_result that arrived late drop the new task just picked up.
-            held[stage] = task_id
-        elif t["tool"] == "submit_result" and held.get(stage) == task_id:
-            held.pop(stage, None)
+            held[run_id] = task_id
+        elif t["tool"] == "submit_result":
+            # Cleared **by task**, across runs, rather than "clear whatever this run
+            # holds". Both halves of that matter and they are separate points.
+            #
+            # By task, because an old submit_result arriving late must not drop the new
+            # task the run has just picked up. That was already the rule when this was
+            # keyed by stage and it is unchanged.
+            #
+            # Across runs, because a task reclaimed after a stall is claimed a second
+            # time by a different run while the run that stalled is still, in this
+            # replay, holding it. Keyed by run, only the submitter's own entry would go
+            # and the stalled worker would stand there holding a card that had been
+            # handed in — for the whole of RUN_ALIVE_SECONDS, since nothing else expires
+            # it. The stage-keyed version got this right by accident, both runs being
+            # one key; here it has to be said.
+            for holder in [r for r, held_id in held.items() if held_id == task_id]:
+                held.pop(holder, None)
     return held
+
+
+def _worker_names(touches: list[dict[str, Any]]) -> dict[str, str]:
+    """run id -> the name that run called itself, where it gave one.
+
+    `--hypothesis-agents 3` starts three calls against one agent, so the three runs share
+    an agent name and the database has nothing else to tell them apart by. The name they
+    were each given in their instructions — `hypothesis#2` — is written down in exactly
+    one place: the `worker=` argument they pass when they ask for work
+    (`src/memstara/pipeline/board.py:1383, 1576`).
+
+    Most calls in a run do not carry it (see `queries.TASK_TOUCHES`), so this takes the
+    first one that does and keeps it. A run with no named call at all is absent from the
+    map and gets drawn under a slot number instead, which is a worse label but not a
+    wrong one.
+    """
+    names: dict[str, str] = {}
+    for t in touches:
+        worker = (t.get("worker") or "").strip()
+        if worker:
+            names.setdefault(str(t["run_id"]), worker)
+    return names
+
+
+def _slot_key(run_id: str, worker: str) -> tuple[int, int, str, str]:
+    """Order the workers of one character so they do not swap places between polls.
+
+    The screen re-reads this every 2 seconds. Order the figures by anything the database
+    is free to return in a different order and the characters shuffle along the floor
+    while nothing has happened.
+
+    Worker names sort first and numerically: `data#10` after `data#2`, which plain string
+    order gets backwards. A run with no name sorts last, by run id, which is arbitrary but
+    fixed.
+    """
+    tail = worker.rsplit("#", 1)[-1] if worker else ""
+    if tail.isdigit():
+        return (0, int(tail), worker, run_id)
+    return (1, 0, worker, run_id)
 
 
 def _members_of_each_character() -> dict[str, list[str]]:
@@ -432,129 +491,233 @@ def _members_of_each_character() -> dict[str, list[str]]:
 
 
 def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
-    # ★ Assembles the scene: the five characters' **state, position and what they are
+    # ★ Assembles the scene: the characters' **state, position and what they are
     # holding,** and the lines that will flash.
     #
-    # First the rows that came from core are indexed by stage. `if r["name"] in
+    # **A character is one worker, not one stage.** Until 2026-09-08 this walked
+    # `stores.HOME` and produced exactly five figures, so `--hypothesis-agents 3` — which
+    # the pipeline has supported since A-11 — drew one hypothesis character while three
+    # were running, and the two it dropped were invisible rather than merged: their runs,
+    # their tool calls and the cards in their hands were simply not on the screen. The
+    # floor plan is the thing people watch to see whether parallelism is doing anything,
+    # and it was the one screen that could not show it.
+    #
+    # `stores.HOME` is still the list of *characters* and still has five entries — the
+    # floor has five stations and each stage rests at its own. What changed is that a
+    # station can now have more than one figure standing at it.
+    #
+    # First the rows that came from core are indexed by **run**. `if r["name"] in
     # stores.AGENT_BY_NAME` is what does the filtering — only **board-path characters**
     # appear in the scene, so supervisor-path agents are quietly dropped here.
     # (The access map is the opposite: it has to count both. See _access.)
-    open_by_stage = {
-        stores.AGENT_BY_NAME[r["name"]]: r
+    open_by_run = {
+        str(r["run_id"]): r
         for r in core["open"] if r["name"] in stores.AGENT_BY_NAME
     }
-    last_by_stage = {
-        stores.AGENT_BY_NAME[r["name"]]: r
+    last_by_run = {
+        str(r["run_id"]): r
         for r in core["last_call"] if r["name"] in stores.AGENT_BY_NAME
     }
     held = _carrying(core["touches"])
+    workers = _worker_names(core["touches"])
+
+    # Which stage a run belongs to. All three sources are read because they cover
+    # different runs: `open` has only what is running, `last_call` only what has made a
+    # tool call, and `touches` is the one that still names a run which has finished but
+    # is holding a card — the "moving" state below exists for exactly that run, and
+    # without this line it would have no stage and no figure.
+    stage_by_run: dict[str, str] = {}
+    for rows in (core["open"], core["last_call"], core["touches"]):
+        for r in rows:
+            stage = stores.AGENT_BY_NAME.get(r["name"])
+            if stage is not None and r.get("run_id") is not None:
+                stage_by_run[str(r["run_id"])] = stage
+
     # The three ingredients are now gathered: the runs going right now (open), the last
-    # call (last), and what is in hand (held). The for loop below combines the three to
-    # settle one character's state.
-    #
-    # They are keyed by **stage**, and the loop walks **characters**, so each ingredient
-    # is chosen from the stages that character stands for. For four of the five that is
-    # a list of one and the choosing does nothing.
+    # call per run (last), and what is in each run's hand (held). The loop below combines
+    # the three to settle one figure's state.
     members = _members_of_each_character()
 
+    # Every run that has a figure of its own: it is running, or it is holding a card and
+    # has not handed it in. Grouped by the character whose station it stands at.
+    live: dict[str, list[str]] = {character: [] for character in stores.HOME}
+    for run_id in set(open_by_run) | set(held):
+        stage = stage_by_run.get(run_id)
+        if stage is not None:
+            live.setdefault(stores.drawn_as(stage), []).append(run_id)
+
     agents = []
-    for stage in stores.HOME:
+    # run id -> the id of the figure drawn for it, filled in as the figures are built.
+    # The flashes below are keyed by run and need it.
+    figure_of_run: dict[str, str] = {}
+    # character -> the id of its first figure, for a call by a run that has no figure.
+    first_figure: dict[str, str] = {}
+
+    for character in stores.HOME:
         # The character's own name, and only its own: a merged character is labelled for
         # the stage it is drawn as, not for every stage folded into it. The loop walks
         # `HOME`, which has five keys, so a folded-away stage is never looked up here —
         # `AGENT_LABELS` still holds the retired `curator` because
         # `check_definitions.py:154` requires a label for every stage the viewer knows,
         # not because anything on screen reads it.
-        label = stores.AGENT_LABELS.get(stage, stage)
-        mine = members.get(stage, [stage])
+        label = stores.AGENT_LABELS.get(character, character)
+        mine = members.get(character, [character])
 
-        # Both members can be busy at once — on a pre-2026-09-07 run the curator could
-        # be writing wave n+1's questions while a hypothesis worker was still on wave n —
-        # so pick the run that started most recently: that is what the character is doing
-        # *now*. A single-member character takes the same branch and gets its own run.
-        running = [(open_by_stage[s], s) for s in mine if s in open_by_stage]
-        run, run_stage = (
-            max(running, key=lambda pair: pair[0]["created_at"]) if running else (None, None)
-        )
-        calls = [(last_by_stage[s], s) for s in mine if s in last_by_stage]
-        last, last_stage = (
-            max(calls, key=lambda pair: pair[0]["started_at"]) if calls else (None, None)
-        )
-        # `carrying` needs no tie-break: only stages granted `claim_task` can hold one,
-        # and of the two folded together only the hypothesis stage has it
-        # (`src/memstara/pipeline/core.py:354-428`). Written for the general case anyway,
-        # because a grant is a table somebody can edit.
-        holding = [(held[s], s) for s in mine if s in held]
-        carrying = holding[0][0] if holding else None
+        runs = sorted(live.get(character, []),
+                      key=lambda rid: _slot_key(rid, workers.get(rid, "")))
 
-        if not core_up:
-            # Not "idle" — unknown. Saying idle would be an assertion we cannot make.
-            # With the core DB unreadable, saying "this agent is doing nothing" is
-            # making **an assertion that cannot be made.** Not knowing has to be
-            # reported as not knowing, or the screen cannot be trusted.
-            state, at = "unknown", None
-        elif run is not None:
-            state = "working"
-            at = stores.store_of(last["tool"]) if last else None
-        elif carrying is not None:
-            # Holds a task but no run is open: it picked the task up and its run ended.
-            # It cannot be called dead and it cannot be called working, so it is drawn
-            # as **"moving"** and stood in front of the board.
-            #
-            # The order these states are decided in is the priority order:
-            # unknown -> working -> moving -> idle.
-            state, at = "moving", "board"
-        else:
-            # No run going and nothing in hand means it really is idle.
-            state, at = "idle", None
+        # One entry per figure. A character with nothing running still puts one figure
+        # down — resting at home is a state, not an absence — and that entry carries no
+        # run at all.
+        instances: list[tuple[str | None, dict[str, Any] | None,
+                              dict[str, Any] | None, str | None]] = []
+        for run_id in runs:
+            instances.append((run_id, open_by_run.get(run_id), last_by_run.get(run_id),
+                              stage_by_run.get(run_id)))
+        if not instances:
+            # Idle. `last` is then the most recent call across every run of every stage
+            # this character stands for — what the character last did, rather than what
+            # any one of its runs last did. Both members can have a last call: on a
+            # pre-2026-09-07 run the curator and the hypothesis stage were two agents
+            # drawn as one figure.
+            calls = [(r, stores.AGENT_BY_NAME[r["name"]]) for r in core["last_call"]
+                     if stores.AGENT_BY_NAME.get(r["name"]) in mine]
+            last, last_stage = (max(calls, key=lambda pair: pair[0]["started_at"])
+                                if calls else (None, None))
+            instances.append((None, None, last, last_stage))
 
-        # `name` is the agent that produced the state just settled, not the character's
-        # own — so replaying a pre-2026-09-07 run, the merged character says
-        # `memstara-board-curator` while that agent is the one running, and which of the
-        # two is working stays readable from the card.
-        agents.append({
-            "id": stage,
-            "label": label,
-            "name": stores.BOARD_AGENT_NAMES_ANY.get(run_stage or last_stage or stage, stage),
-            "state": state,
-            "at": at,
-            "home": stores.HOME[stage],
-            "carrying": carrying,
-            "run_id": str(run["run_id"]) if run else None,
-            "since": _iso(run["created_at"]) if run else None,
-            "last_tool": None if not last else {
-                "server": last["server"], "tool": last["tool"],
-                "store": stores.store_of(last["tool"]), "at": _iso(last["started_at"]),
-            },
-            "windows": sorted({t for s in mine for t in stores.STAGE_WINDOWS.get(s, set())}),
-            # The list of windows this character can open — the **union** over the stages
-            # it stands for, because a merged character really can open all of them. A
-            # set has no order, so left alone the order shifts on every refresh and the
-            # screen flickers. Hence the sort.
-            #
-            # `STAGE_WINDOWS` and not `BOARD_TOOLS`: the latter is what one *call* may
-            # hold, and the hypothesis agent has two calls with two different lists
-            # (`stores.STAGE_WINDOWS`). Reading BOARD_TOOLS here would drop
-            # `read_questions`, `read_results` and `propose_questions` from the card
-            # while `BOARD_WINDOWS` still names Hypothesis as their holder — two screens
-            # disagreeing, with neither saying so.
-        })
+        # The id each figure is drawn under, and it is the id every other part of the
+        # screen keys off: React Flow nodes, the flash edges' `source`, the colour table.
+        #
+        # **A character with one figure keeps the stage's own id.** That is deliberate
+        # and it is what makes this change invisible to a default run: with every
+        # `--*-agents` at 1 the scene is byte-identical to what it was before, so nothing
+        # that reads `hypothesis` had to be found and changed. The worker name only
+        # becomes the id when there is a second worker for it to be told apart from.
+        ids: list[str] = []
+        for slot, (run_id, _run, _last, _stage) in enumerate(instances):
+            if len(instances) == 1:
+                ids.append(character)
+            else:
+                ids.append(workers.get(run_id or "") or f"{character}#{slot + 1}")
+        # Two runs can genuinely report the same worker name: `data#1` is what the first
+        # worker of every wave is called, so a task reclaimed after a stall is claimed by
+        # a `data#1` in a later run while the run that stalled is still holding one. Node
+        # ids have to be unique or React Flow draws one figure where there are two, and
+        # silently — so uniqueness is made here rather than assumed.
+        seen: set[str] = set()
+        for k, ident in enumerate(ids):
+            base, n = ident, 1
+            while ident in seen:
+                n += 1
+                ident = f"{base}/{n}"
+            seen.add(ident)
+            ids[k] = ident
+
+        first_figure[character] = ids[0]
+        for slot, (run_id, run, last, run_stage) in enumerate(instances):
+            if run_id is not None:
+                figure_of_run[run_id] = ids[slot]
+            carrying = held.get(run_id) if run_id is not None else None
+
+            if not core_up:
+                # Not "idle" — unknown. Saying idle would be an assertion we cannot make.
+                # With the core DB unreadable, saying "this agent is doing nothing" is
+                # making **an assertion that cannot be made.** Not knowing has to be
+                # reported as not knowing, or the screen cannot be trusted.
+                state, at = "unknown", None
+            elif run is not None:
+                state = "working"
+                at = stores.store_of(last["tool"]) if last else None
+            elif carrying is not None:
+                # Holds a task but no run is open: it picked the task up and its run
+                # ended. It cannot be called dead and it cannot be called working, so it
+                # is drawn as **"moving"** and stood in front of the board.
+                #
+                # The order these states are decided in is the priority order:
+                # unknown -> working -> moving -> idle.
+                state, at = "moving", "board"
+            else:
+                # No run going and nothing in hand means it really is idle.
+                state, at = "idle", None
+
+            # `name` is the agent that produced the state just settled, not the
+            # character's own — so replaying a pre-2026-09-07 run, the merged character
+            # says `memstara-board-curator` while that agent is the one running, and
+            # which of the two is working stays readable from the card. It is the same
+            # for every worker of one stage, which is exactly why it cannot be what the
+            # figures are told apart by.
+            agents.append({
+                "id": ids[slot],
+                # The station this figure stands at, and the key for everything indexed
+                # by stage — the colour table and the pictogram, both of which are
+                # exhaustive over the five and would return undefined for `hypothesis#2`.
+                # `id` says which figure; `stage` says which of the five it is one of.
+                "stage": character,
+                "label": label,
+                # The name this run called itself, or null when it never said. Drawn as a
+                # second line under the label, so two figures at one station are told
+                # apart by the name the board also records in `claimed_by` rather than by
+                # their position on the floor.
+                "worker": workers.get(run_id or "") or None,
+                # Which of its character's figures this is, from 0. The floor plan offsets
+                # by it so two workers do not stand on the same spot; a character with one
+                # figure is always slot 0 and therefore exactly where it always was.
+                "slot": slot,
+                "name": stores.BOARD_AGENT_NAMES_ANY.get(run_stage or character, character),
+                "state": state,
+                "at": at,
+                "home": stores.HOME[character],
+                "carrying": carrying,
+                "run_id": str(run["run_id"]) if run else None,
+                "since": _iso(run["created_at"]) if run else None,
+                "last_tool": None if not last else {
+                    "server": last["server"], "tool": last["tool"],
+                    "store": stores.store_of(last["tool"]), "at": _iso(last["started_at"]),
+                },
+                "windows": sorted({t for s in mine
+                                   for t in stores.STAGE_WINDOWS.get(s, set())}),
+                # The list of windows this character can open — the **union** over the
+                # stages it stands for, because a merged character really can open all of
+                # them. A set has no order, so left alone the order shifts on every
+                # refresh and the screen flickers. Hence the sort.
+                #
+                # `STAGE_WINDOWS` and not `BOARD_TOOLS`: the latter is what one *call* may
+                # hold, and the hypothesis agent has two calls with two different lists
+                # (`stores.STAGE_WINDOWS`). Reading BOARD_TOOLS here would drop
+                # `read_questions`, `read_results` and `propose_questions` from the card
+                # while `BOARD_WINDOWS` still names Hypothesis as their holder — two
+                # screens disagreeing, with neither saying so.
+            })
 
     # flashes below: the calls of the last few seconds = **the lines that will flash**
     # on screen.
     # `place` is settled by the **tool**, not the server (stores.store_of) — because the
     # one board server is responsible for two places, the board and the results table.
     # Here too only board-path characters are kept. A line for a character that is not
-    # in the scene has nowhere to be drawn — which is why `drawn_as` has to be applied
-    # here as well as above. `ScenePanel.tsx` builds each edge as `source: agent-${agent}`
-    # against the node ids it got from `agents`, so a flash still keyed `curator` would
-    # name a node that no longer exists and the line would simply not appear.
-    flashes = [
-        {"agent": stores.drawn_as(stores.AGENT_BY_NAME[r["name"]]),
-         "place": stores.store_of(r["tool"]),
-         "tool": r["tool"], "server": r["server"], "at": _iso(r["started_at"])}
-        for r in core["recent"] if r["name"] in stores.AGENT_BY_NAME
-    ]
+    # in the scene has nowhere to be drawn — which is why the figure is looked up here as
+    # well as built above. `ScenePanel.tsx` builds each edge as `source: agent-${agent}`
+    # against the node ids it got from `agents`, so a flash naming anything else would
+    # name a node that does not exist and the line would simply not appear.
+    #
+    # The run is tried first and the character's first figure is the fallback. Both arms
+    # are load-bearing: with several workers at one station there is no figure called
+    # `hypothesis` for a stage-keyed flash to reach, and a run that has just finished has
+    # no figure of its own for a run-keyed one — its last call belongs on the figure
+    # resting at its station, which is what the fallback returns.
+    flashes = []
+    for r in core["recent"]:
+        if r["name"] not in stores.AGENT_BY_NAME:
+            continue
+        character = stores.drawn_as(stores.AGENT_BY_NAME[r["name"]])
+        agent_id = figure_of_run.get(str(r["run_id"])) or first_figure.get(character)
+        if agent_id is None:
+            continue
+        flashes.append({
+            "agent": agent_id,
+            "place": stores.store_of(r["tool"]),
+            "tool": r["tool"], "server": r["server"], "at": _iso(r["started_at"]),
+        })
 
     return {"places": stores.PLACES, "agents": agents, "flashes": flashes}
 

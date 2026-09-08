@@ -102,11 +102,16 @@ export default function AgentsTab() {
           Tools are handed over <span className="font-bold">at run time</span>, not in the agent
           definition (<span className="font-mono">available_tools</span>).
         </p>
+        {/* One card per **stage**, not per worker. The scene has one entry per worker
+            since 2026-09-08, so `--data-agents 3` would otherwise put three identical
+            cards here and break the five-column grid — and identically, because the
+            window list is a property of the stage and every worker of a stage is handed
+            the same one. `slot === 0` is the first figure of each stage. */}
         <div className="grid grid-cols-5 gap-3">
-          {scene?.agents.map((a) => (
+          {scene?.agents.filter((a) => a.slot === 0).map((a) => (
             <div key={a.id} className="rounded-lg border border-paper-line bg-white p-3">
               <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STAGE_COLOR[a.id] }} />
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STAGE_COLOR[a.stage] }} />
                 <span className="text-sm font-bold">{a.label}</span>
               </div>
               <ul className="mt-2 space-y-1">

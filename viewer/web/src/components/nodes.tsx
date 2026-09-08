@@ -2,7 +2,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { motion } from "framer-motion";
 import { STAGE_ICON, STORE_ICON } from "../lib/icons";
 import { STAGE_COLOR, STATE_LABEL } from "../lib/stage";
-import type { SceneAgent, Place, StageId } from "../types";
+import type { SceneAgent, Place } from "../types";
 
 /** Custom React Flow nodes: the places agents reach, and the agents themselves. */
 
@@ -44,10 +44,10 @@ export function PlaceNode({ data }: NodeProps) {
 
 export function AgentNode({ data }: NodeProps) {
   const agent = data.agent as SceneAgent;
-  const color = STAGE_COLOR[agent.id as StageId];
+  const color = STAGE_COLOR[agent.stage];
   const busy = agent.state === "working";
   const unknown = agent.state === "unknown";
-  const Icon = STAGE_ICON[agent.id as StageId];
+  const Icon = STAGE_ICON[agent.stage];
 
   return (
     <div className="flex w-32 flex-col items-center">
@@ -93,6 +93,17 @@ export function AgentNode({ data }: NodeProps) {
 
       <div className="mt-2 text-center">
         <div className="text-sm font-bold leading-tight">{agent.label}</div>
+        {/* The worker's own name, and only when it has one. Two figures at one station
+            are both labelled "Hypothesis", so without this line the fix for drawing N of
+            them stops one step short: they would be visible and still not tellable
+            apart. It is the same string the board writes to `claimed_by`, so the figure
+            holding card #12 can be matched against the row that says who holds it.
+            Monospaced because it is an identifier, not prose. */}
+        {agent.worker && (
+          <div className="font-mono text-[10px] leading-tight" style={{ color }}>
+            {agent.worker}
+          </div>
+        )}
         <div className={unknown ? "text-[11px] font-bold text-amber-700" : "text-[11px] text-ink-faint"}>
           {STATE_LABEL[agent.state]}
         </div>

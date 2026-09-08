@@ -132,6 +132,18 @@ FEED_LIMIT = 60
 # sets are equal.
 DRAWN_AS = {"curator": "hypothesis"}
 
+# stores.HOME's keys: the stations on the floor, one per stage the pipeline still runs.
+# Written out for the same reason as the two above.
+#
+# This is the number that stayed fixed when the character count stopped being fixed. The
+# scene has drawn one figure per **worker** since 2026-09-08, so `--data-agents 3` puts
+# seven figures on the floor and any check written as `== 5` would fail on a run that was
+# working perfectly. Five *stations* is still a promise the viewer makes, and it is the
+# one worth checking: every figure stands at one of these, and every one of these has at
+# least one figure, because a stage with nothing running still puts its resting figure
+# down. See check 6 below.
+STATIONS = {"hypothesis", "data", "ml", "interpreter", "report"}
+
 # The feed's rows, computed independently of api/queries.py. Same three traps, expressed
 # differently again: a CROSS JOIN LATERAL where FLAT_CALLS uses the comma form, and the
 # two shapes named as separate CTEs rather than one UNION inside a single `flat`.
@@ -332,14 +344,14 @@ def main() -> int:
     chk("6 dead run does not look alive", int(stale) > 0 and not working,
         f"{stale} old pending runs yet working {working}")
 
-    # The skeleton of the scene. 6 places and 5 characters must always come out. Add a
+    # The skeleton of the scene. 6 places and 5 stations must always come out. Add a
     # stage without making room for it in stores.PLACES/HOME and it is caught here.
     # Both numbers are written out rather than read from stores, so that adding a stage
     # to the viewer and forgetting to say so here still fails. (They were frozen at 5
     # while PLACES already held 6 and the pipeline already had six stages, so this line
     # was reporting a stale number rather than a real gap.)
     #
-    # **The two numbers differ and both are right.** Six places, five characters: the
+    # **The two numbers differ and both are right.** Six places, five stations: the
     # pipeline has five board agents since 2026-09-07, and the sixth it used to have —
     # the curator — is retired rather than deleted, so its runs are still in the database
     # and still reach the floor through stores.DRAWN_AS. This file is the place that
@@ -347,10 +359,25 @@ def main() -> int:
     # databases directly and never imports from `api/` — the checks below would be worth
     # nothing if they asked the viewer whether the viewer was right.
     #
+    # The character count was `== 5` here until 2026-09-08 and is not a constant any
+    # more; see STATIONS above for why, and what replaced it. The three checks below are
+    # what "5 characters" was actually protecting, said in the terms that survive
+    # parallelism: every figure belongs to a station, every station has a figure, and no
+    # two figures share an id. The last is not pedantry — React Flow keys its nodes by
+    # that string and draws two nodes sharing one id as a single node, silently, so a
+    # duplicate would look exactly like the collapse this all exists to stop.
+    #
     # The leading digit in each label is the check group, not a count. Do not read
     # "6 characters" as an expected six.
     chk("6 places", len(snap["scene"]["places"]) == 6, str(len(snap["scene"]["places"])))
-    chk("6 characters", len(snap["scene"]["agents"]) == 5, str(len(snap["scene"]["agents"])))
+    figures = snap["scene"]["agents"]
+    at_station = [a["stage"] for a in figures]
+    chk("6 characters stand at a station", set(at_station) <= STATIONS,
+        f"{sorted(set(at_station) - STATIONS)} stand nowhere")
+    chk("6 every station has a character", STATIONS <= set(at_station),
+        f"{sorted(STATIONS - set(at_station))} have none")
+    chk("6 character ids are unique", len({a["id"] for a in figures}) == len(figures),
+        f"{len(figures)} figures, {len({a['id'] for a in figures})} ids")
     chk("both DBs answered", snap["health"]["memstara"]["up"] and snap["health"]["core"]["up"])
 
     # 7 — the feed.
@@ -403,7 +430,12 @@ def main() -> int:
         # the API does with them, and the day the API stops folding is the day this line
         # is the only thing standing between a historical curator call and a failed check
         # that blames the wrong thing.
-        stages = {a["id"] for a in snap["scene"]["agents"]}
+        # `stage` and not `id`: a figure's id is its **worker** name when a stage runs
+        # more than one (`hypothesis#2`), and the feed names stages. Left as `id` this
+        # check would report every hypothesis call as a stray the moment
+        # `--hypothesis-agents 2` was passed — a failure describing the check rather than
+        # the data.
+        stages = {a["stage"] for a in snap["scene"]["agents"]}
         named = {e["agent"] for e in feed if e["agent"] is not None}
         strays = {DRAWN_AS.get(a, a) for a in named} - stages
         chk("7 feed stages are real stages", not strays, str(sorted(strays)))
