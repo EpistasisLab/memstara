@@ -367,7 +367,7 @@ TOOL_STORE: dict[str, str] = {
     "count_waiting": "board",
     "read_results": "results",
     # The question step's two. They are drawn as the board, but the table they really touch
-    # is `memstara_questions` (src/memstara/mcp_servers/blackboard.py:697, 811, 876) — a third store on the
+    # is `memstara_questions` (src/memstara/mcp_servers/blackboard.py:719, 833, 898) — a third store on the
     # same server, not the task board. Folded in on purpose for now; if the question
     # bank is ever worth its own place on screen, it needs PLACES here plus StoreId and
     # STORE_LABEL on the web side.

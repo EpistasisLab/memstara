@@ -686,7 +686,7 @@ async def release_questions(run_tag: str) -> int:
 
     The counterpart to `claim_question` in `src/memstara/mcp_servers/blackboard.py`, and the
     reason a question claim is safe to make at all. `memstara_questions` has no run_tag
-    (`src/memstara/blackboard.py:292-295`) — the bank spans runs so the project can answer
+    (`src/memstara/blackboard.py:319-322`) — the bank spans runs so the project can answer
     "what have we already asked". A claim left behind would therefore not expire with the
     run that made it; it would take that question out of circulation for every run after,
     and the bank would look exhausted while being full.

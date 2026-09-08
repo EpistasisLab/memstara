@@ -815,7 +815,7 @@ async def main() -> int:
     # the bank in between; and a question that has been spent has to stop being handed out.
     #
     # These four get tags of their own — `adherence` and `care-access`. `_near_duplicate`
-    # compares wording only within one tag set (`src/memstara/mcp_servers/blackboard.py:686`),
+    # compares wording only within one tag set (`src/memstara/mcp_servers/blackboard.py:708`),
     # so a branch nothing above uses puts every question in this item out of reach of the
     # reword block. That matters because a blocked proposal here would arrive as an empty
     # `added` list and read exactly like the wave logic failing.
@@ -842,7 +842,7 @@ async def main() -> int:
     # Wave 2's curator grounds two fresh questions and wave 2's workers claim. The
     # property: they get the **new** pair, not the pair wave 1 just gave back. Nothing
     # enforces that except `ORDER BY question_id DESC` in `claim_question`
-    # (`src/memstara/mcp_servers/blackboard.py:833`) — a released row is open and unclaimed
+    # (`src/memstara/mcp_servers/blackboard.py:855`) — a released row is open and unclaimed
     # again, every bit as available as a new one, and the only thing telling the two apart
     # is which is newer. Lose that ordering and a two-wave run spends its second wave
     # re-asking its first, with no error, no empty result and nothing in the trace that
@@ -895,7 +895,7 @@ async def main() -> int:
     await bb.submit_result(c["task_id"], interpretation="supported")
 
     # retire_after=1 rather than the driver's 3
-    # (`src/memstara/mcp_servers/blackboard.py:983`), because one trial is what this item
+    # (`src/memstara/mcp_servers/blackboard.py:1005`), because one trial is what this item
     # runs. What is under test is the mechanism, not the number — (8) is where 3 itself is
     # walked.
     fed3 = json.loads(await bb.record_question_outcomes(RUN_TAG, retire_after=1))
