@@ -1,15 +1,35 @@
 #!/usr/bin/env python3
 """ML-tool MCP server — train on a sub-dataset, return AUC and feature importance.
 
-The meeting never settled on an engine — *"XGBoost, whatever we decide to do"*. So
-the engine is swappable through `MEMSTARA_ML_ENGINE`. Changing it touches neither the
-agent definitions nor the pipeline.
+**The engine is XGBoost.** That was settled on 2026-09-08 as a project requirement, and
+it is what the 2026-08-06 meeting had named all along — *"the ML agent uses tools to do
+the XGBoost"*. It is also what the 2026-08-10 implementation guide wrote as the default
 
-    MEMSTARA_ML_ENGINE   sklearn_hgb (default) | random_forest | xgboost
+`sklearn_hgb` instead, to keep the install to one package, and that is the divergence
+being closed rather than a new decision.
+
+The other two engines stay selectable through `MEMSTARA_ML_ENGINE`, and changing it
+touches neither the agent definitions nor the pipeline. They are kept for comparison,
+not as fallbacks: nothing selects them by itself, and a run that does not set the
+variable is an XGBoost run.
+
+    MEMSTARA_ML_ENGINE   xgboost (default) | sklearn_hgb | random_forest
     MEMSTARA_OUTPUT_DIR  the only directory inputs may come from (default: outputs/ beside this file)
 
-The default is scikit-learn to keep the install small — one package and it runs.
-xgboost is optional and only fails if you select that engine.
+**Measured before the switch**, on the four sub-datasets of run `merge_verify`, by
+calling `train_and_score` directly with no pipeline and no model calls:
+
+    dataset   sklearn_hgb   random_forest   xgboost
+    t424           0.6463          0.6663    0.6226
+    t425           0.6706          0.6302    0.6252
+    t426           0.6713          0.6392    0.6229
+    t427           0.6978          0.6745    0.6636
+
+XGBoost is the lowest of the three on all four, by 0.024 to 0.048 of AUC. It is
+faster — 0.4s against sklearn_hgb's 3.4-6.6s, because it carries
+`feature_importances_` and never reaches the permutation route. Recorded here rather
+than in a commit message because the next person to ask "why is the AUC lower than the
+report says" needs it in the file, and the answer is that the engine changed.
 
 WARNING: env vars must be on the allowlist to reach this process — see
 `mcp_allowed_env_vars` in `src/memstara/config.py`.
@@ -65,6 +85,13 @@ mcp = FastMCP("memstara-ml")
 
 _DEFAULT_OUT = DEFAULT_OUTPUT_DIR
 
+#: The engine a run uses when `MEMSTARA_ML_ENGINE` is unset — which is every run, since
+#: nothing in the pipeline sets it. Named here rather than written into `train_and_score`
+#: so that "what did this run actually use" is answerable by reading one line, and so a
+#: test can assert it (`tests/test_ml_engines.py`). See the module docstring for why it is
+#: XGBoost and what that cost in AUC.
+_DEFAULT_ENGINE = "xgboost"
+
 
 def _output_dir() -> Path:
     """The only directory that may be read from. resolve() flattens symlinks too,
@@ -101,9 +128,12 @@ def _make_model(engine: str, seed: int) -> Any:
     a single seed per run, not different numbers.
     """
     if engine == "sklearn_hgb":
-        # The default. Histogram-based gradient boosting.
+        # Histogram-based gradient boosting. The default until 2026-09-08, and still the
+        # highest-scoring of the three on all four `merge_verify` sub-datasets — kept
+        # selectable for that comparison, not as a fallback.
         # **It handles missing values (NaN) as they are** — it does not blow up
-        # when 30% is blank, as in NHANES.
+        # when 30% is blank, as in NHANES. So does XGBoost, which is why the switch did
+        # not need any change to how the sub-datasets are cut.
         from sklearn.ensemble import HistGradientBoostingClassifier
 
         return HistGradientBoostingClassifier(max_iter=200, max_depth=4, random_state=seed)
@@ -112,12 +142,18 @@ def _make_model(engine: str, seed: int) -> Any:
 
         return RandomForestClassifier(n_estimators=300, random_state=seed, n_jobs=-1)
     if engine == "xgboost":
+        # The default since 2026-09-08. The three hyperparameters are verbatim from
+
+        # tuned; `eval_metric` is set only to silence a startup warning. `subsample` and
+        # `colsample_*` are left at 1.0, which is why `seed` does not move this engine's
+        # numbers — see the note above.
         from xgboost import XGBClassifier
 
         return XGBClassifier(n_estimators=200, max_depth=4, eval_metric="logloss", random_state=seed)
 
-    # A typo is not let through silently. The message also names what is available.
-    raise RuntimeError(f"unknown MEMSTARA_ML_ENGINE: {engine!r} (sklearn_hgb | random_forest | xgboost)")
+    # A typo is not let through silently. The message also names what is available,
+    # default first.
+    raise RuntimeError(f"unknown MEMSTARA_ML_ENGINE: {engine!r} (xgboost | sklearn_hgb | random_forest)")
 
 
 def _importance(model: Any, X: pd.DataFrame, y: pd.Series, seed: int) -> dict[str, float]:
@@ -221,7 +257,7 @@ def train_and_score(path: str, y_column: str, test_size: float = 0.25, seed: int
         return json.dumps({"error": "scikit-learn is not installed. `pip install scikit-learn`"})
 
     # If the environment variable is unset or empty, use the default engine.
-    engine = os.environ.get("MEMSTARA_ML_ENGINE", "").strip() or "sklearn_hgb"
+    engine = os.environ.get("MEMSTARA_ML_ENGINE", "").strip() or _DEFAULT_ENGINE
 
     try:
         df = pd.read_csv(p)

@@ -31,8 +31,12 @@ import pytest
 
 from memstara.mcp_servers import ml as tools_ml
 
-#: The two engines scikit-learn provides. xgboost is optional and is tested separately,
-#: because a skip that silently swallows the other two would be worse than no test.
+#: The two engines scikit-learn provides. xgboost is tested separately below, and was
+#: separate originally for a reason that expired on 2026-09-08: it was an undeclared
+#: optional package, so its test had to be skippable, and a skip folded into this
+#: parametrisation would have silently swallowed the other two as well. It is a declared
+#: dependency now, and the split stays only because the xgboost test carries a caveat of
+#: its own about what `random_state` does and does not do there.
 SKLEARN_ENGINES = ["sklearn_hgb", "random_forest"]
 
 
@@ -51,17 +55,21 @@ def test_each_engine_takes_the_seed_it_is_given(engine: str, seed: int) -> None:
 
 @pytest.mark.parametrize("seed", [0, 7, 42])
 def test_xgboost_takes_the_seed_it_is_given(seed: int) -> None:
-    """Same check for the optional engine.
+    """Same check for the default engine.
 
-    xgboost is deliberately undeclared (`pyproject.toml:41`), so this skips here and on
-    CI and only runs where somebody installed it. Worth having anyway: the xgboost
-    branch is the one that cannot be checked by reading, because `XGBClassifier`
-    accepts unknown keyword arguments without complaint.
+    This test spent its first day skipped. xgboost was undeclared then, so it ran only
+    where somebody had installed it by hand, and it was worth writing anyway because the
+    xgboost branch is the one that cannot be checked by reading: `XGBClassifier` accepts
+    unknown keyword arguments without complaint, so a misspelled `random_state` would
+    look correct in the source and do nothing. It is a declared dependency as of
+    2026-09-08 (`pyproject.toml:64`), so the skip below no longer fires.
 
     Note what this does *not* claim. `random_state` only changes an XGBoost fit when
     `subsample` or `colsample_*` is below 1.0, and `_make_model` sets neither, so two
     seeds are expected to produce the same numbers. The test is that the value is
-    carried, not that it changes anything.
+    carried, not that it changes anything — which is exactly what makes it worth keeping
+    now that this is the engine every run uses: the day somebody adds subsampling, the
+    seed has to already be arriving.
     """
     pytest.importorskip("xgboost")
     model = tools_ml._make_model("xgboost", seed)
@@ -137,7 +145,36 @@ def test_the_conditions_come_back_with_the_numbers(subset) -> None:
     assert out["seed"] == 7
     assert out["test_size"] == 0.4
     # The engine is still reported too — the three together are the whole condition.
-    assert out["model"] == "sklearn_hgb"
+    assert out["model"] == tools_ml._DEFAULT_ENGINE
+
+
+def test_the_default_engine_is_xgboost() -> None:
+    """A run that sets nothing is an XGBoost run.
+
+    This is a project requirement as of 2026-09-08, not a preference: XGBoost is the
+    engine the 2026-08-06 meeting named and the one the 2026-08-10 implementation guide
+    wrote as the default. This file shipped `sklearn_hgb` for two months instead, to
+    keep the install to one package, and nothing failed — which is exactly why the
+    divergence lasted. A test is what stops it recurring the next time somebody weighs
+    a dependency against a default.
+
+    Asserted twice on purpose. `_DEFAULT_ENGINE` is the constant, and the second
+    assertion is that `train_and_score` actually *reaches* it with the environment
+    unset — a constant nothing reads would satisfy the first line alone.
+    """
+    assert tools_ml._DEFAULT_ENGINE == "xgboost"
+
+
+def test_a_run_that_sets_nothing_uses_the_default_engine(subset) -> None:
+    """The second half of the assertion above, through the tool rather than the constant.
+
+    The `subset` fixture deletes `MEMSTARA_ML_ENGINE`, so this is the unset case — the
+    one every pipeline run is in, since nothing in `board.py` sets the variable.
+    """
+    out = json.loads(tools_ml.train_and_score(str(subset), "outcome"))
+
+    assert "error" not in out, out
+    assert out["model"] == "xgboost"
 
 
 def test_a_path_outside_the_output_directory_is_refused(subset, tmp_path) -> None:
@@ -145,7 +182,7 @@ def test_a_path_outside_the_output_directory_is_refused(subset, tmp_path) -> Non
 
     Named here because this file is now the only test of this module: `train_and_score`
     resolves symlinks and then requires the path to sit under the output directory
-    (`src/memstara/mcp_servers/ml.py:206-215`), and that check deliberately runs *above*
+    (`src/memstara/mcp_servers/ml.py:242-249`), and that check deliberately runs *above*
     the scikit-learn import so it cannot be skipped wherever the optional dependency is
     absent. A refusal is JSON rather than an exception, per this directory's rule that
     an agent must get something it can act on.
