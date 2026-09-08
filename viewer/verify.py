@@ -284,13 +284,24 @@ def main() -> int:
     # got shuffled would be missed.
     # (`string_agg(... ORDER BY task_id)` and the join on the screen side use the same
     # order.)
+    #
+    # **Both sides spell an unfinished task the same way, as the empty string.** A task
+    # that has been claimed but not scored has `auc IS NULL`, and the two sides used to
+    # disagree about what that looks like: `string_agg` drops NULL rows entirely, while
+    # the screen has a row for each and rendered it `str(None)` -> `"None"`. So a board
+    # of three claimed-and-unscored tasks compared `"None,None,None"` against `""` and
+    # this check failed, while a board where a *scored* AUC had gone missing compared
+    # short against short and could pass. `coalesce` on one side and an explicit empty
+    # string on the other make the two agree on the absent value without making the
+    # check blind to it — the commas stay, so a row that vanishes is still a mismatch.
     n = psql("memstara-postgres", "memstara", "memstara",
              f"SELECT count(*) FROM memstara_blackboard WHERE run_tag='{tag}'")
     chk("5 board row count", str(len(snap["board"]["tasks"])) == n, f"screen {len(snap['board']['tasks'])} / DB {n}")
     aucs = psql("memstara-postgres", "memstara", "memstara",
-                f"SELECT string_agg(auc::text, ',' ORDER BY task_id) FROM memstara_blackboard "
-                f"WHERE run_tag='{tag}'")
-    chk("5 AUC", ",".join(str(t["auc"]) for t in snap["board"]["tasks"]) == aucs, aucs)
+                f"SELECT string_agg(coalesce(auc::text, ''), ',' ORDER BY task_id) "
+                f"FROM memstara_blackboard WHERE run_tag='{tag}'")
+    screen_aucs = ",".join("" if t["auc"] is None else str(t["auc"]) for t in snap["board"]["tasks"])
+    chk("5 AUC", screen_aucs == aucs, f"screen {screen_aucs!r} / DB {aucs!r}")
     r = psql("memstara-postgres", "memstara", "memstara",
              f"SELECT count(*) FROM memstara_results WHERE run_tag='{tag}'")
     chk("5 results row count", str(len(snap["results"])) == r)
