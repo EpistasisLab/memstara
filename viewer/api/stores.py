@@ -32,6 +32,8 @@ tool, not by server.
    AGENT_PATH               agent name -> "board" or "supervisor"
    PLACES / HOME            scene coordinates (the SVG's own 1000x560 space)
    DRAWN_AS / drawn_as()    stage -> the character it is drawn as  <- display only
+   reported_as()            agent name -> the name every screen reports it under
+   label_of()               agent name -> what the screen calls it, after the fold
    AGENT_LABELS             stage -> the name shown on screen
    TOOL_STORE / store_of()  tool -> store
    normalise_server()       fold the old `ecoxai-*` server names into the current ones
@@ -48,12 +50,12 @@ tool, not by server.
       place can be moved without touching a component.
    4. `read_board` and `count_waiting` showing zero calls is **the correct picture,
       not a bug** — the first belongs to the driving script, the second to nobody.
-   5. **Six stages, five characters.** `DRAWN_AS` folds the curator into the
-      hypothesis stage *on the scene only*, and the merged character is labelled plainly
-      `Hypothesis` — the drawing does not name the curator anywhere. Nothing else folds:
-      the cost table, the access map and the feed all still report six, by name. If you
-      are looking for the curator and it is not in `HOME`, it has not been deleted —
-      read `DRAWN_AS`, then the Agents tab.
+   5. **Six stages, five agents on screen.** `DRAWN_AS` folds the curator into the
+      hypothesis stage, and `reported_as` carries that fold into the cost table, the
+      access map and the feed as well, so the word "Curator" appears nowhere the viewer
+      draws. The rows are **added together**, not dropped: totals are the same before
+      and after. The curator has not been deleted from anything — the pipeline still
+      runs it and core still records it separately; `verify.py` reads it unfolded.
 ==============================================================================
 """
 
@@ -197,21 +199,65 @@ HOME: dict[str, dict[str, int]] = {
 # `:382-387` gives the curator `read_results` because that is the whole feedback path,
 # and `:394-396` keeps `read_questions` with it because a stage that can read the whole
 # bank can pick itself a second question. None of that is affected by where a character
-# stands. `_agent_totals`, `_access` and `_feed` go on reporting six agents under six
-# names.
+# stands.
 #
-# The merged character is labelled `Hypothesis`, not "Hypothesis · Curator": the drawing
-# is meant to show one stage, and a compound name puts the word back on the screen the
-# fold was supposed to take it off. The cost of that is worth stating — a reader who
-# sees a "Curator" line in the feed cannot point at the character it belongs to, and has
-# to go to the Agents tab, where the curator is still its own row. That is the trade
-# this table makes on purpose.
+# **The fold is the whole screen, not only the floor.** It began as a scene-only grouping
+# and was widened on 2026-09-07: the cost table, the access map and the feed fold through
+# it too, via `reported_as` below, so the word "Curator" appears nowhere the viewer draws.
+# The merged agent is labelled plainly `Hypothesis` — a compound "Hypothesis · Curator"
+# was tried first and withdrawn, because a name that says both puts back the very thing
+# the fold takes away.
+#
+# Two consequences, both deliberate and neither hidden:
+#
+#   - **The numbers are added, never dropped.** `_agent_totals` sums the folded rows and
+#     `_access` re-aggregates them, so total cost, tokens and call counts are identical
+#     before and after. Losing the curator's spend would be the one error here that no
+#     screen would show.
+#   - **You can no longer ask the viewer what the curator alone cost.** That question now
+#     needs the database, or `verify.py`, which reads it unfolded. The pipeline is
+#     untouched and still records the two separately; this is a table about drawing.
+#
+# The driver's own console (the Log panel) still prints `curator` and `curator0`, because
+# that panel tails the pipeline's stdout and rewriting a console is falsifying a record.
 DRAWN_AS: dict[str, str] = {"curator": "hypothesis"}
 
 
 def drawn_as(stage: str) -> str:
     """The character `stage` appears as on the scene. Identity for all but the curator."""
     return DRAWN_AS.get(stage, stage)
+
+
+def reported_as(name: str) -> str:
+    """The agent name a row is *shown under*. Identity unless the stage folds.
+
+    The fold is display-wide, not scene-only: the cost table, the access map and the feed
+    all report the curator's work under the hypothesis agent, because the screen is meant
+    to show one agent and a row saying `memstara-board-curator` puts it back.
+
+    **The numbers must survive it.** Callers do not just relabel — they add the folded
+    rows together, so the cost, the token counts and the call counts are the same before
+    and after. A fold that quietly dropped a row would take the curator's spend off the
+    total, which is the one failure here that would be invisible on screen.
+
+    The fold stays inside one path. The board path has a curator; the supervisor path
+    never had one, so there is nothing there to fold, and `AGENT_PATH` keeps the two
+    apart the way it always has.
+    """
+    stage = AGENT_BY_NAME_ANY.get(name)
+    if stage is None:
+        return name  # An agent the viewer cannot name is left exactly as it arrived.
+    target = drawn_as(stage)
+    if target == stage:
+        return name
+    names = BOARD_AGENT_NAMES if AGENT_PATH.get(name) == "board" else SUPERVISOR_AGENT_NAMES
+    return names.get(target, name)
+
+
+def label_of(name: str) -> str:
+    """What the screen calls the agent behind `name`, after the fold. Raw name if unknown."""
+    stage = AGENT_BY_NAME_ANY.get(reported_as(name))
+    return AGENT_LABELS.get(stage, name) if stage else name
 
 
 AGENT_LABELS = {
@@ -306,6 +352,12 @@ BOARD_WINDOWS: list[dict[str, str]] = [
     {"tool": "read_results",  "holder": "Report",              "store": "results"},
     {"tool": "read_board",    "holder": "Driving script",      "store": "board"},
     {"tool": "count_waiting", "holder": "Nobody",              "store": "board"},
-    {"tool": "read_questions",    "holder": "Curator",         "store": "board"},
-    {"tool": "propose_questions", "holder": "Curator",         "store": "board"},
+    # These two are the curator's grant in the pipeline. They say "Hypothesis" because the
+    # holder is written for the reader, and the reader is looking at a screen where the
+    # curator is drawn and reported as the hypothesis agent (`DRAWN_AS`, `reported_as`).
+    # Naming a holder no other screen has would send someone looking for an agent that,
+    # as far as this viewer is concerned, is not there. The grant itself is unchanged:
+    # `BOARD_TOOLS["curator"]` still lists them and `check_definitions.py` checks it.
+    {"tool": "read_questions",    "holder": "Hypothesis",      "store": "board"},
+    {"tool": "propose_questions", "holder": "Hypothesis",      "store": "board"},
 ]

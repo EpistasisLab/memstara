@@ -355,8 +355,10 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
     agents = []
     for stage in stores.HOME:
         # The character's own name, and only its own: a merged character is labelled for
-        # the stage it is drawn as, not for every stage folded into it. `AGENT_LABELS`
-        # still holds all six, because the cost table and the feed name the curator.
+        # the stage it is drawn as, not for every stage folded into it. The loop walks
+        # `HOME`, which has five keys, so a folded-away stage is never looked up here —
+        # `AGENT_LABELS` still holds all six because `check_definitions.py:142` requires a
+        # label per stage, not because anything on screen reads the sixth.
         label = stores.AGENT_LABELS.get(stage, stage)
         mine = members.get(stage, [stage])
 
@@ -450,17 +452,55 @@ def _agent_totals(core: dict[str, Any]) -> list[dict[str, Any]]:
     # Why the `int()` and `float()` wrappers: PostgreSQL's numeric arrives in Python as
     # a Decimal, which left as it is trips up JSON serialisation.
     # `r["cost"] or 0` handles NULL and 0 together.
-    return [{
-        "name": r["name"],
-        "id": stores.AGENT_BY_NAME_ANY.get(r["name"]),
-        "path": stores.AGENT_PATH.get(r["name"], "other"),
-        "label": stores.AGENT_LABELS.get(stores.AGENT_BY_NAME_ANY.get(r["name"], ""), r["name"]),
-        "runs": r["runs"], "completed": r["completed"], "open_runs": r["open_runs"],
-        "tokens": {"prompt": int(r["prompt_tokens"]), "completion": int(r["completion_tokens"])},
-        "cost": float(r["cost"] or 0),
-        "avg_iterations": round(r["avg_iterations"], 2) if r["avg_iterations"] else None,
-        "last_run_at": _iso(r["last_run_at"]),
-    } for r in core["totals"]]
+    #
+    # Rows are keyed by the name they are **reported under** (stores.reported_as), which
+    # folds the curator into the hypothesis agent. Two source rows can therefore land on
+    # one key, and when they do they are **added**, not overwritten: run counts, token
+    # counts and cost all stay equal to the unfolded database. That is the property worth
+    # protecting here — a fold that dropped a row would take real spend off the total and
+    # no screen would show it.
+    merged: dict[str, dict[str, Any]] = {}
+    for r in core["totals"]:
+        name = stores.reported_as(r["name"])
+        runs = r["runs"]
+        row = merged.get(name)
+        if row is None:
+            row = merged[name] = {
+                "name": name,
+                "id": stores.AGENT_BY_NAME_ANY.get(name),
+                "path": stores.AGENT_PATH.get(name, "other"),
+                "label": stores.label_of(name),
+                "runs": 0, "completed": 0, "open_runs": 0,
+                "tokens": {"prompt": 0, "completion": 0},
+                "cost": 0.0,
+                # Kept as a running (iterations, runs) pair and divided at the end: an
+                # average of two averages is not the average, and the cheap version would
+                # be quietly wrong by a little, which is the worst amount.
+                "_iterations": 0.0, "_iteration_runs": 0,
+                "last_run_at": None,
+            }
+        row["runs"] += runs
+        row["completed"] += r["completed"]
+        row["open_runs"] += r["open_runs"]
+        row["tokens"]["prompt"] += int(r["prompt_tokens"])
+        row["tokens"]["completion"] += int(r["completion_tokens"])
+        row["cost"] += float(r["cost"] or 0)
+        if r["avg_iterations"]:
+            row["_iterations"] += float(r["avg_iterations"]) * runs
+            row["_iteration_runs"] += runs
+        at = _iso(r["last_run_at"])
+        # The freshest of the folded rows: "when did this agent last run" is a question
+        # about the merged agent, so the later of the two is the answer.
+        if at and (row["last_run_at"] is None or at > row["last_run_at"]):
+            row["last_run_at"] = at
+
+    out = []
+    for row in merged.values():
+        runs = row.pop("_iteration_runs")
+        iterations = row.pop("_iterations")
+        row["avg_iterations"] = round(iterations / runs, 2) if runs else None
+        out.append(row)
+    return out
 
 
 def _access(core: dict[str, Any]) -> dict[str, Any]:
@@ -471,15 +511,36 @@ def _access(core: dict[str, Any]) -> dict[str, Any]:
     #
     # Filtering by server would let the hypothesis stage pick up work that is not its
     # own. So the store is settled **one tool at a time** (stores.store_of).
-    rows = [{
-        "agent": stores.AGENT_BY_NAME_ANY.get(r["name"], r["name"]),
-        "agent_label": stores.AGENT_LABELS.get(stores.AGENT_BY_NAME_ANY.get(r["name"], ""), r["name"]),
-        "name": r["name"],
-        "path": stores.AGENT_PATH.get(r["name"], "other"),
-        "server": r["server"], "tool": r["tool"],
-        "store": stores.store_of(r["tool"]),
-        "calls": r["calls"], "last_at": _iso(r["last_at"]),
-    } for r in core["access"] if r["name"] in stores.AGENT_BY_NAME_ANY]
+    #
+    # The agent is the one the row is **reported under** (stores.reported_as), so the
+    # curator's calls arrive here as the hypothesis agent's. That makes duplicate keys
+    # possible where there were none before — the curator and the hypothesis agent both
+    # call `okf_read` — so the rows are **re-aggregated**, not merely relabelled. Skip
+    # that and the map draws two "Hypothesis / okf_read" lines that a reader has to add up
+    # by eye, and `windows` below would still be right, which is what makes it easy to
+    # miss.
+    merged: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for r in core["access"]:
+        if r["name"] not in stores.AGENT_BY_NAME_ANY:
+            continue
+        name = stores.reported_as(r["name"])
+        key = (name, r["server"], r["tool"])
+        row = merged.get(key)
+        if row is None:
+            row = merged[key] = {
+                "agent": stores.AGENT_BY_NAME_ANY.get(name, name),
+                "agent_label": stores.label_of(name),
+                "name": name,
+                "path": stores.AGENT_PATH.get(name, "other"),
+                "server": r["server"], "tool": r["tool"],
+                "store": stores.store_of(r["tool"]),
+                "calls": 0, "last_at": None,
+            }
+        row["calls"] += r["calls"]
+        at = _iso(r["last_at"])
+        if at and (row["last_at"] is None or at > row["last_at"]):
+            row["last_at"] = at
+    rows = list(merged.values())
 
     called = {r["tool"] for r in rows}
     # The set of tools that were actually called at least once.
@@ -514,18 +575,23 @@ def _feed(core: dict[str, Any]) -> list[dict[str, Any]]:
 
     `key` is built here rather than on the screen: `step_id` alone is not unique once a
     step holds a batch, so the SQL's per-step `seq` is folded in.
+
+    Nothing is merged here, unlike the cost table and the access map: a feed row is one
+    call at one moment, and two of them are two rows however they are labelled. The fold
+    only changes which agent the row is attributed to.
     """
+    names = [stores.reported_as(r["name"]) for r in core["feed"]]
     return [{
         "key": f"{r['step_id']}-{r['seq']}",
-        "name": r["name"],
-        "agent": stores.AGENT_BY_NAME_ANY.get(r["name"]),
-        "label": stores.AGENT_LABELS.get(stores.AGENT_BY_NAME_ANY.get(r["name"], ""), r["name"]),
-        "path": stores.AGENT_PATH.get(r["name"], "other"),
+        "name": name,
+        "agent": stores.AGENT_BY_NAME_ANY.get(name),
+        "label": stores.label_of(name),
+        "path": stores.AGENT_PATH.get(name, "other"),
         "server": stores.normalise_server(r["server"]),
         "tool": r["tool"],
         "store": stores.store_of(r["tool"]),
         "at": _iso(r["started_at"]),
-    } for r in core["feed"]]
+    } for r, name in zip(core["feed"], names, strict=True)]
 
 
 async def snapshot(run_tag: str | None) -> dict[str, Any]:

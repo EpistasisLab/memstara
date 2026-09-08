@@ -5,12 +5,18 @@ knowledge source, dataset, trainer and results table each have a **place**. Run 
 pipeline and you watch, in real time, a character walk to the board, pick up a row, carry
 it to their own place, work on it and put it back.
 
-**Six stages, five characters.** The curator and the hypothesis stage are drawn as one
-character, labelled simply "Hypothesis", because they spend most of a run at the same
-shelf and the picture could not tell them apart (`viewer/api/stores.py:183-209`). Only
-the drawing is folded: the curator is still its own stage with its own agent, and the
-Agents tab, the access map and the feed all still list it separately — that is where to
-look when a "Curator" line in the feed needs a face.
+**Six stages, five characters.** The curator and the hypothesis stage are shown as one
+agent, labelled simply "Hypothesis", because they spend most of a run at the same shelf
+and the picture could not tell them apart (`viewer/api/stores.py:177-223`). The fold is
+the whole viewer, not only the drawing: the cost table, the access map and the feed
+report the curator's work under the hypothesis agent too, so no screen here names it.
+
+**Its numbers are added, not dropped** (`viewer/api/scene.py:445-501`). Runs, tokens,
+calls and cost are the same totals as before the fold; what you can no longer ask the
+viewer is what the curator alone cost. The stage itself is untouched — the pipeline runs
+it, core records it separately, and `verify.py` reads it unfolded, which is why the
+checks below still work. The driver's own console in the Log panel also still prints
+`curator`, because that panel tails the pipeline's stdout rather than re-writing it.
 
 ```bash
 docker compose up -d --build     # → http://localhost:8070

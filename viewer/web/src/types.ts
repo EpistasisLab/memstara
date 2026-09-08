@@ -3,6 +3,10 @@
 
 export type AgentState = "idle" | "moving" | "working" | "unknown";
 export type StoreId = "okf" | "matcher" | "board" | "results" | "dataset" | "ml" | "unknown";
+/** The six stages the pipeline has. `curator` is one the API no longer sends: since
+ *  2026-09-07 `stores.reported_as` folds it into `hypothesis` on every screen. It stays in
+ *  the union because it stays in the pipeline, and because a stage the API cannot name is
+ *  better handled by a `Record` that has a key for it than by an undefined lookup. */
 export type StageId = "curator" | "hypothesis" | "data" | "ml" | "interpreter" | "report";
 
 export interface Place {

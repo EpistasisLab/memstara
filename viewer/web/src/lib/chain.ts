@@ -17,19 +17,21 @@ import type { SceneAgent, StageId } from "../types";
 /**
  * The order work actually runs in, and the only place the frontend states it.
  *
- * It mirrors `viewer/api/stores.py:175-181` (`HOME`), whose comment says the same thing —
+ * It mirrors `viewer/api/stores.py:177-183` (`HOME`), whose comment says the same thing —
  * "in the order the pipeline runs them". Read from the snapshot's agent array instead,
  * the order would be whatever the API's dict iteration happened to give, which is right
  * today by accident rather than by contract.
  *
  * **Five cards for six stages.** The curator is not here because it is not drawn as a
- * character of its own: `viewer/api/stores.py:209` (`DRAWN_AS`) folds it into the
- * hypothesis stage, and the merged card is labelled plainly "Hypothesis" — the picture
- * does not name the curator at all. The curator stage is still in the pipeline, still
- * has its own agent, and still appears under its own name in the feed and the cost
- * table; the Agents tab is where you go to find it. This array is about who gets a box
- * drawn, nothing more. It has to agree with the backend, because `ChainPanel` compares
- * its length against the agents the API sent and reports a shortfall as an error.
+ * character of its own: `viewer/api/stores.py:223` (`DRAWN_AS`) folds it into the
+ * hypothesis stage, and the merged card is labelled plainly "Hypothesis". The fold is
+ * not only this picture — `stores.reported_as` carries it into the cost table, the
+ * access map and the feed as well, so no screen the frontend draws names the curator.
+ * The stage itself is untouched: the pipeline still runs it, core still records it
+ * separately, and `viewer/verify.py` reads it unfolded. This array is about who gets a
+ * box drawn, nothing more. It has to agree with the backend, because `ChainPanel`
+ * compares its length against the agents the API sent and reports a shortfall as an
+ * error.
  */
 export const CHAIN: StageId[] = [
   "hypothesis",

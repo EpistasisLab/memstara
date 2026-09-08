@@ -325,9 +325,12 @@ def main() -> int:
     # one.** Six stages come out of the pipeline and five characters stand on the floor:
     # stores.DRAWN_AS draws the curator and the hypothesis stage as one, because they
     # spend most of a run at the same shelf and the picture could not tell them apart.
-    # The curator is not gone, though the drawing no longer names it: the merged
-    # character is labelled plainly "Hypothesis", and the three checks below and the cost
-    # table still count the curator separately.
+    # The curator is not gone, though **no screen names it any more**: the merged
+    # character is labelled plainly "Hypothesis", and since 2026-09-07 the cost table,
+    # the access map and the feed fold through it as well. This file is the place that
+    # still counts it separately, which is exactly why it reads the databases directly
+    # and never imports from `api/` — the checks below would be worth nothing if they
+    # asked the viewer whether the viewer was right.
     #
     # The leading digit in each label is the check group, not a count. Do not read
     # "6 characters" as an expected six.
@@ -376,11 +379,15 @@ def main() -> int:
         # A row the viewer cannot name keeps agent=null and is shown anyway. What must
         # not happen is a *named* row naming a stage that reaches no character on screen.
         #
-        # The feed names six stages and the scene draws five, so the two sets are not
-        # equal and are not meant to be — the question is whether a name the feed used
-        # **arrives somewhere**, which is what folding through DRAWN_AS asks. Comparing
-        # the raw sets instead would fail on any feed window holding a curator call, and
-        # a window normally holds one: the curator is the first stage of every wave.
+        # The question is whether a name the feed used **arrives somewhere**, which is
+        # what folding through DRAWN_AS asks, rather than whether the two sets are equal.
+        #
+        # Since 2026-09-07 the API folds the feed itself, so `named` no longer holds
+        # `curator` and the fold below is an identity on everything it sees. It stays,
+        # and deliberately: this file's job is to be right about the databases whatever
+        # the API does with them, and the day the API stops folding is the day this line
+        # is the only thing standing between a curator call and a failed check that
+        # blames the wrong thing.
         stages = {a["id"] for a in snap["scene"]["agents"]}
         named = {e["agent"] for e in feed if e["agent"] is not None}
         strays = {DRAWN_AS.get(a, a) for a in named} - stages
