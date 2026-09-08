@@ -36,12 +36,13 @@ next**, and that is the only difference worth knowing:
   corpus (OKF)                       cohort CSV
       │                                   │
       ▼                                   ▼
-  ┌─────────┐   question   ┌────────────┐   task   ┌──────┐   sub-CSV   ┌────┐
-  │ curator │ ───────────▶ │ hypothesis │ ───────▶ │ data │ ──────────▶ │ ml │
-  └─────────┘              └────────────┘          └──────┘             └────┘
-       ▲                          │                                        │
-       │      results of the      │  ┌───────────────┐    AUC + importance │
-       └──── previous wave ───────┘  │  interpreter  │ ◀────────────────────┘
+  ┌────────────┐  question  ┌────────────┐   task   ┌──────┐   sub-CSV   ┌────┐
+  │ hypothesis │ ─────────▶ │ hypothesis │ ───────▶ │ data │ ──────────▶ │ ml │
+  │  (asking)  │            │(answering) │          └──────┘             └────┘
+  └────────────┘            └────────────┘                                  │
+       ▲                          │                                         │
+       │      results of the      │  ┌───────────────┐    AUC + importance  │
+       └──── previous wave ───────┘  │  interpreter  │ ◀─────────────────────┘
                                      └───────────────┘
                                              │
                                              ▼   once, at the end
@@ -55,31 +56,38 @@ nothing is passed from agent to agent directly. This is what makes a run resumab
 more than one worker of a stage run at once, and leaves a record that can be replayed
 afterwards with `python -m memstara.trace.board`.
 
-**A wave is one turn of that loop.** With `--waves 2` or more, the curator reads the
+**The two boxes at the front are one agent.** The hypothesis agent writes the wave's
+questions and then answers them, in two calls holding two different sets of tools. There
+was a separate `curator` agent doing the asking until 2026-09-07; what kept the two jobs
+apart was never the agent boundary but the tool grant, and that is unchanged.
+
+**A wave is one turn of that loop.** With `--waves 2` or more, the question call reads the
 previous wave's results before writing the next round of questions — that feedback path
-is the reason `read_results` sits with the curator and not with the hypothesis stage.
+is the reason `read_results` is in the question call's tools and not the answering call's.
 
 ## The agents
 
-Six agents on the board pipeline. Each one's system prompt is a file, so changing what an
+Five agents on the board pipeline. Each one's system prompt is a file, so changing what an
 agent does does not mean touching `core.py`.
 
 | Agent | What it decides | Tools | Prompt |
 |---|---|---|---|
-| `curator` | **what gets asked** — writes the run's questions from the corpus | 6 | `prompts/board/curator.md` |
-| `hypothesis` | which columns should predict the outcome, and puts the work on the board | 8 | `prompts/board/hypothesis.md` |
+| `hypothesis` | **what gets asked** — writes the wave's questions from the corpus | 6 | `prompts/board/hypothesis.md`, first half |
+| `hypothesis` | which columns should predict the outcome, and puts the work on the board | 8 | `prompts/board/hypothesis.md`, second half |
 | `data` | cuts the requested columns into a sub-dataset | 4 | `prompts/board/data.md` |
 | `ml` | trains on that sub-dataset, records AUC and feature importance | 3 | `prompts/board/ml.md` |
 | `interpreter` | whether the hypothesis held | 2 | `prompts/board/interpreter.md` |
 | `report` | the account of the whole run, once, after everything else | 3 | `prompts/board/report.md` |
 
-The allocation is `BOARD_TOOLS` in `src/memstara/pipeline/core.py`, and it is the
-ground truth — the table above is a reading of it, not a second copy to keep in step:
+The allocation is `BOARD_TOOLS` in `src/memstara/pipeline/core.py`, plus `QUESTION_TOOLS`
+beside it for the hypothesis agent's asking call, and it is the ground truth — the table
+above is a reading of it, not a second copy to keep in step:
 
 ```
-curator      okf_list_domains  okf_search  okf_read  read_questions  read_results  propose_questions
+hypothesis   okf_list_domains  okf_search  okf_read  read_questions  read_results  propose_questions
+  (asking)
 hypothesis   okf_list_domains  okf_search  okf_read  describe_dataset  match_concepts  match_concept
-             claim_question  create_task
+ (answering) claim_question  create_task
 data         describe_dataset  slice_columns  claim_task  submit_result
 ml           train_and_score  claim_task  submit_result
 interpreter  claim_task  submit_result
@@ -90,15 +98,18 @@ Three things in that list are deliberate and easy to undo by accident:
 
 - **Only `hypothesis` can `create_task`.** Every other stage takes work rather than making
   it. That is what lets a result be traced back to whose judgement produced it.
-- **`read_results` is the curator's, not the hypothesis stage's.** It is the whole
-  feedback path between waves. Moving it leaves the hypothesis stage able to pick its own
-  next question, which is the contract it is supposed to keep: one question in, one
-  hypothesis out.
+- **`read_results` and `propose_questions` are in the asking call, not the answering
+  one.** The first is the whole feedback path between waves. Grant either to the answering
+  call and a worker part way through the corpus can notice a promising column and write
+  itself the question that column answers — which breaks the contract the stage is
+  supposed to keep: one question in, one hypothesis out. `call_agent` takes the agent id
+  and the tool list as separate arguments, so this holds even though one agent makes both
+  calls: a tool absent from a call cannot be reached however the prompt is worded.
 - **`interpreter` has two tools.** It is meant to reason over what it is handed, not go
   looking for more.
 
 `mvp.py` runs four of these — `hypothesis`, `data`, `ml`, `interpreter` — under a
-supervisor, with prompts in `prompts/mvp/`. There is no curator and no board.
+supervisor, with prompts in `prompts/mvp/`. There is no question step and no board.
 
 
 rule file that loads when you do; the short version is that a prompt is an experimental
@@ -228,8 +239,8 @@ knowledge source and column names in the dataset, so the example reproduces it o
 |---|---|---|
 | `--trials` | 1 | hypotheses seeded per wave |
 | `--waves` | 1 | question-then-investigate rounds; wave 2 onward reads the previous wave's results |
-| `--stop-after-dry` | 2 | stop early after this many waves in which the curator produced no new question; 0 never stops early |
-| `--no-curator` | off | skip question generation, use the built-in perspective list |
+| `--stop-after-dry` | 2 | stop early after this many waves in which the question step produced no new question; 0 never stops early |
+| `--no-curator` | off | skip question generation, use the built-in perspective list. Keeps its name although there is no curator agent any more: the flag is already typed in saved command lines and its meaning has not changed |
 | `--skill` | *(whole bundle)* | confine the corpus to one branch, as front-matter equalities: `terminus_kind=sud` |
 | `--y-column` | from env | the outcome column |
 | `--provider` | `azure_foundry` | `anthropic` · `azure_foundry` · `openai` |

@@ -5,18 +5,25 @@ knowledge source, dataset, trainer and results table each have a **place**. Run 
 pipeline and you watch, in real time, a character walk to the board, pick up a row, carry
 it to their own place, work on it and put it back.
 
-**Six stages, five characters.** The curator and the hypothesis stage are shown as one
-agent, labelled simply "Hypothesis", because they spend most of a run at the same shelf
-and the picture could not tell them apart (`viewer/api/stores.py:177-223`). The fold is
-the whole viewer, not only the drawing: the cost table, the access map and the feed
-report the curator's work under the hypothesis agent too, so no screen here names it.
+**Five characters, and one of them used to be two.** The pipeline has five stages
+(`viewer/api/stores.py:233-239`). It had six until 2026-09-07, when the `curator` was
+merged into the hypothesis agent — writing the wave's questions is that agent's other job
+now, done in a separate call with a separate set of tools.
 
-**Its numbers are added, not dropped** (`viewer/api/scene.py:445-501`). Runs, tokens,
-calls and cost are the same totals as before the fold; what you can no longer ask the
-viewer is what the curator alone cost. The stage itself is untouched — the pipeline runs
-it, core records it separately, and `verify.py` reads it unfolded, which is why the
-checks below still work. The driver's own console in the Log panel also still prints
-`curator`, because that panel tails the pipeline's stdout rather than re-writing it.
+**The viewer still knows the retired name, and must keep knowing it**
+(`viewer/api/stores.py:153`). Hundreds of runs in the database are recorded against
+`memstara-board-curator`, and `viewer/api/scene.py:517` drops any row whose agent name the
+viewer does not recognise. Forget the name and that spend leaves the cost total with
+nothing on any screen to say so. So `DRAWN_AS` (`viewer/api/stores.py:277`) is now a
+compatibility layer rather than a drawing choice: it folds those historical rows into the
+hypothesis agent, which is the agent that does that work today.
+
+**Their numbers are added, not dropped.** Runs, tokens, calls and cost are the same totals
+as before the fold; what you cannot ask the viewer is what the curator alone cost, and
+`verify.py` reads the databases unfolded, which is why the checks below still work. The
+Log panel prints `curator0` for a run made before the merge and `question0` for one made
+after, because that panel tails the pipeline's stdout and rewriting a console is
+falsifying a record.
 
 ```bash
 docker compose up -d --build     # → http://localhost:8070
