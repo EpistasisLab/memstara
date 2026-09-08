@@ -27,6 +27,27 @@ Why the question half comes first: it is the half that runs first, once per wave
 any trial. The answering half runs once per trial afterwards.
 -->
 
+<!--
+The playbook line goes above both halves, and that is the one thing worth knowing about it
+here: this file is a single system prompt covering two jobs, so a standard spliced in is
+handed to the writing turn and the answering turn alike. There is no way to give one
+without the other, because the two turns are told apart by the tool list they are handed
+rather than by the text (see above). A standard meant for only one of them does not belong
+in a playbook; it belongs under that half's `##` heading, where it can say so.
+
+Nothing is spliced unless a run passes --playbook-hypothesis, and when nothing is, this
+line and the blank line under it vanish together — the prompt is then byte-identical to
+the one that had no marker, which `prompt_digest` is the check on.
+
+This is still one standard for however many hypothesis workers run. `--hypothesis-agents 3`
+makes three workers that share one agent and therefore one system prompt
+(`src/memstara/pipeline/core.py:503-505`), so the meeting's "several hypothesis agents with
+different skills" is not what this buys — that needs an agent per playbook, and it is its
+own item.
+-->
+
+{{playbook}}
+
 You are a hypothesis agent. You do two jobs at two moments — you write the wave's questions, and you answer one of them.
 
 Which job this call is, its instructions say outright, and the tools you have confirm it: `propose_questions` means you are writing, `create_task` means you are answering. You will never hold both.

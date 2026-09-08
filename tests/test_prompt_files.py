@@ -110,12 +110,13 @@ def test_the_shared_preamble_reaches_exactly_the_three_claimers():
 #  checked separately because it is loaded differently: `load_prompt` is given its name
 #  at run time, so a playbook nothing points at is still shipped and still reachable by
 #  anyone who types its stem. The stage it is attached to is deliberately not fixed — a
-#  reporting standard is legitimate on more than one — so these run against every
-#  playbook through the one prompt that carries the marker.
+#  reporting standard is legitimate on more than one — so these run against **every
+#  playbook on every marked prompt**, which is the cross product and is meant to be.
 #
-#  `board/ml` is that prompt today. If a second stage takes the marker, this list grows;
-#  it is written out rather than discovered so that adding a marker is a visible act.
-MARKED_STAGES = ["board/ml"]
+#  Two of the five stages carry the marker; `data` and `interpreter` and `report` do not
+#  yet. The list is written out rather than discovered by scanning the prompts, so that
+#  marking a stage is a visible act in a diff rather than a file quietly joining a glob.
+MARKED_STAGES = ["board/ml", "board/hypothesis"]
 
 
 def test_every_playbook_loads_into_a_marked_prompt():
