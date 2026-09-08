@@ -225,6 +225,11 @@ async def _results(run_tag: str) -> list[dict[str, Any]]:
             {"result_id": r["result_id"], "task_id": r["task_id"], "trial": r["trial"],
              "perspective": r["perspective"], "hypothesis": r["hypothesis"],
              "columns_used": _jsonb(r["columns_used"], []),
+             "columns_missing": _jsonb(r["columns_missing"], []),
+             # Named `importance` to match the board's field of the same meaning
+             # (see `_board` above), so a panel can read either without a second shape.
+             "importance": _jsonb(r["feature_importance"], {}),
+             "okf_concept_ids": _jsonb(r["okf_concept_ids"], []),
              "y_column": r["y_column"], "auc": r["auc"],
              "interpretation": r["interpretation"], "created_at": _iso(r["created_at"])}
             for r in rows

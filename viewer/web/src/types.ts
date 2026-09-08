@@ -127,12 +127,22 @@ export interface Window {
 export interface Result {
   result_id: number;
   /** Null once the board row has been cleaned up. The result still describes itself —
-   *  run_tag, trial, perspective, hypothesis, columns_used, y_column and auc are here. */
+   *  everything below is on the result row, so none of it depends on the board. */
   task_id: number | null;
   trial: number;
   perspective: string;
   hypothesis: string;
+  /** What the data stage could actually cut from the cohort. */
   columns_used: string[];
+  /** What it could not. The data stage's own list — **not** the columns the hypothesis
+   *  agent asked for minus `columns_used`; see the RESULTS comment in api/queries.py for
+   *  the three rows that prove those are different claims. */
+  columns_missing: string[];
+  /** Column name -> contribution. Same name and meaning as `Task.importance`, but read
+   *  from the result, which outlives the board row. Can be negative. */
+  importance: Record<string, number>;
+  /** OKF document ids the hypothesis agent relied on to justify those columns. */
+  okf_concept_ids: string[];
   /** What the AUC is an AUC *of*. Carried over from the board. */
   y_column: string;
   auc: number | null;

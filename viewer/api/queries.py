@@ -186,9 +186,30 @@ ORDER BY task_id
 # RESULTS — the results table. That it is **a different table** from the board matters.
 #   The board holds *what is moving*, the results table *what was found*. So the scene
 #   draws them in different places too (see TOOL_STORE in stores.py).
+#   **The explanation is selected from here, not from the board.** `feature_importance`,
+#   `columns_missing` and `okf_concept_ids` live on both tables, and reading them off the
+#   board loses them the moment the board row is cleaned away: `memstara_results.task_id`
+#   is `ON DELETE SET NULL`, so a finished result outlives the row it came from. Taking
+#   them from the result means "which columns went in, what each contributed, and which
+#   OKF concepts justified them" survives for as long as the result does.
+#
+#   `columns_missing` is selected rather than derived from `columns` minus `columns_used`,
+#   because the two are not the same claim. The subtraction says "asked for and not in the
+#   final model", which a run that stopped before the ML stage satisfies for every column
+#   it asked for — the three `curator-smoke` results have 91, 78 and 14 columns, no used
+#   columns at all, and exactly one genuinely missing column each. `columns_missing` is
+#   what the data stage reported as absent from the cohort, which is the thing worth
+#   showing, and it is why `columns` itself is not selected: nothing draws it.
+#
+#   `match_trace` is deliberately **not** here either, for a measured reason. It is the
+#   concept-to-column matching with every rejected candidate, and it is 598 kB across the
+#   81 results now stored against 89 kB for the explanation columns above — one row
+#   reaches 23.6 kB on its own. The snapshot is polled every two seconds and nothing draws
+#   a trace yet, so it belongs to a per-result endpoint, not to this one.
 RESULTS = """
 SELECT result_id, task_id, run_tag, trial, perspective, hypothesis,
-       columns_used, y_column, auc, interpretation, created_at
+       columns_used, columns_missing, feature_importance, okf_concept_ids,
+       y_column, auc, interpretation, created_at
 FROM memstara_results
 WHERE ($1 = '' OR run_tag = $1)
 ORDER BY result_id

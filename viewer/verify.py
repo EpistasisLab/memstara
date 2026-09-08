@@ -283,6 +283,22 @@ def main() -> int:
              f"SELECT count(*) FROM memstara_results WHERE run_tag='{tag}'")
     chk("5 results row count", str(len(snap["results"])) == r)
 
+    # The explanation has to arrive with the result, and a row count cannot see whether it
+    # did — every result could carry an empty importance map and the count above would
+    # still pass. So the same trick as the AUC check: the number of importances per
+    # result, strung together in result_id order and compared whole.
+    #
+    # This is the check that would have caught the panel reading importances off the
+    # **board** instead. `memstara_results.task_id` is `ON DELETE SET NULL`, so once a
+    # board row is cleaned away that lookup returns nothing while the AUC stays — the
+    # result keeps its score and loses the reason for it. Nothing on screen said so.
+    imps = psql("memstara-postgres", "memstara", "memstara",
+                f"SELECT string_agg(n::text, ',' ORDER BY result_id) FROM ("
+                f"SELECT result_id, (SELECT count(*) FROM jsonb_object_keys(feature_importance)) AS n "
+                f"FROM memstara_results WHERE run_tag='{tag}') t")
+    screen_imps = ",".join(str(len(res["importance"])) for res in snap["results"])
+    chk("5 importances per result", screen_imps == imps, f"screen {screen_imps} / DB {imps}")
+
     # 6 — a character holding a card must be holding a card the board agrees is held.
     # The scene's carrying is a value obtained by replaying the record of tool calls
     # (scene._carrying); the board's in_progress is what the DB knows directly. The two

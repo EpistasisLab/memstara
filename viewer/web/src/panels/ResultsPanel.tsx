@@ -2,7 +2,7 @@ import { BarChart3 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import EmptyState from "../components/EmptyState";
 import Panel from "../components/Panel";
-import { useBoard, useResults } from "../store/viewer";
+import { useResults } from "../store/viewer";
 
 /**
  * Finished results — the results table, not the board.
@@ -16,7 +16,6 @@ import { useBoard, useResults } from "../store/viewer";
 
 export default function ResultsPanel() {
   const results = useResults();
-  const board = useBoard();
 
   const compare = (results ?? []).map((r) => ({ name: `trial ${r.trial}`, auc: r.auc ?? 0 }));
 
@@ -45,13 +44,16 @@ export default function ResultsPanel() {
           </section>
 
           {results.map((r) => {
-            // task_id is null once the board row has been cleaned away; the result stands
-            // on its own, it just cannot show the per-column importances any more.
-            const task = r.task_id === null
-              ? undefined
-              : board?.tasks.find((t) => t.task_id === r.task_id);
-            const imp = Object.entries(task?.importance ?? {}).sort((a, b) => b[1] - a[1])
+            // The importances come off the result, not off the board. The board row is
+            // cleaned away eventually and `memstara_results.task_id` is ON DELETE SET
+            // NULL, so reading them from the task made the explanation disappear from
+            // finished work — the AUC stayed and the reason for it did not.
+            const imp = Object.entries(r.importance ?? {}).sort((a, b) => b[1] - a[1])
               .map(([col, v]) => ({ col, v }));
+            // Asked for, but not in the cohort — the data stage's own list, not
+            // `columns` minus `columns_used`. A hypothesis half of whose columns were
+            // missing is a different claim from one that got everything it asked for.
+            const missing = r.columns_missing ?? [];
 
             return (
               <article key={r.result_id} className="rounded-lg border border-paper-line p-4">
@@ -72,10 +74,20 @@ export default function ResultsPanel() {
 
                 <p className="mt-2 text-sm leading-relaxed text-ink-soft">{r.hypothesis}</p>
 
-                {r.task_id === null && (
-                  <p className="mt-3 text-xs text-ink-faint">
-                    Cleaned away from the board — the contributions live only on the board,
-                    so they can no longer be shown.
+                <p className="mt-2 font-mono text-[11px] text-ink-faint">
+                  {(r.columns_used ?? []).length} column
+                  {(r.columns_used ?? []).length === 1 ? "" : "s"} used
+                  {missing.length > 0 && `, ${missing.length} asked for and missing`}
+                  {(r.okf_concept_ids ?? []).length > 0 &&
+                    ` · ${r.okf_concept_ids.length} OKF concept${r.okf_concept_ids.length === 1 ? "" : "s"} behind them`}
+                </p>
+
+                {/* Same red as a negative bar below — in this panel that colour means
+                    "this is the direction that hurt", and a column the agent asked for
+                    and did not get is that. */}
+                {missing.length > 0 && (
+                  <p className="mt-1 font-mono text-[11px] text-[#c0392b]">
+                    missing: {missing.join(", ")}
                   </p>
                 )}
 
