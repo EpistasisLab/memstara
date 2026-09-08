@@ -242,7 +242,7 @@ knowledge source and column names in the dataset, so the example reproduces it o
 | `--stop-after-dry` | 2 | stop early after this many waves in which the question step produced no new question; 0 never stops early |
 | `--no-curator` | off | skip question generation, use the built-in perspective list. Keeps its name although there is no curator agent any more: the flag is already typed in saved command lines and its meaning has not changed |
 | `--skill` | *(whole bundle)* | confine the corpus to one branch, as front-matter equalities: `terminus_kind=sud` |
-| `--y-column` | from env | the outcome column |
+| `--y-column` | `outcome` | the outcome column. **A literal default, not read from the environment** (`src/memstara/pipeline/board.py:1856`) — `outcome` is the synthetic dataset's column (`src/memstara/prep/sample.py:90`), so a real cohort needs this passed explicitly or the pre-flight stops the run. `mvp.py` is the one that falls back to `MEMSTARA_OUTCOME_COLUMN` (`src/memstara/pipeline/mvp.py:425`) |
 | `--provider` | `azure_foundry` | `anthropic` · `azure_foundry` · `openai` |
 | `--model` | `claude-sonnet-4-6` | model id |
 | `--data-agents` `--ml-agents` `--interpret-agents` | 1 | how many workers of that stage claim from the board at once |
@@ -265,7 +265,7 @@ Environment:
 | `AGENTIC_OKF_BUNDLE_DIR` | the knowledge bundle. **Not** `MEMSTARA_*` — see below |
 | `MEMSTARA_DATASET_PATH` | the cohort CSV |
 | `MEMSTARA_OUTPUT_DIR` | where runs, sub-datasets and reports are written |
-| `MEMSTARA_OUTCOME_COLUMN` | default for `--y-column` |
+| `MEMSTARA_OUTCOME_COLUMN` | the label the matcher and the data server exclude from every column list (`src/memstara/mcp_servers/data.py:115`, `src/memstara/matcher/service.py:64`). It is **also** `mvp.py`'s default `--y-column` and **not** `board.py`'s — see that flag above |
 | `MEMSTARA_DATABASE_URL` | the board's Postgres |
 | `MEMSTARA_ML_ENGINE` | which learner `train_and_score` uses |
 | `MEMSTARA_DEBUGPY` / `_WAIT` | attach a debugger to a tool-server child process |
