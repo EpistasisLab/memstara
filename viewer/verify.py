@@ -139,12 +139,17 @@ DRAWN_AS = {"curator": "hypothesis"}
 # Written out for the same reason as the two above.
 #
 # This is the number that stayed fixed when the character count stopped being fixed. The
-# scene has drawn one figure per **worker** since 2026-09-08, so `--data-agents 3` puts
-# seven figures on the floor and any check written as `== 5` would fail on a run that was
-# working perfectly. Five *stations* is still a promise the viewer makes, and it is the
-# one worth checking: every figure stands at one of these, and every one of these has at
-# least one figure, because a stage with nothing running still puts its resting figure
-# down. See check 6 below.
+# scene draws one figure per **worker** at the hypothesis station, so
+# `--hypothesis-agents 3` puts seven figures on the floor and any check written as `== 5`
+# would fail on a run that was working perfectly. Five *stations* is still a promise the
+# viewer makes, and it is the one worth checking: every figure stands at one of these, and
+# every one of these has at least one figure, because a stage with nothing running still
+# puts its resting figure down. See check 6 below.
+#
+# `--data-agents 3` does **not** put three data figures down, and this paragraph said it
+# did between 2026-09-08 and the fix later the same day. That is the divergence itself,
+# written into the referee's own notes — which is how it went unnoticed. Check 6 now
+# tests it rather than describing it.
 STATIONS = {"hypothesis", "data", "ml", "interpreter", "report"}
 
 # The feed's rows, computed independently of api/queries.py. Same three traps, expressed
