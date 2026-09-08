@@ -177,6 +177,26 @@ def playbook_names() -> list[str]:
     return sorted(p.stem for p in PLAYBOOKS_DIR.glob("*.md"))
 
 
+def accepts_playbook(name: str) -> bool:
+    """Whether the prompt *name* carries a ``{{playbook}}`` line to receive one on.
+
+    For a menu, and it is the only honest way to build one. A screen that offered a
+    playbook for every stage would be offering choices the driver then refuses at
+    `ap.error`, which is a form that lies about what it can start. Asking the prompt
+    itself also means a stage joining the list is one marker in one file and nothing
+    else: no second table to update, and no way for the two to disagree.
+
+    Returns False for a prompt that does not exist, rather than raising. The caller is
+    building a list of what is possible, and a missing file is an impossibility like any
+    other.
+    """
+    path = (PROMPTS_DIR / name).with_suffix(".md")
+    if not path.is_file():
+        return False
+    _, body = _read(path)
+    return bool(_PLAYBOOK.search(body))
+
+
 def load_prompt(name: str, playbook: str = "") -> dict[str, str]:
     """Read one agent's prompt, optionally with a playbook spliced into it.
 

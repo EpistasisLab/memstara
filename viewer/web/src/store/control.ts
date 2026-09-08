@@ -31,9 +31,25 @@ export interface RunningRun {
   started: string;
 }
 
-/** The seven fields a run takes. The same names the service's allow-list uses, so a typo
+/** The five stages a playbook can be attached to, in the order the form lays them out.
+ *
+ *  A third copy of `board.py:1138`'s tuple — the second is `PLAYBOOK_STAGES` in
+ *  `src/memstara/control/request.py`, and `tests/test_control_request.py` compares that
+ *  one against the driver. This copy is not compared against anything, and it does not
+ *  need to be: a stage named here that the service does not know comes back as a 400
+ *  naming the field, and a stage the service knows that is missing here simply does not
+ *  appear on the form. Neither is silent.
+ *
+ *  **Which of them can actually take one is not decided here.** A prompt has to carry a
+ *  `{{playbook}}` line, and `GET /control/playbooks` reads the prompt files to say which
+ *  do. The form renders that answer, so marking a third prompt grows this form with no
+ *  edit to this file. */
+export const PLAYBOOK_STAGES = ["hypothesis", "data", "ml", "interpreter", "report"] as const;
+export type PlaybookStage = (typeof PLAYBOOK_STAGES)[number];
+
+/** The twelve fields a run takes. The same names the service's allow-list uses, so a typo
  *  here comes back as a 400 naming the field rather than being silently dropped. */
-export interface RunRequest {
+export type RunRequest = {
   skill: string;
   trials: number;
   waves: number;
@@ -50,7 +66,17 @@ export interface RunRequest {
   y_column: string;
   provider: string;
   model: string;
-}
+} & {
+  /** One key per stage — `playbook_ml` — holding a playbook's stem or `""` for the
+   *  prompt as written. Written as a mapped type rather than five lines so that the
+   *  form can index it with a stage name it got from the service and still be checked.
+   *
+   *  Per-stage and not one `playbook` box because a run legitimately gives different
+   *  stages different standards, and because the service refuses a standard aimed at a
+   *  prompt that cannot receive one — a single box would have nowhere to say which
+   *  stage it was for. */
+  [S in PlaybookStage as `playbook_${S}`]: string;
+};
 
 /** `y_column` is the cohort's real outcome column, not `board.py:1810`'s CLI default.
  *
@@ -73,6 +99,15 @@ export const DEFAULT_REQUEST: RunRequest = {
   y_column: "HIV_DETECTABLE",
   provider: "azure_foundry",
   model: "claude-sonnet-4-6",
+  // Empty is "the prompt as written", which is what every run before 2026-09-08 was and
+  // what the form must still start as. A default playbook would make a standard the
+  // silent condition of every run on this screen, and the run record would show it as
+  // deliberate.
+  playbook_hypothesis: "",
+  playbook_data: "",
+  playbook_ml: "",
+  playbook_interpreter: "",
+  playbook_report: "",
 };
 
 interface ControlState {
@@ -80,6 +115,14 @@ interface ControlState {
   up: boolean | null;
   bundle: { path?: string; documents?: number; error?: string } | null;
   skills: Skill[];
+  /** Every playbook on disk, by stem. **Null until the first answer** — a checkout with
+   *  no playbooks answers `[]`, and the two have to be told apart or the poll re-asks on
+   *  every tick. */
+  playbooks: string[] | null;
+  /** The stages whose prompts carry a `{{playbook}}` line. The service reads this off
+   *  the prompt files, so it is the only honest source for it: offering a row for a
+   *  stage that cannot receive one is a form that lies about what it can start. */
+  playbookStages: PlaybookStage[];
   running: RunningRun | null;
   /** The last thing the service refused, shown next to the button that caused it. */
   error: string | null;
@@ -103,6 +146,7 @@ interface ControlState {
 
   poll: () => Promise<void>;
   loadSkills: () => Promise<void>;
+  loadPlaybooks: () => Promise<void>;
   startRun: (body: RunRequest) => Promise<void>;
   stopRun: () => Promise<void>;
   pollLog: () => Promise<void>;
@@ -129,6 +173,8 @@ export const useControl = create<ControlState>((set, get) => ({
   up: null,
   bundle: null,
   skills: [],
+  playbooks: null,
+  playbookStages: [],
   running: null,
   error: null,
   busy: false,
@@ -149,6 +195,11 @@ export const useControl = create<ControlState>((set, get) => ({
       // Only when it comes back, not on every tick: the branch list is one read of a
       // 312-document bundle and it does not change while a service is up.
       if (wasDown || get().skills.length === 0) void get().loadSkills();
+      // Asked on the same edge, and the condition is `null` rather than `length === 0`
+      // for a reason the skills do not have: a checkout with no playbooks answers `[]`
+      // legitimately, and re-asking on an empty list would be a directory read every two
+      // seconds forever. Null is "not asked"; `[]` is "asked, there are none".
+      if (wasDown || get().playbooks === null) void get().loadPlaybooks();
     } catch {
       // No error message here. A control service nobody started is the normal state of
       // this screen, and writing "failed to fetch" under the dot every two seconds
@@ -163,6 +214,24 @@ export const useControl = create<ControlState>((set, get) => ({
       if (!res.ok) throw new Error(await readError(res));
       const body = await res.json();
       set({ skills: body.skills ?? [] });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) });
+    }
+  },
+
+  loadPlaybooks: async () => {
+    try {
+      const res = await fetch("/control/playbooks");
+      if (!res.ok) throw new Error(await readError(res));
+      const body = await res.json();
+      // The stage names are narrowed against the list this file holds rather than
+      // trusted. They arrive as strings and are about to be turned into object keys of
+      // `RunRequest`; a name outside the five would build `playbook_whatever`, which the
+      // service then refuses as an unknown field — a 400 about a key nobody typed.
+      const stages: PlaybookStage[] = (body.stages ?? []).filter(
+        (s: string): s is PlaybookStage => (PLAYBOOK_STAGES as readonly string[]).includes(s),
+      );
+      set({ playbooks: body.playbooks ?? [], playbookStages: stages });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e) });
     }

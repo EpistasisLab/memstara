@@ -1,6 +1,11 @@
 import { Play, Square } from "lucide-react";
 import { useEffect, useState } from "react";
-import { DEFAULT_REQUEST, useControl, type RunRequest } from "../store/control";
+import {
+  DEFAULT_REQUEST,
+  useControl,
+  type PlaybookStage,
+  type RunRequest,
+} from "../store/control";
 import { POLL_MS } from "../store/viewer";
 
 /**
@@ -13,8 +18,9 @@ import { POLL_MS } from "../store/viewer";
  *
  * Three things it is deliberately not:
  *
- *  - **Not a full command line.** Seven fields, the same seven the service accepts, and
- *    three of them behind a disclosure because nobody changes the provider twice a day.
+ *  - **Not a full command line.** Twelve fields, the same twelve the service accepts, and
+ *    eight of them behind two disclosures because nobody changes the provider twice a day
+ *    and most runs attach no playbook at all.
  *    Everything else `board.py` takes is still there for whoever runs it by hand.
  *  - **Not a validator.** The service refuses a bad request and says why in words; this
  *    shows that sentence. Two places deciding what a legal request is means one of them
@@ -47,6 +53,65 @@ function SkillSelect({ value, onChange }: { value: string; onChange: (v: string)
         ))}
       </select>
     </label>
+  );
+}
+
+/**
+ * One select per stage that can be handed a behavioural standard.
+ *
+ * **Both lists come from the service and neither is written here.** Which playbooks exist
+ * is a directory; which stages can take one is read off the prompt files, because a
+ * playbook only reaches a model through a prompt carrying a `{{playbook}}` line and the
+ * driver refuses the pair otherwise. Offering a row for a stage without the marker would
+ * be a form that lies about what it can start — the run would be refused after the button
+ * was pressed, which is the one place a form is not allowed to be wrong.
+ *
+ * The consequence worth knowing: marking a third prompt is one line in one `.md` file and
+ * a third row appears here. There is no list in this component to add it to.
+ *
+ * Renders nothing at all when there are no playbooks or no marked stages. An empty
+ * disclosure is a promise of a feature this checkout does not have.
+ */
+function PlaybookSelects({
+  form,
+  onChange,
+}: {
+  form: RunRequest;
+  onChange: (stage: PlaybookStage, v: string) => void;
+}) {
+  const playbooks = useControl((s) => s.playbooks);
+  const stages = useControl((s) => s.playbookStages);
+
+  if (!playbooks?.length || !stages.length) return null;
+
+  return (
+    <details className="text-[11px]">
+      <summary className="cursor-pointer text-ink-faint">Playbooks</summary>
+      <div className="mt-2 space-y-2">
+        {stages.map((stage) => (
+          <label key={stage} className="block">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">
+              {stage}
+            </span>
+            <select
+              value={form[`playbook_${stage}`]}
+              onChange={(e) => onChange(stage, e.target.value)}
+              className="mt-1 w-full rounded-md border border-paper-line bg-white px-2 py-1
+                         font-mono text-xs focus:border-ink focus:outline-none"
+            >
+              {/* Named rather than blank. "none" would read as a missing setting; this
+                  says what the run is, and it is what every run before playbooks was. */}
+              <option value="">prompt as written</option>
+              {playbooks.map((book) => (
+                <option key={book} value={book}>
+                  {book}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -172,6 +237,11 @@ export default function StartRun() {
               onChange={(v) => set("hypothesis_agents", v)}
             />
           </div>
+
+          <PlaybookSelects
+            form={form}
+            onChange={(stage, v) => set(`playbook_${stage}`, v)}
+          />
 
           <details className="text-[11px]">
             <summary className="cursor-pointer text-ink-faint">Model and target</summary>

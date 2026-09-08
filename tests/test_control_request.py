@@ -19,11 +19,19 @@ import re
 
 import pytest
 
-from memstara.control.request import DEFAULTS, PROVIDERS, build_argv
+from memstara.control.request import DEFAULTS, PLAYBOOK_STAGES, PROVIDERS, build_argv
 from memstara.paths import REPO_ROOT
 
 # Two of the 26 the real bundle has, enough to test "in the list" and "not in it".
 OFFERED = ["terminus_kind=sud", "mechanism_family=treatment-toxicity,terminus_kind=sud"]
+
+#: What `GET /control/playbooks` answers with, written out rather than read off the disk.
+#: The real answer grows every time somebody writes a playbook or marks a prompt, and a
+#: test that followed it would change meaning without anyone editing it — these two lists
+#: are here to be *stale on purpose*, so that what is asserted below is the rule and not
+#: today's contents of two directories.
+BOOKS = ["ml_reporting", "governance"]
+MARKED = ["hypothesis", "ml"]
 
 
 def flags(argv: list[str]) -> dict[str, str]:
@@ -37,7 +45,13 @@ def flags(argv: list[str]) -> dict[str, str]:
 
 
 def test_an_empty_body_is_the_default_run():
-    """A form nobody touched starts what the CLI with no flags would start."""
+    """A form nobody touched starts what the CLI with no flags would start.
+
+    Written as `==` on the whole dict rather than a check per flag, which is what makes
+    it also the test that **a new field does not silently join every run.** The five
+    `playbook_*` keys were added to `DEFAULTS` on 2026-09-08 and this line is where they
+    had to prove they add no argument until one is chosen.
+    """
     got = flags(build_argv({}, OFFERED))
     assert got == {"--trials": "3", "--waves": "1", "--hypothesis-agents": "1",
                    "--y-column": "outcome", "--provider": "azure_foundry",
@@ -171,6 +185,68 @@ def test_surrounding_whitespace_is_forgiven():
 
 
 # --------------------------------------------------------------------------- #
+#  The playbooks
+# --------------------------------------------------------------------------- #
+#
+#  A playbook is prose spliced into a stage's system prompt, so unlike `--skill` it is
+#  not enforced anywhere downstream — nothing checks that the model obeyed it. What can
+#  be checked is that the run was told the right thing, and these are that check.
+
+
+def test_a_chosen_playbook_becomes_the_stages_flag():
+    argv = build_argv({"playbook_ml": "ml_reporting"}, OFFERED, BOOKS, MARKED)
+    assert flags(argv)["--playbook-ml"] == "ml_reporting"
+
+
+def test_two_stages_can_take_different_standards_in_one_run():
+    """The reason the fields are per-stage and not one `playbook` box. A reporting
+    standard on `ml` and a questioning standard on `hypothesis` is the ordinary case."""
+    argv = build_argv(
+        {"playbook_ml": "ml_reporting", "playbook_hypothesis": "governance"},
+        OFFERED, BOOKS, MARKED,
+    )
+    got = flags(argv)
+    assert got["--playbook-ml"] == "ml_reporting"
+    assert got["--playbook-hypothesis"] == "governance"
+
+
+def test_an_empty_playbook_adds_no_flag():
+    """`board.py` reads the flag's **absence** as "the prompt as written"; there is no
+    value of it that means that. Passing "" would ask `load_prompt` for a playbook whose
+    name is the empty string, which is a FileNotFoundError twenty seconds in."""
+    assert "--playbook-ml" not in flags(build_argv({"playbook_ml": ""}, OFFERED, BOOKS, MARKED))
+
+
+def test_a_playbook_this_checkout_does_not_have_is_refused():
+    with pytest.raises(ValueError, match="not a playbook this checkout has"):
+        build_argv({"playbook_ml": "no_such_standard"}, OFFERED, BOOKS, MARKED)
+
+
+def test_a_stage_whose_prompt_has_no_marker_is_refused_and_says_why():
+    """`report` is a real stage and `ml_reporting` is a real playbook; the pair is still
+    refused, because `board/report.md` carries no `{{playbook}}` line to put it on. The
+    message names the missing marker rather than saying the stage is unknown — the stage
+    is perfectly known, and the fix is one line in a prompt file."""
+    with pytest.raises(ValueError, match=r"no \{\{playbook\}\} line"):
+        build_argv({"playbook_report": "ml_reporting"}, OFFERED, BOOKS, MARKED)
+
+
+def test_nothing_is_offered_when_the_caller_names_nothing():
+    """Both lists default to empty and empty refuses everything. A caller that has not
+    said what exists cannot be read as saying anything goes — and every call site that
+    predates the playbooks is such a caller."""
+    with pytest.raises(ValueError, match="no .*playbook.* line|not a playbook"):
+        build_argv({"playbook_ml": "ml_reporting"}, OFFERED)
+
+
+def test_every_playbook_stage_has_a_field():
+    """The form is built from `DEFAULTS`, so a stage missing here is a stage that cannot
+    be given a standard from the browser however many markers its prompt carries."""
+    for stage in PLAYBOOK_STAGES:
+        assert f"playbook_{stage}" in DEFAULTS
+
+
+# --------------------------------------------------------------------------- #
 #  The copies of board.py's own vocabulary
 # --------------------------------------------------------------------------- #
 
@@ -204,6 +280,24 @@ def test_the_providers_are_the_ones_board_py_accepts():
     assert tuple(re.findall(r'"([^"]+)"', choices.group(1))) == PROVIDERS, (
         "board.py's providers changed; PROVIDERS in src/memstara/control/request.py "
         "has to change with them"
+    )
+
+
+def test_the_playbook_stages_are_board_pys_stages():
+    """`PLAYBOOK_STAGES` is a second copy of the same tuple, for the same reason as
+    `PROVIDERS`, and it is checked the same way.
+
+    Order matters as well as membership: `build_argv` walks this tuple to lay the flags
+    out, and `chosen_playbooks` (`board.py:1141`) walks board.py's. Two lists holding the
+    same names in different orders would put the flags in an order no `--help` describes,
+    which is a diff nobody can read against the driver.
+    """
+    source = (REPO_ROOT / "src/memstara/pipeline/board.py").read_text(encoding="utf-8")
+    written = re.search(r"^PLAYBOOK_STAGES = \((.*?)\)$", source, re.MULTILINE)
+    assert written, "board.py no longer declares PLAYBOOK_STAGES as a one-line tuple"
+    assert tuple(re.findall(r'"([^"]+)"', written.group(1))) == PLAYBOOK_STAGES, (
+        "board.py's playbook stages changed; PLAYBOOK_STAGES in "
+        "src/memstara/control/request.py has to change with them"
     )
 
 

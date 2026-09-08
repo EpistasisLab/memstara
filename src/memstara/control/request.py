@@ -2,7 +2,7 @@
 
 This module turns one JSON object into the argument list for
 `python -m memstara.pipeline.board`. It is the whole of the boundary between a
-browser and a process on this machine, so it is written as an allow-list: seven keys,
+browser and a process on this machine, so it is written as an allow-list: twelve keys,
 each with a type and a range, and **an unknown key is an error rather than a key that
 is ignored.** Silently dropping a field means a run that is not the one that was asked
 for — the same reasoning the prompt loader gives for refusing unknown front matter
@@ -70,6 +70,19 @@ _MAX_HYPOTHESIS_AGENTS = 3
 #: would reopen a decision on screen that was made in a meeting. They are still free on
 #: the command line, and `A-24` draws whatever number results as one character with the
 #: count on it.
+#: The stages that may be given a playbook, in the order they are put on the command
+#: line. The same five as `board.py`'s `PLAYBOOK_STAGES`, written out rather than
+#: imported for the reason in the module docstring — and `tests/test_control_request.py`
+#: compares the two lists, so the copy cannot drift without a test failing.
+#:
+#: **Every stage is here, and only some of them can actually take one.** A prompt has to
+#: carry a `{{playbook}}` line to receive a standard, and three of the five do not yet.
+#: That is not written into this file: which prompts are marked changes with a one-line
+#: edit to a `.md`, and a copy of it here would be a second answer to the same question,
+#: kept in step by hand. `GET /control/playbooks` reads the prompts themselves and the
+#: caller passes the answer in.
+PLAYBOOK_STAGES = ("hypothesis", "data", "ml", "interpreter", "report")
+
 DEFAULTS: dict[str, Any] = {
     "skill": "",
     "trials": 3,
@@ -78,6 +91,12 @@ DEFAULTS: dict[str, Any] = {
     "y_column": "outcome",
     "provider": "azure_foundry",
     "model": "claude-sonnet-4-6",
+    # One key per stage rather than one `playbooks` object, so the allow-list stays flat
+    # and an unknown *stage* is caught by the same check that catches an unknown field
+    # — a nested object would need its own copy of that rule, and the copy is what goes
+    # wrong. Empty means the prompt as written, which is also what `board.py` means by
+    # the flag being absent.
+    **{f"playbook_{stage}": "" for stage in PLAYBOOK_STAGES},
 }
 
 
@@ -102,7 +121,12 @@ def _text(body: Mapping[str, Any], key: str) -> str:
     return value.strip()
 
 
-def build_argv(body: Mapping[str, Any], offered: Iterable[str]) -> list[str]:
+def build_argv(
+    body: Mapping[str, Any],
+    offered: Iterable[str],
+    playbooks: Iterable[str] = (),
+    playbook_stages: Iterable[str] = (),
+) -> list[str]:
     """The arguments for one run, or `ValueError` saying which field was wrong.
 
     Args:
@@ -112,6 +136,15 @@ def build_argv(body: Mapping[str, Any], offered: Iterable[str]) -> list[str]:
             filter**: the list is generated from the bundle, so anything missing from
             it selects no documents, and a run confined to nothing is a run whose
             agents can read nothing and will not say so.
+        playbooks: the playbook stems `GET /control/playbooks` listed. Named here for
+            the same reason the skills are: `board.py` refuses an unknown one, but it
+            does so after the process has started, where the message reaches a log
+            rather than the person who pressed the button.
+        playbook_stages: the stages whose prompts carry a ``{{playbook}}`` line, out of
+            the same endpoint. **Both default to empty, which refuses every playbook.**
+            A caller that does not say what exists cannot be assumed to have meant
+            anything is allowed, and no playbook is the state every run was in until
+            this field existed.
 
     Returns:
         The tail of the command line — `["--trials", "3", ...]`. The caller adds
@@ -153,10 +186,33 @@ def build_argv(body: Mapping[str, Any], offered: Iterable[str]) -> list[str]:
     waves = _whole_number(body, "waves", _MAX_WAVES)
     hypothesis_agents = _whole_number(body, "hypothesis_agents", _MAX_HYPOTHESIS_AGENTS)
 
+    known = set(playbooks)
+    markable = set(playbook_stages)
+    chosen: list[tuple[str, str]] = []
+    for stage in PLAYBOOK_STAGES:
+        book = _text(body, f"playbook_{stage}")
+        if not book:
+            continue
+        if stage not in markable:
+            raise ValueError(
+                f"the {stage} prompt has no {{{{playbook}}}} line, so it cannot be given "
+                f"the {book!r} standard. Ask GET /control/playbooks for the stages that can"
+            )
+        if book not in known:
+            raise ValueError(
+                f"{book!r} is not a playbook this checkout has. "
+                f"Ask GET /control/playbooks for the list"
+            )
+        chosen.append((stage, book))
+
     # --skill is passed even when it is empty, so that the run is confined by what this
     # request said and never by a value left over in the environment this service was
     # started with. `board.py:1890` writes it unconditionally for the same reason.
-    return [
+    #
+    # --playbook-* is the opposite: written only when one was chosen. There is no value
+    # of the flag that means "the prompt as written" — `board.py` reads its absence as
+    # that — and passing an empty string would ask `load_prompt` for a playbook named "".
+    argv = [
         "--trials", str(trials),
         "--waves", str(waves),
         "--hypothesis-agents", str(hypothesis_agents),
@@ -165,3 +221,6 @@ def build_argv(body: Mapping[str, Any], offered: Iterable[str]) -> list[str]:
         "--model", model,
         "--skill", skill,
     ]
+    for stage, book in chosen:
+        argv += [f"--playbook-{stage}", book]
+    return argv

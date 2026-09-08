@@ -13,6 +13,8 @@
 
  The six routes
    GET  /control/health          the service is up, and which bundle it reads
+   GET  /control/playbooks       the behavioural standards on disk, and which stages
+                                 can be given one. Two lists: see `playbooks()`.
    GET  /control/skills          the branches this bundle actually has, with a
                                  document count each. Generated, never listed
    POST /control/runs            start one run. Returns its tag immediately
@@ -63,6 +65,8 @@ from memstara.env import load_env
 from memstara.logging_setup import new_run_dir
 from memstara.mcp_servers.frontmatter import matches, values_for
 from memstara.mcp_servers.okf import OKFError, _bundle_root, _load
+from memstara.pipeline.board import PLAYBOOK_STAGES
+from memstara.pipeline.prompts import accepts_playbook, playbook_names
 from memstara.paths import REPO_ROOT
 
 #: The two front matter fields a skill is built from. `terminus_kind` is what the
@@ -255,6 +259,27 @@ def skills() -> list[dict[str, Any]]:
     return out
 
 
+def playbooks() -> dict[str, Any]:
+    """The behavioural standards on disk, and the stages that can be given one.
+
+    **Two lists, not one, and the second is the point.** A playbook only reaches a model
+    through a prompt that carries a ``{{playbook}}`` line; `board.py` refuses the pair at
+    `ap.error` otherwise. So a menu built from the playbooks alone would offer the report
+    stage a standard it cannot receive, and the browser would find that out from a run
+    that never started. `stages` is read off the prompt files themselves
+    (`prompts.accepts_playbook`), so marking a third stage makes this endpoint — and the
+    form that renders it — grow by itself.
+
+    This is deliberately *not* `skills()`'s shape. That one counts documents per branch
+    because a branch with nothing in it is a filter that returns nothing; a playbook has
+    no such property, it is one file that is either attached or not.
+    """
+    return {
+        "playbooks": playbook_names(),
+        "stages": [s for s in PLAYBOOK_STAGES if accepts_playbook(f"board/{s}")],
+    }
+
+
 def read_log(run_dir: Path, offset: int) -> dict[str, Any]:
     """One run's console output from `offset` bytes in, capped at `_MAX_LOG`.
 
@@ -382,6 +407,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(503, {"error": str(e)})
             return
 
+        if path == "/control/playbooks":
+            # No try/except around it, unlike /control/skills. That one reads the OKF
+            # bundle, which is a path out of the environment and can genuinely be absent;
+            # this reads a directory inside the installed package, and `playbook_names`
+            # already answers `[]` for a checkout that has none.
+            self._send(200, playbooks())
+            return
+
         if path == "/control/runs":
             self._send(200, {"running": RUNS.running(), "finished": RUNS.finished()})
             return
@@ -436,8 +469,13 @@ class Handler(BaseHTTPRequestHandler):
         except OKFError as e:
             self._send(503, {"error": str(e)})
             return
+        # Read here rather than cached at import, so that writing a new playbook while
+        # the service is running makes it startable without a restart. It is a directory
+        # listing and a handful of small files; the bundle read above is the expensive
+        # half of this handler and it was already being done per request.
+        menu = playbooks()
         try:
-            argv = build_argv(body, offered)
+            argv = build_argv(body, offered, menu["playbooks"], menu["stages"])
         except ValueError as e:
             self._send(400, {"error": str(e)})
             return
@@ -463,7 +501,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 _ROUTES = [
-    "GET /control/health", "GET /control/skills", "POST /control/runs",
+    "GET /control/health", "GET /control/skills", "GET /control/playbooks",
+    "POST /control/runs",
     "GET /control/runs", "GET /control/runs/{tag}/log", "POST /control/runs/{tag}/stop",
 ]
 
