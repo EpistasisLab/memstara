@@ -31,7 +31,9 @@ tool, not by server.
    AGENT_BY_NAME_ANY        BOTH paths merged  <- the access map uses this one
    AGENT_PATH               agent name -> "board" or "supervisor"
    PLACES / HOME            scene coordinates (the SVG's own 1000x560 space)
+   DRAWN_AS / drawn_as()    stage -> the character it is drawn as  <- display only
    AGENT_LABELS             stage -> the name shown on screen
+   SCENE_LABELS             the scene's overrides, for a character that is two stages
    TOOL_STORE / store_of()  tool -> store
    normalise_server()       fold the old `ecoxai-*` server names into the current ones
    BOARD_WINDOWS            the eight windows the board server opens, and whose they are
@@ -47,6 +49,10 @@ tool, not by server.
       place can be moved without touching a component.
    4. `read_board` and `count_waiting` showing zero calls is **the correct picture,
       not a bug** — the first belongs to the driving script, the second to nobody.
+   5. **Six stages, five characters.** `DRAWN_AS` folds the curator into the
+      hypothesis stage *on the scene only*. Nothing else folds: the cost table, the
+      access map and the feed all still report six. If you are looking for the curator
+      and it is not in `HOME`, it has not been deleted — read `DRAWN_AS`.
 ==============================================================================
 """
 
@@ -158,18 +164,48 @@ PLACES: list[dict[str, Any]] = [
     {"id": "ml",      "label": "Trainer",          "sub": "train_and_score",     "x": 330, "y": 300},
 ]
 
-# Where each character rests when it has nothing to do — six of them side by side
-# along the bottom (y=470), in the order the pipeline runs them. A stage missing from
-# here is silently dropped from the drawing, which is what `check_definitions.py`
-# watches for.
+# Where each character rests when it has nothing to do — five of them side by side
+# along the bottom (y=470), in the order the pipeline runs them. **This is the list of
+# characters on the floor, and the only one**: `scene.py` iterates it. Six stages come
+# out of the pipeline and five stand here, because `DRAWN_AS` below folds the curator
+# into the hypothesis stage. A stage that neither appears here nor resolves through
+# `DRAWN_AS` to something that does is silently dropped from the drawing, which is what
+# `check_definitions.py` watches for.
 HOME: dict[str, dict[str, int]] = {
-    "curator":     {"x": 110, "y": 470},
-    "hypothesis":  {"x": 260, "y": 470},
-    "data":        {"x": 410, "y": 470},
-    "ml":          {"x": 560, "y": 470},
-    "interpreter": {"x": 710, "y": 470},
+    "hypothesis":  {"x": 160, "y": 470},
+    "data":        {"x": 335, "y": 470},
+    "ml":          {"x": 510, "y": 470},
+    "interpreter": {"x": 685, "y": 470},
     "report":      {"x": 860, "y": 470},
 }
+
+# Which character a stage is *drawn* as. **This is the picture, not the pipeline.**
+#
+# The curator and the hypothesis stage are drawn as one because the floor plan draws
+# which store a character is standing in front of, and for most of a run those two are
+# standing in front of the same one. Measured on the three-trial run of 2026-09-05
+# (`outputs/runs/2026-09-05T184303_board_3trials/trace/`): the curator made 13 tool
+# calls and 11 went to the OKF shelf — everything except `read_questions` and
+# `propose_questions` — and the hypothesis workers spent 8 of 12, 9 of 13 and 6 of 10
+# calls in the same place. Two characters at one shelf, and the drawing distinguishing
+# nothing.
+#
+# **The curator stage is not removed and this table does not remove it.** It keeps its
+# agent, its prompt, its tool grant and every row it has ever written. The pipeline
+# genuinely does tell the two apart, and deliberately — `src/memstara/pipeline/core.py`
+# `:382-387` gives the curator `read_results` because that is the whole feedback path,
+# and `:394-396` keeps `read_questions` with it because a stage that can read the whole
+# bank can pick itself a second question. None of that is affected by where a character
+# stands. `_agent_totals`, `_access` and `_feed` go on reporting six agents under six
+# names, which is what lets a "Curator" line in the feed be traced back to the merged
+# character on the floor.
+DRAWN_AS: dict[str, str] = {"curator": "hypothesis"}
+
+
+def drawn_as(stage: str) -> str:
+    """The character `stage` appears as on the scene. Identity for all but the curator."""
+    return DRAWN_AS.get(stage, stage)
+
 
 AGENT_LABELS = {
     # Stage -> the name shown on screen.
@@ -188,6 +224,20 @@ AGENT_LABELS = {
     "hypothesis": "Hypothesis", "data": "Data", "ml": "ML",
     "interpreter": "Interpreter", "report": "Report · Insight",
 }
+
+# What the **scene** calls a character, where that differs from the stage's own name.
+# Everything not named here uses `AGENT_LABELS`.
+#
+# One entry, and it is the other side of the same convention as "Report · Insight"
+# above: there, one stage under two names; here, two stages under one name. The merged
+# character has to say both, because the feed and the cost table go on printing
+# "Curator" and a reader has to be able to find, on the floor, the character that line
+# belongs to.
+#
+# `AGENT_LABELS` deliberately keeps all six entries. `_agent_totals`, `_access` and
+# `_feed` label a real agent through it, so dropping "curator" there would put the raw
+# `memstara-board-curator` on screen instead.
+SCENE_LABELS: dict[str, str] = {"hypothesis": "Hypothesis · Curator"}
 
 # A tool touches exactly one store. Keyed by tool, not by server, because the board
 # server serves two stores — see the module docstring. (`claim_task`/`submit_result`

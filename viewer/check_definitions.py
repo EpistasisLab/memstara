@@ -132,13 +132,27 @@ def main() -> int:
 
     # `real` is rebound by the loop above; name the table we actually mean.
     stages = set(BOARD_TOOLS)
-    missing_home = stages - set(stores.HOME)
+    # A stage does not need a place of its own — it needs to be **drawn**, and
+    # `stores.DRAWN_AS` lets one character stand for two stages (the curator is drawn as
+    # the hypothesis stage). So the question is whether the character it resolves to has
+    # a place, not whether the stage does. Every stage still needs its own label:
+    # `AGENT_LABELS` is what names an agent in the cost table, the access map and the
+    # feed, all of which still report the six separately.
+    missing_home = {stores.drawn_as(s) for s in stages} - set(stores.HOME)
     missing_label = stages - set(stores.AGENT_LABELS)
-    if missing_home or missing_label:
+    # `DRAWN_AS` is checked from both ends, or the grouping becomes a way to lose a
+    # stage quietly: a key naming a stage that does not exist folds nothing, and a value
+    # naming a character with no place folds a real stage into thin air.
+    unknown_source = set(stores.DRAWN_AS) - stages
+    unknown_target = set(stores.DRAWN_AS.values()) - set(stores.HOME)
+    if missing_home or missing_label or unknown_source or unknown_target:
         bad = True
         print(f"  {'scene places':20} ⛔ missing stages home={missing_home} label={missing_label}")
+        if unknown_source or unknown_target:
+            print(f"  {'':20}    DRAWN_AS bad keys={unknown_source} bad targets={unknown_target}")
     else:
-        print(f"  {'scene places':20} match — all {len(stores.HOME)} stages have a place and a name")
+        drawn = f"{len(stages)} stages drawn as {len(stores.HOME)} characters"
+        print(f"  {'scene places':20} match — {drawn}, every one with a place and a name")
 
     every_tool = {t for ts in BOARD_TOOLS.values() for t in ts} | {"read_board", "count_waiting"}
     # Every tool the stages use, plus the two that belong to no stage.

@@ -309,6 +309,23 @@ def _carrying(touches: list[dict[str, Any]]) -> dict[str, int]:
     return held
 
 
+def _members_of_each_character() -> dict[str, list[str]]:
+    # Which real stages each character on the floor stands for.
+    #
+    # Six stages come out of the pipeline and five characters stand on the floor,
+    # because `stores.DRAWN_AS` draws the curator and the hypothesis stage as one — they
+    # spend most of a run at the same shelf and the picture cannot tell them apart. This
+    # is a **grouping for the drawing only**; the stages, agents and tool grants are
+    # untouched, and `_agent_totals`, `_access` and `_feed` below still report six.
+    #
+    # Read off `BOARD_TOOLS` rather than written out, so a stage added to the pipeline
+    # arrives here by itself instead of going missing until somebody notices.
+    members: dict[str, list[str]] = {character: [] for character in stores.HOME}
+    for stage in stores.BOARD_TOOLS:
+        members.setdefault(stores.drawn_as(stage), []).append(stage)
+    return members
+
+
 def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
     # ★ Assembles the scene: the five characters' **state, position and what they are
     # holding,** and the lines that will flash.
@@ -329,12 +346,34 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
     # The three ingredients are now gathered: the runs going right now (open), the last
     # call (last), and what is in hand (held). The for loop below combines the three to
     # settle one character's state.
+    #
+    # They are keyed by **stage**, and the loop walks **characters**, so each ingredient
+    # is chosen from the stages that character stands for. For four of the five that is
+    # a list of one and the choosing does nothing.
+    members = _members_of_each_character()
 
     agents = []
-    for stage, label in stores.AGENT_LABELS.items():
-        run = open_by_stage.get(stage)
-        last = last_by_stage.get(stage)
-        carrying = held.get(stage)
+    for stage in stores.HOME:
+        label = stores.SCENE_LABELS.get(stage, stores.AGENT_LABELS.get(stage, stage))
+        mine = members.get(stage, [stage])
+
+        # Both members can be busy at once — the curator can be writing wave n+1's
+        # questions while a hypothesis worker is still on wave n — so pick the run that
+        # started most recently: that is what the character is doing *now*.
+        running = [(open_by_stage[s], s) for s in mine if s in open_by_stage]
+        run, run_stage = (
+            max(running, key=lambda pair: pair[0]["created_at"]) if running else (None, None)
+        )
+        calls = [(last_by_stage[s], s) for s in mine if s in last_by_stage]
+        last, last_stage = (
+            max(calls, key=lambda pair: pair[0]["started_at"]) if calls else (None, None)
+        )
+        # `carrying` needs no tie-break: only stages granted `claim_task` can hold one,
+        # and of the two folded together only the hypothesis stage has it
+        # (`src/memstara/pipeline/core.py:354-428`). Written for the general case anyway,
+        # because a grant is a table somebody can edit.
+        holding = [(held[s], s) for s in mine if s in held]
+        carrying = holding[0][0] if holding else None
 
         if not core_up:
             # Not "idle" — unknown. Saying idle would be an assertion we cannot make.
@@ -357,10 +396,13 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
             # No run going and nothing in hand means it really is idle.
             state, at = "idle", None
 
+        # `name` is the agent that produced the state just settled, not the character's
+        # own — so a merged character says `memstara-board-curator` while the curator is
+        # the one running. Which of the two is working is still readable from the card.
         agents.append({
             "id": stage,
             "label": label,
-            "name": stores.BOARD_AGENT_NAMES.get(stage, stage),
+            "name": stores.BOARD_AGENT_NAMES.get(run_stage or last_stage or stage, stage),
             "state": state,
             "at": at,
             "home": stores.HOME[stage],
@@ -371,10 +413,11 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
                 "server": last["server"], "tool": last["tool"],
                 "store": stores.store_of(last["tool"]), "at": _iso(last["started_at"]),
             },
-            "windows": sorted(stores.BOARD_TOOLS.get(stage, set())),
-            # The list of windows this character can open. A set has no order, so left
-            # alone the order shifts on every refresh and the screen flickers. Hence the
-            # sort.
+            "windows": sorted({t for s in mine for t in stores.BOARD_TOOLS.get(s, set())}),
+            # The list of windows this character can open — the **union** over the stages
+            # it stands for, because a merged character really can open all of them. A
+            # set has no order, so left alone the order shifts on every refresh and the
+            # screen flickers. Hence the sort.
         })
 
     # flashes below: the calls of the last few seconds = **the lines that will flash**
@@ -382,9 +425,12 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
     # `place` is settled by the **tool**, not the server (stores.store_of) — because the
     # one board server is responsible for two places, the board and the results table.
     # Here too only board-path characters are kept. A line for a character that is not
-    # in the scene has nowhere to be drawn.
+    # in the scene has nowhere to be drawn — which is why `drawn_as` has to be applied
+    # here as well as above. `ScenePanel.tsx` builds each edge as `source: agent-${agent}`
+    # against the node ids it got from `agents`, so a flash still keyed `curator` would
+    # name a node that no longer exists and the line would simply not appear.
     flashes = [
-        {"agent": stores.AGENT_BY_NAME[r["name"]],
+        {"agent": stores.drawn_as(stores.AGENT_BY_NAME[r["name"]]),
          "place": stores.store_of(r["tool"]),
          "tool": r["tool"], "server": r["server"], "at": _iso(r["started_at"])}
         for r in core["recent"] if r["name"] in stores.AGENT_BY_NAME

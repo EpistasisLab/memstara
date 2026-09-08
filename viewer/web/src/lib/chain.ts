@@ -17,13 +17,20 @@ import type { SceneAgent, StageId } from "../types";
 /**
  * The order work actually runs in, and the only place the frontend states it.
  *
- * It mirrors `viewer/api/stores.py:165-172` (`HOME`), whose comment says the same thing —
- * six stages "in the order the pipeline runs them". Read from the snapshot's agent array
- * instead, the order would be whatever the API's dict iteration happened to give, which
- * is right today by accident rather than by contract.
+ * It mirrors `viewer/api/stores.py:174-180` (`HOME`), whose comment says the same thing —
+ * "in the order the pipeline runs them". Read from the snapshot's agent array instead,
+ * the order would be whatever the API's dict iteration happened to give, which is right
+ * today by accident rather than by contract.
+ *
+ * **Five links for six stages.** The curator is not here because it is not drawn as a
+ * character of its own: `viewer/api/stores.py:202` (`DRAWN_AS`) folds it into the
+ * hypothesis stage, which is why that link is labelled "Hypothesis · Curator". The
+ * curator stage is still in the pipeline, still has its own agent, and still appears
+ * under its own name in the feed and the cost table — this array is about who gets a box
+ * drawn, nothing more. It has to agree with the backend, because `ChainPanel` compares
+ * its length against the agents the API sent and reports a shortfall as an error.
  */
 export const CHAIN: StageId[] = [
-  "curator",
   "hypothesis",
   "data",
   "ml",
