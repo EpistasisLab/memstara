@@ -150,6 +150,45 @@ export interface Result {
   created_at: string;
 }
 
+/** One candidate the matcher offered for a concept. */
+export interface TraceCandidate {
+  column: string;
+  feature_type: string;
+  /** Cosine similarity to the concept. Null only if the matcher omitted it. */
+  score: number | null;
+  /** The agent asked for this column. Judged against `columns` — what was asked for —
+   *  and not against `columns_used`, so a column the cohort turned out not to have is
+   *  still shown as chosen. See scene._trace_groups. */
+  chosen: boolean;
+  /** …and it also survived into the model. */
+  present: boolean;
+}
+
+/** What the matcher offered for one concept, chosen and rejected alike. */
+export interface TraceGroup {
+  tool: string;
+  concept: string;
+  /** The matcher's own reason for an empty group — "nothing was close enough" is worth
+   *  rewording for, "a code this cohort does not carry" is not. */
+  note: string;
+  candidates: TraceCandidate[];
+}
+
+/** `/api/result/{id}` — one result with the matcher record behind its columns.
+ *
+ *  Not part of `Snapshot`. `match_trace` is 598 kB across the stored results against
+ *  89 kB for every explanation column the snapshot carries, and the snapshot is polled
+ *  every two seconds, so this is fetched once when a person opens a result. */
+export interface ResultDetail extends Result {
+  run_tag: string;
+  /** What the hypothesis agent asked for, against `columns_used` which is what arrived. */
+  columns: string[];
+  match_trace: TraceGroup[];
+  /** Calls stored before flattening. A trace that unwraps to no groups still differs
+   *  from a task the matcher was never called for, and those need opposite fixes. */
+  match_trace_calls: number;
+}
+
 export interface RunSummary {
   run_tag: string;
   tasks: number;

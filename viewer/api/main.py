@@ -18,7 +18,7 @@ careful — verified: UPDATE and DELETE are refused.
    the HTTP shell — four routes, the CORS setting, and closing the pools on shutdown.
    Started under Docker, this app is :8071 of the `memstara-viewer-api` container.
 
- The four endpoints
+ The five endpoints
    GET /api/health          which of the two DBs answers. Also used as the container
                             healthcheck
    GET /api/runs            the list of runs (run_tag). For the selector at the top of
@@ -26,6 +26,7 @@ careful — verified: UPDATE and DELETE are refused.
    GET /api/snapshot        ★ the workhorse. Called every 2 seconds, it holds
                             everything all six screens need
    GET /api/task/{task_id}  one task + the history of the agent runs that touched it
+   GET /api/result/{id}     one result + the matcher record behind its columns
 
  Easy things to miss
    1. **The pools are not built up front in lifespan.** The viewer has to start even
@@ -35,6 +36,12 @@ careful — verified: UPDATE and DELETE are refused.
       in the CORS setting.
    4. The trail in `/api/task` cannot be read off the board. The board holds no run
       ids, so it is rebuilt by retracing the record of tool calls.
+   5. **`/api/result` is the one read the snapshot deliberately does not carry**, and
+      that is not an inconsistency with point 2. `match_trace` is 598 kB across the 81
+      stored results against 89 kB for every explanation column the snapshot does
+      carry, and the snapshot is polled every two seconds. Consistency is worth one
+      request per screen; it is not worth six-fold that, thirty times a minute, for
+      something a person opens one of at a time.
 ==============================================================================
 """
 
@@ -161,3 +168,29 @@ async def task(task_id: int) -> dict[str, Any]:
     # read".
 
     return {"task": found, "trail": trail, "health": pools.health.as_dict()}
+
+
+@app.get("/api/result/{result_id}")
+async def result(result_id: int) -> dict[str, Any]:
+    """One result, with the matcher record that explains where its columns came from.
+
+    This is the only place `match_trace` is served. It is left out of the snapshot for a
+    measured reason (see the note on queries.RESULT_ONE), so a screen that wants to show
+    *why this column* asks here, once, when someone opens a result.
+    """
+    found = await scene.result_detail(result_id)
+    if found is None:
+        # Two different failures reach this line and they are told apart rather than
+        # both reported as 404. `scene.result_detail` returns None for "no such row" and
+        # also for "the query could not run" — `guarded` hands back the fallback either
+        # way — so a database that is down would otherwise be reported to a person as a
+        # result that does not exist. That is not a degraded answer, it is a wrong one.
+        # `/api/task` above does not draw this distinction yet.
+        if not pools.health.memstara:
+            raise HTTPException(
+                status_code=503,
+                detail=f"the memstara database is not answering: {pools.health.memstara_error}",
+            )
+        raise HTTPException(status_code=404, detail=f"no result {result_id}")
+
+    return {"result": found, "health": pools.health.as_dict()}

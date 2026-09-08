@@ -99,6 +99,19 @@ A browser cannot connect to Postgres directly. And if six screens each interpret
 `/api/snapshot` hands over the data for every screen **at once**, and the front end picks
 from it — one request every two seconds.
 
+Two endpoints stand outside that and are fetched per item, when a person opens one:
+`/api/task/{task_id}` and `/api/result/{result_id}`. The second is the one with a measured
+reason. `match_trace` — the matcher's candidates, chosen and rejected alike — is 598 kB
+across the 81 stored results against 89 kB for every explanation column the snapshot does
+carry, with one row at 23.6 kB. Polling that thirty times a minute to show something
+nobody has opened is what the split avoids, not a preference about shape.
+
+That trace is also the only place the **rejected** candidates exist. The board and the
+results table keep the columns that were chosen, so "it picked `DX__D64.9__Anemia,
+unspecified`" was already on screen and "it picked that over `DX__D50.9__Iron deficiency
+anemia` at 0.975" was nowhere. The Results panel's *Why these columns* section is what
+reads it.
+
 ## The board is still visible when core is down
 
 The board (`memstara-postgres:5463`) and the agent records (`motoro-postgres:5453`) are

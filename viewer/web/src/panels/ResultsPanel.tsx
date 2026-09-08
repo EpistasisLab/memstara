@@ -2,6 +2,7 @@ import { BarChart3 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import EmptyState from "../components/EmptyState";
 import Panel from "../components/Panel";
+import WhyColumns from "../components/WhyColumns";
 import { useResults } from "../store/viewer";
 
 /**
@@ -118,6 +119,11 @@ export default function ResultsPanel() {
                   </summary>
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{r.interpretation}</p>
                 </details>
+
+                {/* The one thing on this panel that is not in the snapshot. The matcher
+                    record is too big to poll, so it is fetched per result when opened —
+                    see WhyColumns. */}
+                <WhyColumns resultId={r.result_id} />
               </article>
             );
           })}

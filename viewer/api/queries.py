@@ -215,6 +215,26 @@ WHERE ($1 = '' OR run_tag = $1)
 ORDER BY result_id
 """
 
+# RESULT_ONE — one result, and this is the only query that selects `match_trace`.
+#   It exists so the trace has somewhere to be read that is not the two-second poll. The
+#   size is the whole reason for the split: 598 kB across the 81 results stored, one row
+#   at 23.6 kB, against 89 kB for every explanation column in RESULTS put together. Sent
+#   with the snapshot that is a six-fold increase every two seconds for something nothing
+#   on screen was drawing; fetched here it is one request, made when a person opens one
+#   result.
+#
+#   `run_tag` is selected even though RESULTS does not: this endpoint is reached by
+#   result_id alone, so the row has to say which run it belongs to without a second read.
+#   No run filter — a result opens from a link whichever run produced it, the same
+#   reasoning as `/api/task/{task_id}` passing '' to BOARD.
+RESULT_ONE = """
+SELECT result_id, task_id, run_tag, trial, perspective, hypothesis,
+       columns, columns_used, columns_missing, feature_importance, okf_concept_ids,
+       match_trace, y_column, auc, interpretation, created_at
+FROM memstara_results
+WHERE result_id = $1
+"""
+
 # --- core's database -------------------------------------------------------- #
 
 # From here on it is the core DB (motoro-postgres:5453), where the agents and the

@@ -23,6 +23,9 @@ doing.
    _jsonb / _iso / _retried        the small converters
    --- Reads ---
    list_runs / _board / _results   from the memstara DB
+   _trace_groups / result_detail   one result and its matcher record. **Not part of the
+                                   snapshot** — the trace is too big to poll, which is
+                                   why it has its own endpoint. See queries.RESULT_ONE.
    _core_facts                     from the core DB (seven queries on one connection)
    --- The scene ---
    _carrying     ★ replays who is holding which task right now
@@ -236,6 +239,102 @@ async def _results(run_tag: str) -> list[dict[str, Any]]:
         ]
 
     return await pools.guarded("memstara", q, [])
+
+
+def _trace_groups(trace: Any, asked: list[str], used: list[str]) -> list[dict[str, Any]]:
+    """Flatten a `match_trace` into one group per concept the matcher was asked about.
+
+    The stored trace is a list of calls, each `{"tool", "arguments", "result"}`, and the
+    two matcher tools answer in two different shapes: `match_concepts` returns
+    `{"results": [group, ...]}` and `match_concept` returns a single group. Both are
+    unwrapped to the same thing here rather than on screen, for the reason `_board` gives
+    — one translation, in one place, or two panels reach two answers.
+
+    Each candidate is marked against the task's own column lists:
+
+      `chosen`  the agent asked for this column after reading the group. Judged against
+                `columns` (what was asked for) and **not** `columns_used` (what the
+                cohort turned out to have), because a candidate the agent picked and the
+                data stage could not find is still a candidate the agent picked. Marking
+                it unchosen would blame the agent for the cohort.
+      `present` it also survived into the model.
+
+    A group with no chosen candidate is normal and is not a bug in this function.
+    `harvest_match_trace` files the turn's whole matcher record on **every** task the
+    same turn created (`src/memstara/pipeline/board.py:913-921`), so one result's trace
+    legitimately carries concepts matched for a sibling task. Nothing here hides that: the
+    groups are returned in call order, none is dropped, and none is merged with another
+    of the same name — two calls for one concept with different `top_k` are two different
+    answers and collapsing them would invent a third.
+    """
+    out: list[dict[str, Any]] = []
+    asked_set, used_set = set(asked), set(used)
+    for call in _jsonb(trace, []):
+        if not isinstance(call, dict):
+            continue
+        result = call.get("result")
+        if not isinstance(result, dict):
+            continue
+        groups = result.get("results") if isinstance(result.get("results"), list) else [result]
+        for g in groups:
+            if not isinstance(g, dict) or "concept" not in g:
+                continue
+            candidates = g.get("candidates")
+            out.append({
+                "tool": call.get("tool") or "",
+                "concept": g.get("concept") or "",
+                # The matcher's own explanation for an empty group — "nothing was close
+                # enough" and "a code this cohort does not carry" are different findings
+                # and only one of them is worth rewording for. Dropping it would leave an
+                # empty group looking like a failed call.
+                "note": g.get("note") or "",
+                "candidates": [
+                    {"column": c.get("feature_name") or "",
+                     "feature_type": c.get("feature_type") or "",
+                     "score": c.get("similarity_score"),
+                     "chosen": (c.get("feature_name") or "") in asked_set,
+                     "present": (c.get("feature_name") or "") in used_set}
+                    for c in (candidates if isinstance(candidates, list) else [])
+                    if isinstance(c, dict)
+                ],
+            })
+    return out
+
+
+async def result_detail(result_id: int) -> dict[str, Any] | None:
+    """One result with its matcher record, or None when there is no such row.
+
+    None means "the query ran and found nothing" *or* "the query could not run" —
+    `guarded` returns the fallback for both. The caller separates them by looking at
+    `pools.health`, because a 404 for a database that is down tells a person the result
+    does not exist, which is a different and wrong thing.
+    """
+    async def q(conn: asyncpg.Connection) -> dict[str, Any] | None:
+        r = await conn.fetchrow(queries.RESULT_ONE, result_id)
+        if r is None:
+            return None
+        asked = _jsonb(r["columns"], [])
+        used = _jsonb(r["columns_used"], [])
+        return {
+            "result_id": r["result_id"], "task_id": r["task_id"], "run_tag": r["run_tag"],
+            "trial": r["trial"], "perspective": r["perspective"],
+            "hypothesis": r["hypothesis"],
+            "columns": asked, "columns_used": used,
+            "columns_missing": _jsonb(r["columns_missing"], []),
+            # Named `importance` to match `_results` and `_board`, so the same panel can
+            # read a result from either place without a second shape.
+            "importance": _jsonb(r["feature_importance"], {}),
+            "okf_concept_ids": _jsonb(r["okf_concept_ids"], []),
+            "y_column": r["y_column"], "auc": r["auc"],
+            "interpretation": r["interpretation"], "created_at": _iso(r["created_at"]),
+            "match_trace": _trace_groups(r["match_trace"], asked, used),
+            # `match_trace_calls` is the number of calls **stored**, before flattening,
+            # so a trace that unwraps to nothing can still be told apart from a task the
+            # matcher was never called for. Those need opposite fixes.
+            "match_trace_calls": len(_jsonb(r["match_trace"], [])),
+        }
+
+    return await pools.guarded("memstara", q, None)
 
 
 async def _core_facts() -> dict[str, Any]:
