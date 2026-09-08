@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 """ML-tool MCP server — train on a sub-dataset, return AUC and feature importance.
 
-**The engine is XGBoost.** That was settled on 2026-09-08 as a project requirement, and
-it is what the 2026-08-06 meeting had named all along — *"the ML agent uses tools to do
-the XGBoost"*. It is also what the 2026-08-10 implementation guide wrote as the default
+**The engine is XGBoost, and it is the only one.** That was settled on 2026-09-08 as a
+project requirement, and it is what the 2026-08-06 meeting had named all along — *"the
+ML agent uses tools to do the XGBoost"*. It is also what the 2026-08-10 implementation
 
-`sklearn_hgb` instead, to keep the install to one package, and that is the divergence
-being closed rather than a new decision.
+this file quietly shipped `sklearn_hgb` instead, to keep the install to one package, and
+that is the divergence being closed rather than a new decision.
 
-The other two engines stay selectable through `MEMSTARA_ML_ENGINE`, and changing it
-touches neither the agent definitions nor the pipeline. They are kept for comparison,
-not as fallbacks: nothing selects them by itself, and a run that does not set the
-variable is an XGBoost run.
+`MEMSTARA_ML_ENGINE` still exists and still reaches this process, so a stale `.env`
+carrying `sklearn_hgb` fails loudly instead of being ignored. `xgboost` is the only value
+it accepts.
 
-    MEMSTARA_ML_ENGINE   xgboost (default) | sklearn_hgb | random_forest
+    MEMSTARA_ML_ENGINE   xgboost — the only accepted value; unset means the same
     MEMSTARA_OUTPUT_DIR  the only directory inputs may come from (default: outputs/ beside this file)
 
 **Measured before the switch**, on the four sub-datasets of run `merge_verify`, by
@@ -25,11 +24,23 @@ calling `train_and_score` directly with no pipeline and no model calls:
     t426           0.6713          0.6392    0.6229
     t427           0.6978          0.6745    0.6636
 
-XGBoost is the lowest of the three on all four, by 0.024 to 0.048 of AUC. It is
+XGBoost was the lowest of the three on all four, by 0.024 to 0.048 of AUC. It is
 faster — 0.4s against sklearn_hgb's 3.4-6.6s, because it carries
 `feature_importances_` and never reaches the permutation route. Recorded here rather
 than in a commit message because the next person to ask "why is the AUC lower than the
 report says" needs it in the file, and the answer is that the engine changed.
+
+**That table is the whole reason those numbers are still written down.** The two other
+engines were removed on 2026-09-08, in the commit after the one that made XGBoost the
+default, so nothing here can reproduce those two columns any more. Reinstating them is a
+`git revert` away and is `A-26`'s business — lifting the engine to a tool argument, where
+an agent could choose it, rather than an environment variable no agent can see.
+
+**Results already on the board were not all produced by this engine.** 81 of them came
+from `sklearn_hgb` and their `feature_importance` maps are permutation AUC drops on no
+fixed scale, not gain. That is what the `model` column is for
+(`src/memstara/blackboard.py:190-195`), and it is why the viewer still carries a scale
+note for an engine this file no longer builds.
 
 WARNING: env vars must be on the allowlist to reach this process — see
 `mcp_allowed_env_vars` in `src/memstara/config.py`.
@@ -44,7 +55,7 @@ WARNING: env vars must be on the allowlist to reach this process — see
    train_and_score(path, y_column)   train a model on a small CSV and return AUC
 
  Two helpers are called from inside it:
-   _make_model(engine, seed)   engine name -> the actual model object
+   _make_model(engine, seed)   checks the name is "xgboost", returns the classifier
    _importance(model, ...)     which column contributed how much
 
  The flow:
@@ -100,19 +111,31 @@ def _output_dir() -> Path:
 
 
 def _make_model(engine: str, seed: int) -> Any:
-    """Build a model for the named engine, seeded from the caller's `seed`.
+    """Build the XGBoost classifier, seeded from the caller's `seed`.
 
-    Imports are deferred so that a missing optional engine does not prevent the
-    server from starting. Put at the top of the file instead, anyone who never
-    uses xgboost would still have to install it.
+    **There is one engine, and `engine` is still a parameter.** It would be shorter to
+    drop it and hard-code the classifier, and that would be the wrong shape: the value
+    comes from `MEMSTARA_ML_ENGINE`, which is on the allowlist (`src/memstara/config.py:107`)
+    and therefore still reaches this process. Somebody's `.env` says `sklearn_hgb`
+    today. Ignoring it would run XGBoost while the operator believed otherwise and
+    every number would look fine, which is the exact failure this file spent
+    2026-09-08 closing at the other end. So the name is checked and a wrong one stops
+    the call.
+
+    The import is deferred rather than moved to the top of the file. That was originally
+    so a missing optional engine could not prevent the server from starting; xgboost is a
+    declared dependency now (`pyproject.toml:64`) so it is no longer optional, and the
+    deferral is kept for the remaining half of the reason — an import at module scope runs
+    when the *server* starts, and a failure there is a server that reports no tools rather
+
 
     **`seed` is the same one that splits the data**, and that is the point of the
-    parameter. Until 2026-09-08 all three engines carried a hard-coded
-    ``random_state`` of 0 while the split used the caller's 42, so a run had two
-    different seeds in it and neither was controllable: `train_and_score` exposes
-    `seed` as a tool parameter, and passing a different value moved the split and
-    left the model exactly where it was. NFR-2b (`spec/Memstara_SRS_KR.md:949`) asks
-    that the seed can *be fixed*, not that some seed is fixed somewhere.
+    parameter. Until 2026-09-08 every engine carried a hard-coded ``random_state`` of 0
+    while the split used the caller's 42, so a run had two different seeds in it and
+    neither was controllable: `train_and_score` exposes `seed` as a tool parameter, and
+    passing a different value moved the split and left the model exactly where it was.
+    NFR-2b (`spec/Memstara_SRS_KR.md:949`) asks that the seed can *be fixed*, not that
+    some seed is fixed somewhere.
 
     42 rather than 0 because it is the value with a documented origin —
 
@@ -127,87 +150,83 @@ def _make_model(engine: str, seed: int) -> Any:
     move. That is not a failure of this change — the change buys controllability and
     a single seed per run, not different numbers.
     """
-    if engine == "sklearn_hgb":
-        # Histogram-based gradient boosting. The default until 2026-09-08, and still the
-        # highest-scoring of the three on all four `merge_verify` sub-datasets — kept
-        # selectable for that comparison, not as a fallback.
-        # **It handles missing values (NaN) as they are** — it does not blow up
-        # when 30% is blank, as in NHANES. So does XGBoost, which is why the switch did
-        # not need any change to how the sub-datasets are cut.
-        from sklearn.ensemble import HistGradientBoostingClassifier
+    if engine != _DEFAULT_ENGINE:
+        # Two different mistakes reach this line and the message has to tell them apart,
+        # because the fix is different. `sklearn_hgb` and `random_forest` were real until
+        # 2026-09-08 and were removed; a config that names one is out of date, not wrong,
+        # and the numbers it used to produce are in this module's docstring. Anything else
+        # is a typo.
+        removed = {"sklearn_hgb", "random_forest"}
+        if engine in removed:
+            raise RuntimeError(
+                f"MEMSTARA_ML_ENGINE={engine!r} was removed on 2026-09-08; XGBoost is the only "
+                f"engine this server builds. Unset the variable, or set it to 'xgboost'."
+            )
+        raise RuntimeError(f"unknown MEMSTARA_ML_ENGINE: {engine!r} (the only accepted value is 'xgboost')")
 
-        return HistGradientBoostingClassifier(max_iter=200, max_depth=4, random_state=seed)
-    if engine == "random_forest":
-        from sklearn.ensemble import RandomForestClassifier
+    # The three hyperparameters are verbatim from
 
-        return RandomForestClassifier(n_estimators=300, random_state=seed, n_jobs=-1)
-    if engine == "xgboost":
-        # The default since 2026-09-08. The three hyperparameters are verbatim from
+    # tuned; `eval_metric` is set only to silence a startup warning. `subsample` and
+    # `colsample_*` are left at 1.0, which is why `seed` does not move this engine's
+    # numbers — see the note above.
+    #
+    # **It handles missing values (NaN) as they are** — it does not blow up when 30% is
+    # blank, as in NHANES. `sklearn_hgb` did too, which is why replacing it needed no
+    # change to how the sub-datasets are cut.
+    from xgboost import XGBClassifier
 
-        # tuned; `eval_metric` is set only to silence a startup warning. `subsample` and
-        # `colsample_*` are left at 1.0, which is why `seed` does not move this engine's
-        # numbers — see the note above.
-        from xgboost import XGBClassifier
-
-        return XGBClassifier(n_estimators=200, max_depth=4, eval_metric="logloss", random_state=seed)
-
-    # A typo is not let through silently. The message also names what is available,
-    # default first.
-    raise RuntimeError(f"unknown MEMSTARA_ML_ENGINE: {engine!r} (xgboost | sklearn_hgb | random_forest)")
+    return XGBClassifier(n_estimators=200, max_depth=4, eval_metric="logloss", random_state=seed)
 
 
 def _importance(model: Any, X: pd.DataFrame, y: pd.Series, seed: int) -> dict[str, float]:
-    """Extract per-column importance, by whichever route the engine allows.
+    """Per-column importance, straight off the fitted model.
 
-    **The two routes do not return the same quantity, and this function cannot make
-    them.** Which one ran is therefore part of the answer, not an implementation
-    detail — `train_and_score` returns the engine name alongside the numbers, and the
-    caller is expected to store it (`src/memstara/blackboard.py:305`).
+    **One engine means one route.** `XGBClassifier` carries `feature_importances_`, so
+    the numbers are gain: non-negative, and summing to exactly 1.0000 on all four
+    `merge_verify` sub-datasets. There is nothing here to choose between any more, and
+    the `y` and `seed` parameters are now unused by the body — kept in the signature
+    because the second route is a revert away, and a caller that has to be edited back is
+    a caller that will not be.
 
-    The figures below come from calling `train_and_score` directly on the four
-    sub-datasets of run `merge_verify`, once per engine — no pipeline run, no model
-    call.
+    **The second route is gone, and rows produced by it are not.** Until 2026-09-08 an
+    engine without `feature_importances_` fell back to permutation importance: shuffle
+    one column and measure how far AUC drops. That drop **is** the number — a different
+    unit, on no fixed scale, negative for a column whose shuffling made the model look
+    better. `sklearn_hgb` was the only engine that reached it, `sklearn_hgb` was the
+    default for two months, and **81 results on the board are in those units**. They
+    cannot be compared column-by-column with anything produced after that date; ranking
+    one against the other is reading an AUC delta against a fraction of gain. The `model`
+    field stored beside each row is the only thing that says which is which
+    (`src/memstara/blackboard.py:190-195`).
 
-    - ``feature_importances_`` — random_forest and xgboost carry it. Impurity decrease
-      or gain: non-negative, and summing to about 1 across the columns. random_forest
-      sums to exactly 1.0000 on all four.
-    - permutation importance — HistGradientBoosting has no ``feature_importances_``,
-      so shuffle one column's values and measure how far AUC drops. That drop **is**
-      the number: a different unit, on no fixed scale, and negative for a column
-      whose shuffling made the model look better. sklearn_hgb's maps sum to 0.0819
-      and 0.2572 on two of the four, with a minimum entry of -0.0131.
+    Two things that were true of that route, recorded because nothing in this file can
+    demonstrate them any more. It was expensive: permutation was most of `sklearn_hgb`'s
+    2.9-6.3s per call, against 0.4-0.5s for an engine that skipped it, and the four
+    sub-datasets have 22, 18, 17 and 11 columns after one-hot encoding rather than the
+    "fewer than ten" an earlier version of this docstring assumed. And it was worth
+    paying anyway, for the engine that needed it: a model with no importance at all is a
+    result nobody can read.
 
-    So two rows can only be compared column-by-column when they were produced by
-    engines on the same route. Ranking one engine's map against another's is reading
-    an AUC delta against a fraction of impurity.
-
-    Until 2026-09-08 this docstring claimed permutation "yields a comparable quantity
-    across engines". It does not, and could not: only HistGradientBoosting reaches
-    that branch, so the two routes never produce comparable numbers for the same
-    engine — they produce incomparable numbers for different ones. The same passage
-    called the permutation cost acceptable because "there are fewer than ten columns
-    here"; the four sub-datasets have 22, 18, 17 and 11 after one-hot encoding, and
-    permutation is most of sklearn_hgb's 2.9-6.3s per call against random_forest's
-    0.4-0.5s. It is still worth paying — a HistGradientBoosting model with no
-    importance at all is a result nobody can read — but it is not free and it is not
-    the same measurement.
+    That earlier version also claimed permutation "yields a comparable quantity across
+    engines". It did not and could not — only one engine ever reached the branch, so the
+    two routes never produced comparable numbers for the same engine, only incomparable
+    ones for different engines.
     """
-    if hasattr(model, "feature_importances_"):
-        # If the model already carries them, use them as they are.
-        # strict=True: one score per column, or the model was not fitted on this X.
-        # Without it zip() truncates to the shorter side and the caller gets a
-        # short, plausible, wrong importance table.
-        return {c: float(v) for c, v in zip(X.columns, model.feature_importances_, strict=True)}
+    if not hasattr(model, "feature_importances_"):
+        # Unreachable while XGBoost is the only engine, and kept as a guard rather than
+        # deleted. It fires if a future xgboost stops exposing the attribute, or if a
+        # second engine is added without its importance route — and an empty importance
+        # map is the kind of failure that reads as "this column mattered least" rather
+        # than as a bug.
+        raise RuntimeError(
+            f"{type(model).__name__} has no feature_importances_, and the permutation "
+            f"fallback was removed on 2026-09-08 when XGBoost became the only engine."
+        )
 
-    from sklearn.inspection import permutation_importance
-
-    # n_repeats=5 — shuffle five times and average. A single shuffle is swayed by chance.
-    # `seed` is the caller's, the same one that split the data and built the model. This
-    # branch is the one the default engine takes, so leaving a hard-coded 0 here would
-    # have made the seed controllable everywhere except the place sklearn_hgb's numbers
-    # actually come from — which is most of a run's randomness, not a corner of it.
-    r = permutation_importance(model, X, y, n_repeats=5, random_state=seed, scoring="roc_auc")
-    return {c: float(v) for c, v in zip(X.columns, r.importances_mean, strict=True)}
+    # strict=True: one score per column, or the model was not fitted on this X. Without
+    # it zip() truncates to the shorter side and the caller gets a short, plausible,
+    # wrong importance table.
+    return {c: float(v) for c, v in zip(X.columns, model.feature_importances_, strict=True)}
 
 
 @mcp.tool()

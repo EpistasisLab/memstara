@@ -1,6 +1,6 @@
 # SOURCE: SANDBOX-ORIGINAL — not copied from afc-forge. afc-forge has no ML tool
 #   server, so there is no counterpart upstream.
-"""`_make_model` — one seed reaches every engine.
+"""`_make_model` — one engine, and one seed that reaches it.
 
 **Until 2026-09-08 this file did not exist and neither did any test of the ml tool
 server.** That is what let the following stand unnoticed: `train_and_score` exposed
@@ -9,6 +9,11 @@ carried a hard-coded `random_state=0`. Passing a different seed moved the split 
 left the model exactly where it was, so the seed the caller chose was never the seed
 the run used. NFR-2b asks that the seed *can be fixed*
 (`spec/Memstara_SRS_KR.md:949`); half of it could not be reached at all.
+
+**Three engines became one, later the same day.** XGBoost was made the default, and then
+`sklearn_hgb` and `random_forest` were removed outright. So this file now guards two
+things that look similar and are not: that the one engine takes its seed, and that the
+two that no longer exist are *refused by name* rather than quietly ignored.
 
 These tests are offline and take milliseconds. `_make_model` is a pure function — it
 builds an estimator and returns it, fitting nothing — so no CSV, no Postgres, no model
@@ -31,31 +36,20 @@ import pytest
 
 from memstara.mcp_servers import ml as tools_ml
 
-#: The two engines scikit-learn provides. xgboost is tested separately below, and was
-#: separate originally for a reason that expired on 2026-09-08: it was an undeclared
-#: optional package, so its test had to be skippable, and a skip folded into this
-#: parametrisation would have silently swallowed the other two as well. It is a declared
-#: dependency now, and the split stays only because the xgboost test carries a caveat of
-#: its own about what `random_state` does and does not do there.
-SKLEARN_ENGINES = ["sklearn_hgb", "random_forest"]
-
-
-@pytest.mark.parametrize("engine", SKLEARN_ENGINES)
-@pytest.mark.parametrize("seed", [0, 7, 42])
-def test_each_engine_takes_the_seed_it_is_given(engine: str, seed: int) -> None:
-    """The seed argument reaches the estimator, whatever its value.
-
-    Three seeds rather than one: with a single value a test passes just as well
-    against a hard-coded constant that happens to equal it, which is the state this
-    module was in when the constant was 0.
-    """
-    model = tools_ml._make_model(engine, seed)
-    assert model.random_state == seed
+#: The two engines that existed until 2026-09-08 and do not any more. Named here rather
+#: than inline because three separate tests are about them, and because the list is the
+#: thing that has to change if `A-26` ever brings a second engine back.
+REMOVED_ENGINES = ["sklearn_hgb", "random_forest"]
 
 
 @pytest.mark.parametrize("seed", [0, 7, 42])
 def test_xgboost_takes_the_seed_it_is_given(seed: int) -> None:
-    """Same check for the default engine.
+    """The seed argument reaches the estimator, whatever its value.
+
+    Three seeds rather than one: with a single value a test passes just as well against a
+    hard-coded constant that happens to equal it, which is the state this module was in
+    when the constant was 0. There used to be two more engines parametrised alongside
+    this one; they were removed on 2026-09-08 and so was the parametrisation over them.
 
     This test spent its first day skipped. xgboost was undeclared then, so it ran only
     where somebody had installed it by hand, and it was worth writing anyway because the
@@ -68,28 +62,52 @@ def test_xgboost_takes_the_seed_it_is_given(seed: int) -> None:
     `subsample` or `colsample_*` is below 1.0, and `_make_model` sets neither, so two
     seeds are expected to produce the same numbers. The test is that the value is
     carried, not that it changes anything — which is exactly what makes it worth keeping
-    now that this is the engine every run uses: the day somebody adds subsampling, the
-    seed has to already be arriving.
+    now that this is the only engine: the day somebody adds subsampling, the seed has to
+    already be arriving.
     """
     pytest.importorskip("xgboost")
     model = tools_ml._make_model("xgboost", seed)
     assert model.random_state == seed
 
 
-def test_an_unknown_engine_names_the_ones_that_exist() -> None:
+def test_an_unknown_engine_names_the_one_that_exists() -> None:
     """A typo fails loudly and the message is the answer.
 
     `.env.example` shipped `MEMSTARA_ML_ENGINE=logistic` — a value that exists nowhere.
     Uncommenting it lands here, and what makes that recoverable in one read rather than
-    one search is that the exception lists the three real names.
+    one search is that the exception names the value that does work.
     """
     with pytest.raises(RuntimeError) as caught:
         tools_ml._make_model("logistic", 42)
 
     message = str(caught.value)
     assert "logistic" in message
-    for engine in ("sklearn_hgb", "random_forest", "xgboost"):
-        assert engine in message
+    assert "xgboost" in message
+
+
+@pytest.mark.parametrize("engine", REMOVED_ENGINES)
+def test_a_removed_engine_says_it_was_removed(engine: str) -> None:
+    """A config naming an old engine is out of date, not mistyped, and is told so.
+
+    This is the test the whole restriction rests on. `MEMSTARA_ML_ENGINE` is on the
+    allowlist (`src/memstara/config.py:107`), so a `.env` written before 2026-09-08 still
+    reaches this process carrying `sklearn_hgb`. The dangerous outcome is not an error —
+    it is the variable being ignored, XGBoost running, and every number coming back
+    looking exactly as plausible as it would have under the engine the operator believed
+    was selected. That is the same failure this module spent 2026-09-08 closing at the
+    other end, where the shipped default silently disagreed with the plan.
+
+    Asserting on the word "removed" rather than only on `pytest.raises`: a bare raise
+    would also be satisfied by the generic typo message, and the two mistakes have
+    different fixes. One is "you misspelled it", the other is "this used to work".
+    """
+    with pytest.raises(RuntimeError) as caught:
+        tools_ml._make_model(engine, 42)
+
+    message = str(caught.value)
+    assert engine in message
+    assert "removed" in message
+    assert "xgboost" in message
 
 
 def test_the_default_seed_is_42() -> None:
@@ -175,6 +193,30 @@ def test_a_run_that_sets_nothing_uses_the_default_engine(subset) -> None:
 
     assert "error" not in out, out
     assert out["model"] == "xgboost"
+
+
+@pytest.mark.parametrize("engine", REMOVED_ENGINES)
+def test_a_stale_environment_variable_is_refused_through_the_tool(engine, subset, monkeypatch) -> None:
+    """The same refusal, reached the way it will actually be reached.
+
+    `test_a_removed_engine_says_it_was_removed` calls `_make_model` directly, which
+    proves the check exists but not that anything routes to it. This one sets the
+    environment variable — the only way an engine is ever chosen here, since no agent and
+    no pipeline stage passes one — and goes in through the tool.
+
+    A refusal here is JSON rather than an exception, per this directory's rule that an
+
+    is worth asserting separately: `_make_model` raising and `train_and_score` returning
+    `{"error": ...}` are two different contracts and only the second one is what an agent
+    sees.
+    """
+    monkeypatch.setenv("MEMSTARA_ML_ENGINE", engine)
+
+    out = json.loads(tools_ml.train_and_score(str(subset), "outcome"))
+
+    assert "error" in out, out
+    assert engine in out["error"]
+    assert "removed" in out["error"]
 
 
 def test_a_path_outside_the_output_directory_is_refused(subset, tmp_path) -> None:
