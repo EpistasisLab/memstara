@@ -794,11 +794,31 @@ async def board_state(registry: MCPServerRegistry, run_tag: str) -> dict:
     # Sometimes the return is a (metadata, body) tuple, sometimes only the body.
     text = raw[1] if isinstance(raw, tuple) else raw
     try:
-        return json.loads(text)
+        state = json.loads(text)
     except (json.JSONDecodeError, TypeError):
         # If it cannot be read, treat it as "the board is empty". The loop ends on this
         # value, which is better than spinning forever because a read failed.
         return {"count": 0, "tasks": []}
+
+    # **A failed read parses.** Every tool on the blackboard server turns its exception
+    # into `{"error": "..."}` rather than raising, so the agent has something to reason
+    # about (`src/memstara/mcp_servers/blackboard.py:112-118`). That is right for an
+    # agent and wrong for this function: the payload is valid JSON, so it sails through
+    # the `except` above and is handed back as if it were a board. The caller then
+    # subscripts a key that is not there, and the run dies somewhere else entirely —
+    # on 2026-09-08 that was `state['count']` at the end of stage (4), a `KeyError`
+    # 300 lines and one stage away from the read that actually failed, after $3.75 of
+    # model calls had already been spent. The read had been failing since the `model`
+    # column joined `read_board`'s SELECT without the migration being applied.
+    #
+    # So the error is reported here, where it happened, and named. The empty board is
+    # still returned rather than raised, for the reason above — a read failure must not
+    # spin the wave loop forever — but it no longer does so silently.
+    if not isinstance(state, dict) or "count" not in state or "tasks" not in state:
+        detail = state.get("error") if isinstance(state, dict) else f"{type(state).__name__}"
+        note(f"⚠ the board could not be read: {detail or state} — treating it as empty")
+        return {"count": 0, "tasks": []}
+    return state
 
 
 #: Matcher tools whose calls are worth keeping. Both live on the semantic-matcher
