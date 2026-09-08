@@ -472,6 +472,33 @@ def _slot_key(run_id: str, worker: str) -> tuple[int, int, str, str]:
     return (1, 0, worker, run_id)
 
 
+def _recency(run_id: str | None, last: dict[str, Any] | None,
+             open_by_run: dict[str, dict[str, Any]]) -> tuple[int, Any, str]:
+    """How recently a run did something, for picking which run a folded figure shows.
+
+    A station that is not in `stores.SPLITTABLE` draws one figure however many runs stand
+    at it, and this is what decides which of them the figure describes. The answer is the
+    run that **called a tool most recently**, falling back to when the run opened for a
+    run that has not called anything yet.
+
+    That is not an arbitrary tie-break. The rest of the card — `state`, `at`, `carrying`,
+    `last_tool` — all answer "what is this character doing right now", so the run they
+    describe has to be the one that is doing it. Picking the oldest, or the first the
+    database happened to return, would draw a figure standing still at a station whose
+    other worker is the one actually moving.
+
+    Returns:
+        A sort key, largest = most recent. The leading flag keeps a run with no timestamp
+        at all comparable with one that has a real datetime, and sorts it last.
+    """
+    if last is not None:
+        return (1, last["started_at"], run_id or "")
+    run = open_by_run.get(run_id or "")
+    if run is not None:
+        return (1, run["created_at"], run_id or "")
+    return (0, 0, run_id or "")
+
+
 def _members_of_each_character() -> dict[str, list[str]]:
     # Which real stages each character on the floor stands for.
     #
@@ -505,6 +532,12 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
     # `stores.HOME` is still the list of *characters* and still has five entries — the
     # floor has five stations and each stage rests at its own. What changed is that a
     # station can now have more than one figure standing at it.
+    #
+    # **And only one station may.** The first version of this split all five, which is the
+    # opposite of what the meeting decided and of what A-24 was written to do: the user
+    # chooses how many hypothesis agents to run and sees them, and everything else is one
+    # character however many workers are behind it (`stores.SPLITTABLE`). The count is not
+    # hidden — it rides on the card as `running`.
     #
     # First the rows that came from core are indexed by **run**. `if r["name"] in
     # stores.AGENT_BY_NAME` is what does the filtering — only **board-path characters**
@@ -586,6 +619,28 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
                                 if calls else (None, None))
             instances.append((None, None, last, last_stage))
 
+        # **Only a splittable station gets a figure per worker.** Everything else keeps one
+        # figure however many runs it has, and the one it keeps is the run that called a
+        # tool most recently — the same "what is happening now" the rest of the card is
+        # built on (`state`, `at`, `carrying` all describe this instant, so the run they
+        # describe has to be the current one). A run folded away here still reaches the
+        # screen: its flash falls back to `first_figure[character]` below, which is this
+        # figure, so the station lights up for every worker's call and not just one's.
+        folded = character not in stores.SPLITTABLE and len(instances) > 1
+        if folded:
+            instances = [max(instances, key=lambda inst: _recency(inst[0], inst[2],
+                                                                  open_by_run))]
+
+        # How many runs **each figure** stands for. One apiece where the station splits,
+        # all of them where it folds, and zero for a figure that is resting. This is the
+        # reason folding is not the same as hiding: the meeting asked for the data agent
+        # to be *drawn* once, not for the second one's existence to be taken off the
+        # screen, and without a count `--data-agents 2` would look exactly like
+        # `--data-agents 1` with nothing anywhere to say otherwise.
+        stands_for = [len(runs)] if folded else [
+            1 if run_id is not None else 0 for run_id, *_ in instances
+        ]
+
         # The id each figure is drawn under, and it is the id every other part of the
         # screen keys off: React Flow nodes, the flash edges' `source`, the colour table.
         #
@@ -595,7 +650,7 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
         # that reads `hypothesis` had to be found and changed. The worker name only
         # becomes the id when there is a second worker for it to be told apart from.
         ids: list[str] = []
-        for slot, (run_id, _run, _last, _stage) in enumerate(instances):
+        for run_id, _run, _last, _stage in instances:
             if len(instances) == 1:
                 ids.append(character)
             else:
@@ -675,6 +730,11 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
                 # by it so two workers do not stand on the same spot; a character with one
                 # figure is always slot 0 and therefore exactly where it always was.
                 "slot": slot,
+                # How many runs **this figure** stands for: 1 where the station splits,
+                # the whole count where it folds, 0 while it rests. The screen draws it as
+                # a badge only when it is more than one, which is exactly the case the
+                # fold would otherwise have made invisible.
+                "running": stands_for[slot],
                 "name": stores.BOARD_AGENT_NAMES_ANY.get(run_stage or character, character),
                 "state": state,
                 "at": at,

@@ -41,6 +41,14 @@ export interface SceneAgent {
   /** Which of its stage's figures this is, from 0. The floor plan offsets by it so two
    *  workers of one stage do not stand on the same spot. */
   slot: number;
+  /** How many runs **this figure** stands for — 0 when it is resting.
+   *
+   *  Only `hypothesis` is drawn as one figure per worker (`stores.SPLITTABLE`), so there
+   *  this is 1 on each. The other four are one figure however many run behind them, which
+   *  is what the meeting of 2026-08-26 asked for, and there this is the whole count. That
+   *  is why folding them is not the same as hiding them: `--data-agents 2` draws one data
+   *  character with a 2 on it, not two characters and not a silent one. */
+  running: number;
   name: string;
   state: AgentState;
   /** Which place it is standing at, or null when resting at home. */

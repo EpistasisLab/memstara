@@ -27,12 +27,13 @@ Run with the *core* interpreter, which can import both sides::
    main()               compares the three tables, then goes on to check the scene
                         places and the tool mapping
 
- The four things checked
+ The five things checked
    1. BOARD_TOOLS       which tools each stage uses
    2. BOARD_SERVERS     which MCP server each stage connects to
    3. BOARD_AGENT_NAMES stage -> the name in the agents table
    4. scene places / tool->store   does every stage have a HOME and a label, and does
                                    every tool have a store
+   5. SPLITTABLE        does every station allowed to show several figures exist
 
  Easy things to miss
    ★ Why `_copy_from_stores` uses **ast parsing instead of an import.** On an import
@@ -177,6 +178,21 @@ def main() -> int:
     else:
         drawn = f"{len(known)} stages drawn as {len(stores.HOME)} characters"
         print(f"  {'scene places':20} match — {drawn}, every one with a place and a name")
+
+    # `SPLITTABLE` names the stations that may show more than one figure. A name in it
+    # that is not a station is not a harmless spare entry — `_build_scene` tests
+    # `character not in stores.SPLITTABLE`, so a typo there silently folds the stage it
+    # meant to split, which is the failure that made A-24 need reopening in the first
+    # place. It reads as working: five characters on the floor, one per stage, exactly
+    # what a default run looks like anyway.
+    unknown_split = stores.SPLITTABLE - set(stores.HOME)
+    if unknown_split:
+        bad = True
+        print(f"  {'splittable':20} ⛔ not stations: {sorted(unknown_split)}")
+    else:
+        folded = sorted(set(stores.HOME) - stores.SPLITTABLE)
+        print(f"  {'splittable':20} match — {sorted(stores.SPLITTABLE)} split by worker, "
+              f"{len(folded)} folded to one figure")
 
     every_tool = ({t for ts in BOARD_TOOLS.values() for t in ts}
                   | set(QUESTION_TOOLS)

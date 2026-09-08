@@ -4,6 +4,7 @@ import {
   BackgroundVariant,
   Controls,
   MiniMap,
+  MarkerType,
   ReactFlow,
   type Edge,
   type Node,
@@ -133,7 +134,39 @@ export default function ScenePanel() {
       });
     }
 
-    return live;
+    // The one line on this floor that is not something happening: an arrow from **each**
+    // hypothesis figure to the single data figure. It is the shape of the pipeline, not
+    // the traffic on it, so it is still and pale where the other two are animated and
+    // coloured — a viewer who cannot tell those apart at a glance learns nothing from
+    // either.
+    //
+    // This is what the vertical stack was chosen for (meeting of 2026-08-26): three
+    // hypothesis agents above one another, three arrows converging on one data agent, and
+    // the fan-in readable without being told. Until 2026-09-08 the stack was drawn and the
+    // arrows were not, so the layout was there and the thing it was the layout *for* was
+    // missing.
+    //
+    // Drawn at one hypothesis worker too, not only at two or more. An element that appears
+    // only under a non-default flag is an element the default run never checks.
+    const dataFigure = scene.agents.find((a) => a.stage === "data");
+    const pipe: Edge[] = dataFigure
+      ? scene.agents
+          .filter((a) => a.stage === "hypothesis")
+          .map((a) => ({
+            id: `feeds-${a.id}`,
+            source: `agent-${a.id}`,
+            target: `agent-${dataFigure.id}`,
+            animated: false,
+            selectable: false,
+            style: { stroke: "#cbd5e1", strokeWidth: 1.5 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#cbd5e1",
+                         width: 14, height: 14 },
+          }))
+      : [];
+
+    // The static arrows go first so React Flow paints them under the flashes: a pale line
+    // crossing a live one should be the one that gives way.
+    return [...pipe, ...live];
   }, [scene]);
 
   const working = scene?.agents.filter((a) => a.state === "working").length ?? 0;

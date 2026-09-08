@@ -77,6 +77,31 @@ export function AgentNode({ data }: NodeProps) {
           <Icon className="h-6 w-6" strokeWidth={1.8} />
         </motion.div>
 
+        {/* How many workers this one figure stands for. Only `hypothesis` is drawn one
+            figure per worker; `data`, `ml`, `interpreter` and `report` are a single
+            character however many run behind them, because that is what the meeting asked
+            for — the user chooses the number of hypothesis agents and should not have to
+            know the rest are internally run more than once.
+
+            "Should not have to know" is not "must not be able to find out", and this badge
+            is the difference. Without it a folded station is indistinguishable from a
+            station running one worker, and A-13 — which put the parallelism on the screen
+            in the first place — would be undone for four stages out of five.
+
+            Left of the circle, opposite the card on the right, so a data agent that is
+            both running two workers and holding a task shows both without them
+            overlapping. */}
+        {agent.running > 1 && (
+          <div
+            className="absolute -left-9 -top-3 rounded-full border-2 bg-white px-1.5 py-0.5
+                       font-mono text-[11px] font-bold leading-none shadow-sm"
+            style={{ borderColor: color, color }}
+            title={`${agent.running} workers, drawn as one`}
+          >
+            ×{agent.running}
+          </div>
+        )}
+
         {/* The card it is holding: claimed but not yet submitted. */}
         {agent.carrying !== null && (
           <motion.div

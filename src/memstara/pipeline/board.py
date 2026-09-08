@@ -1921,10 +1921,21 @@ async def main() -> int:
     # the same kind of number: those three are how many workers stand at the board through
     # a whole run, this is how many of a wave's trials are seeded at once. --trials still
     # decides how many trials there are; this only decides how many are in flight.
+    #
+    # **This is the one stage the viewer draws a figure per worker for**, which is why the
+    # help says where the drawing stops being comfortable. The meeting of 2026-08-26 asked
+    # for one to two hypothesis agents with the screen expandable to three, and the floor
+    # plan was laid out to that: the figures stack upwards from a row of five stations 175
+    # apart, and the space above the row runs out somewhere past three. There is
+    # deliberately **no upper limit in the code** — a cap belongs to the drawing and would
+    # here stop an experiment, and a run of three worked on 2026-09-08. Past three the run
+    # is fine and the picture is crowded, and it is better for that to be said than
+    # enforced.
     ap.add_argument(
         "--hypothesis-agents", type=int, default=1,
         help="how many hypothesis workers seed the board at once. Each claims its own "
-             "question out of the bank, so two never set out from one question (default 1)",
+             "question out of the bank, so two never set out from one question (default 1; "
+             "the floor plan is laid out for up to 3 and is not capped)",
     )
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--run-dir", default=None)

@@ -238,6 +238,27 @@ HOME: dict[str, dict[str, int]] = {
     "report":      {"x": 860, "y": 470},
 }
 
+# The stations that may show more than one figure at once. **Everything not named here
+# is drawn as exactly one character however many workers are running behind it.**
+#
+# This is the meeting's decision of 2026-08-26, not an implementation detail: the backend
+# may run N of any stage in parallel, and the screen shows the hypothesis stage split
+# because that is the parallelism the user is choosing, while the data agent stays a
+# single figure — the user does not need to know that it is internally run more than once.
+#
+# It is declared here rather than in `scene.py` for the same reason `HOME` and `DRAWN_AS`
+# are: the definition lives in one file and `scene.py` consumes it, which is the shape
+# `check_definitions.py` can read. A name here that is not a key of `HOME` is a station
+# that does not exist; that file is what says so, because this module has no import-time
+# guards and adding the first one here would hide the check where nobody runs it.
+#
+# **This was shipped backwards once.** Until 2026-09-08 `_build_scene` split every key of
+# `HOME` by worker, so `--data-agents 2` drew `data#1` and `data#2` — the exact thing the
+
+# asked for. Every check passed, because all three of them had been written from the
+# implementation instead of from the item.
+SPLITTABLE: frozenset[str] = frozenset({"hypothesis"})
+
 # Which character a stage is *drawn* as. **This is now a compatibility layer**, and it
 # is the reason a run from before 2026-09-07 still shows up on every screen.
 #

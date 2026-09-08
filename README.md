@@ -245,8 +245,8 @@ knowledge source and column names in the dataset, so the example reproduces it o
 | `--y-column` | `outcome` | the outcome column. **A literal default, not read from the environment** (`src/memstara/pipeline/board.py:1856`) — `outcome` is the synthetic dataset's column (`src/memstara/prep/sample.py:90`), so a real cohort needs this passed explicitly or the pre-flight stops the run. `mvp.py` is the one that falls back to `MEMSTARA_OUTCOME_COLUMN` (`src/memstara/pipeline/mvp.py:425`) |
 | `--provider` | `azure_foundry` | `anthropic` · `azure_foundry` · `openai` |
 | `--model` | `claude-sonnet-4-6` | model id |
-| `--data-agents` `--ml-agents` `--interpret-agents` | 1 | how many workers of that stage claim from the board at once |
-| `--hypothesis-agents` | 1 | how many seed the board at once; each claims its own question |
+| `--data-agents` `--ml-agents` `--interpret-agents` | 1 | how many workers of that stage claim from the board at once. **The floor plan draws each of these as one character however many run** — the count rides on the figure as a badge (`viewer/api/stores.py`, `SPLITTABLE`) |
+| `--hypothesis-agents` | 1 | how many seed the board at once; each claims its own question. **The one stage drawn as a figure per worker**, stacked, each with an arrow to the data character. The floor plan is laid out for up to 3; there is no cap in the code, and past 3 the run is fine and the picture is crowded |
 | `--max-attempts` | 5 | give up on a task after this many extra returns, mark it failed, go on; 0 retries forever |
 | `--stale-after` | 600 | seconds a task may sit `in_progress` before it is presumed abandoned |
 | `--run-tag` | — | names this run on the board |
