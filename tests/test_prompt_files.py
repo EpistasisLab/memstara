@@ -1,6 +1,6 @@
 """The prompt files this repository actually ships.
 
-`tests/test_prompts.py` tests the loader against fixtures. This file tests the ten real
+`tests/test_prompts.py` tests the loader against fixtures. This file tests the nine real
 prompts, and it exists for one reason the loader tests cannot cover: **a prompt is now
 edited by someone who never opens `core.py`.** That is the whole point of the move, and
 it is also what removes the reader who used to notice.
@@ -21,11 +21,15 @@ from memstara.paths import PROMPTS_DIR
 from memstara.pipeline.prompts import load_prompt
 
 #: Every agent, by the path `provision_all` and `provision_board_agents` pass to
-#: `_ensure_agent_from_file`. Four on the 02 (supervisor) path, six on the 03 (board) one.
+#: `_ensure_agent_from_file`. Four on the 02 (supervisor) path, five on the 03 (board) one.
+#: `board/curator` was here until 2026-09-07. It is gone because the agent is: writing the
+#: wave's questions is the hypothesis agent's other job now, and its text lives in the
+#: second half of `board/hypothesis.md`. There is no sixth file, which is the whole of what
+#: `test_no_file_is_unaccounted_for` below then has to agree with.
 AGENTS = [
     "mvp/hypothesis", "mvp/data", "mvp/ml", "mvp/interpreter",
     "board/hypothesis", "board/data", "board/ml", "board/interpreter",
-    "board/report", "board/curator",
+    "board/report",
 ]
 
 #: Files that are not agents. A fragment has no goal and is never loaded on its own.
