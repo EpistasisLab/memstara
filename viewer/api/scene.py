@@ -440,7 +440,7 @@ def _worker_names(touches: list[dict[str, Any]]) -> dict[str, str]:
     an agent name and the database has nothing else to tell them apart by. The name they
     were each given in their instructions — `hypothesis#2` — is written down in exactly
     one place: the `worker=` argument they pass when they ask for work
-    (`src/memstara/pipeline/board.py:1383, 1576`).
+    (`src/memstara/pipeline/board.py:1403, 1596`).
 
     Most calls in a run do not carry it (see `queries.TASK_TOUCHES`), so this takes the
     first one that does and keeps it. A run with no named call at all is absent from the
@@ -599,7 +599,18 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
             if len(instances) == 1:
                 ids.append(character)
             else:
-                ids.append(workers.get(run_id or "") or f"{character}#{slot + 1}")
+                # The fallback names the **run**, never a worker number. It used to be
+                # `f"{character}#{slot + 1}"`, and that put an invented name into the
+                # workers' own namespace: real workers are 0-indexed (`wid =
+                # f"hypothesis#{i}"`, `src/memstara/pipeline/board.py:1403`), so a
+                # three-worker run drew `hypothesis#0`, `hypothesis#2`, `hypothesis#3` in
+                # the seconds before the third worker reached its `claim_question` — one
+                # id naming a worker that does not exist, and `hypothesis#1` nowhere,
+                # while `hypothesis#1` was in fact running. Seen on a live run on
+                # 2026-09-08. A worker has no name here only until it makes its first
+                # call; the run id is what genuinely tells these apart in the meantime,
+                # and it cannot be mistaken for something the board wrote.
+                ids.append(workers.get(run_id or "") or f"{character}:run{run_id}")
         # Two runs can genuinely report the same worker name: `data#1` is what the first
         # worker of every wave is called, so a task reclaimed after a stall is claimed by
         # a `data#1` in a later run while the run that stalled is still holding one. Node
