@@ -95,7 +95,7 @@ const ENTRY: [BlockEntryKind, RegExp][] = [
  *
  * `interpret` is the one genuine mismatch in the whole vocabulary: the console says
  * `interpret#1` and the chain calls the stage `interpreter` (`lib/chain.ts:CHAIN`, mirroring
- * `viewer/api/stores.py:165-172`). It is aliased here rather than renamed on either side,
+ * `viewer/api/stores.py:175-181`). It is aliased here rather than renamed on either side,
  * because both names are load-bearing where they are.
  */
 export function workerStage(worker: string): StageId | null {

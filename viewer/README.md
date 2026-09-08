@@ -5,11 +5,12 @@ knowledge source, dataset, trainer and results table each have a **place**. Run 
 pipeline and you watch, in real time, a character walk to the board, pick up a row, carry
 it to their own place, work on it and put it back.
 
-**Six stages, five characters.** The curator and the hypothesis stage are drawn as one,
-labelled "Hypothesis · Curator", because they spend most of a run at the same shelf and
-the picture could not tell them apart (`viewer/api/stores.py:182-202`). Only the drawing
-is folded: the curator is still its own stage with its own agent, and the Agents tab, the
-access map and the feed all still list it separately.
+**Six stages, five characters.** The curator and the hypothesis stage are drawn as one
+character, labelled simply "Hypothesis", because they spend most of a run at the same
+shelf and the picture could not tell them apart (`viewer/api/stores.py:183-209`). Only
+the drawing is folded: the curator is still its own stage with its own agent, and the
+Agents tab, the access map and the feed all still list it separately — that is where to
+look when a "Curator" line in the feed needs a face.
 
 ```bash
 docker compose up -d --build     # → http://localhost:8070

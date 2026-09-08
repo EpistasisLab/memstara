@@ -354,7 +354,10 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
 
     agents = []
     for stage in stores.HOME:
-        label = stores.SCENE_LABELS.get(stage, stores.AGENT_LABELS.get(stage, stage))
+        # The character's own name, and only its own: a merged character is labelled for
+        # the stage it is drawn as, not for every stage folded into it. `AGENT_LABELS`
+        # still holds all six, because the cost table and the feed name the curator.
+        label = stores.AGENT_LABELS.get(stage, stage)
         mine = members.get(stage, [stage])
 
         # Both members can be busy at once — the curator can be writing wave n+1's

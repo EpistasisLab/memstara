@@ -33,7 +33,6 @@ tool, not by server.
    PLACES / HOME            scene coordinates (the SVG's own 1000x560 space)
    DRAWN_AS / drawn_as()    stage -> the character it is drawn as  <- display only
    AGENT_LABELS             stage -> the name shown on screen
-   SCENE_LABELS             the scene's overrides, for a character that is two stages
    TOOL_STORE / store_of()  tool -> store
    normalise_server()       fold the old `ecoxai-*` server names into the current ones
    BOARD_WINDOWS            the eight windows the board server opens, and whose they are
@@ -50,9 +49,11 @@ tool, not by server.
    4. `read_board` and `count_waiting` showing zero calls is **the correct picture,
       not a bug** — the first belongs to the driving script, the second to nobody.
    5. **Six stages, five characters.** `DRAWN_AS` folds the curator into the
-      hypothesis stage *on the scene only*. Nothing else folds: the cost table, the
-      access map and the feed all still report six. If you are looking for the curator
-      and it is not in `HOME`, it has not been deleted — read `DRAWN_AS`.
+      hypothesis stage *on the scene only*, and the merged character is labelled plainly
+      `Hypothesis` — the drawing does not name the curator anywhere. Nothing else folds:
+      the cost table, the access map and the feed all still report six, by name. If you
+      are looking for the curator and it is not in `HOME`, it has not been deleted —
+      read `DRAWN_AS`, then the Agents tab.
 ==============================================================================
 """
 
@@ -197,8 +198,14 @@ HOME: dict[str, dict[str, int]] = {
 # and `:394-396` keeps `read_questions` with it because a stage that can read the whole
 # bank can pick itself a second question. None of that is affected by where a character
 # stands. `_agent_totals`, `_access` and `_feed` go on reporting six agents under six
-# names, which is what lets a "Curator" line in the feed be traced back to the merged
-# character on the floor.
+# names.
+#
+# The merged character is labelled `Hypothesis`, not "Hypothesis · Curator": the drawing
+# is meant to show one stage, and a compound name puts the word back on the screen the
+# fold was supposed to take it off. The cost of that is worth stating — a reader who
+# sees a "Curator" line in the feed cannot point at the character it belongs to, and has
+# to go to the Agents tab, where the curator is still its own row. That is the trade
+# this table makes on purpose.
 DRAWN_AS: dict[str, str] = {"curator": "hypothesis"}
 
 
@@ -224,20 +231,6 @@ AGENT_LABELS = {
     "hypothesis": "Hypothesis", "data": "Data", "ml": "ML",
     "interpreter": "Interpreter", "report": "Report · Insight",
 }
-
-# What the **scene** calls a character, where that differs from the stage's own name.
-# Everything not named here uses `AGENT_LABELS`.
-#
-# One entry, and it is the other side of the same convention as "Report · Insight"
-# above: there, one stage under two names; here, two stages under one name. The merged
-# character has to say both, because the feed and the cost table go on printing
-# "Curator" and a reader has to be able to find, on the floor, the character that line
-# belongs to.
-#
-# `AGENT_LABELS` deliberately keeps all six entries. `_agent_totals`, `_access` and
-# `_feed` label a real agent through it, so dropping "curator" there would put the raw
-# `memstara-board-curator` on screen instead.
-SCENE_LABELS: dict[str, str] = {"hypothesis": "Hypothesis · Curator"}
 
 # A tool touches exactly one store. Keyed by tool, not by server, because the board
 # server serves two stores — see the module docstring. (`claim_task`/`submit_result`

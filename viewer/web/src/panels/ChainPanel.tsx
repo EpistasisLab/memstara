@@ -44,11 +44,9 @@ import type { StageId } from "../types";
 /** Card width plus the gap. Nothing else depends on it — `fitView` scales the row to
  *  whatever the panel is, so this only sets how the cards sit relative to each other.
  *
- *  It has to move whenever the card does. The card is `w-56` (224px), so this leaves the
- *  same 56px between cards it always did; left at its old 232 the cards would sit 8px
- *  apart and read as one block. The card grew because the merged label
- *  "Hypothesis · Curator" did not fit the old 176px — see `components/chain.tsx`. */
-const STEP_X = 280;
+ *  It has to move whenever the card does: the card is `w-44` (176px), so this leaves
+ *  56px between cards. Change one without the other and they either crowd or drift. */
+const STEP_X = 232;
 
 export default function ChainPanel() {
   const scene = useScene();

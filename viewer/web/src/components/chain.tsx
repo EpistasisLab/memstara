@@ -55,7 +55,7 @@ export function ChainNode({ data }: NodeProps) {
 
   return (
     <div
-      className={`w-56 rounded-xl border-2 bg-white px-3 py-2.5 shadow-sm transition
+      className={`w-44 rounded-xl border-2 bg-white px-3 py-2.5 shadow-sm transition
                   hover:shadow-md ${tone.ring}`}
       style={busy ? { borderColor: color } : undefined}
     >
@@ -83,10 +83,12 @@ export function ChainNode({ data }: NodeProps) {
 
         <div className="min-w-0">
           <div className="font-mono text-[10px] leading-none text-ink-faint">{step}</div>
-          {/* `truncate` stays, so the label is one Tailwind class away from being cut
-              short again with nothing raised anywhere — `w-56` is sized for the longest
-              label there is today and not a character more. The tooltip is what makes
-              that failure visible rather than silent. */}
+          {/* The label gets about 108px here (w-44, less the padding, the border, the
+              32px glyph and the gap), which is roughly 15 characters at this size. A
+              longer one is cut with an ellipsis and nothing is raised anywhere, so the
+              `title` is what keeps that from being silent. "Report · Insight" is the
+              longest label there is and sits near that limit; whether it actually clips
+              has not been measured. */}
           <div className="truncate text-[13px] font-bold leading-tight" title={agent.label}>
             {agent.label}
           </div>

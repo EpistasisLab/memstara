@@ -209,9 +209,9 @@ export default function NavigatorPanel() {
           <p className="font-bold text-ink">This run has no board rows yet.</p>
           <p className="mt-1 leading-snug">
             The curator proposes questions first; rows appear once the hypothesis stage pins
-            the first instruction to the board. Both are drawn as the one character labelled
-            &ldquo;Hypothesis&nbsp;&middot;&nbsp;Curator&rdquo;, so the two steps described
-            here happen at a single place on the floor plan.
+            the first instruction to the board. Both steps happen at the single character
+            drawn as &ldquo;Hypothesis&rdquo;, which is why the floor plan shows one place
+            here and not two. The curator has its own row in the Agents tab.
           </p>
         </div>
       ) : (

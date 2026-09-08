@@ -325,8 +325,9 @@ def main() -> int:
     # one.** Six stages come out of the pipeline and five characters stand on the floor:
     # stores.DRAWN_AS draws the curator and the hypothesis stage as one, because they
     # spend most of a run at the same shelf and the picture could not tell them apart.
-    # The curator is not gone — it is the other half of "Hypothesis · Curator", and the
-    # three checks below and the cost table still count it separately.
+    # The curator is not gone, though the drawing no longer names it: the merged
+    # character is labelled plainly "Hypothesis", and the three checks below and the cost
+    # table still count the curator separately.
     #
     # The leading digit in each label is the check group, not a count. Do not read
     # "6 characters" as an expected six.
