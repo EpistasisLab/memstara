@@ -120,6 +120,16 @@ SELECT tool || '=' || n FROM (
 # and this fails, which is the point.
 FEED_LIMIT = 60
 
+# stores.DRAWN_AS: which stages the scene draws as one character. Written out for the
+# same reason as FEED_LIMIT — a referee that imports the player's answer sheet is not
+# refereeing. Fold the grouping on the API side without saying so here and check 7 fails.
+#
+# The screens disagree about this on purpose and both are right: the scene draws five
+# characters, and the cost table, the access map and the feed all still report six
+# agents. So check 7 below cannot ask whether the two name the same set — it asks
+# whether a name the feed used arrives somewhere on the floor.
+DRAWN_AS = {"curator": "hypothesis"}
+
 # The feed's rows, computed independently of api/queries.py. Same three traps, expressed
 # differently again: a CROSS JOIN LATERAL where FLAT_CALLS uses the comma form, and the
 # two shapes named as separate CTEs rather than one UNION inside a single `flat`.
@@ -304,14 +314,24 @@ def main() -> int:
     chk("6 dead run does not look alive", int(stale) > 0 and not working,
         f"{stale} old pending runs yet working {working}")
 
-    # The skeleton of the scene. 6 places and 6 characters must always come out. Add a
+    # The skeleton of the scene. 6 places and 5 characters must always come out. Add a
     # stage without making room for it in stores.PLACES/HOME and it is caught here.
     # Both numbers are written out rather than read from stores, so that adding a stage
     # to the viewer and forgetting to say so here still fails. (They were frozen at 5
     # while PLACES already held 6 and the pipeline already had six stages, so this line
     # was reporting a stale number rather than a real gap.)
+    #
+    # **The two numbers differ, and that is the current truth rather than the old stale
+    # one.** Six stages come out of the pipeline and five characters stand on the floor:
+    # stores.DRAWN_AS draws the curator and the hypothesis stage as one, because they
+    # spend most of a run at the same shelf and the picture could not tell them apart.
+    # The curator is not gone — it is the other half of "Hypothesis · Curator", and the
+    # three checks below and the cost table still count it separately.
+    #
+    # The leading digit in each label is the check group, not a count. Do not read
+    # "6 characters" as an expected six.
     chk("6 places", len(snap["scene"]["places"]) == 6, str(len(snap["scene"]["places"])))
-    chk("6 characters", len(snap["scene"]["agents"]) == 6, str(len(snap["scene"]["agents"])))
+    chk("6 characters", len(snap["scene"]["agents"]) == 5, str(len(snap["scene"]["agents"])))
     chk("both DBs answered", snap["health"]["memstara"]["up"] and snap["health"]["core"]["up"])
 
     # 7 — the feed.
@@ -353,9 +373,16 @@ def main() -> int:
             str(sorted({e["server"] for e in feed})))
 
         # A row the viewer cannot name keeps agent=null and is shown anyway. What must
-        # not happen is a *named* row naming a stage the scene does not have.
+        # not happen is a *named* row naming a stage that reaches no character on screen.
+        #
+        # The feed names six stages and the scene draws five, so the two sets are not
+        # equal and are not meant to be — the question is whether a name the feed used
+        # **arrives somewhere**, which is what folding through DRAWN_AS asks. Comparing
+        # the raw sets instead would fail on any feed window holding a curator call, and
+        # a window normally holds one: the curator is the first stage of every wave.
         stages = {a["id"] for a in snap["scene"]["agents"]}
-        strays = {e["agent"] for e in feed if e["agent"] is not None} - stages
+        named = {e["agent"] for e in feed if e["agent"] is not None}
+        strays = {DRAWN_AS.get(a, a) for a in named} - stages
         chk("7 feed stages are real stages", not strays, str(sorted(strays)))
 
     # Only the count for what passed; for what did not, the reason in full.
