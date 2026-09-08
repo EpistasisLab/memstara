@@ -334,7 +334,11 @@ async def main() -> int:
     # any numbers. What is confirmed is whether the status becomes "done" when the last
     # stage finishes.
     c = json.loads(await bb.claim_task("ml", RUN_TAG))
-    await bb.submit_result(c["task_id"], auc=0.71, feature_importance='{"CURRENT_AGE": 0.4}')
+    # `model` is passed here for the same reason the AUC is: it is one of the three things
+    # the ml stage produces, and without it the importance number below is on a scale
+    # nobody can name.
+    await bb.submit_result(c["task_id"], auc=0.71, feature_importance='{"CURRENT_AGE": 0.4}',
+                           model="random_forest")
     c = json.loads(await bb.claim_task("interpret", RUN_TAG))
     r3 = json.loads(await bb.submit_result(c["task_id"], interpretation="supported"))
     results.append(ok(r3.get("status") == "done", "once interpretation finishes it becomes done", str(r3.get("status"))))
@@ -371,6 +375,18 @@ async def main() -> int:
                       f"evidence {len(res.get('okf_concept_ids') or [])} · "
                       f"candidate records {len(res.get('match_trace') or [])} · "
                       f"importances {len(res.get('feature_importance') or {})}"))
+
+    # ---- did the scale of those importances survive the copy -------------
+    #
+    # An importance number without the engine that produced it is not a weaker record, it
+    # is an unreadable one: impurity/gain from random_forest and the permutation drop in
+    # AUC that sklearn_hgb falls back to are different quantities. The 81 results stored
+    # before 2026-09-08 have no engine on them and cannot get one. So this checks the
+    # copy specifically — the column existing on the board is not the same as it arriving
+    # on the table that outlives the run.
+    results.append(ok(res.get("model") == "random_forest",
+                      "the results table records which engine produced the importances",
+                      f"model={res.get('model')!r} (expected 'random_forest')"))
 
     # ---- did the result carry "what was asked" too ---------------------
     #

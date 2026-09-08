@@ -186,6 +186,25 @@ CREATE TABLE IF NOT EXISTS memstara_blackboard (
     auc                DOUBLE PRECISION,
     feature_importance JSONB       NOT NULL DEFAULT '{{}}'::jsonb,
 
+    -- Which engine produced the two numbers above. It is not decoration: the engine
+    -- decides what feature_importance *is*. `random_forest` and `xgboost` carry
+    -- `feature_importances_`, so the numbers are impurity/gain — non-negative and
+    -- summing to about 1. `sklearn_hgb` does not, so `_importance` falls back to
+    -- permutation importance and the numbers are a drop in AUC — a different unit, on a
+    -- different scale, and legitimately negative. Measured on the same four
+    -- sub-datasets: random_forest sums to exactly 1.0000, sklearn_hgb to 0.0819 and
+    -- 0.2572 with a minimum of -0.0131.
+    --
+    -- So a row without this column records a quantity whose meaning cannot be recovered,
+    -- and every comparison across rows is unsound. The tool has always returned the
+    -- engine (`mcp_servers/ml.py:217`); until 2026-09-08 nothing stored it, and the 81
+    -- results already in the table are on an unrecorded scale for good — the engine was
+    -- an environment variable read inside the call and written down nowhere else.
+    --
+    -- '' means "not recorded", which is what those older rows say, and it is a different
+    -- claim from any engine name. Do not backfill it by guessing.
+    model              TEXT        NOT NULL DEFAULT '',
+
     -- Filled by the interpretation stage: the numbers put into human words.
     interpretation     TEXT        NOT NULL DEFAULT '',
 
@@ -276,6 +295,14 @@ CREATE TABLE IF NOT EXISTS memstara_results (
     -- on the board, a hypothesis agent reading finished results could see that a trial
     -- scored 0.72 but not which of its columns contributed nothing.
     feature_importance JSONB   NOT NULL DEFAULT '{{}}'::jsonb,
+
+    -- And which engine produced them, copied over with them. This is the column the
+    -- whole of feature_importance depends on to mean anything — see the long note on
+    -- memstara_blackboard.model above. It matters more here than on the board, because
+    -- this is the table that outlives the run: an importance map whose scale is
+    -- unrecorded is not a weaker record, it is an uninterpretable one, and this is where
+    -- it is kept forever.
+    model          TEXT        NOT NULL DEFAULT '',
 
     interpretation TEXT        NOT NULL DEFAULT '',
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -369,6 +396,13 @@ ALTER TABLE memstara_results    ADD COLUMN IF NOT EXISTS match_trace JSONB NOT N
 ALTER TABLE memstara_results    ADD COLUMN IF NOT EXISTS feature_importance JSONB NOT NULL DEFAULT '{{}}'::jsonb;
 ALTER TABLE memstara_results    ADD COLUMN IF NOT EXISTS columns JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE memstara_results    ADD COLUMN IF NOT EXISTS columns_missing JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+-- Which engine produced the importances, added the same way. Every database this code
+-- has run against already has both tables, so without these two lines the column exists
+-- only on a database nobody has. The existing rows take the '' default, and that is the
+-- honest value for them: the engine was never written down while they were produced.
+ALTER TABLE memstara_blackboard ADD COLUMN IF NOT EXISTS model TEXT NOT NULL DEFAULT '';
+ALTER TABLE memstara_results    ADD COLUMN IF NOT EXISTS model TEXT NOT NULL DEFAULT '';
 
 -- Which bank question seeded this row. A plain INTEGER and deliberately not a foreign
 -- key: memstara_questions outlives the board and the results table, and a foreign key

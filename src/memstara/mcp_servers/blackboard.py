@@ -259,7 +259,7 @@ async def claim_task(task_type: str, run_tag: str = "", worker: str = "") -> str
                     )
                     RETURNING task_id, run_tag, trial, perspective, hypothesis,
                               columns, y_column, okf_concept_ids, subset_path,
-                              columns_used, auc, feature_importance, claimed_by
+                              columns_used, auc, feature_importance, model, claimed_by
                     """,
                     task_type, run_tag, worker,
                 )
@@ -289,8 +289,8 @@ async def claim_task(task_type: str, run_tag: str = "", worker: str = "") -> str
 async def submit_result(task_id: int, subset_path: str = "",
                         columns_used: list[str] | None = None,
                         columns_missing: list[str] | None = None, auc: float | None = None,
-                        feature_importance: str = "", interpretation: str = "",
-                        worker: str = "") -> str:
+                        feature_importance: str = "", model: str = "",
+                        interpretation: str = "", worker: str = "") -> str:
     """Write what you produced and hand the task to the next stage.
 
     Pass only the fields your stage produces; leave the rest out.
@@ -305,6 +305,13 @@ async def submit_result(task_id: int, subset_path: str = "",
             empty list records "none were missing"; omitting it leaves the field alone.
         auc: ml stage — the test AUC.
         feature_importance: ml stage — JSON object of column to importance.
+        model: ml stage — **the `model` field train_and_score returned, copied through
+            unchanged.** Not optional in practice: the engine decides what the numbers in
+            feature_importance are. `random_forest` and `xgboost` return impurity/gain,
+            non-negative and summing to about 1; `sklearn_hgb` returns a drop in AUC,
+            which is a different unit and can be negative. Leave it out and the row
+            records importances nobody can later say the scale of — which is what every
+            result stored before 2026-09-08 does.
         interpretation: interpretation stage — the write-up.
         worker: who you are — **the same string you passed to claim_task.** If the task
             is now held by somebody else this is refused and nothing is written, which
@@ -385,6 +392,9 @@ async def submit_result(task_id: int, subset_path: str = "",
                         columns_missing    = CASE WHEN $4 <> '' THEN $4::jsonb ELSE columns_missing END,
                         auc                = COALESCE($5, auc),
                         feature_importance = CASE WHEN $6 <> '' THEN $6::jsonb ELSE feature_importance END,
+                        -- $10 is last rather than beside $6 because appending a
+                        -- parameter cannot renumber the nine that were already here.
+                        model              = COALESCE(NULLIF($10, ''), model),
                         interpretation     = COALESCE(NULLIF($7, ''), interpretation),
                         status             = $8,
                         task_type          = $9,
@@ -407,6 +417,7 @@ async def submit_result(task_id: int, subset_path: str = "",
                     interpretation,
                     new_status,
                     new_type,
+                    model,
                 )
 
                 # The results table is separate on purpose: the board holds what is
@@ -432,11 +443,11 @@ async def submit_result(task_id: int, subset_path: str = "",
                             (task_id, run_tag, trial, perspective, hypothesis,
                              columns, columns_used, columns_missing,
                              okf_concept_ids, match_trace, question_id,
-                             y_column, auc, feature_importance, interpretation)
+                             y_column, auc, feature_importance, model, interpretation)
                         SELECT task_id, run_tag, trial, perspective, hypothesis,
                                columns, columns_used, columns_missing,
                                okf_concept_ids, match_trace, question_id,
-                               y_column, auc, feature_importance, interpretation
+                               y_column, auc, feature_importance, model, interpretation
                         FROM memstara_blackboard WHERE task_id = $1
                         """,
                         task_id,
@@ -572,7 +583,12 @@ async def read_board(run_tag: str = "") -> str:
                        -- of one type. A plain TEXT column, so it needs no unpacking
                        -- below.
                        claimed_by,
-                       auc, feature_importance, interpretation, attempts, error
+                       auc, feature_importance,
+                       -- Which engine produced those importances. '' means it was not
+                       -- recorded, which is a different claim from any engine name and
+                       -- is what every row written before 2026-09-08 says.
+                       model,
+                       interpretation, attempts, error
                 FROM memstara_blackboard
                 WHERE ($1 = '' OR run_tag = $1)
                 ORDER BY trial, task_id
@@ -626,6 +642,12 @@ async def read_results(run_tag: str = "", include_match_trace: bool = False) -> 
         offered, chosen and rejected alike) and ``feature_importance`` (which columns
         actually carried the AUC). A later trial can use the last of these to avoid
         columns that contributed nothing.
+
+        ``model`` says which engine produced the importances, and it has to be read
+        before they are compared: impurity/gain from ``random_forest`` and ``xgboost``
+        is not the same quantity as the permutation drop in AUC ``sklearn_hgb``
+        falls back to. Two results with different ``model`` values have importances on
+        different scales. ``''`` means the engine was not recorded — do not guess it.
     """
     try:
         conn = await asyncpg.connect(_dsn())
@@ -635,7 +657,7 @@ async def read_results(run_tag: str = "", include_match_trace: bool = False) -> 
                 SELECT result_id, task_id, run_tag, trial, perspective, hypothesis,
                        columns, columns_used, columns_missing,
                        okf_concept_ids, match_trace, question_id,
-                       y_column, auc, feature_importance, interpretation, created_at
+                       y_column, auc, feature_importance, model, interpretation, created_at
                 FROM memstara_results
                 WHERE ($1 = '' OR run_tag = $1)
                 ORDER BY trial, result_id
