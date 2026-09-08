@@ -24,6 +24,7 @@ how the original divergence appeared, one plausible line at a time.
 from __future__ import annotations
 
 import inspect
+import json
 import re
 
 import pytest
@@ -93,6 +94,67 @@ def test_the_default_seed_is_42() -> None:
     """
     default = inspect.signature(tools_ml.train_and_score).parameters["seed"].default
     assert default == 42
+
+
+@pytest.fixture()
+def subset(tmp_path, monkeypatch):
+    """A tiny sub-dataset inside an allowed output directory.
+
+    60 rows with one column that carries the signal and one that does not, which is
+    enough for a split, a fit and a permutation pass. It is not the cohort and must not
+    become it: what is under test is what the tool *reports about its own conditions*,
+    and a test that needs the real dataset stops running the moment that file moves
+    (`tests/test_slice_columns.py:16-18` makes the same choice for the same reason).
+    """
+    out = tmp_path / "out"
+    out.mkdir()
+    rows = ["signal,noise,outcome"]
+    for i in range(60):
+        label = i % 2
+        rows.append(f"{label * 10 + i % 3},{i % 7},{label}")
+    csv = out / "subset.csv"
+    csv.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    monkeypatch.setenv("MEMSTARA_OUTPUT_DIR", str(out))
+    monkeypatch.delenv("MEMSTARA_ML_ENGINE", raising=False)
+    return csv
+
+
+def test_the_conditions_come_back_with_the_numbers(subset) -> None:
+    """`seed` and `test_size` are in the return, at whatever value was passed.
+
+    They are tool parameters, so an agent can pass something other than the default.
+    Before 2026-09-08 doing so left no trace: the return carried the AUC and not the
+    conditions that produced it, which made the docstring's promise — that a result can
+    be re-scored by hand and checked against the board — true only of calls that passed
+    neither.
+
+    A non-default seed rather than 42, for the reason the parametrised tests above take
+    three values: against a hard-coded default, echoing the default proves nothing.
+    """
+    out = json.loads(tools_ml.train_and_score(str(subset), "outcome", test_size=0.4, seed=7))
+
+    assert "error" not in out, out
+    assert out["seed"] == 7
+    assert out["test_size"] == 0.4
+    # The engine is still reported too — the three together are the whole condition.
+    assert out["model"] == "sklearn_hgb"
+
+
+def test_a_path_outside_the_output_directory_is_refused(subset, tmp_path) -> None:
+    """The security check still fires, and still fires first.
+
+    Named here because this file is now the only test of this module: `train_and_score`
+    resolves symlinks and then requires the path to sit under the output directory
+    (`src/memstara/mcp_servers/ml.py:206-215`), and that check deliberately runs *above*
+    the scikit-learn import so it cannot be skipped wherever the optional dependency is
+    absent. A refusal is JSON rather than an exception, per this directory's rule that
+    an agent must get something it can act on.
+    """
+    outside = tmp_path / "elsewhere.csv"
+    outside.write_text("a,outcome\n1,0\n2,1\n", encoding="utf-8")
+
+    out = json.loads(tools_ml.train_and_score(str(outside), "outcome"))
+    assert "outside the allowed directory" in out["error"]
 
 
 def test_no_seed_is_written_into_this_module() -> None:

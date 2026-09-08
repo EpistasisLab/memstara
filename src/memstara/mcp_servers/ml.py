@@ -187,12 +187,13 @@ def train_and_score(path: str, y_column: str, test_size: float = 0.25, seed: int
             same number and a result can be re-scored by hand later and checked
             against what the board recorded. Leave it at 42 unless you are
             deliberately testing how much of a result is the split; changing it is a
-            different experimental condition, and nothing yet records which value
-            was used.
+            different experimental condition. Whichever value is used comes back in
+            the return, so the condition travels with the numbers.
 
     Returns:
-        JSON with auc, feature_importance, n_train, n_test and model. Report the
-        returned numbers as they stand; do not restate them approximately.
+        JSON with auc, features, feature_importance, n_train, n_test, model, seed and
+        test_size. Report the returned numbers as they stand; do not restate them
+        approximately.
 
         ``model`` is which engine ran, and it belongs with the numbers rather than
         beside them: it is what says whether feature_importance is impurity/gain or a
@@ -277,6 +278,21 @@ def train_and_score(path: str, y_column: str, test_size: float = 0.25, seed: int
             "n_train": int(len(X_tr)),
             "n_test": int(len(X_te)),
             "model": engine,      # record which engine produced these numbers
+            # The two conditions the caller could have changed, returned for the same
+            # reason `model` is: a number is only reproducible alongside what produced
+            # it. Both are tool parameters, so an agent may pass something other than
+            # the default — and until now, doing so left no trace anywhere. The
+            # docstring's promise that a result can be re-scored by hand and checked
+            # against the board was therefore true only of calls that passed neither.
+            #
+            # This reaches the run trace, not the board: `submit_result` has no
+            # parameter for either (`src/memstara/mcp_servers/blackboard.py:289-293`)
+            # and `memstara_results` has no column
+            # (`src/memstara/blackboard.py:247-277`). Storing them is a schema change
+            # and its own piece of work; returning them costs nothing and is what makes
+            # that work possible to do later against real values.
+            "seed": int(seed),
+            "test_size": float(test_size),
         }
     )
 
