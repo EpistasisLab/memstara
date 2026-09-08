@@ -18,7 +18,7 @@ import { useViewer } from "../store/viewer";
  * store keeps the last snapshot through a failed poll (`store/viewer.ts:106-107`). So a
  * missing slice means there has been no successful response *at all* — not that the last
  * one failed. That is why the third branch can be so specific: `snapshot()` puts every
- * key in every 200 (`viewer/api/scene.py:504-518`), so an answer arriving without one did
+ * key in every 200 (`viewer/api/scene.py:972-986`), so an answer arriving without one did
  * not come from this code, which in practice means a container older than the source.
  *
  * Not for a panel that fetches for itself. `tabs/TaskTab.tsx` has its own request and its

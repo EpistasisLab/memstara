@@ -12,7 +12,7 @@ now, done in a separate call with a separate set of tools.
 
 **The viewer still knows the retired name, and must keep knowing it**
 (`viewer/api/stores.py:153`). Hundreds of runs in the database are recorded against
-`memstara-board-curator`, and `viewer/api/scene.py:517` drops any row whose agent name the
+`memstara-board-curator`, and `viewer/api/scene.py:784` drops any row whose agent name the
 viewer does not recognise. Forget the name and that spend leaves the cost total with
 nothing on any screen to say so. So `DRAWN_AS` (`viewer/api/stores.py:277`) is now a
 compatibility layer rather than a drawing choice: it folds those historical rows into the

@@ -103,7 +103,7 @@ function TaskRow({
               #{task.task_id}
             </span>
             {/* A real retry, not the normal hand-off between stages — the API separates
-                the two for us (`viewer/api/scene.py:106-118`). */}
+                the two for us (`viewer/api/scene.py:146-158`). */}
             {task.retried > 0 && (
               <span
                 className={cn(
