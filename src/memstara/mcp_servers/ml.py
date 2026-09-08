@@ -100,12 +100,40 @@ def _make_model(engine: str) -> Any:
 
 
 def _importance(model: Any, X: pd.DataFrame, y: pd.Series) -> dict[str, float]:
-    """Extract per-column importance, whichever engine produced the model.
+    """Extract per-column importance, by whichever route the engine allows.
 
-    HistGradientBoosting has no ``feature_importances_``, so fall back to
-    permutation importance. Slower, but there are fewer than ten columns here, and
-    it yields a comparable quantity across engines. Permutation importance works
-    by shuffling one column's values and measuring how far performance drops.
+    **The two routes do not return the same quantity, and this function cannot make
+    them.** Which one ran is therefore part of the answer, not an implementation
+    detail — `train_and_score` returns the engine name alongside the numbers, and the
+    caller is expected to store it (`src/memstara/blackboard.py:305`).
+
+    The figures below come from calling `train_and_score` directly on the four
+    sub-datasets of run `merge_verify`, once per engine — no pipeline run, no model
+    call.
+
+    - ``feature_importances_`` — random_forest and xgboost carry it. Impurity decrease
+      or gain: non-negative, and summing to about 1 across the columns. random_forest
+      sums to exactly 1.0000 on all four.
+    - permutation importance — HistGradientBoosting has no ``feature_importances_``,
+      so shuffle one column's values and measure how far AUC drops. That drop **is**
+      the number: a different unit, on no fixed scale, and negative for a column
+      whose shuffling made the model look better. sklearn_hgb's maps sum to 0.0819
+      and 0.2572 on two of the four, with a minimum entry of -0.0131.
+
+    So two rows can only be compared column-by-column when they were produced by
+    engines on the same route. Ranking one engine's map against another's is reading
+    an AUC delta against a fraction of impurity.
+
+    Until 2026-09-08 this docstring claimed permutation "yields a comparable quantity
+    across engines". It does not, and could not: only HistGradientBoosting reaches
+    that branch, so the two routes never produce comparable numbers for the same
+    engine — they produce incomparable numbers for different ones. The same passage
+    called the permutation cost acceptable because "there are fewer than ten columns
+    here"; the four sub-datasets have 22, 18, 17 and 11 after one-hot encoding, and
+    permutation is most of sklearn_hgb's 2.9-6.3s per call against random_forest's
+    0.4-0.5s. It is still worth paying — a HistGradientBoosting model with no
+    importance at all is a result nobody can read — but it is not free and it is not
+    the same measurement.
     """
     if hasattr(model, "feature_importances_"):
         # If the model already carries them, use them as they are.
@@ -136,6 +164,11 @@ def train_and_score(path: str, y_column: str, test_size: float = 0.25, seed: int
     Returns:
         JSON with auc, feature_importance, n_train, n_test and model. Report the
         returned numbers as they stand; do not restate them approximately.
+
+        ``model`` is which engine ran, and it belongs with the numbers rather than
+        beside them: it is what says whether feature_importance is impurity/gain or a
+        drop in AUC. See ``_importance`` above. Pass it on unchanged — you did not
+        choose it and cannot, it is read from the environment here.
     """
     # The path check comes FIRST. Putting a security check behind an optional
     # dependency means it is skipped entirely wherever that package is absent,
