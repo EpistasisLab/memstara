@@ -124,10 +124,12 @@ FEED_LIMIT = 60
 # same reason as FEED_LIMIT — a referee that imports the player's answer sheet is not
 # refereeing. Fold the grouping on the API side without saying so here and check 7 fails.
 #
-# The screens disagree about this on purpose and both are right: the scene draws five
-# characters, and the cost table, the access map and the feed all still report six
-# agents. So check 7 below cannot ask whether the two name the same set — it asks
-# whether a name the feed used arrives somewhere on the floor.
+# `curator` is a retired stage: the pipeline stopped naming it on 2026-09-07 and the
+# question step became the hypothesis agent's other job. The entry stays because the
+# databases this file reads still hold hundreds of runs recorded against it, and this
+# file's whole purpose is to be right about the databases. Check 7 below therefore asks
+# whether a name the feed used **arrives somewhere** on the floor, not whether the two
+# sets are equal.
 DRAWN_AS = {"curator": "hypothesis"}
 
 # The feed's rows, computed independently of api/queries.py. Same three traps, expressed
@@ -321,16 +323,13 @@ def main() -> int:
     # while PLACES already held 6 and the pipeline already had six stages, so this line
     # was reporting a stale number rather than a real gap.)
     #
-    # **The two numbers differ, and that is the current truth rather than the old stale
-    # one.** Six stages come out of the pipeline and five characters stand on the floor:
-    # stores.DRAWN_AS draws the curator and the hypothesis stage as one, because they
-    # spend most of a run at the same shelf and the picture could not tell them apart.
-    # The curator is not gone, though **no screen names it any more**: the merged
-    # character is labelled plainly "Hypothesis", and since 2026-09-07 the cost table,
-    # the access map and the feed fold through it as well. This file is the place that
-    # still counts it separately, which is exactly why it reads the databases directly
-    # and never imports from `api/` — the checks below would be worth nothing if they
-    # asked the viewer whether the viewer was right.
+    # **The two numbers differ and both are right.** Six places, five characters: the
+    # pipeline has five board agents since 2026-09-07, and the sixth it used to have —
+    # the curator — is retired rather than deleted, so its runs are still in the database
+    # and still reach the floor through stores.DRAWN_AS. This file is the place that
+    # counts those runs under their own agent name, which is exactly why it reads the
+    # databases directly and never imports from `api/` — the checks below would be worth
+    # nothing if they asked the viewer whether the viewer was right.
     #
     # The leading digit in each label is the check group, not a count. Do not read
     # "6 characters" as an expected six.
@@ -386,8 +385,8 @@ def main() -> int:
         # `curator` and the fold below is an identity on everything it sees. It stays,
         # and deliberately: this file's job is to be right about the databases whatever
         # the API does with them, and the day the API stops folding is the day this line
-        # is the only thing standing between a curator call and a failed check that
-        # blames the wrong thing.
+        # is the only thing standing between a historical curator call and a failed check
+        # that blames the wrong thing.
         stages = {a["id"] for a in snap["scene"]["agents"]}
         named = {e["agent"] for e in feed if e["agent"] is not None}
         strays = {DRAWN_AS.get(a, a) for a in named} - stages

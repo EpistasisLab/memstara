@@ -274,7 +274,7 @@ async def _ensure_agent_from_file(name: str, prompt: str, **kwargs: Any) -> Any:
 
     Args:
         name: The agent's name, from `AGENT_NAMES` or `BOARD_AGENT_NAMES`.
-        prompt: Path under `PROMPTS_DIR` without the suffix — "board/curator".
+        prompt: Path under `PROMPTS_DIR` without the suffix — "board/hypothesis".
         **kwargs: Passed straight through; `model_config` and `pattern_config` in
             practice.
 
@@ -342,17 +342,34 @@ async def provision_all(
 # word — the data and ml stages are no more free to think for themselves than before.
 # Only the fetching and the writing are new.
 
-# The **six** agents of the board path. Two more than the 02 path — `report`, which
-# reads the results table at the end and writes the account, and `curator`, which
-# stands at the very front and **decides what gets asked.** Why the curator is first:
-# the questions used to be the 20 PERSPECTIVES hardcoded above, and that list did not
-# line up with the subjects the knowledge-source corpus actually holds.
+# The **five** agents of the board path. One more than the 02 path — `report`, which
+# reads the results table at the end and writes the account.
+#
+# **Writing the questions is the hypothesis agent's other job, not a sixth agent.**
+# There used to be a `curator` here, standing at the very front and deciding what gets
+# asked. Deciding what to ask and then answering it are two moments of one person's
+# work, and splitting them into two agents bought nothing that separate *calls* do not
+# buy already: `call_agent` takes the agent id and the tool list as separate arguments
+# (`src/memstara/pipeline/board.py:486-494`), so the same agent is handed
+# QUESTION_TOOLS below when it writes and BOARD_TOOLS["hypothesis"] when it answers,
+# and a tool absent from a call cannot be reached however the prompt is worded. What
+# the two stages were separating is still separated, mechanically, one layer down.
+#
+# What did NOT move: the reason the questions are grounded in the corpus at all. They
+# used to be the 20 PERSPECTIVES hardcoded above, and that list did not line up with
+# the subjects the knowledge-source corpus actually holds.
+#
+# **The `memstara-board-curator` agent record in motoro is left where it is.** It is
+# not in this dict any more, so nothing provisions or calls it, but hundreds of past
+# runs are recorded against it and `_ensure_agent` finds an agent by *name* (:234-269).
+# Renaming or deleting it would cut those runs loose from the agent that did them, and
+# `viewer/api/stores.py` keeps the name explicitly so the viewer's cost totals still
+# include them.
 #
 # The names are prefixed with `board-` to keep them apart from the 02 path's. Under the
 # same names the two paths would share one agent, and editing one path's prompt would
 # quietly change the other.
 BOARD_AGENT_NAMES = {
-    "curator": "memstara-board-curator",
     "hypothesis": "memstara-board-hypothesis",
     "data": "memstara-board-data",
     "ml": "memstara-board-ml",
@@ -379,21 +396,23 @@ BOARD_TOOLS = {
     # agent (see run_one_trial). `describe_matcher` is deliberately not here: it
     # reports cache paths and versions, which is a fact about this machine and not
     # about the cohort.
-    # The curator writes the questions the hypothesis stage is then asked. It gets
-    # `read_results` and the hypothesis stage does not: that is the whole feedback
-    # path, and putting it here rather than there keeps the hypothesis stage's contract
-    # intact (one perspective in, one hypothesis out) while still letting a wave learn
-    # from the one before it. `record_question_outcomes` is deliberately absent — it is
-    # bookkeeping about a wave having ended, which the driver knows and no agent does.
-    "curator": {"okf_list_domains", "okf_search", "okf_read",
-                "read_questions", "read_results", "propose_questions"},
     # `claim_question` is the one thing this stage takes rather than makes. It is not a
     # softening of the rule below — the stage still claims no *task*, and it is still the
     # only stage that puts work on the board. What it claims is the question it sets out
     # from, which stops two hypothesis workers of one wave both investigating the newest
-    # question in the bank. `read_questions` stays with the curator: this stage is handed
-    # one question, and a stage that can read the whole bank is a stage that can pick a
-    # second one for itself.
+    # question in the bank.
+    #
+    # Three tools are deliberately absent here and present in QUESTION_TOOLS below, and
+    # the split is the *only* thing keeping the two jobs apart now that one agent does
+    # both. `read_results` is the entire feedback path: withheld here, the contract of
+    # answering a question stays what it was (one question in, one hypothesis out) while
+    # a wave can still learn from the one before it — at the moment it is writing, not at
+    # the moment it is answering. `read_questions` likewise: this call is handed exactly
+    # one question, and a call that can read the whole bank is a call that can pick a
+    # second one for itself. And `propose_questions` is absent so that a worker part way
+    # through the corpus cannot notice a promising column and write itself the question
+    # that column answers — which is the failure the note above about tracing a result
+    # back to whose judgement produced it is about.
     "hypothesis": {"okf_list_domains", "okf_search", "okf_read", "describe_dataset",
                    "match_concepts", "match_concept", "claim_question", "create_task"},
     "data": {"describe_dataset", "slice_columns", "claim_task", "submit_result"},
@@ -419,7 +438,6 @@ BOARD_TOOLS = {
 # Which servers may be reached **at all.** Together with BOARD_TOOLS above this filters
 # in two layers: narrowed once by server, then narrowed again by tool name within it.
 BOARD_SERVERS = {
-    "curator": {"okf", "memstara-blackboard"},
     "hypothesis": {"okf", "memstara-data", "memstara-blackboard", "semantic-matcher"},
     "data": {"memstara-data", "memstara-blackboard"},
     "ml": {"memstara-ml", "memstara-blackboard"},
@@ -427,11 +445,31 @@ BOARD_SERVERS = {
     "report": {"okf", "memstara-blackboard"},
 }
 
+# The hypothesis agent's **other job**: writing the wave's questions before anybody
+# answers them. This is not a stage. There is no agent of this name, nothing is drawn
+# for it, and no run is recorded against it — it exists as its own pair of constants
+# only because the permission is per *call* rather than per agent, and one agent that
+# does two jobs therefore needs two tool lists.
+#
+# It is deliberately kept out of BOARD_TOOLS / BOARD_SERVERS rather than added as a
+# sixth key. Those two tables are read as "one entry per agent" by everything that
+# consumes them — `board.py`'s `by_stage` loop, and `viewer/check_definitions.py:139`,
+# which takes their key set to *be* the set of stages and reports anything else as an
+# error. A sixth key would make that checker call a job an agent.
+#
+# Compared against BOARD_TOOLS["hypothesis"]: `read_questions`, `read_results` and
+# `propose_questions` are here and not there; `describe_dataset`, the two matcher tools,
+# `claim_question` and `create_task` are there and not here. The comment on the
+# hypothesis entry above says why each way round.
+QUESTION_TOOLS = {"okf_list_domains", "okf_search", "okf_read",
+                  "read_questions", "read_results", "propose_questions"}
+QUESTION_SERVERS = {"okf", "memstara-blackboard"}
+
 
 async def provision_board_agents(
     *, provider: str = "azure_foundry", model: str = "claude-sonnet-4-6"
 ) -> dict[str, uuid.UUID]:
-    """Create the six board-driven agents (or find the existing ones).
+    """Create the five board-driven agents (or find the existing ones).
 
     What each stage is, and what it must do first, is one file per stage under
     `src/memstara/prompts/board/`, named for its key in `BOARD_AGENT_NAMES`.
@@ -464,13 +502,7 @@ async def provision_board_agents(
         BOARD_AGENT_NAMES["report"], "board/report",
         model_config=mc, pattern_config=react,
     )
-    curator = await _ensure_agent_from_file(
-        BOARD_AGENT_NAMES["curator"], "board/curator",
-        model_config=mc, pattern_config=react,
-    )
-
     return {
-        "curator": curator.id,
         "hypothesis": hypothesis.id,
         "data": data.id,
         "ml": ml.id,

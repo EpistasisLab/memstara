@@ -145,7 +145,7 @@ def load_prompt(name: str) -> dict[str, str]:
     """Read one agent's prompt.
 
     Args:
-        name: Path under `PROMPTS_DIR` without the suffix — ``"board/curator"``,
+        name: Path under `PROMPTS_DIR` without the suffix — ``"board/hypothesis"``,
             ``"mvp/hypothesis"``.
 
     Returns:
@@ -193,7 +193,7 @@ def prompt_digest(name: str) -> dict[str, str]:
     both of which are the truth about that edit.
 
     Args:
-        name: The same path `load_prompt` takes — ``"board/curator"``.
+        name: The same path `load_prompt` takes — ``"board/hypothesis"``.
 
     Returns:
         ``{"goal": <hex>, "system_prompt": <hex>}``.

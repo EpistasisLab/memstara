@@ -17,21 +17,20 @@ import type { SceneAgent, StageId } from "../types";
 /**
  * The order work actually runs in, and the only place the frontend states it.
  *
- * It mirrors `viewer/api/stores.py:177-183` (`HOME`), whose comment says the same thing —
+ * It mirrors `viewer/api/stores.py:233-239` (`HOME`), whose comment says the same thing —
  * "in the order the pipeline runs them". Read from the snapshot's agent array instead,
  * the order would be whatever the API's dict iteration happened to give, which is right
  * today by accident rather than by contract.
  *
- * **Five cards for six stages.** The curator is not here because it is not drawn as a
- * character of its own: `viewer/api/stores.py:223` (`DRAWN_AS`) folds it into the
- * hypothesis stage, and the merged card is labelled plainly "Hypothesis". The fold is
- * not only this picture — `stores.reported_as` carries it into the cost table, the
- * access map and the feed as well, so no screen the frontend draws names the curator.
- * The stage itself is untouched: the pipeline still runs it, core still records it
- * separately, and `viewer/verify.py` reads it unfolded. This array is about who gets a
- * box drawn, nothing more. It has to agree with the backend, because `ChainPanel`
- * compares its length against the agents the API sent and reports a shortfall as an
- * error.
+ * **Five cards for the pipeline's five stages.** There is a sixth stage key, `curator`,
+ * and it is deliberately absent: the pipeline retired it on 2026-09-07, when writing the
+ * wave's questions became the hypothesis agent's other job. Runs made before that are
+ * still in the database, and `viewer/api/stores.py` (`DRAWN_AS`) folds them into the
+ * hypothesis stage so they still appear; `stores.reported_as` carries the same fold into
+ * the cost table, the access map and the feed, so no screen the frontend draws names the
+ * curator. This array is about who gets a box drawn, nothing more. It has to agree with
+ * the backend, because `ChainPanel` compares its length against the agents the API sent
+ * and reports a shortfall as an error.
  */
 export const CHAIN: StageId[] = [
   "hypothesis",

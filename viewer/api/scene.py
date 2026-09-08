@@ -312,16 +312,17 @@ def _carrying(touches: list[dict[str, Any]]) -> dict[str, int]:
 def _members_of_each_character() -> dict[str, list[str]]:
     # Which real stages each character on the floor stands for.
     #
-    # Six stages come out of the pipeline and five characters stand on the floor,
-    # because `stores.DRAWN_AS` draws the curator and the hypothesis stage as one — they
-    # spend most of a run at the same shelf and the picture cannot tell them apart. This
-    # is a **grouping for the drawing only**; the stages, agents and tool grants are
-    # untouched, and `_agent_totals`, `_access` and `_feed` below still report six.
+    # Five stages come out of the pipeline and five characters stand on the floor, so
+    # for anything run since 2026-09-07 this is an identity. It is not dead code: the
+    # retired `curator` stage still reaches the floor through `stores.DRAWN_AS`, which
+    # is the only route by which a run recorded against `memstara-board-curator` gets
+    # drawn at all. See `stores.LEGACY_BOARD_AGENT_NAMES`.
     #
-    # Read off `BOARD_TOOLS` rather than written out, so a stage added to the pipeline
-    # arrives here by itself instead of going missing until somebody notices.
+    # Read off `BOARD_AGENT_NAMES_ANY` rather than written out, so a stage added to the
+    # pipeline arrives here by itself instead of going missing until somebody notices —
+    # and a stage *retired* from it stays, which `BOARD_TOOLS` would not give us.
     members: dict[str, list[str]] = {character: [] for character in stores.HOME}
-    for stage in stores.BOARD_TOOLS:
+    for stage in stores.BOARD_AGENT_NAMES_ANY:
         members.setdefault(stores.drawn_as(stage), []).append(stage)
     return members
 
@@ -357,14 +358,16 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
         # The character's own name, and only its own: a merged character is labelled for
         # the stage it is drawn as, not for every stage folded into it. The loop walks
         # `HOME`, which has five keys, so a folded-away stage is never looked up here —
-        # `AGENT_LABELS` still holds all six because `check_definitions.py:142` requires a
-        # label per stage, not because anything on screen reads the sixth.
+        # `AGENT_LABELS` still holds the retired `curator` because
+        # `check_definitions.py:154` requires a label for every stage the viewer knows,
+        # not because anything on screen reads it.
         label = stores.AGENT_LABELS.get(stage, stage)
         mine = members.get(stage, [stage])
 
-        # Both members can be busy at once — the curator can be writing wave n+1's
-        # questions while a hypothesis worker is still on wave n — so pick the run that
-        # started most recently: that is what the character is doing *now*.
+        # Both members can be busy at once — on a pre-2026-09-07 run the curator could
+        # be writing wave n+1's questions while a hypothesis worker was still on wave n —
+        # so pick the run that started most recently: that is what the character is doing
+        # *now*. A single-member character takes the same branch and gets its own run.
         running = [(open_by_stage[s], s) for s in mine if s in open_by_stage]
         run, run_stage = (
             max(running, key=lambda pair: pair[0]["created_at"]) if running else (None, None)
@@ -402,12 +405,13 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
             state, at = "idle", None
 
         # `name` is the agent that produced the state just settled, not the character's
-        # own — so a merged character says `memstara-board-curator` while the curator is
-        # the one running. Which of the two is working is still readable from the card.
+        # own — so replaying a pre-2026-09-07 run, the merged character says
+        # `memstara-board-curator` while that agent is the one running, and which of the
+        # two is working stays readable from the card.
         agents.append({
             "id": stage,
             "label": label,
-            "name": stores.BOARD_AGENT_NAMES.get(run_stage or last_stage or stage, stage),
+            "name": stores.BOARD_AGENT_NAMES_ANY.get(run_stage or last_stage or stage, stage),
             "state": state,
             "at": at,
             "home": stores.HOME[stage],
@@ -418,11 +422,18 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
                 "server": last["server"], "tool": last["tool"],
                 "store": stores.store_of(last["tool"]), "at": _iso(last["started_at"]),
             },
-            "windows": sorted({t for s in mine for t in stores.BOARD_TOOLS.get(s, set())}),
+            "windows": sorted({t for s in mine for t in stores.STAGE_WINDOWS.get(s, set())}),
             # The list of windows this character can open — the **union** over the stages
             # it stands for, because a merged character really can open all of them. A
             # set has no order, so left alone the order shifts on every refresh and the
             # screen flickers. Hence the sort.
+            #
+            # `STAGE_WINDOWS` and not `BOARD_TOOLS`: the latter is what one *call* may
+            # hold, and the hypothesis agent has two calls with two different lists
+            # (`stores.STAGE_WINDOWS`). Reading BOARD_TOOLS here would drop
+            # `read_questions`, `read_results` and `propose_questions` from the card
+            # while `BOARD_WINDOWS` still names Hypothesis as their holder — two screens
+            # disagreeing, with neither saying so.
         })
 
     # flashes below: the calls of the last few seconds = **the lines that will flash**

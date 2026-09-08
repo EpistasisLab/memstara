@@ -169,6 +169,8 @@ from memstara.pipeline.core import (
     BOARD_AGENT_NAMES,       # stage -> the durable agent's name in motoro's database
     BOARD_SERVERS,           # the tool servers each stage is allowed to reach
     BOARD_TOOLS,             # the individual tool names each stage is allowed
+    QUESTION_SERVERS,        # ...and the same two, for the hypothesis agent's other job
+    QUESTION_TOOLS,          # (writing the wave's questions). Not a stage — see core.py
     perspective_for,         # trial number -> perspective wording
     provision_board_agents,  # creates or fetches the five agents
     temperature_for,         # trial number -> temperature
@@ -952,20 +954,27 @@ async def questions_for_wave(
     want: int,
     skill: str = "",
 ) -> tuple[list[dict[str, Any]], bool]:
-    """Ask the curator for this wave's questions, then read back what it banked.
+    """Ask for this wave's questions, then read back what was banked.
 
-    Read back rather than trust the return value: the curator answers in prose, and
+    The agent called here is the **hypothesis agent**, doing the other of its two jobs.
+    It is handed `by_stage["question"]` rather than `by_stage["hypothesis"]`, and that
+    difference is the whole separation: this call cannot reach `create_task`, so it
+    cannot answer its own question, and the answering call cannot reach
+    `propose_questions`, so it cannot write itself an easier one
+    (`src/memstara/pipeline/core.py:448-466`).
+
+    Read back rather than trust the return value: the agent answers in prose, and
     what matters is what actually landed in the bank. propose_questions is also the
     only thing that can reject a question, so its verdict is the one to read.
 
-    Returns fewer than `want` without complaint. A curator that can only ground three
+    Returns fewer than `want` without complaint. A wave that can only ground three
     questions in the corpus should propose three; padding to a target is exactly the
     habit that produced questions nothing could answer.
 
     Returns:
         ``(rows, recycled)``. `rows` is bank entries, newest first, at most `want`; an
         empty list means the caller should fall back to the built-in perspective list.
-        `recycled` is True when the curator produced nothing new and this wave is about
+        `recycled` is True when the call produced nothing new and this wave is about
         to re-run questions the bank already had — the caller decides what that means.
         It is returned rather than only printed because the run is otherwise unable to
         tell "investigated something new" from "investigated the same thing again".
@@ -973,7 +982,13 @@ async def questions_for_wave(
     before = await call_board_tool(registry, "read_questions", {"status": "open", "limit": 200})
     known = {q["question_id"] for q in (before or {}).get("questions", [])}
 
+    # The first sentence says which of the agent's two jobs this call is. Its system
+    # prompt describes both, so without it the agent has to infer from the tools it was
+    # handed which half of its own instructions applies — and inferring is exactly what
+    # the per-call message exists to make unnecessary.
     ask = (
+        "This call is the question-writing half of your work: decide what gets asked, "
+        "and do not investigate anything. "
         f"Propose {want} question(s) for wave {wave} of run '{run_tag}'. "
         f"Call propose_questions once, with origin_run='{run_tag}' and origin_wave={wave}. "
     )
@@ -983,7 +998,7 @@ async def questions_for_wave(
         else f"Call read_results with run_tag='{run_tag}' first and let those results "
              "decide what is worth asking next."
     )
-    # The curator is the first agent to touch the corpus, and under a skill it is
+    # This is the first call of the wave to touch the corpus, and under a skill it is
     # reading one branch of it. Left unsaid, "work from the corpus" asks it to ground
     # questions in what looks like a very small literature, and the reasonable response
     # to that is to search wider — which the server will refuse, call after call.
@@ -993,17 +1008,22 @@ async def questions_for_wave(
             f"return that branch and nothing else, so ask what that branch can answer."
         )
     try:
-        # Neither half of what call_agent returns is wanted here. What the curator did is
+        # Neither half of what call_agent returns is wanted here. What the call did is
         # read back off the bank below, not taken from what it said — that is the whole
         # point of the docstring above.
+        #
+        # `stage=` is the console and trace label only (`:502-503`); the run is recorded
+        # against the agent id. "question" rather than the agent's own name because the
+        # label's job is to say which of the two jobs a line is about, and the Log panel
+        # is the one place a reader sees these strings.
         await call_agent(
-            agents["curator"], ask,
-            tools=by_stage["curator"], registry=registry, stage=f"curator{wave}",
+            agents["hypothesis"], ask,
+            tools=by_stage["question"], registry=registry, stage=f"question{wave}",
         )
     except Exception as e:  # noqa: BLE001 - the fallback below is the point
-        note(f"(the curator failed: {type(e).__name__} — going with the built-in "
+        note(f"(the question step failed: {type(e).__name__} — going with the built-in "
              "perspective list)")
-        # Not recycling: a curator that crashed says nothing about whether the corpus
+        # Not recycling: a call that crashed says nothing about whether the corpus
         # still has questions in it. Those are different situations with different fixes.
         return [], False
 
@@ -1011,7 +1031,7 @@ async def questions_for_wave(
     rows = (after or {}).get("questions", [])
     fresh = [q for q in rows if q["question_id"] not in known]
 
-    # Falling back to already-banked questions when the curator only produced duplicates
+    # Falling back to already-banked questions when the call only produced duplicates
     # keeps the wave running, and a repeat of a known question is still grounded in the
     # corpus — which the built-in list is not.
     #
@@ -1178,14 +1198,27 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             stage: tools_for(registry, BOARD_SERVERS[stage], only=BOARD_TOOLS[stage])
             for stage in BOARD_TOOLS
         }
+        # `question` is not a sixth person — it is the hypothesis agent's other set of
+        # buttons, handed to it when it is writing the wave's questions instead of
+        # answering one (`src/memstara/pipeline/core.py:448-466`). It is a separate entry
+        # here because the buttons are handed out per call, and this is the table the
+        # calls read from.
+        by_stage["question"] = tools_for(
+            registry, QUESTION_SERVERS, only=QUESTION_TOOLS,
+        )
         # Print who got what. Later it can be confirmed from the log alone.
         step("(3)", "decide who gets which button", "cut them off from other people's work")
-        _ROLE = {"hypothesis": "hypothesis agent", "data": "data agent", "ml": "ml agent",
-                 "interpreter": "interpreter agent", "report": "report agent"}
+        _ROLE = {"hypothesis": "hypothesis agent (answering)", "data": "data agent",
+                 "ml": "ml agent", "interpreter": "interpreter agent",
+                 "report": "report agent", "question": "hypothesis agent (asking)"}
         for stage, ts in by_stage.items():
             names = sorted(x["tool_name"] for x in ts)
-            print(f"   {_ROLE.get(stage, stage):<18} {len(names)}  {' · '.join(names)}")
-        done("(3)", f"handed out to {len(by_stage)}")
+            print(f"   {_ROLE.get(stage, stage):<30} {len(names)}  {' · '.join(names)}")
+        # Sets of buttons, not people. There are more sets than agents because the
+        # hypothesis agent gets two, and saying "handed out to 6" about 5 agents is the
+        # kind of number someone would later quote.
+        done("(3)", f"{len(by_stage)} sets of buttons for "
+                    f"{len(BOARD_TOOLS)} agents")
 
         # -- report only ------------------------------------------------
         # -- the path that does only (6) (--report-only) ------------------
@@ -1219,7 +1252,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         # The wave boundary is what makes feedback possible at all. Seeding every trial
         # up front means the questions are all written before a single result exists,
         # so nothing any trial finds can affect what gets asked. A wave ends with
-        # results on the table, and the next wave's curator reads them.
+        # results on the table, and the next wave's question step reads them.
         #
         # Trial numbers that were seeded but left nothing on the board. They accumulate
         # across waves, and at the end they are handed to the report agent too.
@@ -1256,7 +1289,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             recycled = False
             if not args.no_curator:
                 step("(3')", "decide what to ask",
-                     "the curator reads the corpus"
+                     "the question step reads the corpus"
                      + ("" if wave == 0 else " and the previous wave's results")
                      + f" and makes {args.trials} questions")
                 questions, recycled = await questions_for_wave(
@@ -1271,10 +1304,10 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
 
             # -- stop when it runs dry -----------------------------------
             #
-            # Two consecutive dry waves, not one. A curator LLM can come back
+            # Two consecutive dry waves, not one. The question step can come back
             # empty-handed once by mistake, and that is not the same thing as a corpus
             # with nothing left in it. The break happens *before* seeding, so a run that
-            # has run dry pays for one more curator call and not for a whole wave of
+            # has run dry pays for one more question call and not for a whole wave of
             # trials it has already done.
             dry_streak = dry_streak + 1 if recycled else 0
             if args.stop_after_dry and dry_streak >= args.stop_after_dry:
@@ -1284,13 +1317,13 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 break
             waves_run += 1
 
-            # If the curator was switched off or failed, fall back to the perspective list
-            # hard-coded here. It is a list that does not line up with the corpus, but that
+            # If question generation was switched off or failed, fall back to the
+            # perspective list hard-coded here. It is a list that does not line up with the corpus, but that
             # is better than the run stopping.
             if not questions:
                 questions = [{"question_id": 0, "text": perspective_for(base + k)}
                              for k in range(args.trials)]
-            # Counted here rather than as waves × trials: the curator is allowed to
+            # Counted here rather than as waves × trials: the question step is allowed to
             # ground fewer questions than asked for, and the loop above is allowed to
             # stop early. Both make the multiplication a number no run actually seeded.
             seeded_total += len(questions)
@@ -1316,9 +1349,9 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             #   from the bank  — the worker calls claim_question and is handed one. The
             #       bank row records who took it, so two workers cannot set out from one
             #       question even if this driver is not the only thing reading the bank.
-            #   the fallback   — the curator grounded nothing (questions_for_wave returned
-            #       empty) and these perspectives are not in the bank at all, so there is
-            #       nothing to claim. Worker k is handed perspectives[k] directly, which
+            #   the fallback   — the question step grounded nothing (questions_for_wave
+            #       returned empty) and these perspectives are not in the bank at all,
+            #       so there is nothing to claim. Worker k is handed perspectives[k] directly, which
             #       is distinct by construction because the driver deals them out itself.
             #
             # The fallback keeps the old prompt exactly. It is the degraded path and it
@@ -1348,8 +1381,14 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 """Call one hypothesis worker and attach what its matcher calls saw."""
                 text = q["text"]
                 wid = f"hypothesis#{i}"
+                # Both branches open by naming which of the agent's two jobs this is —
+                # the counterpart of the sentence in `questions_for_wave`. The system
+                # prompt covers writing questions as well as answering them, so a call
+                # that does not say which it is leaves the agent to guess.
                 if from_bank:
                     ask = (
+                        f"This call is the answering half of your work: investigate the "
+                        f"question you are handed and put the work on the board. "
                         f"You are worker '{wid}'. Call claim_question with "
                         f"run_tag='{args.run_tag}' and worker='{wid}' to be given your "
                         f"question; if it hands you nothing, stop. The outcome column is "
@@ -1363,6 +1402,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                     # question_id travels with the task so a finished result can be traced
                     # back to what was asked. 0 means the fallback list was used.
                     ask = (
+                        f"This call is the answering half of your work: investigate the "
+                        f"question below and put the work on the board. "
                         f"The outcome column is '{args.y_column}'. Choose the columns that will predict it, "
                         f"{text}. Then put the task on the board with "
                         f"run_tag='{args.run_tag}', trial={i}, perspective='{text}', "
@@ -1595,8 +1636,9 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
 
             # -- (6') write this wave's score into the question bank ------
             #
-            # Has to be here, not after the last wave: the next wave's curator reads the
-            # bank, so a score written after the loop is a score no question ever used.
+            # Has to be here, not after the last wave: the next wave's question step
+            # reads the bank, so a score written after the loop is a score no question
+            # ever used.
             try:
                 folded = await call_board_tool(
                     registry, "record_question_outcomes", {"run_tag": args.run_tag})
@@ -1803,10 +1845,14 @@ async def main() -> int:
                          "target — see --stop-after-dry")
     ap.add_argument("--stop-after-dry", type=int, default=2,
                     help="stop early after this many consecutive waves in which the "
-                         "curator produced no new question, so the wave would only "
+                         "question step produced no new question, so the wave would only "
                          "re-run ones already banked. 0 never stops early (default 2)")
+    # Kept under this name although there is no curator agent any more: it is an
+    # argument people already type and its meaning has not changed. Renaming it would
+    # break every saved command line to make a flag agree with an implementation detail.
     ap.add_argument("--no-curator", action="store_true",
-                    help="skip question generation and use the built-in perspective list")
+                    help="skip the question-writing call and use the built-in "
+                         "perspective list instead")
     ap.add_argument("--y-column", default="outcome")
     # The user's chosen skill: one branch of the knowledge bundle, named the way the
     # bundle files it. This flag does not ask the agents to stay inside it — it sets
