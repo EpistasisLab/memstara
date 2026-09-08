@@ -246,7 +246,7 @@ knowledge source and column names in the dataset, so the example reproduces it o
 | `--provider` | `azure_foundry` | `anthropic` · `azure_foundry` · `openai` |
 | `--model` | `claude-sonnet-4-6` | model id |
 | `--data-agents` `--ml-agents` `--interpret-agents` | 1 | how many workers of that stage claim from the board at once. **The floor plan draws each of these as one character however many run** — the count rides on the figure as a badge (`viewer/api/stores.py`, `SPLITTABLE`) |
-| `--hypothesis-agents` | 1 | how many seed the board at once; each claims its own question. **The one stage drawn as a figure per worker**, stacked, each with an arrow to the data character. The floor plan is laid out for up to 3; there is no cap in the code, and past 3 the run is fine and the picture is crowded |
+| `--hypothesis-agents` | 1 | how many seed the board at once; each claims its own question. **The one stage drawn as a figure per worker**, stacked, each with an arrow to the data character. The floor plan is laid out for up to 3; there is no cap here, and past 3 the run is fine and the picture is crowded. The *browser* does cap it at 3 (`src/memstara/control/request.py`, `_MAX_HYPOTHESIS_AGENTS`) — the limit belongs to the drawing, so it lives where the drawing's requests are checked and not in this driver |
 | `--max-attempts` | 5 | give up on a task after this many extra returns, mark it failed, go on; 0 retries forever |
 | `--stale-after` | 600 | seconds a task may sit `in_progress` before it is presumed abandoned |
 | `--run-tag` | — | names this run on the board |

@@ -13,7 +13,7 @@ import { POLL_MS } from "../store/viewer";
  *
  * Three things it is deliberately not:
  *
- *  - **Not a full command line.** Six fields, the same six the service accepts, and
+ *  - **Not a full command line.** Seven fields, the same seven the service accepts, and
  *    three of them behind a disclosure because nobody changes the provider twice a day.
  *    Everything else `board.py` takes is still there for whoever runs it by hand.
  *  - **Not a validator.** The service refuses a bad request and says why in words; this
@@ -161,6 +161,16 @@ export default function StartRun() {
           <div className="flex gap-2">
             <Number_ label="Trials" value={form.trials} onChange={(v) => set("trials", v)} />
             <Number_ label="Waves" value={form.waves} onChange={(v) => set("waves", v)} />
+            {/* The one stage count on this form, and the reason it is here at all: until
+                this field existed, "expandable to three hypothesis agents" was true of the
+                drawing and false of the button — a browser could only ever start one, and
+                two meant going to the command line. The other three stages were fixed at
+                one each by the same meeting and are deliberately not offered. */}
+            <Number_
+              label="Hypothesis"
+              value={form.hypothesis_agents}
+              onChange={(v) => set("hypothesis_agents", v)}
+            />
           </div>
 
           <details className="text-[11px]">

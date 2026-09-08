@@ -31,12 +31,22 @@ export interface RunningRun {
   started: string;
 }
 
-/** The six fields a run takes. The same names the service's allow-list uses, so a typo
+/** The seven fields a run takes. The same names the service's allow-list uses, so a typo
  *  here comes back as a 400 naming the field rather than being silently dropped. */
 export interface RunRequest {
   skill: string;
   trials: number;
   waves: number;
+  /** How many hypothesis workers seed the board at once, and **the only stage count on
+   *  this form**. The meeting of 2026-08-26 fixed one data, one ml and one interpreter
+   *  for V1, so those three are not offered here; they are still free on the command
+   *  line, where whatever number results is drawn as one character with the count on it.
+   *
+   *  The ceiling of 3 is not enforced here. `src/memstara/control/request.py` holds it,
+   *  and this form is deliberately not a validator — a 4 comes back as the service's own
+   *  sentence naming the field, which is one place deciding what a legal request is
+   *  instead of two. */
+  hypothesis_agents: number;
   y_column: string;
   provider: string;
   model: string;
@@ -59,6 +69,7 @@ export const DEFAULT_REQUEST: RunRequest = {
   skill: "",
   trials: 3,
   waves: 1,
+  hypothesis_agents: 1,
   y_column: "HIV_DETECTABLE",
   provider: "azure_foundry",
   model: "claude-sonnet-4-6",

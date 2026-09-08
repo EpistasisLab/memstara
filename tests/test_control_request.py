@@ -39,9 +39,9 @@ def flags(argv: list[str]) -> dict[str, str]:
 def test_an_empty_body_is_the_default_run():
     """A form nobody touched starts what the CLI with no flags would start."""
     got = flags(build_argv({}, OFFERED))
-    assert got == {"--trials": "3", "--waves": "1", "--y-column": "outcome",
-                   "--provider": "azure_foundry", "--model": "claude-sonnet-4-6",
-                   "--skill": ""}
+    assert got == {"--trials": "3", "--waves": "1", "--hypothesis-agents": "1",
+                   "--y-column": "outcome", "--provider": "azure_foundry",
+                   "--model": "claude-sonnet-4-6", "--skill": ""}
 
 
 def test_the_skill_is_always_passed_even_when_empty():
@@ -119,6 +119,31 @@ def test_a_number_written_as_text_is_refused():
 
 
 # --------------------------------------------------------------------------- #
+#  The one place three is a limit
+# --------------------------------------------------------------------------- #
+
+
+def test_three_hypothesis_agents_is_accepted():
+    """The number the meeting of 2026-08-26 named as the screen's ceiling. It has to be
+    reachable from the form, or the ceiling is a floor of one."""
+    assert flags(build_argv({"hypothesis_agents": 3}, OFFERED))["--hypothesis-agents"] == "3"
+
+
+def test_a_fourth_hypothesis_agent_is_refused_with_the_ceiling_named():
+    """Refused **here** and not in `board.py`, where the flag is uncapped on purpose. The
+    limit is the floor plan's, so it is checked where the floor plan's requests arrive."""
+    with pytest.raises(ValueError, match="hypothesis_agents must be between 1 and 3"):
+        build_argv({"hypothesis_agents": 4}, OFFERED)
+
+
+def test_zero_hypothesis_agents_is_refused():
+    """`board.py` refuses it too (`ap.error`, `board.py:1948-1952`), twenty seconds and a
+    provisioned run later. Same answer, sooner."""
+    with pytest.raises(ValueError, match="between 1 and 3"):
+        build_argv({"hypothesis_agents": 0}, OFFERED)
+
+
+# --------------------------------------------------------------------------- #
 #  The rest of the fields
 # --------------------------------------------------------------------------- #
 
@@ -151,13 +176,24 @@ def test_surrounding_whitespace_is_forgiven():
 
 
 def board_argument(flag: str) -> str:
-    """The one `add_argument` line in `board.py` that declares *flag*.
+    """The whole `add_argument` call in `board.py` that declares *flag*.
 
     The source is read as text rather than imported: `board.py` pulls in asyncpg,
     litellm and motoro, none of which a CI runner has.
+
+    Matched across newlines rather than line by line. Half of `board.py`'s flags put the
+    name on the line after `ap.add_argument(` — `--hypothesis-agents` and `--skill` both
+    do — and a line-by-line search finds nothing for those, which is a test that passes
+    by never looking rather than by agreeing.
     """
     source = (REPO_ROOT / "src/memstara/pipeline/board.py").read_text(encoding="utf-8")
-    return next(ln for ln in source.splitlines() if f'add_argument("{flag}"' in ln)
+    # One level of nesting is allowed for, which covers the `choices=[...]` and the
+    # parenthesised asides inside help strings. No flag here nests deeper than that.
+    call = re.search(
+        r"add_argument\(\s*\"" + re.escape(flag) + r"\"(?:[^()]|\([^()]*\))*\)", source
+    )
+    assert call, f"board.py has no add_argument for {flag}"
+    return call.group(0)
 
 
 def test_the_providers_are_the_ones_board_py_accepts():
@@ -175,6 +211,7 @@ def test_the_defaults_are_board_pys_defaults():
     """A form nobody touched must start the run the CLI would, which is only true while
     the two lists of defaults agree."""
     for flag, key in (("--trials", "trials"), ("--waves", "waves"),
+                      ("--hypothesis-agents", "hypothesis_agents"),
                       ("--y-column", "y_column"), ("--provider", "provider"),
                       ("--model", "model")):
         line = board_argument(flag)

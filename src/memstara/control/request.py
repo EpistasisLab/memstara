@@ -2,7 +2,7 @@
 
 This module turns one JSON object into the argument list for
 `python -m memstara.pipeline.board`. It is the whole of the boundary between a
-browser and a process on this machine, so it is written as an allow-list: six keys,
+browser and a process on this machine, so it is written as an allow-list: seven keys,
 each with a type and a range, and **an unknown key is an error rather than a key that
 is ignored.** Silently dropping a field means a run that is not the one that was asked
 for — the same reasoning the prompt loader gives for refusing unknown front matter
@@ -49,12 +49,32 @@ _MODEL = re.compile(r"[A-Za-z0-9._:/-]{1,120}\Z")
 _MAX_TRIALS = 20
 _MAX_WAVES = 10
 
+#: **The only place three is a limit.** The meeting of 2026-08-26 scoped V1 to one or two
+#: hypothesis agents with the screen expandable to three, and the floor plan was laid out
+#: to that: the figures stack upwards from a row of five stations and the space above the
+#: row runs out somewhere past three.
+#:
+#: `board.py` deliberately does **not** cap `--hypothesis-agents`
+#: (`src/memstara/pipeline/board.py:1930-1933`), because a cap in the driver stops an
+#: experiment, and a run of three worked on 2026-09-08. Both statements are the same
+#: decision seen from two sides — the limit belongs to the screen, so it is written where
+#: the screen's requests are checked and nowhere else. Anyone looking for it in the driver
+#: will not find it, which is what this paragraph is for.
+_MAX_HYPOTHESIS_AGENTS = 3
+
 #: What the form sends when a field is left alone. The same values as `board.py`'s own
 #: argparse defaults, so a request that names nothing starts the run the CLI would.
+#:
+#: `hypothesis_agents` is the only stage count here. The same meeting fixed the other
+#: three at one each — one data, one ml, one interpreter — so putting them on the form
+#: would reopen a decision on screen that was made in a meeting. They are still free on
+#: the command line, and `A-24` draws whatever number results as one character with the
+#: count on it.
 DEFAULTS: dict[str, Any] = {
     "skill": "",
     "trials": 3,
     "waves": 1,
+    "hypothesis_agents": 1,
     "y_column": "outcome",
     "provider": "azure_foundry",
     "model": "claude-sonnet-4-6",
@@ -131,6 +151,7 @@ def build_argv(body: Mapping[str, Any], offered: Iterable[str]) -> list[str]:
 
     trials = _whole_number(body, "trials", _MAX_TRIALS)
     waves = _whole_number(body, "waves", _MAX_WAVES)
+    hypothesis_agents = _whole_number(body, "hypothesis_agents", _MAX_HYPOTHESIS_AGENTS)
 
     # --skill is passed even when it is empty, so that the run is confined by what this
     # request said and never by a value left over in the environment this service was
@@ -138,6 +159,7 @@ def build_argv(body: Mapping[str, Any], offered: Iterable[str]) -> list[str]:
     return [
         "--trials", str(trials),
         "--waves", str(waves),
+        "--hypothesis-agents", str(hypothesis_agents),
         "--y-column", y_column,
         "--provider", provider,
         "--model", model,
