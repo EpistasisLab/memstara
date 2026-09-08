@@ -177,10 +177,16 @@ export interface Result {
   y_column: string;
   auc: number | null;
   /** The engine that produced `importance`, and therefore the **scale those numbers are
-   *  on**. `sklearn_hgb` reaches the permutation route and its numbers are AUC deltas;
+   *  on**. `sklearn_hgb` reached the permutation route and its numbers are AUC deltas;
    *  `random_forest` and `xgboost` carry `feature_importances_` and theirs are impurity
    *  or gain, summing to about 1. Ranking one against the other is reading an AUC delta
    *  against a fraction of impurity, which is why this field travels with the map.
+   *
+   *  Since 2026-09-08 `xgboost` is the only engine, so every *new* row is on one scale.
+   *  The field is not therefore redundant: this type describes rows read off the board,
+   *  and the board still holds rows from all three. A screen that assumed one scale
+   *  because the current code only produces one would be right about today's runs and
+   *  wrong about the 81 it renders alongside them.
    *
    *  `""` means **not recorded**, not "unknown engine" — the column is
    *  `TEXT NOT NULL DEFAULT ''` and every result stored before 2026-09-08 takes it,

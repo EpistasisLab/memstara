@@ -308,10 +308,14 @@ async def submit_result(task_id: int, subset_path: str = "",
         model: ml stage — **the `model` field train_and_score returned, copied through
             unchanged.** Not optional in practice: the engine decides what the numbers in
             feature_importance are. `random_forest` and `xgboost` return impurity/gain,
-            non-negative and summing to about 1; `sklearn_hgb` returns a drop in AUC,
+            non-negative and summing to about 1; `sklearn_hgb` returned a drop in AUC,
             which is a different unit and can be negative. Leave it out and the row
             records importances nobody can later say the scale of — which is what every
-            result stored before 2026-09-08 does.
+            result stored before 2026-09-08 does. Since that date `xgboost` is the only
+            value a new row can carry, and copying it through unchanged is still the
+            instruction: an agent that decides what the engine "should" be is guessing at
+            something the tool already told it, and the first day the answer changes is
+            the day the guess goes unnoticed.
         interpretation: interpretation stage — the write-up.
         worker: who you are — **the same string you passed to claim_task.** If the task
             is now held by somebody else this is refused and nothing is written, which
@@ -646,8 +650,14 @@ async def read_results(run_tag: str = "", include_match_trace: bool = False) -> 
         ``model`` says which engine produced the importances, and it has to be read
         before they are compared: impurity/gain from ``random_forest`` and ``xgboost``
         is not the same quantity as the permutation drop in AUC ``sklearn_hgb``
-        falls back to. Two results with different ``model`` values have importances on
+        fell back to. Two results with different ``model`` values have importances on
         different scales. ``''`` means the engine was not recorded — do not guess it.
+
+        **This matters more since 2026-09-08, not less.** ``xgboost`` became the only
+        engine that day, so every new row is on one scale — and the rows this tool
+        returns are not all new. The mixed-scale case is now invisible from the code
+        alone and reachable only through the data, which is precisely when a reader
+        stops checking.
     """
     try:
         conn = await asyncpg.connect(_dsn())

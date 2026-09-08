@@ -26,11 +26,19 @@ import { useResults } from "../store/viewer";
  *    `""`             not recorded. Every result from before 2026-09-08 says this, and it
  *                     cannot be backfilled: the engine was an environment variable read
  *                     inside the call and nothing wrote it down
- *                     (`src/memstara/mcp_servers/ml.py:194`)
+ *                     (`src/memstara/mcp_servers/ml.py:335`)
  *
  *  The wording comes from `_importance`'s own docstring, which measured it: random_forest
  *  sums to exactly 1.0000 on all four sub-datasets, sklearn_hgb's permutation maps sum to
- *  0.0819 and 0.2572 with a minimum entry of -0.0131. */
+ *  0.0819 and 0.2572 with a minimum entry of -0.0131.
+ *
+ *  **Two of the three engines below no longer exist and their rows stay in this table.**
+ *  `sklearn_hgb` and `random_forest` were removed from `ml._make_model` on 2026-09-08,
+ *  leaving `xgboost` the only engine a new result can name. This panel does not render new
+ *  results — it renders whatever is on the board, and 81 rows there say `sklearn_hgb`,
+ *  whose numbers are AUC drops rather than gain. Pruning this table to match what the tool
+ *  can produce today would turn every one of those rows into "scale not described here",
+ *  which is the one thing the table exists to prevent. It shrinks when the rows do. */
 function scaleNote(model: string): string {
   if (model === "") return "scale not recorded — this result predates the engine being stored";
   const measure: Record<string, string> = {

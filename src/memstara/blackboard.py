@@ -189,15 +189,23 @@ CREATE TABLE IF NOT EXISTS memstara_blackboard (
     -- Which engine produced the two numbers above. It is not decoration: the engine
     -- decides what feature_importance *is*. `random_forest` and `xgboost` carry
     -- `feature_importances_`, so the numbers are impurity/gain — non-negative and
-    -- summing to about 1. `sklearn_hgb` does not, so `_importance` falls back to
+    -- summing to about 1. `sklearn_hgb` does not, so `_importance` fell back to
     -- permutation importance and the numbers are a drop in AUC — a different unit, on a
     -- different scale, and legitimately negative. Measured on the same four
     -- sub-datasets: random_forest sums to exactly 1.0000, sklearn_hgb to 0.0819 and
     -- 0.2572 with a minimum of -0.0131.
     --
+    -- **All three names are still described here although only `xgboost` can be written
+    -- now.** The other two were removed from the tool server on 2026-09-08, and rows
+    -- carrying them did not go anywhere. A schema comment documents what is *in* the
+    -- column, not what the current code can put there, and a reader holding a row that
+    -- says `sklearn_hgb` needs to learn from this comment that its numbers are AUC
+    -- drops. Trimming the list to match today's tool would delete exactly the
+    -- explanation that only old rows need.
+    --
     -- So a row without this column records a quantity whose meaning cannot be recovered,
     -- and every comparison across rows is unsound. The tool has always returned the
-    -- engine (`mcp_servers/ml.py:217`); until 2026-09-08 nothing stored it, and the 81
+    -- engine (`mcp_servers/ml.py:335`); until 2026-09-08 nothing stored it, and the 81
     -- results already in the table are on an unrecorded scale for good — the engine was
     -- an environment variable read inside the call and written down nowhere else.
     --
