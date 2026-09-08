@@ -24,8 +24,8 @@ WARNING: env vars must be on the allowlist to reach this process — see
    train_and_score(path, y_column)   train a model on a small CSV and return AUC
 
  Two helpers are called from inside it:
-   _make_model(engine)      engine name -> the actual model object
-   _importance(model, ...)  which column contributed how much
+   _make_model(engine, seed)   engine name -> the actual model object
+   _importance(model, ...)     which column contributed how much
 
  The flow:
    (1) is the path inside the allowed directory (security check)
@@ -72,12 +72,33 @@ def _output_dir() -> Path:
     return Path(os.environ.get("MEMSTARA_OUTPUT_DIR", "").strip() or _DEFAULT_OUT).resolve()
 
 
-def _make_model(engine: str) -> Any:
-    """Build a model for the named engine.
+def _make_model(engine: str, seed: int) -> Any:
+    """Build a model for the named engine, seeded from the caller's `seed`.
 
     Imports are deferred so that a missing optional engine does not prevent the
     server from starting. Put at the top of the file instead, anyone who never
     uses xgboost would still have to install it.
+
+    **`seed` is the same one that splits the data**, and that is the point of the
+    parameter. Until 2026-09-08 all three engines carried a hard-coded
+    ``random_state`` of 0 while the split used the caller's 42, so a run had two
+    different seeds in it and neither was controllable: `train_and_score` exposes
+    `seed` as a tool parameter, and passing a different value moved the split and
+    left the model exactly where it was. NFR-2b (`spec/Memstara_SRS_KR.md:949`) asks
+    that the seed can *be fixed*, not that some seed is fixed somewhere.
+
+    42 rather than 0 because it is the value with a documented origin —
+
+    seed for reproducibility and sets it to 42. A seed of 0 appears in no
+    meeting note and no design document; it entered during implementation, and
+    since the whole repository arrived in one commit (`b4fd613`) git cannot say
+    whose judgement it was.
+
+    Note for whoever reads an unchanged xgboost number afterwards: `XGBClassifier`'s
+    `random_state` only bites when `subsample` or `colsample_*` is below 1.0, and
+    neither is set here, so training is deterministic and the AUC is expected not to
+    move. That is not a failure of this change — the change buys controllability and
+    a single seed per run, not different numbers.
     """
     if engine == "sklearn_hgb":
         # The default. Histogram-based gradient boosting.
@@ -85,21 +106,21 @@ def _make_model(engine: str) -> Any:
         # when 30% is blank, as in NHANES.
         from sklearn.ensemble import HistGradientBoostingClassifier
 
-        return HistGradientBoostingClassifier(max_iter=200, max_depth=4, random_state=0)
+        return HistGradientBoostingClassifier(max_iter=200, max_depth=4, random_state=seed)
     if engine == "random_forest":
         from sklearn.ensemble import RandomForestClassifier
 
-        return RandomForestClassifier(n_estimators=300, random_state=0, n_jobs=-1)
+        return RandomForestClassifier(n_estimators=300, random_state=seed, n_jobs=-1)
     if engine == "xgboost":
         from xgboost import XGBClassifier
 
-        return XGBClassifier(n_estimators=200, max_depth=4, eval_metric="logloss", random_state=0)
+        return XGBClassifier(n_estimators=200, max_depth=4, eval_metric="logloss", random_state=seed)
 
     # A typo is not let through silently. The message also names what is available.
     raise RuntimeError(f"unknown MEMSTARA_ML_ENGINE: {engine!r} (sklearn_hgb | random_forest | xgboost)")
 
 
-def _importance(model: Any, X: pd.DataFrame, y: pd.Series) -> dict[str, float]:
+def _importance(model: Any, X: pd.DataFrame, y: pd.Series, seed: int) -> dict[str, float]:
     """Extract per-column importance, by whichever route the engine allows.
 
     **The two routes do not return the same quantity, and this function cannot make
@@ -145,7 +166,11 @@ def _importance(model: Any, X: pd.DataFrame, y: pd.Series) -> dict[str, float]:
     from sklearn.inspection import permutation_importance
 
     # n_repeats=5 — shuffle five times and average. A single shuffle is swayed by chance.
-    r = permutation_importance(model, X, y, n_repeats=5, random_state=0, scoring="roc_auc")
+    # `seed` is the caller's, the same one that split the data and built the model. This
+    # branch is the one the default engine takes, so leaving a hard-coded 0 here would
+    # have made the seed controllable everywhere except the place sklearn_hgb's numbers
+    # actually come from — which is most of a run's randomness, not a corner of it.
+    r = permutation_importance(model, X, y, n_repeats=5, random_state=seed, scoring="roc_auc")
     return {c: float(v) for c, v in zip(X.columns, r.importances_mean, strict=True)}
 
 
@@ -157,9 +182,13 @@ def train_and_score(path: str, y_column: str, test_size: float = 0.25, seed: int
         path: sub-dataset CSV produced by slice_columns.
         y_column: name of the outcome column.
         test_size: test split fraction (default 0.25).
-        seed: random seed. It is fixed, so the same input always yields the same
-            number and a result can be re-scored by hand later and checked
-            against what the board recorded.
+        seed: random seed. **It is the only one** — it splits the data, builds the
+            model and drives the permutation shuffle, so the same input yields the
+            same number and a result can be re-scored by hand later and checked
+            against what the board recorded. Leave it at 42 unless you are
+            deliberately testing how much of a result is the split; changing it is a
+            different experimental condition, and nothing yet records which value
+            was used.
 
     Returns:
         JSON with auc, feature_importance, n_train, n_test and model. Report the
@@ -217,7 +246,7 @@ def train_and_score(path: str, y_column: str, test_size: float = 0.25, seed: int
         # both sides — without it, data with only 10% positives can end up with
         # almost no positives on the test side.
         X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=test_size, random_state=seed, stratify=y)
-        model = _make_model(engine)
+        model = _make_model(engine, seed)
         model.fit(X_tr, y_tr)                 # fit
 
         # predict_proba gives [P(0), P(1)]. [:, 1] takes only the probability of 1.
@@ -225,7 +254,7 @@ def train_and_score(path: str, y_column: str, test_size: float = 0.25, seed: int
 
         # Importance is measured on the **test data**. Measured on the training data,
         # whatever the model memorised would look important too.
-        importance = _importance(model, X_te, y_te)
+        importance = _importance(model, X_te, y_te, seed)
     except Exception as e:
         # Return the kind of failure as well as the message, so the agent can read
         # it and decide what to do.
