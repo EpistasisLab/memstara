@@ -45,14 +45,14 @@ export default function ScenePanel() {
   const selectAgent = useViewer((s) => s.selectAgent);
   const form = useControl((s) => s.form);
 
-  // The figures the API sent, plus one `planned` figure per hypothesis agent the run form
-  // asks for and the scene does not have yet (`lib/planned.ts`). Everything below counts,
-  // places and draws off this list rather than `scene.agents`, so the fan spacing, the
-  // fan-in arrows and the header count all describe the same picture.
+  // The figures the API sent, with the hypothesis station brought to the number the run form
+  // asks for (`lib/planned.ts`): short of it, `planned` figures; past it, resting figures
+  // dropped and busy ones kept. Everything below counts, places and draws off this list
+  // rather than `scene.agents`, so the fan spacing, the fan-in arrows and the header count
+  // all describe the same picture.
   //
-  // `withPlannedAgents` returns its input unchanged when there is nothing to add, so a
-  // default run allocates nothing here and the memo below sees the same array it saw last
-  // poll.
+  // `withPlannedAgents` returns its input unchanged when the two already agree, so the memo
+  // below sees the same array it saw last poll.
   const drawn: SceneAgent[] = useMemo(
     () => (scene ? withPlannedAgents(scene.agents, form) : []),
     [scene, form],

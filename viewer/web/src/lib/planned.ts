@@ -18,15 +18,34 @@ import type { SceneAgent } from "../types";
  * one and it has not started. See `AgentState` in `types.ts` for why that is its own member
  * of the union rather than an `idle` card wearing a flag.
  *
- * **Padding only, never truncating.** The count drawn is `max(observed, requested)`. Five
- * workers running while the form says two is an ordinary thing — the form is edited after
- * the run starts — and honouring the two would take three live workers off the screen.
- * Observed always wins; the form can only ever add.
+ * **The form decides the count; a figure that is not resting is never removed.** The first
+ * version of this padded only — `max(observed, requested)` — and it was wrong in the case
+ * anyone sees first. `LAST_ROSTER` keeps the previous run's workers on the snapshot however
+ * long ago it ran (`A-41`), so a fresh page with the form at its default of 1 drew **three**
+ * hypothesis cards: the three from yesterday's run, all `idle`, outnumbering the form and
+ * winning. The number said one and the picture said three, which is the same complaint as
+ * `A-41` seen from the other side.
+ *
+ * So the rule is a single one, and it is the one a reader already assumes: **the hypothesis
+ * column shows the number on the form.** The exception exists to protect work, not history —
+ * a figure that is `working`, `moving` or `unknown` is kept even past the form's count,
+ * because dropping it would take a running worker off the screen, and because with the core
+ * database unreadable (`unknown`) there is no basis for dropping anything at all. Only a
+ * figure positively known to be resting is trimmed.
+ *
+ * Trimming and padding can therefore never both happen: whatever survives the trim is at
+ * least the form's count, so there is nothing left to pad.
+ *
+ * The cost is worth stating. The form resets to `DEFAULT_REQUEST` on reload, so reloading
+ * after a three-agent run shows one card until the number is set back to three. That is the
+ * price of the picture answering to the control beside it, and it is paid where it is
+ * cheapest to undo — one field, one keystroke.
  *
  * **Only the hypothesis station.** It is the one stage drawn per worker
  * (`viewer/api/stores.py`, `SPLITTABLE`) and the one whose count the form offers. The other
  * four are deliberately folded to a single figure carrying a count, so padding them would
- * invent a second `data` character the 2026-08-26 meeting asked to be drawn once.
+ * invent a second `data` character the 2026-08-26 meeting asked to be drawn once — and
+ * trimming them would remove the only figure a stage has.
  */
 
 /** The comma-separated `playbook_hypothesis` field as one entry per agent, padded to
@@ -68,16 +87,49 @@ function plannedAgentName(standards: string[], slot: number): string {
   return `${HYPOTHESIS_AGENT}-${standards[slot] ?? ""}`;
 }
 
-/**
- * `agents` plus one `planned` figure for every hypothesis agent the form asks for and the
- * scene does not have.
+/** A figure the form is not allowed to take off the screen.
  *
- * Returns the input array unchanged — the same reference — when there is nothing to add, so
- * the `useMemo` downstream of it does not see a new array on every poll.
+ *  `working` and `moving` are workers with something in hand or a run open — removing one
+ *  because a number changed would hide work that is happening. `unknown` is the core
+ *  database being unreadable, which is the state that exists precisely so the screen does
+ *  not assert things it cannot check; "this one is surplus to the form" is such an
+ *  assertion. `idle` is the only state that says, on the record, that this figure is doing
+ *  nothing. See `viewer/api/scene.py:793-812` for where the four are decided. */
+function isResting(agent: SceneAgent): boolean {
+  return agent.state === "idle";
+}
+
+/**
+ * `agents`, with the hypothesis station showing what the run form asks for.
+ *
+ * Short of the form's count it gains `planned` figures; past it, resting figures are
+ * dropped and busy ones are not (see `isResting`).
+ *
+ * Returns the input array unchanged — the same reference — when neither is needed, so the
+ * `useMemo` downstream of it does not see a new array on every poll.
  */
 export function withPlannedAgents(agents: SceneAgent[], form: RunRequest): SceneAgent[] {
   const observed = agents.filter((a) => a.stage === PLANNABLE);
-  const missing = form.hypothesis_agents - observed.length;
+  // A number input yields `NaN` for the moment it is empty mid-edit, and 0 or a fraction is
+  // one keypress away. Every branch below indexes with this, and `NaN` makes all of them
+  // quietly do nothing — a figure that stops responding while the field is being retyped.
+  //
+  // This clamps the **drawing**, not the request: `startRun` still posts what was typed and
+  // the service still refuses it in words, which is the rule this form keeps everywhere
+  // else. The station is never drawn with fewer than one figure because the API never sends
+  // fewer than one.
+  const wanted = Math.max(1, Math.floor(form.hypothesis_agents) || 1);
+
+  // Trimmed from the tail, by id rather than by rebuilding the list, so that every other
+  // stage keeps the order and the identity the API gave it.
+  const surplus = new Set(
+    observed.filter((a, i) => i >= wanted && isResting(a)).map((a) => a.id),
+  );
+  if (surplus.size) return agents.filter((a) => !surplus.has(a.id));
+
+  // Nothing was trimmed, so every observed figure is still here and the next free slot is
+  // the count of them — which is what the padding below indexes from.
+  const missing = wanted - observed.length;
   if (missing <= 0) return agents;
 
   // Where the planned figures stand. The floor plan positions by `home`, and every figure
@@ -88,7 +140,9 @@ export function withPlannedAgents(agents: SceneAgent[], form: RunRequest): Scene
   // anyway and nothing is drawn.
   const home = observed[0]?.home ?? { x: 0, y: 0 };
   const label = observed[0]?.label ?? "Hypothesis";
-  const standards = asSlots(form.playbook_hypothesis, form.hypothesis_agents);
+  // `wanted`, not the raw field, for the same reason — and it is also the number of selects
+  // the Playbooks disclosure is showing, so slot *i* here is the standard select *i* has.
+  const standards = asSlots(form.playbook_hypothesis, wanted);
 
   const planned: SceneAgent[] = Array.from({ length: missing }, (_, i) => {
     const slot = observed.length + i;

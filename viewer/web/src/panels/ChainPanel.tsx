@@ -83,9 +83,10 @@ export default function ChainPanel() {
   // response, so it earns the same badge for the same reason.
   const stale = useViewer((s) => s.snapshot?.stale ?? false);
 
-  // The run form, which is what makes this panel answer to the control beside it: five
-  // hypothesis agents asked for and three on the board draws five cards, two of them
-  // `planned`. See `lib/planned.ts` for why the padding is one-way.
+  // The run form, which is what makes this panel answer to the control beside it: the
+  // hypothesis column holds the number the form asks for, with the ones no worker has
+  // opened a run for yet drawn as `planned`. `lib/planned.ts` holds the one exception —
+  // a figure that is not resting is never taken off the screen by a number changing.
   //
   // The whole form rather than the two fields that are read, because the store holds it as
   // one object and a selector returning a slice of it would allocate a new one on every
