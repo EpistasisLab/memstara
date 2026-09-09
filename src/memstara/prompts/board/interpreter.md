@@ -23,8 +23,18 @@ separate commit from writing it.
 
 This is one standard for however many interpret workers run. `--interpret-agents 3` makes
 three workers sharing one agent and therefore one system prompt
-(`src/memstara/pipeline/core.py:503-506`), the same property `board/hypothesis.md` records
-for its own stage. `A-32` is where that is being lifted.
+(`src/memstara/pipeline/core.py:549-550` — this stage is in the list that gets one agent
+each, whatever the worker count).
+
+`A-32` lifted that for `hypothesis` only, on 2026-09-08, and stopping there was the
+decision rather than the unfinished half. The hypothesis stage is the one the meeting named
+and the one where several standards mean something: its workers set out independently, so
+two of them agreeing is evidence. Interpret workers do not set out from anywhere — they
+claim finished tasks off one board, and which worker gets which task is whatever order the
+board hands them out in. Giving those workers different standards would mean a trial's
+reading was decided by a race, and a run could not say which standard read which result.
+So the shape here is right, not pending: one standard, and if that is ever meant to vary it
+varies per *hypothesis*, not per interpret worker.
 -->
 
 {{playbook}}

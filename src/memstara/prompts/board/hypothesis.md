@@ -39,11 +39,20 @@ Nothing is spliced unless a run passes --playbook-hypothesis, and when nothing i
 line and the blank line under it vanish together — the prompt is then byte-identical to
 the one that had no marker, which `prompt_digest` is the check on.
 
-This is still one standard for however many hypothesis workers run. `--hypothesis-agents 3`
-makes three workers that share one agent and therefore one system prompt
-(`src/memstara/pipeline/core.py:503-505`), so the meeting's "several hypothesis agents with
-different skills" is not what this buys — that needs an agent per playbook, and it is its
-own item.
+**This file is the system prompt of however many hypothesis agents a run provisions, and
+since 2026-09-08 that can be more than one.** `--playbook-hypothesis a,b,c` with
+`--hypothesis-agents 3` provisions three agents from this same text, each spliced with a
+different standard, named for the standard it carries
+(`src/memstara/pipeline/core.py:476-507`). That is the meeting's "several hypothesis agents
+with different skills", and it is why two workers choosing the same column is now evidence
+of two standards agreeing rather than of one standard asked twice (`A-32`).
+
+What that means for editing this file: a sentence written here is read by every one of
+them. The per-agent difference lives entirely in the playbook, so anything that is only
+true under one standard belongs in that playbook and not in this text. With no
+`--playbook-hypothesis`, or with one, there is still exactly one agent and the three
+workers share it — unchanged, and deliberately so, since that is every run made before that
+date.
 -->
 
 {{playbook}}
