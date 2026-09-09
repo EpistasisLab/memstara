@@ -7,6 +7,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import { motion } from "framer-motion";
+import { BookMarked } from "lucide-react";
 import { STAGE_ICON, STATE_ICON, STORE_ICON } from "../lib/icons";
 import { STAGE_COLOR, STATE_LABEL } from "../lib/stage";
 import type { SceneAgent } from "../types";
@@ -133,6 +134,36 @@ export function ChainNode({ data }: NodeProps) {
             and a healthy one look identical for as long as anyone cares to watch. */}
         {elapsed && <span className="ml-auto shrink-0 font-mono font-normal">{elapsed}</span>}
       </div>
+
+      {/* The behavioural standard this figure is running under.
+
+          **Always on a hypothesis card, even when there is none.** The meeting's own figure
+          labels each hypothesis with its skill, and several hypothesis agents running to
+          several standards is the comparison this column exists to make readable
+
+          be ambiguous between "the prompt as written" and "the standard never reached the
+          screen", and the second of those was a real bug one level down.
+
+          On the other four it appears only when there is one to show, because a row of
+          cards each saying "no standard" is four lines of nothing. `data` is on that side
+          of the line deliberately: attaching a skill to the data agent was not among the
+          roles the meeting listed (`:157`). */}
+      {(agent.playbook || agent.stage === "hypothesis") && (
+        <div className="mt-1.5 flex items-center gap-1 text-[10px] leading-tight">
+          <BookMarked className="h-3 w-3 shrink-0"
+                      style={{ color: agent.playbook ? color : "#9c9a94" }}
+                      strokeWidth={1.8} />
+          <span
+            className={agent.playbook ? "truncate font-mono font-bold" : "truncate text-ink-faint"}
+            style={agent.playbook ? { color } : undefined}
+            title={agent.playbook
+              ? `Running under the ${agent.playbook} standard`
+              : "No standard attached — the prompt as written"}
+          >
+            {agent.playbook || "no standard"}
+          </span>
+        </div>
+      )}
 
       {agent.carrying !== null && (
         <div className="mt-1.5 inline-flex rounded-md border px-1.5 py-0.5 font-mono text-[10px]

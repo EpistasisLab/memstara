@@ -129,6 +129,24 @@ export function AgentNode({ data }: NodeProps) {
             {agent.worker}
           </div>
         )}
+        {/* The standard it is running under. Same rule as the pipeline card: always on a
+            hypothesis figure because the stack is there to be compared and a blank would
+            not say which of "none" and "lost on the way" it meant, and elsewhere only when
+            there is one. Two stacked figures reading `Hypothesis` over `hypothesis#1` and
+            `hypothesis#2` say which worker; this is what says what each was told. */}
+        {(agent.playbook || agent.stage === "hypothesis") && (
+          <div
+            className={agent.playbook
+              ? "truncate font-mono text-[10px] font-bold leading-tight"
+              : "truncate text-[10px] leading-tight text-ink-faint"}
+            style={agent.playbook ? { color } : undefined}
+            title={agent.playbook
+              ? `Running under the ${agent.playbook} standard`
+              : "No standard attached — the prompt as written"}
+          >
+            {agent.playbook || "no standard"}
+          </div>
+        )}
         <div className={unknown ? "text-[11px] font-bold text-amber-700" : "text-[11px] text-ink-faint"}>
           {STATE_LABEL[agent.state]}
         </div>

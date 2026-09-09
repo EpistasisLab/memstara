@@ -575,11 +575,18 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
     # is holding a card — the "moving" state below exists for exactly that run, and
     # without this line it would have no stage and no figure.
     stage_by_run: dict[str, str] = {}
+    # …and which **agent** it ran as, which is a different question since `A-32`. The stage
+    # is `hypothesis` for every hypothesis worker; the agent name is what carries the
+    # standard it was provisioned with (`memstara-board-hypothesis-cardiometabolic`), and
+    # it is the only place on this path that standard survives. `stage_by_run` cannot
+    # answer it — resolving the stage is exactly the step that takes the suffix off.
+    agent_by_run: dict[str, str] = {}
     for rows in (core["open"], core["last_call"], core["touches"]):
         for r in rows:
             stage = stores.stage_of_agent(r["name"])
             if stage is not None and r.get("run_id") is not None:
                 stage_by_run[str(r["run_id"])] = stage
+                agent_by_run[str(r["run_id"])] = r["name"]
 
     # The three ingredients are now gathered: the runs going right now (open), the last
     # call per run (last), and what is in each run's hand (held). The loop below combines
@@ -750,7 +757,28 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
                 # a badge only when it is more than one, which is exactly the case the
                 # fold would otherwise have made invisible.
                 "running": stands_for[slot],
-                "name": stores.BOARD_AGENT_NAMES_ANY.get(run_stage or character, character),
+                # The agent this run actually ran as, **including its playbook suffix**,
+                # falling back to the stage's canonical name for a figure with no run
+                # behind it. It used to be the canonical name always, and that was a
+                # silent mismatch as soon as `A-32` made the name open-ended: the cost
+                # table lists a suffixed agent under its own name (`reported_as` keeps the
+                # suffix on purpose), and `AgentsTab` highlights the row where
+                # `selected === r.name`, so clicking a figure running under a standard
+                # highlighted nothing at all — no error, just a table that did not react.
+                "name": (agent_by_run.get(run_id or "")
+                         or stores.BOARD_AGENT_NAMES_ANY.get(run_stage or character,
+                                                             character)),
+                # The behavioural standard this figure is running under, or `""` for the
+                # prompt as written. Its own field rather than part of `label`, and that
+                # is the point of it: `label` is the **station's** — every figure standing
+                # at one shares it, and it is what the colour and pictogram tables are
+                # keyed beside — while the standard belongs to the worker. Three agents
+                # under three standards were three figures all reading `Hypothesis`.
+                #
+                # `""` is drawn as *no standard*, not left blank. "The prompt as written"
+                # and "the suffix was dropped on the way here" look identical when the
+                # answer is empty, and those two need opposite fixes.
+                "playbook": stores.playbook_of(agent_by_run.get(run_id or "", "")),
                 "state": state,
                 "at": at,
                 "home": stores.HOME[character],

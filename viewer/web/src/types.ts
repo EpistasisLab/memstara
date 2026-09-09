@@ -50,6 +50,18 @@ export interface SceneAgent {
    *  character with a 2 on it, not two characters and not a silent one. */
   running: number;
   name: string;
+  /** The behavioural standard this worker runs under, or `""` for the prompt as written.
+   *
+   *  Separate from `label` because they belong to different things: `label` is the
+   *  station's and every figure standing at it shares it, while the standard is the
+   *  worker's. Since `A-32` a run may give three hypothesis agents three different
+   *  standards, and until this field existed all three drew figures reading `Hypothesis`
+   *  — the one comparison the stacked drawing exists to let a person read.
+   *
+   *  Drawn as *no standard* when empty rather than omitted: "the prompt as written" and
+   *  "the name lost its suffix somewhere" are the same blank on screen and need opposite
+   *  fixes. */
+  playbook: string;
   state: AgentState;
   /** Which place it is standing at, or null when resting at home. */
   at: StoreId | null;
