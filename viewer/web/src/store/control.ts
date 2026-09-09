@@ -169,7 +169,33 @@ const LOG_LINES = 2000;
 async function readError(res: Response): Promise<string> {
   try {
     const body = await res.json();
-    if (typeof body?.error === "string") return body.error;
+    if (typeof body?.error === "string") {
+      // **A 404 from this service means the service is older than this page**, and it is
+      // the one diagnosis the service cannot make about itself: a build that predates a
+      // route has no code in it that knows the route was ever added, so the most it can
+      // say is that the path is not one of the ones it has.
+      //
+      // The judgement therefore belongs here, where both versions are visible — the page
+      // asked for a route it was built to expect, and got told there is no such thing.
+      // This happened on 2026-09-09: `/control/playbooks` had existed in the checkout for
+      // a day and the process answering had been up since the Thursday before, so the
+      // Playbook row never rendered and the message under the button was
+      // `no route /control/playbooks`, which names the symptom and no cure.
+      //
+      // The command is spelled out rather than described. The service is a **host**
+      // process, not one of the containers `docker compose` restarts, so "restart the
+      // viewer" is the wrong instinct and rebuilding the containers changes nothing.
+      if (res.status === 404 && body.error.startsWith("no route")) {
+        return (
+          `${body.error} — the control service running on this machine is older than ` +
+          `this page. It is a host process, not a container, so rebuilding the viewer ` +
+          `will not replace it. Restart it: ` +
+          `kill the \`python -m memstara.control\` process and run ` +
+          `\`.venv/bin/python -m memstara.control\` again from the repository root.`
+        );
+      }
+      return body.error;
+    }
   } catch {
     /* not JSON; fall through to the status line */
   }
