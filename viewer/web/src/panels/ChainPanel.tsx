@@ -14,7 +14,9 @@ import FitOnResize from "../components/FitOnResize";
 import Panel from "../components/Panel";
 import { chainEdgeTypes, chainNodeTypes } from "../components/chain";
 import { CHAIN, chainAgents, elapsedSince, linkIsLive } from "../lib/chain";
+import { withPlannedAgents } from "../lib/planned";
 import { STAGE_COLOR } from "../lib/stage";
+import { useControl } from "../store/control";
 import { useScene, useViewer } from "../store/viewer";
 
 /**
@@ -81,9 +83,22 @@ export default function ChainPanel() {
   // response, so it earns the same badge for the same reason.
   const stale = useViewer((s) => s.snapshot?.stale ?? false);
 
+  // The run form, which is what makes this panel answer to the control beside it: five
+  // hypothesis agents asked for and three on the board draws five cards, two of them
+  // `planned`. See `lib/planned.ts` for why the padding is one-way.
+  //
+  // The whole form rather than the two fields that are read, because the store holds it as
+  // one object and a selector returning a slice of it would allocate a new one on every
+  // call, which is the shape zustand re-renders on. Editing an unrelated field therefore
+  // re-runs the memo below; it is a pure function over five cards, called on a keystroke.
+  const form = useControl((s) => s.form);
+
   // One column per stage; the hypothesis column holds one card per worker — see
   // `chainAgents`.
-  const steps = useMemo(() => chainAgents(scene?.agents ?? []), [scene]);
+  const steps = useMemo(
+    () => chainAgents(withPlannedAgents(scene?.agents ?? [], form)),
+    [scene, form],
+  );
 
   const nodes: Node[] = useMemo(() => {
     // One `now` for the whole frame, so two cards can never disagree about the time by a
@@ -230,6 +245,10 @@ export default function ChainPanel() {
                 .flatMap((s) => s.agents)
                 .find((a) => `chain-${a.id}` === node.id);
               if (!agent) return;
+              // A planned card has no agent page to go to. Its `name` is the row the run
+              // *would* provision, and that row may not exist yet, so following it would
+              // land on an empty panel — worse than not moving at all.
+              if (agent.state === "planned") return;
               selectAgent(agent.name);
               setView("agents");
             }}

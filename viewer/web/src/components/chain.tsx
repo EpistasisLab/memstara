@@ -33,6 +33,10 @@ const STATE_TONE: Record<SceneAgent["state"], { text: string; ring: string }> = 
   moving: { text: "text-ink-soft", ring: "border-transparent" },
   idle: { text: "text-ink-faint", ring: "border-paper-line" },
   unknown: { text: "text-amber-700", ring: "border-amber-300" },
+  // The only dashed border on the screen, and that is the point: the outline says *not
+  // filled in yet* before any label is read. Faint like `idle` because it is equally not
+  // busy, and unlike `unknown` because nothing here is wrong.
+  planned: { text: "text-ink-faint", ring: "border-dashed border-paper-line" },
 };
 
 export interface ChainNodeData extends Record<string, unknown> {

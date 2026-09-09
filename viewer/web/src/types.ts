@@ -1,7 +1,19 @@
 /** Shapes returned by the API. Written by hand rather than generated: the surface is
  *  small, and a hand-written type is where a field's meaning can be recorded. */
 
-export type AgentState = "idle" | "moving" | "working" | "unknown";
+/** What a figure is doing. Four of the five come from the API; `planned` never does.
+ *
+ *  **`planned` is the only state the browser invents**, and it is invented from something
+ *  the browser genuinely knows: the run form asks for N hypothesis agents and only M of
+ *  them exist yet, so the remaining N−M are drawn under this state (`lib/planned.ts`). It
+ *  is not a guess about the database — it is the form, quoted back.
+ *
+ *  It has to be its own state rather than an `idle` card with a flag, for the same reason
+ *  `unknown` is not a quiet `idle`: three tables are keyed exhaustively by this union
+ *  (`STATE_LABEL`, `STATE_ICON`, `STATE_TONE`), so a new member makes every drawing site
+ *  say what it looks like or fail to compile. Reusing `idle` would have drawn an agent
+ *  that has run and stopped, which is a different and false claim. */
+export type AgentState = "idle" | "moving" | "working" | "unknown" | "planned";
 export type StoreId = "okf" | "matcher" | "board" | "results" | "dataset" | "ml" | "unknown";
 /** The five stages the pipeline has, plus one it used to. `curator` was retired on
  *  2026-09-07 — writing the wave's questions is the hypothesis agent's other job now —

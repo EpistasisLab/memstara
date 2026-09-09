@@ -70,4 +70,9 @@ export const STATE_ICON: Record<AgentState, LucideIcon> = {
   moving: PackageOpen,
   idle: CircleDot,
   unknown: TriangleAlert,
+  // The outline of `idle`'s filled dot: the same shape, nothing in it yet. `unknown`'s
+  // amber warning would be wrong here — nothing is amiss about an agent that has not
+  // started, and the store row already uses `CircleDashed` for the same "no content"
+  // sense, which is what makes the vocabulary one vocabulary.
+  planned: CircleDashed,
 };

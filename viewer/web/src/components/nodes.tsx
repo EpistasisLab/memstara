@@ -47,6 +47,9 @@ export function AgentNode({ data }: NodeProps) {
   const color = STAGE_COLOR[agent.stage];
   const busy = agent.state === "working";
   const unknown = agent.state === "unknown";
+  // Asked for on the form and not started — invented by the browser, never sent by the API.
+  // See `lib/planned.ts`.
+  const planned = agent.state === "planned";
   const Icon = STAGE_ICON[agent.stage];
 
   return (
@@ -66,8 +69,10 @@ export function AgentNode({ data }: NodeProps) {
           />
         )}
         <motion.div
-          className={cnCircle(unknown)}
-          style={{ backgroundColor: unknown ? "#c9c7c1" : color }}
+          className={cnCircle(unknown, planned)}
+          style={planned
+            ? { borderColor: color, color }
+            : { backgroundColor: unknown ? "#c9c7c1" : color }}
           animate={busy ? { y: [0, -3, 0] } : { y: 0 }}
           transition={busy ? { duration: 1.4, repeat: Infinity } : { duration: 0.3 }}
         >
@@ -155,10 +160,19 @@ export function AgentNode({ data }: NodeProps) {
   );
 }
 
-function cnCircle(unknown: boolean) {
+/** `planned` is drawn as the outline of a figure rather than a figure: no fill, a dashed
+ *  ring in the stage's colour, and the pictogram in that colour instead of in white.
+ *
+ *  It has to differ at the silhouette, not at the caption. Every other figure on this floor
+ *  is a filled disc, so a planned one drawn filled reads as an agent that ran and stopped —
+ *  the caption "Not started" underneath is four words down and is not what anyone scanning
+ *  a floor plan looks at. The dashed outline is the same signal `STATE_TONE` gives the
+ *  pipeline card, so the two views say the same thing in the same way. */
+function cnCircle(unknown: boolean, planned: boolean) {
   return [
     "flex h-14 w-14 items-center justify-center rounded-full",
-    "text-sm font-bold text-white shadow-sm",
+    "text-sm font-bold shadow-sm",
+    planned ? "border-2 border-dashed bg-white" : "text-white",
     unknown ? "opacity-70" : "",
   ].join(" ");
 }

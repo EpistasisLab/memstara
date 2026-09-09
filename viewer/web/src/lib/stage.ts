@@ -26,4 +26,8 @@ export const STATE_LABEL = {
   moving: "Carrying a task",
   working: "Working",
   unknown: "Unknown",
+  // Not "Idle". An idle figure has a past — it ran, and stopped — and this one has none:
+  // it is on screen because the run form asks for it (`lib/planned.ts`). The two need
+  // opposite reactions from a reader, so they cannot share a word.
+  planned: "Not started",
 } as const;

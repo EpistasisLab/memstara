@@ -14,9 +14,11 @@ import { Map } from "lucide-react";
 import EmptyState from "../components/EmptyState";
 import Panel from "../components/Panel";
 import { nodeTypes } from "../components/nodes";
+import { withPlannedAgents } from "../lib/planned";
 import { STAGE_COLOR } from "../lib/stage";
+import { useControl } from "../store/control";
 import { useBoard, useScene, useViewer } from "../store/viewer";
-import type { StageId } from "../types";
+import type { SceneAgent, StageId } from "../types";
 
 /**
  * The floor plan: every agent and every store at once, laid out by place.
@@ -41,6 +43,20 @@ export default function ScenePanel() {
   const board = useBoard();
   const setView = useViewer((s) => s.setView);
   const selectAgent = useViewer((s) => s.selectAgent);
+  const form = useControl((s) => s.form);
+
+  // The figures the API sent, plus one `planned` figure per hypothesis agent the run form
+  // asks for and the scene does not have yet (`lib/planned.ts`). Everything below counts,
+  // places and draws off this list rather than `scene.agents`, so the fan spacing, the
+  // fan-in arrows and the header count all describe the same picture.
+  //
+  // `withPlannedAgents` returns its input unchanged when there is nothing to add, so a
+  // default run allocates nothing here and the memo below sees the same array it saw last
+  // poll.
+  const drawn: SceneAgent[] = useMemo(
+    () => (scene ? withPlannedAgents(scene.agents, form) : []),
+    [scene, form],
+  );
 
   const nodes: Node[] = useMemo(() => {
     if (!scene) return [];
@@ -58,7 +74,7 @@ export default function ScenePanel() {
       draggable: false,
     }));
 
-    const agents: Node[] = scene.agents.map((a) => {
+    const agents: Node[] = drawn.map((a) => {
       // Working characters stand at the store they last touched; the rest stay home.
       const at = a.state === "working" && a.at
         ? scene.places.find((p) => p.id === a.at)
@@ -88,7 +104,10 @@ export default function ScenePanel() {
       //
       // For one, two or three workers this computes 0, 22 and 62 exactly, so the floor plan
       // is pixel-identical to what it was for every run made before today.
-      const mine = scene.agents.filter((b) => b.stage === a.stage).length;
+      // Counted over `drawn`, so a planned figure gets room made for it rather than being
+      // laid on top of the last observed one. This is what makes the preview honest at 5:
+      // the stack tightens to fit as the number on the form goes up.
+      const mine = drawn.filter((b) => b.stage === a.stage).length;
       const spread = Math.max(1, mine - 1);
       const xStep = Math.min(22, 47 / spread);
       const yStep = Math.min(62, 124 / spread);
@@ -103,7 +122,7 @@ export default function ScenePanel() {
     });
 
     return [...places, ...agents];
-  }, [scene, board]);
+  }, [scene, board, drawn]);
 
   const edges: Edge[] = useMemo(() => {
     if (!scene) return [];
@@ -167,9 +186,12 @@ export default function ScenePanel() {
     //
     // Drawn at one hypothesis worker too, not only at two or more. An element that appears
     // only under a non-default flag is an element the default run never checks.
-    const dataFigure = scene.agents.find((a) => a.stage === "data");
+    // Over `drawn`, so a planned figure is wired into the shape like any other. It is the
+    // shape of the pipeline that is being drawn here, not the traffic on it, and a figure
+    // standing on the floor with no line leaving it would read as one that feeds nothing.
+    const dataFigure = drawn.find((a) => a.stage === "data");
     const pipe: Edge[] = dataFigure
-      ? scene.agents
+      ? drawn
           .filter((a) => a.stage === "hypothesis")
           .map((a) => ({
             id: `feeds-${a.id}`,
@@ -186,7 +208,7 @@ export default function ScenePanel() {
     // The static arrows go first so React Flow paints them under the flashes: a pale line
     // crossing a live one should be the one that gives way.
     return [...pipe, ...live];
-  }, [scene]);
+  }, [scene, drawn]);
 
   const working = scene?.agents.filter((a) => a.state === "working").length ?? 0;
 
@@ -194,7 +216,11 @@ export default function ScenePanel() {
     <Panel
       icon={Map}
       title="Floor plan"
-      count={scene?.agents.length}
+      // Figures on the floor, planned ones included, because the number beside the title is
+      // read as "how many of these am I looking at". `working` below stays on `scene`: a
+      // planned figure is not working, and never counting one keeps that number about the
+      // pipeline rather than about the form.
+      count={scene ? drawn.length : undefined}
       status={
         scene ? (
           <>
@@ -238,7 +264,11 @@ export default function ScenePanel() {
                 // swapping this slot for a room that is already open.
                 document.getElementById("results-panel")?.scrollIntoView({ behavior: "smooth" });
               } else if (node.type === "agent") {
-                selectAgent((node.data.agent as { name: string }).name);
+                const agent = node.data.agent as SceneAgent;
+                // Nothing to open for a figure that has not run — its agent row may not
+                // exist yet. Same rule as `ChainPanel`.
+                if (agent.state === "planned") return;
+                selectAgent(agent.name);
                 setView("agents");
               }
             }}
