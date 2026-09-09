@@ -581,6 +581,35 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
     # it is the only place on this path that standard survives. `stage_by_run` cannot
     # answer it — resolving the stage is exactly the step that takes the suffix off.
     agent_by_run: dict[str, str] = {}
+    # …and the same question asked of a **station** rather than a run, which is the only
+    # form that survives the run ending. A figure with nothing open has no `run_id` to
+    # look up, so until 2026-09-09 its standard came back `""` and the card read *no
+    # standard* the moment the work finished — the one reading the field exists to rule
+    # out. The standard belongs to the agent, and the agent does not stop having been
+    # provisioned under it because its run closed.
+    #
+    # **The most recent agent, not the only one.** A set of every name ever seen at the
+    # station was tried first and answered nothing on this machine: the database holds
+    # every run since August, so `hypothesis` had both `memstara-board-hypothesis` and
+    # `memstara-board-hypothesis-ml_reporting` in it and a rule of "use it when there is
+    # exactly one" fell through on the very case it was written for. Recency is the
+    # question actually being asked — *what was this station last doing* — and
+    # `last_call.started_at` is the one timestamp that answers it for a run that has
+    # closed. Built from `last_call` alone because it is the only one of the three that
+    # carries that column.
+    #
+    # While two workers run at once under two standards this is not consulted at all:
+    # each has an open run and `agent_by_run` answers per figure. It is only what an
+    # **idle** figure falls back to, and there the station has one past, not two.
+    agents_at: dict[str, tuple[Any, str]] = {}
+    for r in core["last_call"]:
+        stage = stores.stage_of_agent(r["name"])
+        if stage is None:
+            continue
+        character = stores.drawn_as(stage)
+        seen = agents_at.get(character)
+        if seen is None or r["started_at"] > seen[0]:
+            agents_at[character] = (r["started_at"], r["name"])
     for rows in (core["open"], core["last_call"], core["touches"]):
         for r in rows:
             stage = stores.stage_of_agent(r["name"])
@@ -729,6 +758,13 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
                 # No run going and nothing in hand means it really is idle.
                 state, at = "idle", None
 
+            # The agent this figure is: the one its own run ran as while it has one, and
+            # otherwise the one this station most recently ran as. The second half is what
+            # keeps the standard on the card after the work is done — see `agents_at`.
+            # Empty only for a station that has never made a call, which is the one case
+            # where "no standard" is the true answer.
+            ran_as = agent_by_run.get(run_id or "") or agents_at.get(character, (None, ""))[1]
+
             # `name` is the agent that produced the state just settled, not the
             # character's own — so replaying a pre-2026-09-07 run, the merged character
             # says `memstara-board-curator` while that agent is the one running, and
@@ -765,7 +801,7 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
                 # suffix on purpose), and `AgentsTab` highlights the row where
                 # `selected === r.name`, so clicking a figure running under a standard
                 # highlighted nothing at all — no error, just a table that did not react.
-                "name": (agent_by_run.get(run_id or "")
+                "name": (ran_as
                          or stores.BOARD_AGENT_NAMES_ANY.get(run_stage or character,
                                                              character)),
                 # The behavioural standard this figure is running under, or `""` for the
@@ -778,7 +814,7 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
                 # `""` is drawn as *no standard*, not left blank. "The prompt as written"
                 # and "the suffix was dropped on the way here" look identical when the
                 # answer is empty, and those two need opposite fixes.
-                "playbook": stores.playbook_of(agent_by_run.get(run_id or "", "")),
+                "playbook": stores.playbook_of(ran_as),
                 "state": state,
                 "at": at,
                 "home": stores.HOME[character],
