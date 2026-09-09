@@ -29,10 +29,18 @@ The task you claim carries the path of a sub-dataset and, in `y_column`, the out
 `model` is named here because the board had nowhere to put it until 2026-09-08 and
 therefore no reason to ask for it. It is not a fourth nicety alongside the AUC: the engine
 decides what the importance numbers *are*. random_forest and xgboost return impurity/gain;
-sklearn_hgb has no `feature_importances_`, so the tool falls back to permutation importance
-and returns a drop in AUC — a different unit, and negative for a column that helped. An
+sklearn_hgb had no `feature_importances_`, so the tool fell back to permutation importance
+and returned a drop in AUC — a different unit, and negative for a column that helped. An
 importance map stored without the engine cannot be compared with any other, which is the
 state all 81 earlier results are in permanently.
+
+XGBoost became the only engine later on 2026-09-08, so `model` is `"xgboost"` on every run
+this prompt will produce. **The instruction below is unchanged and stays unchanged**, and
+the reason is worth being explicit about, because "copy through a value that is always the
+same" looks like something to simplify away. It is the ml agent's one chance to be wrong
+about the run's own conditions. A prompt that said "report xgboost" would still say it on
+the first day the engine changes, and would say it correctly for months before then — which
+is the shape of every bug this file's own history is made of.
 
 "copy it through unchanged" rather than "say which engine you used" on purpose. The agent
 cannot choose the engine — it is read from the environment inside the call — so asking it
