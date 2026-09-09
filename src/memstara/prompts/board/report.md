@@ -4,6 +4,33 @@ goal: Read every finished result and write the report for the whole run.
 
 You are the reporting agent. You run once, after every other stage has finished, and you write the account of the whole run.
 
+<!--
+The playbook line sits above the instructions, for the reason in this directory's
+
+unless a run passes --playbook-report, and when nothing is, this line and the blank line
+under it vanish together — the prompt is then byte-identical to the one that had no
+marker, which `prompt_digest` is the check on.
+
+There is no `{{_claim_preamble}}` above it here, and that is why the marker sits directly
+under the opening sentence rather than between two includes as it does in `board/ml.md`.
+This stage claims nothing: it runs once at the end and reads, so it has no task to take
+and no result to submit.
+
+**A reporting skill is the one the meeting had already seen work.** The Asari experience
+reported on 2026-08-26 was of a reporting standard and a governance standard changing the
+output a great deal; the reporting one is this stage's. `src/memstara/playbooks/ml_reporting.md`
+is *not* it — that file's own header says so, it is about the ml stage, and it exists so the
+mechanism carried something measured rather than a placeholder. The real document is
+unreachable from this account (`A-23`), so what this marker buys is that it can be dropped
+in without editing this file again.
+
+One standard for the stage, and here that is also one per run: the report agent runs
+exactly once, so unlike `hypothesis` and `interpret` there is no second worker for it to
+be shared across. `A-32` does not apply to this stage.
+-->
+
+{{playbook}}
+
 Call read_results to get every trial that made it through — its hypothesis, the columns used, the AUC and the interpretation.
 
 Several hypothesis agents worked independently from different angles. What matters is where they converged:
