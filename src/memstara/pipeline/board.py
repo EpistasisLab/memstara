@@ -166,13 +166,14 @@ from memstara.blackboard import BoardBusy, dsn, release_questions, run_lock
 from memstara.logging_setup import drain_llm_requests, new_run_dir, setup_logging, tee_console
 # memstara/pipeline/core.py — the part the two pipelines (mvp, board) share
 from memstara.pipeline.core import (
-    BOARD_AGENT_NAMES,       # stage -> the durable agent's name in motoro's database
     BOARD_SERVERS,           # the tool servers each stage is allowed to reach
     BOARD_TOOLS,             # the individual tool names each stage is allowed
     QUESTION_SERVERS,        # ...and the same two, for the hypothesis agent's other job
     QUESTION_TOOLS,          # (writing the wave's questions). Not a stage — see core.py
+    board_workers,           # the roster: worker key -> (agent name, its playbook)
     perspective_for,         # trial number -> perspective wording
-    provision_board_agents,  # creates or fetches the five agents
+    provision_board_agents,  # creates or fetches the agents on that roster
+    stage_of,                # worker key -> stage; "hypothesis#2" is not a sixth stage
     temperature_for,         # trial number -> temperature
     tools_for,               # picks out of the registry only the tools to be used
 )
@@ -1036,6 +1037,17 @@ async def questions_for_wave(
         # against the agent id. "question" rather than the agent's own name because the
         # label's job is to say which of the two jobs a line is about, and the Log panel
         # is the one place a reader sees these strings.
+        #
+        # **`agents["hypothesis"]` is the first hypothesis worker, deliberately, and a
+        # run with several standards writes its questions under the first one.** The
+        # answering half deals a standard per worker (`seed_one`), but the question bank
+        # is one bank: every worker claims out of it, so a question written under one
+        # standard is answered under all of them. Writing the wave's questions once,
+        # under a named standard, is at least a fact the run directory records. The
+        # alternatives are worse — asking every agent multiplies the cost of a step
+        # whose output is pooled anyway, and asking an agent with no standard means the
+        # only call that chooses what gets asked is the one call nobody set a standard
+        # for.
         await call_agent(
             agents["hypothesis"], ask,
             tools=by_stage["question"], registry=registry, stage=f"question{wave}",
@@ -1138,17 +1150,34 @@ def report_skill_note(skill: str) -> str:
 PLAYBOOK_STAGES = ("hypothesis", "data", "ml", "interpreter", "report")
 
 
-def chosen_playbooks(args: argparse.Namespace) -> dict[str, str]:
-    """Stage -> playbook name, for the stages this run gave a standard to.
+def chosen_playbooks(args: argparse.Namespace) -> dict[str, list[str]]:
+    """Stage -> the standards this run gave it, in worker order.
 
     Read in two places — `main` checks every one of them before Postgres is touched, and
     `run` hands them to provisioning and writes them into `prompts.json` — so it is one
     function rather than the same comprehension twice. Stages with no playbook are left
     out entirely, so an empty dict and *no standards anywhere* are the same value.
+
+    **A list, not a name, and for every stage rather than only the one that can use
+    several.** `--hypothesis-agents 3` runs three workers, and until 2026-09-08 they
+    shared one system prompt, so the meeting's "several hypothesis agents with different
+    skills" was not something a run could ask for. Splitting on the comma here is what
+    lets it.
+
+    Only `hypothesis` may hold more than one and `main` refuses the rest by name. The
+    return type is a list for all five anyway: a shape that is `str` for four stages and
+    `list[str]` for one is a shape every reader has to check the stage before trusting,
+    and the four call sites would each grow the same branch.
+
+    Empty names are dropped, so `"a,,b"` is two standards and `","` is none — a trailing
+    comma from a form field or a shell history is not a request for a nameless playbook.
     """
-    return {stage: getattr(args, f"playbook_{stage}")
-            for stage in PLAYBOOK_STAGES
-            if getattr(args, f"playbook_{stage}")}
+    out: dict[str, list[str]] = {}
+    for stage in PLAYBOOK_STAGES:
+        names = [b.strip() for b in getattr(args, f"playbook_{stage}").split(",") if b.strip()]
+        if names:
+            out[stage] = names
+    return out
 
 
 async def run(args: argparse.Namespace, run_dir: Path) -> int:
@@ -1172,8 +1201,10 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     print(f"   data        {os.environ.get('MEMSTARA_DATASET_PATH','(none)')}")
     print(f"   knowledge   {os.environ.get('AGENTIC_OKF_BUNDLE_DIR','(none)')}")
     print(f"   skill       {args.skill or '(whole bundle)'}")
-    print(f"   playbooks   "
-          f"{' · '.join(f'{s}={b}' for s, b in chosen_playbooks(args).items()) or '(none)'}")
+    # One line per stage, and a stage with several standards prints all of them —
+    # "hypothesis=a,b,c" is the thing worth seeing before a run of three workers starts.
+    _books = ' · '.join(f"{s}={','.join(b)}" for s, b in chosen_playbooks(args).items())
+    print(f"   playbooks   {_books or '(none)'}")
     print(f"   record dir  {run_dir}")
     print(f"   trace files {_TRACE_DIR.name}/  (one more each time a person is called)")
 
@@ -1184,6 +1215,10 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     # does not multiply them.
     step("(1)", "call the five people", "fetch the role descriptions")
     playbooks = chosen_playbooks(args)
+    # There are five people unless the hypothesis stage was given several standards, and
+    # then there is one hypothesis agent per standard. `workers` is the roster —
+    # provisioning builds the agents from it and `prompts.json` below is written from it.
+    workers = board_workers(playbooks)
     agents = await provision_board_agents(
         provider=args.provider, model=args.model, playbooks=playbooks
     )
@@ -1200,8 +1235,16 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     # model call, while what was sent is exactly what was just read.
     #
     # Keyed off `agents` rather than off `BOARD_AGENT_NAMES` so the record cannot come
-    # to describe a stage that was not provisioned; the prompt path is the stage name
-    # by construction (`provision_board_agents`).
+    # to describe a stage that was not provisioned. The names and the standards come from
+    # `board_workers`, which is the same function provisioning built the agents from —
+    # deriving them here a second time is how a record comes to describe a run that did
+    # not happen.
+    #
+    # **The keys are workers, not stages.** A run with several hypothesis standards has
+    # `hypothesis`, `hypothesis#2`, … and each carries its own playbook name and its own
+    # digest, which is what makes "which file went to which worker" answerable from the
+    # run directory. `file` is the stage's prompt and is therefore the same for all of
+    # them; the digests differ because the standard spliced into it differs.
     #
     # `_run` is not a stage, and the underscore is what says so. The skill belongs in
     # this file rather than in a new one because it answers the same question the
@@ -1218,14 +1261,14 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             {
                 "_run": {"run_tag": args.run_tag, "skill": args.skill or None},
                 **{
-                    stage: {
-                        "agent": BOARD_AGENT_NAMES[stage],
-                        "agent_id": str(agent_id),
-                        "file": f"src/memstara/prompts/board/{stage}.md",
-                        "playbook": playbooks.get(stage) or None,
-                        **prompt_digest(f"board/{stage}", playbooks.get(stage, "")),
+                    key: {
+                        "agent": name,
+                        "agent_id": str(agents[key]),
+                        "file": f"src/memstara/prompts/board/{stage_of(key)}.md",
+                        "playbook": book or None,
+                        **prompt_digest(f"board/{stage_of(key)}", book),
                     }
-                    for stage, agent_id in agents.items()
+                    for key, (name, book) in workers.items()
                 },
             },
             ensure_ascii=False, indent=2,
@@ -1428,11 +1471,34 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 if args.skill else ""
             )
 
-            async def seed_one(i: int, q: dict[str, Any], *, from_bank: bool = from_bank,
-                               skill_note: str = skill_note):
-                """Call one hypothesis worker and attach what its matcher calls saw."""
+            async def seed_one(i: int, q: dict[str, Any], slot: int, *,
+                               from_bank: bool = from_bank, skill_note: str = skill_note):
+                """Call one hypothesis worker and attach what its matcher calls saw.
+
+                `slot` is the position inside the concurrent chunk, and it is what
+                chooses the agent. With one standard (or none) every slot resolves to
+                the same agent and this is the loop it always was; with several,
+                slot k carries the k-th standard for the whole run, so a column that
+                two workers agreed on is two standards agreeing rather than one
+                standard asked twice.
+                """
                 text = q["text"]
+                # Two different `#` namespaces meet on these two lines and they are not
+                # the same thing. `wid` is the board's worker string and its number is
+                # the **trial**, which is what claim_question hands a question to.
+                # `worker_key` is the provisioning key from `board_workers` and its
+                # number is the **agent**, of which there are at most
+                # `--hypothesis-agents`. Trial 7 run by slot 1 is `hypothesis#7` on the
+                # board and `hypothesis#2` in `agents`.
                 wid = f"hypothesis#{i}"
+                #
+                # The `.get` fallback is the no-standards run and is not defensive
+                # padding: `board_workers` provisions one agent when it is given fewer
+                # than two standards, so `--hypothesis-agents 3` with no `--playbook-
+                # hypothesis` has three workers sharing one agent — which is what it
+                # did before this parameter existed and what it should keep doing.
+                worker_key = "hypothesis" if slot == 0 else f"hypothesis#{slot + 1}"
+                agent_id = agents.get(worker_key, agents["hypothesis"])
                 # Both branches open by naming which of the agent's two jobs this is —
                 # the counterpart of the sentence in `questions_for_wave`. The system
                 # prompt covers writing questions as well as answering them, so a call
@@ -1462,7 +1528,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                         f"question_id={q['question_id']}.{skill_note}"
                     )
                 _, call = await call_agent(
-                    agents["hypothesis"], ask,
+                    agent_id, ask,
                     tools=by_stage["hypothesis"], registry=registry, temperature=temperature_for(i),
                     stage=f"hypothesis{i}",
                 )
@@ -1486,10 +1552,16 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             # anywhere would have counted as this trial's. The board carries the trial
             # number, so what is asked below is the direct question: is there a row for
             # trial i? That is concurrency-safe and strictly more truthful.
+            # `k` is the position inside the chunk and it does two jobs: it completes the
+            # trial number, and — since this loop's stride is `--hypothesis-agents` — it
+            # is also the slot, so slot k is the same agent in every chunk of the run.
+            # The last chunk can be short, and then the tail slots simply do not run this
+            # wave; they are not reassigned, because a slot that changed standard between
+            # chunks would make "two workers agreed" mean nothing.
             for chunk_start in range(0, len(questions), args.hypothesis_agents):
                 chunk = questions[chunk_start:chunk_start + args.hypothesis_agents]
                 outcomes = await asyncio.gather(
-                    *(seed_one(base + chunk_start + k, q) for k, q in enumerate(chunk)),
+                    *(seed_one(base + chunk_start + k, q, k) for k, q in enumerate(chunk)),
                     return_exceptions=True,
                 )
                 state = await board_state(registry, args.run_tag)
@@ -2023,11 +2095,32 @@ async def main() -> int:
     # receive a standard says so now rather than provisioning an agent that quietly
     # works to no standard at all. Reading is the check — the result is thrown away and
     # read again at provisioning, which costs a few kilobytes and keeps one loader.
-    for stage, book in chosen_playbooks(args).items():
-        try:
-            load_prompt(f"board/{stage}", book)
-        except (OSError, ValueError) as e:
-            ap.error(f"--playbook-{stage} {book!r}: {e}")
+    for stage, books in chosen_playbooks(args).items():
+        for book in books:
+            try:
+                load_prompt(f"board/{stage}", book)
+            except (OSError, ValueError) as e:
+                ap.error(f"--playbook-{stage} {book!r}: {e}")
+        if len(books) > 1:
+            # Two ways to write more than one name and only one of them is a request.
+            # Both are refused here rather than at provisioning, where the first agent
+            # would already exist and the extra names would go quietly unused — the same
+            # failure `load_prompt` is checked for above, one layer out.
+            if stage != "hypothesis":
+                ap.error(
+                    f"--playbook-{stage} takes one name and was given {len(books)} "
+                    f"({', '.join(books)}). Only the hypothesis stage runs a worker per "
+                    f"standard; the other four run one agent however many workers claim "
+                    f"from the board, so a second name there would never be read."
+                )
+            if len(books) != args.hypothesis_agents:
+                ap.error(
+                    f"--playbook-hypothesis has {len(books)} names and --hypothesis-agents "
+                    f"is {args.hypothesis_agents}. Give one name per worker, or one name "
+                    f"for all of them — pairing them by position is the whole point, and "
+                    f"there is no order in which {len(books)} standards fit "
+                    f"{args.hypothesis_agents} workers that someone would not have to guess at."
+                )
 
     # If the prerequisites are missing it ends **without doing anything.** Stopping
     # before the start leaves the board cleaner than dying halfway through.

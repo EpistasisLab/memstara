@@ -60,7 +60,7 @@ from __future__ import annotations
 import json      # agent output (a JSON string) into Python values
 import uuid      # run ids
 from collections import Counter   # for counting how often each column was chosen
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -473,11 +473,89 @@ QUESTION_TOOLS = {"okf_list_domains", "okf_search", "okf_read",
 QUESTION_SERVERS = {"okf", "memstara-blackboard"}
 
 
+def hypothesis_agent_names(playbooks: Sequence[str]) -> list[str]:
+    """One durable agent name per hypothesis playbook, in worker order.
+
+    **With fewer than two playbooks the answer is the one name it has always been.**
+    That is the whole of what keeps every run made before this function existed
+    identical: a run with no standard and a run with one both provision
+    `memstara-board-hypothesis` and update it in place, exactly as they did.
+
+    With two or more, each agent is named for the standard it carries —
+    `memstara-board-hypothesis-cardiometabolic`. The alternative was a positional
+    suffix (`-1`, `-2`), and it was rejected: an agent is a durable row found by
+    name, so `-2` would mean a different standard in every run and the second run's
+    provisioning would silently rewrite the first run's agent. A name that says which
+    standard it carries cannot do that, and it makes the row in motoro's database
+    readable without opening the run directory that produced it.
+
+    The cost is that renaming or retiring a playbook leaves an agent behind under the
+    old name. That is preferred to the alternative's cost, which is two runs that
+    cannot be told apart afterwards.
+
+    Args:
+        playbooks: The standards the hypothesis stage was given, in worker order. An
+            empty sequence and one empty string both mean the prompt as written.
+
+    Returns:
+        One name per element, or the single unsuffixed name when there are fewer
+        than two.
+    """
+    base = BOARD_AGENT_NAMES["hypothesis"]
+    if len(playbooks) < 2:
+        return [base]
+    return [f"{base}-{book}" for book in playbooks]
+
+
+def _sole(books: dict[str, list[str]], stage: str) -> str:
+    """The one playbook a single-agent stage was given, or "" for none.
+
+    Only `hypothesis` runs an agent per standard. Every other stage takes at most
+    one, which `board.main` refuses at argument-parsing time rather than here — this
+    reads the first and would rather be given a list of one.
+    """
+    return (books.get(stage) or [""])[0]
+
+
+def board_workers(playbooks: dict[str, list[str]] | None = None) -> dict[str, tuple[str, str]]:
+    """Worker key -> (agent name, the playbook that worker carries).
+
+    **The one place that decides what the workers of a run are.** `provision_board_agents`
+    builds its agents from this and `board.run` writes `prompts.json` from it, so the
+    record and the agents cannot describe different runs — which they would the moment
+    two functions each derived the key format from the same rule in their own words.
+
+    The keys are worker keys: the stage name for the first agent of each stage, and
+    `hypothesis#2`, `hypothesis#3`, … for the further hypothesis agents a run with
+    several standards has. Use `stage_of` to get back to something `BOARD_TOOLS` can be
+    keyed by.
+
+    Args:
+        playbooks: Stage -> the standards it was given, in worker order. Only
+            `hypothesis` may hold more than one; `board.main` refuses the others.
+
+    Returns:
+        An ordered mapping, hypothesis workers first. `""` as a playbook means the
+        prompt as written.
+    """
+    books = playbooks or {}
+    hypothesis_books = books.get("hypothesis") or [""]
+    out = {
+        ("hypothesis" if k == 0 else f"hypothesis#{k + 1}"): (name, book)
+        for k, (name, book) in enumerate(
+            zip(hypothesis_agent_names(hypothesis_books), hypothesis_books, strict=True)
+        )
+    }
+    for stage in ("data", "ml", "interpreter", "report"):
+        out[stage] = (BOARD_AGENT_NAMES[stage], _sole(books, stage))
+    return out
+
+
 async def provision_board_agents(
     *, provider: str = "azure_foundry", model: str = "claude-sonnet-4-6",
-    playbooks: dict[str, str] | None = None,
+    playbooks: dict[str, list[str]] | None = None,
 ) -> dict[str, uuid.UUID]:
-    """Create the five board-driven agents (or find the existing ones).
+    """Create the board-driven agents (or find the existing ones).
 
     What each stage is, and what it must do first, is one file per stage under
     `src/memstara/prompts/board/`, named for its key in `BOARD_AGENT_NAMES`.
@@ -487,46 +565,49 @@ async def provision_board_agents(
     It goes through `_ensure_agent`, so editing a prompt file **updates the existing
     agent** on the next run — the name stays and only the contents change.
 
+    **There are five agents unless the hypothesis stage was given more than one
+    standard**, which is the 2026-08-26 meeting's "several hypothesis agents with
+    different skills". Then there is one hypothesis agent per standard and the
+    returned mapping grows keys `hypothesis#2`, `hypothesis#3`, … beside the
+    unsuffixed `hypothesis`, which is always the first. The four other stages take at
+    most one standard each and are unaffected.
+
     Args:
         provider: The LLM provider.
         model: The model id.
-        playbooks: Stage key -> playbook name, for the stages a run chose a
-            behavioural standard for. Absent and empty mean the same thing here, and
-            both mean the prompt as written. The four keys the meeting of 2026-08-26
-            named are `hypothesis`, `ml`, `interpreter` and `report`; `data` takes one
-            too, because refusing it would be a rule in the code that nobody decided.
+        playbooks: Stage key -> the standards that stage was given, in worker order.
+            Absent, empty, and `[""]` all mean the prompt as written. The four keys
+            the meeting named are `hypothesis`, `ml`, `interpreter` and `report`;
+            `data` takes one too, because refusing it would be a rule in the code that
+            nobody decided. Only `hypothesis` may hold more than one.
+
+    Returns:
+        Key -> agent id. The key is the stage for the first agent of each stage, and
+        `stage#N` (N from 2) for a further hypothesis agent. **It is a worker key, not
+        a stage key** — `BOARD_TOOLS[key]` is wrong for `hypothesis#2` and
+        `stage_of(key)` is what turns one into the other.
     """
     mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096)
     react = {"execution_pattern": "reason_act"}
-    books = playbooks or {}
 
-    hypothesis = await _ensure_agent_from_file(
-        BOARD_AGENT_NAMES["hypothesis"], "board/hypothesis", books.get("hypothesis", ""),
-        model_config=mc, pattern_config=react,
-    )
-    data = await _ensure_agent_from_file(
-        BOARD_AGENT_NAMES["data"], "board/data", books.get("data", ""),
-        model_config=mc, pattern_config=react,
-    )
-    ml = await _ensure_agent_from_file(
-        BOARD_AGENT_NAMES["ml"], "board/ml", books.get("ml", ""),
-        model_config=mc, pattern_config=react,
-    )
-    interpreter = await _ensure_agent_from_file(
-        BOARD_AGENT_NAMES["interpreter"], "board/interpreter", books.get("interpreter", ""),
-        model_config=mc, pattern_config=react,
-    )
-    report = await _ensure_agent_from_file(
-        BOARD_AGENT_NAMES["report"], "board/report", books.get("report", ""),
-        model_config=mc, pattern_config=react,
-    )
-    return {
-        "hypothesis": hypothesis.id,
-        "data": data.id,
-        "ml": ml.id,
-        "interpreter": interpreter.id,
-        "report": report.id,
-    }
+    out: dict[str, uuid.UUID] = {}
+    for key, (name, book) in board_workers(playbooks).items():
+        agent = await _ensure_agent_from_file(
+            name, f"board/{stage_of(key)}", book, model_config=mc, pattern_config=react,
+        )
+        out[key] = agent.id
+    return out
+
+
+def stage_of(worker_key: str) -> str:
+    """The stage a key from `provision_board_agents` belongs to.
+
+    `"hypothesis#2"` -> `"hypothesis"`; every other key is already its own stage.
+    Everything keyed by the five stages — `BOARD_TOOLS`, `BOARD_SERVERS`, the prompt
+    path — must go through this, because a second hypothesis agent is a second
+    **worker** and not a sixth stage.
+    """
+    return worker_key.split("#", 1)[0]
 
 
 # --------------------------------------------------------------------------- #
