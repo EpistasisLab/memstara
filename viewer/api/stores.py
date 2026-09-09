@@ -303,6 +303,73 @@ def drawn_as(stage: str) -> str:
     return DRAWN_AS.get(stage, stage)
 
 
+def base_agent_name(name: str) -> str:
+    """An agent name with its playbook suffix taken off, if it has one.
+
+    `memstara-board-hypothesis-cardiometabolic` -> `memstara-board-hypothesis`. Every
+    other name comes back exactly as it arrived, including one this file has never heard
+    of — the viewer's rule everywhere is that an unrecognised name is passed through, not
+    guessed at.
+
+    **Why this exists.** Until 2026-09-08 an agent name was one of nine fixed strings and
+    `AGENT_BY_NAME` could be a dict. `A-32` made the hypothesis stage provision one agent
+    per behavioural standard, named for the standard it carries, so the set is now open —
+    it grows with `src/memstara/playbooks/`. Every lookup in `scene.py` filters on
+    membership of that dict, so without this a run under a standard is dropped at the
+    door: no figure on the scene, no row in the cost table, and no error anywhere,
+    because being absent from a dict is not a failure.
+
+    **Matched by prefix rather than by reading the playbook directory.** The directory is
+    the authority on which standards exist, but the viewer runs in a container that may
+    not have it — `_pipeline_definitions` already falls back for exactly that reason —
+    and a name that arrived from the database is evidence the agent existed whatever the
+    directory says today. A prefix is also the one form that cannot go stale.
+
+    The prefix has to be a *whole* segment: `-` is required after the base name, so
+    `memstara-board-ml` is never read as a suffixed `memstara-board-m`. Only board names
+    are stripped; the supervisor path has no playbooks.
+    """
+    for base in BOARD_AGENT_NAMES_ANY.values():
+        if name.startswith(f"{base}-"):
+            return base
+    return name
+
+
+def stage_of_agent(name: str) -> str | None:
+    """The board stage an agent name belongs to, or `None` if it is not a board agent.
+
+    Use this rather than `AGENT_BY_NAME.get`, and `stage_of_agent(n) is not None` rather
+    than `n in AGENT_BY_NAME`: the dict holds one name per stage and a playbook-suffixed
+    name is not in it (`base_agent_name`).
+    """
+    return AGENT_BY_NAME.get(base_agent_name(name))
+
+
+def stage_of_agent_any(name: str) -> str | None:
+    """As `stage_of_agent`, across the board path and the supervisor path both.
+
+    The access map, the cost table and the feed use this one — they show what actually
+    ran, and most of what ran historically was the supervisor path.
+    """
+    return AGENT_BY_NAME_ANY.get(base_agent_name(name))
+
+
+def path_of_agent(name: str) -> str:
+    """`"board"`, `"supervisor"`, or `"other"` for a name the viewer does not know."""
+    return AGENT_PATH.get(base_agent_name(name), "other")
+
+
+def playbook_of(name: str) -> str:
+    """The standard a suffixed agent name carries, or `""` if it carries none.
+
+    The inverse half of `base_agent_name`, and the reason both exist: the suffix has to
+    come off for the stage lookup and stay visible on the label, or two agents running to
+    two different standards appear on the cost table as two rows called the same thing.
+    """
+    base = base_agent_name(name)
+    return name[len(base) + 1:] if base != name else ""
+
+
 def reported_as(name: str) -> str:
     """The agent name a row is *shown under*. Identity unless the stage folds.
 
@@ -319,21 +386,37 @@ def reported_as(name: str) -> str:
     The fold stays inside one path. The board path had a curator; the supervisor path
     never did, so there is nothing there to fold, and `AGENT_PATH` keeps the two apart
     the way it always has.
+
+    **A playbook-suffixed name reports under itself, and that is the decision here.** Two
+    hypothesis agents running to two standards are two agents; folding their rows together
+    would make the one question the split exists to answer — did the standard change what
+    the agent did, and what did each cost — unaskable from the screen. The suffix is
+    resolved for the *stage* lookup and kept in the name.
     """
-    stage = AGENT_BY_NAME_ANY.get(name)
+    stage = stage_of_agent_any(name)
     if stage is None:
         return name  # An agent the viewer cannot name is left exactly as it arrived.
     target = drawn_as(stage)
     if target == stage:
         return name
-    names = BOARD_AGENT_NAMES if AGENT_PATH.get(name) == "board" else SUPERVISOR_AGENT_NAMES
+    names = BOARD_AGENT_NAMES if path_of_agent(name) == "board" else SUPERVISOR_AGENT_NAMES
     return names.get(target, name)
 
 
 def label_of(name: str) -> str:
-    """What the screen calls the agent behind `name`, after the fold. Raw name if unknown."""
-    stage = AGENT_BY_NAME_ANY.get(reported_as(name))
-    return AGENT_LABELS.get(stage, name) if stage else name
+    """What the screen calls the agent behind `name`, after the fold. Raw name if unknown.
+
+    A suffixed name carries its standard into the label — `Hypothesis · cardiometabolic` —
+    because `AGENT_LABELS` is per stage and two agents of one stage would otherwise be two
+    rows reading identically in the cost table and the access map.
+    """
+    reported = reported_as(name)
+    stage = stage_of_agent_any(reported)
+    if not stage:
+        return name
+    label = AGENT_LABELS.get(stage, name)
+    book = playbook_of(reported)
+    return f"{label} · {book}" if book else label
 
 
 AGENT_LABELS = {

@@ -417,7 +417,7 @@ def _carrying(touches: list[dict[str, Any]]) -> dict[str, int]:
         # The stage is not the key any more, but it is still the filter: only board-path
         # runs are drawn, and a supervisor-path claim must not put a card in anyone's
         # hand.
-        if t["name"] not in stores.AGENT_BY_NAME or not t.get("task_id"):
+        if stores.stage_of_agent(t["name"]) is None or not t.get("task_id"):
             continue
         run_id = str(t["run_id"])
         task_id = int(t["task_id"])
@@ -549,17 +549,22 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
     # character however many workers are behind it (`stores.SPLITTABLE`). The count is not
     # hidden — it rides on the card as `running`.
     #
-    # First the rows that came from core are indexed by **run**. `if r["name"] in
-    # stores.AGENT_BY_NAME` is what does the filtering — only **board-path characters**
-    # appear in the scene, so supervisor-path agents are quietly dropped here.
+    # First the rows that came from core are indexed by **run**. `stores.stage_of_agent`
+    # is what does the filtering — only **board-path characters** appear in the scene, so
+    # supervisor-path agents are quietly dropped here.
     # (The access map is the opposite: it has to count both. See _access.)
+    #
+    # A function rather than `name in stores.AGENT_BY_NAME`, and that is not a style
+    # preference: since `A-32` a hypothesis agent may be named for the standard it
+    # carries, so the set of board agent names is open and the dict holds only the bases.
+    # A membership test would drop every run made under a playbook — no figure, no error.
     open_by_run = {
         str(r["run_id"]): r
-        for r in core["open"] if r["name"] in stores.AGENT_BY_NAME
+        for r in core["open"] if stores.stage_of_agent(r["name"]) is not None
     }
     last_by_run = {
         str(r["run_id"]): r
-        for r in core["last_call"] if r["name"] in stores.AGENT_BY_NAME
+        for r in core["last_call"] if stores.stage_of_agent(r["name"]) is not None
     }
     held = _carrying(core["touches"])
     workers = _worker_names(core["touches"])
@@ -572,7 +577,7 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
     stage_by_run: dict[str, str] = {}
     for rows in (core["open"], core["last_call"], core["touches"]):
         for r in rows:
-            stage = stores.AGENT_BY_NAME.get(r["name"])
+            stage = stores.stage_of_agent(r["name"])
             if stage is not None and r.get("run_id") is not None:
                 stage_by_run[str(r["run_id"])] = stage
 
@@ -623,8 +628,8 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
             # any one of its runs last did. Both members can have a last call: on a
             # pre-2026-09-07 run the curator and the hypothesis stage were two agents
             # drawn as one figure.
-            calls = [(r, stores.AGENT_BY_NAME[r["name"]]) for r in core["last_call"]
-                     if stores.AGENT_BY_NAME.get(r["name"]) in mine]
+            calls = [(r, stores.stage_of_agent(r["name"])) for r in core["last_call"]
+                     if stores.stage_of_agent(r["name"]) in mine]
             last, last_stage = (max(calls, key=lambda pair: pair[0]["started_at"])
                                 if calls else (None, None))
             instances.append((None, None, last, last_stage))
@@ -788,9 +793,9 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
     # resting at its station, which is what the fallback returns.
     flashes = []
     for r in core["recent"]:
-        if r["name"] not in stores.AGENT_BY_NAME:
+        if stores.stage_of_agent(r["name"]) is None:
             continue
-        character = stores.drawn_as(stores.AGENT_BY_NAME[r["name"]])
+        character = stores.drawn_as(stores.stage_of_agent(r["name"]))
         agent_id = figure_of_run.get(str(r["run_id"])) or first_figure.get(character)
         if agent_id is None:
             continue
@@ -805,9 +810,11 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
 
 def _agent_totals(core: dict[str, Any]) -> list[dict[str, Any]]:
     # The running totals per agent (run count, tokens, cost). Unlike the scene, this
-    # **shows both paths.** That is why it uses `AGENT_BY_NAME_ANY` rather than
-    # `AGENT_BY_NAME`, and marks with `path` whether it is the board path or the
-    # supervisor path.
+    # **shows both paths.** That is why it uses `stage_of_agent_any` rather than
+    # `stage_of_agent`, and marks with `path` whether it is the board path or the
+    # supervisor path. Two hypothesis agents carrying two standards stay two rows here,
+    # labelled `Hypothesis · <standard>` apiece — folding them would make "what did each
+    # standard cost" a question the screen cannot answer.
     # Why the `int()` and `float()` wrappers: PostgreSQL's numeric arrives in Python as
     # a Decimal, which left as it is trips up JSON serialisation.
     # `r["cost"] or 0` handles NULL and 0 together.
@@ -826,8 +833,8 @@ def _agent_totals(core: dict[str, Any]) -> list[dict[str, Any]]:
         if row is None:
             row = merged[name] = {
                 "name": name,
-                "id": stores.AGENT_BY_NAME_ANY.get(name),
-                "path": stores.AGENT_PATH.get(name, "other"),
+                "id": stores.stage_of_agent_any(name),
+                "path": stores.path_of_agent(name),
                 "label": stores.label_of(name),
                 "runs": 0, "completed": 0, "open_runs": 0,
                 "tokens": {"prompt": 0, "completion": 0},
@@ -880,17 +887,17 @@ def _access(core: dict[str, Any]) -> dict[str, Any]:
     # miss.
     merged: dict[tuple[str, str, str], dict[str, Any]] = {}
     for r in core["access"]:
-        if r["name"] not in stores.AGENT_BY_NAME_ANY:
+        if stores.stage_of_agent_any(r["name"]) is None:
             continue
         name = stores.reported_as(r["name"])
         key = (name, r["server"], r["tool"])
         row = merged.get(key)
         if row is None:
             row = merged[key] = {
-                "agent": stores.AGENT_BY_NAME_ANY.get(name, name),
+                "agent": stores.stage_of_agent_any(name) or name,
                 "agent_label": stores.label_of(name),
                 "name": name,
-                "path": stores.AGENT_PATH.get(name, "other"),
+                "path": stores.path_of_agent(name),
                 "server": r["server"], "tool": r["tool"],
                 "store": stores.store_of(r["tool"]),
                 "calls": 0, "last_at": None,
@@ -922,7 +929,7 @@ def _feed(core: dict[str, Any]) -> list[dict[str, Any]]:
     Three things are deliberate here and each is visible on screen rather than silent:
 
     1. **Both paths.** Like `_access` and unlike the scene, this uses
-       `AGENT_BY_NAME_ANY`. The supervisor path did most of the tool calls historically,
+       `stage_of_agent_any`. The supervisor path did most of the tool calls historically,
        so a board-only feed would understate the system roughly fivefold.
     2. **Every run, not the selected one.** Only create_task/claim_task/submit_result
        carry a run_tag at all (queries.TASK_TOUCHES), so filtering by the run the
@@ -943,9 +950,9 @@ def _feed(core: dict[str, Any]) -> list[dict[str, Any]]:
     return [{
         "key": f"{r['step_id']}-{r['seq']}",
         "name": name,
-        "agent": stores.AGENT_BY_NAME_ANY.get(name),
+        "agent": stores.stage_of_agent_any(name),
         "label": stores.label_of(name),
-        "path": stores.AGENT_PATH.get(name, "other"),
+        "path": stores.path_of_agent(name),
         "server": stores.normalise_server(r["server"]),
         "tool": r["tool"],
         "store": stores.store_of(r["tool"]),

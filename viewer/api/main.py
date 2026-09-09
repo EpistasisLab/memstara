@@ -152,8 +152,13 @@ async def task(task_id: int) -> dict[str, Any]:
 
     core = await scene._core_facts()
     trail = [{
-        "agent": stores.AGENT_BY_NAME.get(t["name"], t["name"]),
-        "agent_label": stores.AGENT_LABELS.get(stores.AGENT_BY_NAME.get(t["name"], ""), t["name"]),
+        # Through `stage_of_agent` / `label_of` rather than the dicts, so a hypothesis
+        # agent carrying a playbook resolves to its stage and keeps its standard on the
+        # label. Straight off the dict it would fall through to the raw agent name in
+        # both fields, which is the one place a trail is read to see which *stage*
+        # touched a task.
+        "agent": stores.stage_of_agent(t["name"]) or t["name"],
+        "agent_label": stores.label_of(t["name"]),
         "tool": t["tool"],
         "run_id": str(t["run_id"]),
         "at": scene._iso(t["started_at"]),
