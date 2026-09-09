@@ -14,9 +14,9 @@ import FitOnResize from "../components/FitOnResize";
 import Panel from "../components/Panel";
 import { chainEdgeTypes, chainNodeTypes } from "../components/chain";
 import { CHAIN, chainAgents, elapsedSince, linkIsLive } from "../lib/chain";
-import { withPlannedAgents } from "../lib/planned";
+import { playbookAt, withPlannedAgents, withPlaybookAt } from "../lib/planned";
 import { STAGE_COLOR } from "../lib/stage";
-import { useControl } from "../store/control";
+import { PLAYBOOK_STAGES, useControl, type PlaybookStage } from "../store/control";
 import { useScene, useViewer } from "../store/viewer";
 
 /**
@@ -65,6 +65,15 @@ const STEP_X = 232;
  *  panel, so being generous costs only zoom. */
 const ROW_Y = 148;
 
+/** Whether `stage` is one the form has a `playbook_<stage>` field for.
+ *
+ *  `SceneAgent.stage` is `StageId`, which includes `curator` — a stage with no playbook
+ *  field and no `{{playbook}}` prompt. Narrowing here rather than casting is what keeps a
+ *  card from building `playbook_curator`, a key the service refuses as unknown. */
+function isPlaybookStage(stage: string): stage is PlaybookStage {
+  return (PLAYBOOK_STAGES as readonly string[]).includes(stage);
+}
+
 export default function ChainPanel() {
   const scene = useScene();
   const fetchedAt = useViewer((s) => s.fetchedAt);
@@ -93,6 +102,11 @@ export default function ChainPanel() {
   // call, which is the shape zustand re-renders on. Editing an unrelated field therefore
   // re-runs the memo below; it is a pure function over five cards, called on a keystroke.
   const form = useControl((s) => s.form);
+  const setForm = useControl((s) => s.setForm);
+  // Which stages can be handed a standard at all, read off the prompt files by the service
+  // (`GET /control/playbooks`). Not a list written here: a prompt gains a `{{playbook}}`
+  // line and a card gains a select, with no edit to this panel.
+  const playbookStages = useControl((s) => s.playbookStages);
 
   // One column per stage; the hypothesis column holds one card per worker — see
   // `chainAgents`.
@@ -101,33 +115,63 @@ export default function ChainPanel() {
     [scene, form],
   );
 
+  // **While anything is running, every card is read-only.** A card must then show what the
+  // run is actually using — `agent.playbook`, which came from the database — and that is
+  // not a value a select can change: a control offering to change it would be claiming the
+  // screen can re-skill a worker mid-run.
+  //
+  // Read off the scene rather than off `useControl(s => s.running)`, because that field is
+  // only set for a run *this* control service started. A pipeline launched by hand in a
+  // terminal has workers on this screen and no entry there, and it must lock the cards just
+  // the same.
+  const live = (scene?.agents ?? []).some(
+    (a) => a.state === "working" || a.state === "moving",
+  );
+
   const nodes: Node[] = useMemo(() => {
     // One `now` for the whole frame, so two cards can never disagree about the time by a
     // millisecond and render "3s" beside "2s" for the same instant.
     const now = Date.now();
 
     return steps.flatMap(({ agents }, i) =>
-      agents.map((agent, row) => ({
-        id: `chain-${agent.id}`,
-        type: "chain",
-        // The column is centred on its own stack, so the four single-card columns line up
-        // with the middle of the hypothesis stack rather than with its top. A stack of one
-        // puts its card at y=0, which is where every card was before this panel stacked
-        // anything — a default run is laid out exactly as it always was.
-        position: { x: i * STEP_X, y: (row - (agents.length - 1) / 2) * ROW_Y },
-        // While a run is open, `since` is when it opened; otherwise the freshest thing the
-        // stage has is its last tool call. The state word beside the figure says which of
-        // the two is being counted.
-        data: {
-          agent,
-          step: i + 1,
-          elapsed: elapsedSince(agent.since ?? agent.last_tool?.at ?? null, now),
-        },
-        draggable: false,
-        selectable: false,
-      })),
+      agents.map((agent, row) => {
+        // A stage the service says can take one, and nothing running to contradict the
+        // form. Both halves are needed: `curator` has no playbook field at all, and a live
+        // run makes the whole column a report rather than a control.
+        const stage = isPlaybookStage(agent.stage) ? agent.stage : null;
+        const editable = !live && stage !== null && playbookStages.includes(stage);
+        return {
+          id: `chain-${agent.id}`,
+          type: "chain",
+          // The column is centred on its own stack, so the four single-card columns line up
+          // with the middle of the hypothesis stack rather than with its top. A stack of one
+          // puts its card at y=0, which is where every card was before this panel stacked
+          // anything — a default run is laid out exactly as it always was.
+          position: { x: i * STEP_X, y: (row - (agents.length - 1) / 2) * ROW_Y },
+          // While a run is open, `since` is when it opened; otherwise the freshest thing the
+          // stage has is its last tool call. The state word beside the figure says which of
+          // the two is being counted.
+          data: {
+            agent,
+            step: i + 1,
+            elapsed: elapsedSince(agent.since ?? agent.last_tool?.at ?? null, now),
+            editable,
+            // The form's value for this card's slot, which is what the select shows. Slot
+            // comes from the figure, and `withPlannedAgents` is what put the figure there,
+            // so card *i* of the hypothesis column and select *i* of the field are the same
+            // slot by construction rather than by two counts agreeing.
+            choice: stage ? playbookAt(form, stage, agent.slot) : "",
+            onPlaybook: (book: string) => {
+              if (!stage) return;
+              setForm((f) => withPlaybookAt(f, stage, agent.slot, book));
+            },
+          },
+          draggable: false,
+          selectable: false,
+        };
+      }),
     );
-  }, [steps, fetchedAt]);
+  }, [steps, fetchedAt, form, live, playbookStages, setForm]);
 
   const edges: Edge[] = useMemo(
     () =>

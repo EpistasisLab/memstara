@@ -10,6 +10,7 @@ import { motion } from "framer-motion";
 import { BookMarked } from "lucide-react";
 import { STAGE_ICON, STATE_ICON, STORE_ICON } from "../lib/icons";
 import { STAGE_COLOR, STATE_LABEL } from "../lib/stage";
+import { useControl } from "../store/control";
 import type { SceneAgent } from "../types";
 
 /**
@@ -49,13 +50,31 @@ export interface ChainNodeData extends Record<string, unknown> {
   step: number;
   /** Pre-formatted by the panel so every card on one frame measures from one `now`. */
   elapsed: string | null;
+  /** Whether this card's standard may be **chosen** here rather than only read.
+   *
+   *  Decided by the panel, not here, because it is a fact about the whole pipeline: while
+   *  any worker is running, every card shows what that run is actually using and none of
+   *  them may be edited. See `ChainPanel`. */
+  editable: boolean;
+  /** What the run form says for this card's slot — the value the select shows while
+   *  `editable`. Not the same field as `agent.playbook`, and the difference is the point:
+   *  that one is what the database says the last run used, this one is what the next run
+   *  would use. They are shown together when they disagree. */
+  choice: string;
+  /** Writes `choice` back to the form. Called with a playbook stem, or `""` for the prompt
+   *  as written. A no-op when `editable` is false; the select is not rendered then. */
+  onPlaybook: (book: string) => void;
 }
 
 export function ChainNode({ data }: NodeProps) {
-  const { agent, step, elapsed } = data as ChainNodeData;
+  const { agent, step, elapsed, editable, choice, onPlaybook } = data as ChainNodeData;
   const color = STAGE_COLOR[agent.stage];
   const busy = agent.state === "working";
   const tone = STATE_TONE[agent.state];
+  // Read here rather than passed down: it is one list for the whole screen, it changes only
+  // when the control service comes back up, and threading it through the panel's node data
+  // would put a new array into every card's props on every poll.
+  const playbooks = useControl((s) => s.playbooks);
 
   const StageGlyph = STAGE_ICON[agent.stage];
   const StateGlyph = STATE_ICON[agent.state];
@@ -152,20 +171,67 @@ export function ChainNode({ data }: NodeProps) {
           cards each saying "no standard" is four lines of nothing. `data` is on that side
           of the line deliberately: attaching a skill to the data agent was not among the
           roles the meeting listed (`:157`). */}
-      {(agent.playbook || agent.stage === "hypothesis") && (
+      {(editable || agent.playbook || agent.stage === "hypothesis") && (
         <div className="mt-1.5 flex items-center gap-1 text-[10px] leading-tight">
           <BookMarked className="h-3 w-3 shrink-0"
-                      style={{ color: agent.playbook ? color : "#9c9a94" }}
+                      style={{ color: (editable ? choice : agent.playbook) ? color : "#9c9a94" }}
                       strokeWidth={1.8} />
-          <span
-            className={agent.playbook ? "truncate font-mono font-bold" : "truncate text-ink-faint"}
-            style={agent.playbook ? { color } : undefined}
-            title={agent.playbook
-              ? `Running under the ${agent.playbook} standard`
-              : "No standard attached — the prompt as written"}
-          >
-            {agent.playbook || "no standard"}
-          </span>
+          {editable ? (
+            // **The requirement's own figure**: each hypothesis box carries its skill, and
+            // several agents running to several standards is what the stacked column exists
+            // to make comparable (`:111-139`). Until 2026-09-09 that choice lived only in a
+            // collapsed disclosure in the left rail, so the picture showed the skills and
+            // could not set them — which `:151` names as the separate half of the work.
+            //
+            // `nodrag nopan` and the stopped mousedown are not styling. React Flow treats a
+            // press inside a node as the start of a drag, and this panel's `onNodeClick`
+            // navigates to the agents view: without both, opening this select leaves the
+            // page instead.
+            <select
+              value={choice}
+              onChange={(e) => onPlaybook(e.target.value)}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              className={`nodrag nopan min-w-0 flex-1 cursor-pointer truncate rounded
+                          border border-dashed border-paper-line bg-white px-1 py-0.5
+                          text-[10px] leading-tight focus:border-ink focus:outline-none
+                          ${choice ? "font-mono font-bold" : "text-ink-faint"}`}
+              style={choice ? { color } : undefined}
+              title={choice
+                ? `The next run gives this agent the ${choice} standard`
+                : "No standard — this agent gets the prompt as written"}
+            >
+              {/* Named rather than blank, and worded exactly as the disclosure words it:
+                  two controls over one value that describe it differently read as two
+                  different settings. */}
+              <option value="">prompt as written</option>
+              {(playbooks ?? []).map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          ) : (
+            <span
+              className={agent.playbook ? "truncate font-mono font-bold" : "truncate text-ink-faint"}
+              style={agent.playbook ? { color } : undefined}
+              title={agent.playbook
+                ? `Running under the ${agent.playbook} standard`
+                : "No standard attached — the prompt as written"}
+            >
+              {agent.playbook || "no standard"}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* What this figure's **last** run was given, when that is not what the select above
+          would give its next one. The select has to show the form or it is a control that
+          sets one thing and displays another; this line is what keeps that from erasing the
+          record on the card. It appears only where the two genuinely differ, so an
+          untouched screen does not grow a second line under every card. */}
+      {editable && agent.playbook && agent.playbook !== choice && (
+        <div className="truncate pl-4 font-mono text-[10px] leading-tight text-ink-faint"
+             title={`This agent's last run used the ${agent.playbook} standard`}>
+          ran as {agent.playbook}
         </div>
       )}
 

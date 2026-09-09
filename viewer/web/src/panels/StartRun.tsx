@@ -1,6 +1,6 @@
 import { Play, Square } from "lucide-react";
 import { useEffect } from "react";
-import { asSlots } from "../lib/planned";
+import { asSlots, fromSlots, withPlaybookAt } from "../lib/planned";
 import { useControl, type PlaybookStage, type RunRequest } from "../store/control";
 import { POLL_MS } from "../store/viewer";
 
@@ -52,16 +52,6 @@ function SkillSelect({ value, onChange }: { value: string; onChange: (v: string)
   );
 }
 
-/** Slots back to the field. All-empty collapses to `""` — the prompt as written, which is
- *  what every run before playbooks was and what `build_argv` reads as *no flag at all*.
- *  A partly-filled set is joined as it stands, empties included, so the service sees the
- *  mismatch it is going to refuse and says so in words. Quietly dropping the empties here
- *  would turn "two of three chosen" into a request for two agents, which is not what the
- *  form said. */
-function fromSlots(slots: string[]): string {
-  return slots.some((s) => s) ? slots.join(",") : "";
-}
-
 /**
  * One select per stage that can be handed a behavioural standard — and for the hypothesis
  * stage, one per agent.
@@ -87,13 +77,20 @@ function fromSlots(slots: string[]): string {
  *
  * Renders nothing at all when there are no playbooks or no marked stages. An empty
  * disclosure is a promise of a feature this checkout does not have.
+ *
+ * **It is no longer the only way to set one.** Since `A-44` each card in the Pipeline view
+ * carries the same choice, which is what the 2026-08-26 figure asked for — a skill shown
+ * and chosen on the agent it belongs to
+
+ * `withPlaybookAt`, so this disclosure stays the place to see all five stages at once and
+ * neither control can produce a field value the other would not.
  */
 function PlaybookSelects({
   form,
   onChange,
 }: {
   form: RunRequest;
-  onChange: (stage: PlaybookStage, v: string) => void;
+  onChange: (stage: PlaybookStage, slot: number, book: string) => void;
 }) {
   const playbooks = useControl((s) => s.playbooks);
   const stages = useControl((s) => s.playbookStages);
@@ -123,11 +120,7 @@ function PlaybookSelects({
                   <select
                     key={i}
                     value={book}
-                    onChange={(e) => {
-                      const next = [...slots];
-                      next[i] = e.target.value;
-                      onChange(stage, slots.length > 1 ? fromSlots(next) : next[0]);
-                    }}
+                    onChange={(e) => onChange(stage, i, e.target.value)}
                     className="w-full rounded-md border border-paper-line bg-white px-2 py-1
                                font-mono text-xs focus:border-ink focus:outline-none"
                   >
@@ -295,7 +288,9 @@ export default function StartRun() {
 
           <PlaybookSelects
             form={form}
-            onChange={(stage, v) => set(`playbook_${stage}`, v)}
+            onChange={(stage, slot, book) =>
+              setForm((f) => withPlaybookAt(f, stage, slot, book))
+            }
           />
 
           <details className="text-[11px]">
