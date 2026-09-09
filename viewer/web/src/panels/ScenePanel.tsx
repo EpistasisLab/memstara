@@ -72,16 +72,27 @@ export default function ScenePanel() {
       // the figures from looking like one column and hiding the one behind.
       //
       // **One of the five stations stacks** (`stores.SPLITTABLE`), and the row has room
-      // for a stack at any of them: a figure is 128 wide, so three span 172 and clear the
-      // next station's column by 3px — the same 3px everywhere, because it is the same
-      // 175. Three is therefore the ceiling and it is not enforced here: the limit belongs
-      // to the drawing, so it lives where the drawing's requests are checked
-      // (`_MAX_HYPOTHESIS_AGENTS` in `src/memstara/control/request.py`). Clamping the slot
-      // here would put two workers on one spot, which is what this line exists to prevent.
+      // for a stack at any of them: a figure is 128 wide and the stations are 175 apart,
+      // so a stack has 47px of sideways travel and 124px of upward travel before it
+      // reaches the store row at y=300. Both were fixed steps — 22 and 62 — until
+      // 2026-09-09, which is the same as saying the drawing was correct for three figures
+      // and drew the fourth on top of the next station. That is why the request checker
+      // capped the count at three, and the cap is now 8 because this is no longer true.
       //
-      // `slot` is 0 for a stage running a single worker, so this is a no-op for a
-      // default run and the floor plan is pixel-identical to what it was.
-      const pos = { x: base.x + a.slot * 22, y: base.y - a.slot * 62 };
+      // The envelope is divided rather than the step being fixed: the whole stack occupies
+      // the space three figures occupied, however many there are, so there is no N at which
+      // a figure lands somewhere it does not belong. The cost is honest and worth stating —
+      // past three the figures overlap more the more of them there are, and the **Pipeline**
+      // view is the one that stays legible at that point, because it stacks in a column
+      // with room below it (`ChainPanel`, `ROW_Y = 148`).
+      //
+      // For one, two or three workers this computes 0, 22 and 62 exactly, so the floor plan
+      // is pixel-identical to what it was for every run made before today.
+      const mine = scene.agents.filter((b) => b.stage === a.stage).length;
+      const spread = Math.max(1, mine - 1);
+      const xStep = Math.min(22, 47 / spread);
+      const yStep = Math.min(62, 124 / spread);
+      const pos = { x: base.x + a.slot * xStep, y: base.y - a.slot * yStep };
       return {
         id: `agent-${a.id}`,
         type: "agent",

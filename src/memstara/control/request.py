@@ -49,18 +49,25 @@ _MODEL = re.compile(r"[A-Za-z0-9._:/-]{1,120}\Z")
 _MAX_TRIALS = 20
 _MAX_WAVES = 10
 
-#: **The only place three is a limit.** The meeting of 2026-08-26 scoped V1 to one or two
-#: hypothesis agents with the screen expandable to three, and the floor plan was laid out
-#: to that: the figures stack upwards from a row of five stations and the space above the
-#: row runs out somewhere past three.
+#: **This was 3 until 2026-09-09, and three was a drawing's limit rather than a run's.**
+#: The meeting of 2026-08-26 scoped V1 to one or two hypothesis agents with the screen
+#: expandable to three, and the floor plan was laid out to exactly that: the figures fan
+#: upwards from a row of five stations 175 apart, a figure is 128 wide, and a fixed 22px
+#: sideways step means three span 172 and the fourth walks into the next station.
 #:
-#: `board.py` deliberately does **not** cap `--hypothesis-agents`
-#: (`src/memstara/pipeline/board.py:1930-1933`), because a cap in the driver stops an
-#: experiment, and a run of three worked on 2026-09-08. Both statements are the same
-#: decision seen from two sides — the limit belongs to the screen, so it is written where
-#: the screen's requests are checked and nowhere else. Anyone looking for it in the driver
-#: will not find it, which is what this paragraph is for.
-_MAX_HYPOTHESIS_AGENTS = 3
+#: The step is no longer fixed. `ScenePanel.tsx` now divides the same 175-wide envelope by
+#: however many figures there are, so the stack tightens instead of overflowing and there
+#: is no N at which it draws something wrong. That removes the reason this number was 3,
+#: and a number kept after its reason has gone is the kind that gets cited later as though
+#: it meant something.
+#:
+#: It is 8 rather than removed. `board.py` deliberately does **not** cap
+#: `--hypothesis-agents` (`src/memstara/pipeline/board.py:1930-1933`), because a cap in the
+#: driver stops an experiment; this one is on the *screen's* requests, where the thing being
+#: guarded is a slipped keypress in a number field — the same reason as `_MAX_TRIALS` above,
+#: and the same kind of ceiling. Eight hypothesis agents is already a run nobody starts by
+#: accident, and the CLI is still there for a deliberate ninth.
+_MAX_HYPOTHESIS_AGENTS = 8
 
 #: What the form sends when a field is left alone. The same values as `board.py`'s own
 #: argparse defaults, so a request that names nothing starts the run the CLI would.
