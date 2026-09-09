@@ -1,11 +1,7 @@
 import { Play, Square } from "lucide-react";
-import { useEffect, useState } from "react";
-import {
-  DEFAULT_REQUEST,
-  useControl,
-  type PlaybookStage,
-  type RunRequest,
-} from "../store/control";
+import { useEffect } from "react";
+import { asSlots } from "../lib/planned";
+import { useControl, type PlaybookStage, type RunRequest } from "../store/control";
 import { POLL_MS } from "../store/viewer";
 
 /**
@@ -54,18 +50,6 @@ function SkillSelect({ value, onChange }: { value: string; onChange: (v: string)
       </select>
     </label>
   );
-}
-
-/** The comma-separated `playbook_hypothesis` field as one entry per agent, padded to
- *  *agents* and truncated to it.
- *
- *  The field is one string because `--playbook-hypothesis` is one argument; the form is
- *  several selects because a person choosing three standards is choosing three things.
- *  This is the only place the two shapes meet, and it is a pure function so that neither
- *  side has to hold the other's state. */
-function asSlots(value: string, agents: number): string[] {
-  const chosen = value.split(",");
-  return Array.from({ length: agents }, (_, i) => chosen[i]?.trim() ?? "");
 }
 
 /** Slots back to the field. All-empty collapses to `""` — the prompt as written, which is
@@ -222,7 +206,13 @@ export default function StartRun() {
   const error = useControl((s) => s.error);
   const startRun = useControl((s) => s.startRun);
   const stopRun = useControl((s) => s.stopRun);
-  const [form, setForm] = useState<RunRequest>(DEFAULT_REQUEST);
+  // In the store rather than in this component since 2026-09-09. The two pipeline drawings
+  // pad themselves to `form.hypothesis_agents`, so the form stopped being this panel's
+  // private business the moment something else on the screen answered to it. Nothing about
+  // how the form behaves changed — both writers below already computed the next form from
+  // the current one, which is exactly what `setForm` takes.
+  const form = useControl((s) => s.form);
+  const setForm = useControl((s) => s.setForm);
   const set = <K extends keyof RunRequest>(k: K, v: RunRequest[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 

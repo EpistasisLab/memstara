@@ -58,10 +58,12 @@ export type RunRequest = {
    *  for V1, so those three are not offered here; they are still free on the command
    *  line, where whatever number results is drawn as one character with the count on it.
    *
-   *  The ceiling of 3 is not enforced here. `src/memstara/control/request.py` holds it,
-   *  and this form is deliberately not a validator — a 4 comes back as the service's own
+   *  The ceiling of 8 is not enforced here. `src/memstara/control/request.py` holds it,
+   *  and this form is deliberately not a validator — a 9 comes back as the service's own
    *  sentence naming the field, which is one place deciding what a legal request is
-   *  instead of two. */
+   *  instead of two. (It was 3 until `d34ebe7`, which is what the floor plan's fixed-step
+   *  fan could draw; the fan now divides its envelope, so the drawing no longer caps the
+   *  number.) */
   hypothesis_agents: number;
   y_column: string;
   provider: string;
@@ -135,6 +137,20 @@ interface ControlState {
   error: string | null;
   /** A request is in flight; the button is disabled so one press is one run. */
   busy: boolean;
+
+  /** What the run form currently says.
+   *
+   *  **It was `useState` inside `StartRun` until 2026-09-09**, and moving it here is not
+   *  tidying: the two pipeline drawings now read it. Setting *Hypothesis* to 5 draws five
+   *  cards, the ones with no worker behind them yet in the `planned` state
+   *  (`lib/planned.ts`), and a panel cannot read another panel's local state. So the form
+   *  became shared the moment something other than the form depended on it.
+   *
+   *  Held as one object, edited through `setForm`, because `RunRequest` is the shape the
+   *  service takes and splitting it into twelve pieces of state would be twelve chances
+   *  for the request sent to differ from the form shown. */
+  form: RunRequest;
+  setForm: (update: (form: RunRequest) => RunRequest) => void;
 
   /** Which run the transcript below belongs to. Null when this service has started
    *  nothing — which is not the same as a run that has printed nothing yet. */
@@ -211,6 +227,14 @@ export const useControl = create<ControlState>((set, get) => ({
   running: null,
   error: null,
   busy: false,
+
+  form: DEFAULT_REQUEST,
+  // An updater rather than a whole-object setter, because the two callers that already
+  // existed in `StartRun` both computed the next form from the current one — one field at a
+  // time, and one case (`hypothesis_agents`) that has to re-cut `playbook_hypothesis` in
+  // the same breath so the number of agents and the number of standards can never be seen
+  // disagreeing.
+  setForm: (update) => set((s) => ({ form: update(s.form) })),
 
   logTag: null,
   logLines: [],
