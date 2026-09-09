@@ -543,11 +543,11 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
     # floor has five stations and each stage rests at its own. What changed is that a
     # station can now have more than one figure standing at it.
     #
-    # **And only two stations may.** The first version of this split all five, which is the
+    # **And only one station may.** The first version of this split all five, which is the
     # opposite of what the meeting decided and of what A-24 was written to do: the user
-    # chooses how many hypothesis and interpretation agents to run and sees them, and the
-    # middle three are one character however many workers are behind them
-    # (`stores.SPLITTABLE`). The count is not hidden — it rides on the card as `running`.
+    # chooses how many hypothesis agents to run and sees them, and everything else is one
+    # character however many workers are behind it (`stores.SPLITTABLE`). The count is not
+    # hidden — it rides on the card as `running`.
     #
     # First the rows that came from core are indexed by **run**. `stores.stage_of_agent`
     # is what does the filtering — only **board-path characters** appear in the scene, so

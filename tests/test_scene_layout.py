@@ -68,11 +68,12 @@ def test_a_full_stack_does_not_reach_the_next_station():
 def test_every_station_has_the_same_room_whether_it_uses_it_or_not():
     """Why A-33's deferred *layout* decision turned out not to be one.
 
-    The item expected a second stacking station to need a new floor plan. It does not:
-    the row is evenly spaced, so the clearance is the same 3px at every station, and
-    the rightmost has the rest of the canvas. Which stations stack is therefore a
-    question about the design and not about the pixels — and this test is what would
-    stop being true if someone moved a station and made it one again.
+    The item expected a second stacking station to need a new floor plan. It would not
+    have: the row is evenly spaced, so the clearance is the same 3px at every station.
+    A-33 was then settled the other way for a reason that has nothing to do with pixels
+    — the design puts one interpreter on screen — but that is exactly why this test is
+    kept. It is what says the next such question is a design question too, and what
+    would stop being true if someone moved a station and made it a layout one again.
     """
     ordered = sorted(stores.HOME, key=lambda s: stores.HOME[s]["x"])
     for station, neighbour in zip(ordered, ordered[1:], strict=False):
@@ -81,9 +82,19 @@ def test_every_station_has_the_same_room_whether_it_uses_it_or_not():
         assert right < left, f"{station} could not hold {CEILING} figures before {neighbour}"
 
 
-def test_the_middle_stations_are_drawn_once():
-    """The half of the meeting's decision that is easy to lose while implementing the
-    other half. Data and ML may run N workers and are still one figure each, with the
-    count on the card — `--data-agents 2` must not become two characters again."""
-    assert "data" not in stores.SPLITTABLE
-    assert "ml" not in stores.SPLITTABLE
+def test_only_the_hypothesis_station_is_drawn_per_worker():
+    """The design's own shape, and the half of it that is easy to lose while implementing
+    the other half.
+
+    V1 is *hypothesis 1–2, and data · ML · interpreter · report one role each*; reading
+    one hypothesis with several interpreters was considered and rejected for the volume of
+
+    non-hypothesis roles still run N workers internally, and not showing that as a
+    duplicated role is the decision, not an omission — so `--data-agents 2` must stay one
+    character with a 2 on it.
+
+    `interpreter` was in `SPLITTABLE` for part of 2026-09-08 on a misreading of that
+    design. This test is written as an equality rather than as four `not in`s so that
+    adding a station fails here and has to be argued for.
+    """
+    assert stores.SPLITTABLE == frozenset({"hypothesis"})

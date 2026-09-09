@@ -242,18 +242,25 @@ HOME: dict[str, dict[str, int]] = {
 # is drawn as exactly one character however many workers are running behind it.**
 #
 # This is the meeting's decision of 2026-08-26, not an implementation detail: the backend
-# may run N of any stage in parallel, and the screen shows the hypothesis and interpretation
-# stages split because that is the parallelism the user is choosing, while the data agent
-# stays a single figure — the user does not need to know that it is internally run more
-# than once.
+# may run N of any stage in parallel, and the screen shows the hypothesis stage split
+# because that is the parallelism the user is choosing, while the data agent stays a
+# single figure — the user does not need to know that it is internally run more than once.
 #
-# **Why `interpreter` is here and `data` and `ml` are not**, since all three run N workers
-# by the same mechanism (one agent, N concurrent calls, `board.py:1680-1725`). The design
-# the meeting was arguing about is *3–4 hypothesis agents → one data/ML → 3–4 interpretation
-# agents → reporting*. Interpretation is named in it with the same count and in the same
-# breath as the hypothesis stage; data and ML are named as **one**. The fold is a claim
-# about what the user chose, so it follows the design's own shape rather than the
-# implementation's — which happens to be identical across the three.
+# **`interpreter` was added here on 2026-09-08 and taken out again the same day**, and the
+# reason is worth keeping because the argument for adding it was persuasive and wrong.
+
+# interpretation agents → reporting*, so interpretation belonged beside hypothesis. The
+# record says the opposite twice over: the V1 role table is *hypothesis 1–2 (the screen
+# extensible to 3), data · ML · interpreter · report one each*, and combinatorial
+# interpretation — one hypothesis read by several interpreters — was **rejected** for the
+
+# `:97`). The same page states the rule this line implements almost word for word: the
+# internal execution count of a non-hypothesis role is deliberately not shown to the user
+# as a duplicated role.
+#
+# So `data`, `ml` and `interpreter` are alike here, and they are alike for a reason that is
+# about the design rather than about them all running N workers by the same mechanism
+# (`board.py:1680-1725`) — which they do, and which is not why.
 #
 # It is declared here rather than in `scene.py` for the same reason `HOME` and `DRAWN_AS`
 # are: the definition lives in one file and `scene.py` consumes it, which is the shape
@@ -267,31 +274,25 @@ HOME: dict[str, dict[str, int]] = {
 # asked for. Every check passed, because all three of them had been written from the
 # implementation instead of from the item.
 #
-# **The floor plan was the open question, and the arithmetic says there is no question.**
-
-# stacking station would not fit. Figures are 128 wide, stand at `home.x - 64`, and step
-# `+22, -62` per slot (`viewer/web/src/panels/ScenePanel.tsx:76`), so a stack of three
-# spans 172 against a row spaced 175 apart: it clears the next station's column by 3px.
-# The same 3px at *every* station, because it is the same 175 — hypothesis ends at x=268
-# against data's 271, interpreter at 793 against report's 796. The interpreter is the
-# fourth station, not an end, and it did not need to be.
+# **The floor plan is not what decides this, and A-33 assumed it was.** That item deferred
+# adding a second station on the expectation that the row could not hold it. It can, at any
+# station: figures are 128 wide, stand at `home.x - 64`, and step `+22, -62` per slot
+# (`viewer/web/src/panels/ScenePanel.tsx:76`), so a stack of three spans 172 against a row
+# spaced 175 apart and clears the next station's column by 3px. The same 3px everywhere,
+# because it is the same 175. `tests/test_scene_layout.py` derives that from `HOME` rather
+# than asserting it, so moving a station makes it a pixel question again loudly.
 #
-# Vertically the interpreter has the easier half of the canvas. Slot 2 sits at y=346, and
-# the only places on the y=300 row are `dataset` (x 8–232) and `ml` (x 218–442) — both
-# above the hypothesis stack, neither anywhere near x=665–793. The station that was
-# already stacking is the constrained one.
+# The arithmetic is kept here although the station it was worked out for is gone, because
+# it is what establishes that this set is settled by the design and by nothing else. A
+# future stage arriving here needs an argument from the record, not from the canvas.
 #
-# So which stations split is a question about the design and not about the pixels, which
-# is the part of A-33 worth carrying forward. `tests/test_scene_layout.py` is what would
-# make it a pixel question again if someone moved a station.
-#
-# **Three is the ceiling, and it is not enforced here.** Slot 3 would put a figure at
-# x=687–815, across the report station's column. The limit belongs to the drawing, so it
-# is written where the drawing's requests are checked — `_MAX_HYPOTHESIS_AGENTS`
+# **Three is the ceiling, and it is not enforced here.** A fourth figure would land across
+# the next station's column. The limit belongs to the drawing, so it is written where the
+# drawing's requests are checked — `_MAX_HYPOTHESIS_AGENTS`
 # (`src/memstara/control/request.py:63`), which caps a browser-started run and says in its
 # own comment why the driver is deliberately left uncapped. A cap in *this* file would
 # silently hide a running worker, which is the exact failure `folded` was written to avoid.
-SPLITTABLE: frozenset[str] = frozenset({"hypothesis", "interpreter"})
+SPLITTABLE: frozenset[str] = frozenset({"hypothesis"})
 
 # Which character a stage is *drawn* as. **This is now a compatibility layer**, and it
 # is the reason a run from before 2026-09-07 still shows up on every screen.

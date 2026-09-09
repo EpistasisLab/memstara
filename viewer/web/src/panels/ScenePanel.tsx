@@ -71,13 +71,13 @@ export default function ScenePanel() {
       // whereas the space above the row is empty down to y=300. The small x step keeps
       // the figures from looking like one column and hiding the one behind.
       //
-      // **Two of the five stations stack** (`stores.SPLITTABLE`). A figure is 128 wide,
-      // so three of them span 172 and clear the next station's column by 3px — the same
-      // 3px at every station, because it is the same 175. Three is therefore the ceiling
-      // and it is not enforced here: the limit belongs to the drawing, so it lives where
-      // the drawing's requests are checked (`_MAX_HYPOTHESIS_AGENTS` in
-      // `src/memstara/control/request.py`). Clamping the slot here would put two workers
-      // on one spot, which is the thing this line exists to prevent.
+      // **One of the five stations stacks** (`stores.SPLITTABLE`), and the row has room
+      // for a stack at any of them: a figure is 128 wide, so three span 172 and clear the
+      // next station's column by 3px — the same 3px everywhere, because it is the same
+      // 175. Three is therefore the ceiling and it is not enforced here: the limit belongs
+      // to the drawing, so it lives where the drawing's requests are checked
+      // (`_MAX_HYPOTHESIS_AGENTS` in `src/memstara/control/request.py`). Clamping the slot
+      // here would put two workers on one spot, which is what this line exists to prevent.
       //
       // `slot` is 0 for a stage running a single worker, so this is a no-op for a
       // default run and the floor plan is pixel-identical to what it was.
