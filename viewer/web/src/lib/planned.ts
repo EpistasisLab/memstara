@@ -96,6 +96,57 @@ function wantedAgents(form: RunRequest): number {
   return Math.max(1, Math.floor(form.hypothesis_agents) || 1);
 }
 
+/** The most hypothesis agents the service will start — `_MAX_HYPOTHESIS_AGENTS`
+ *  (`src/memstara/control/request.py:70`).
+ *
+ *  **This does not make the form a validator**, and the distinction is the whole reason it
+ *  is safe to have the number here at all. The `Hypothesis` field still accepts a 9 and the
+ *  service still refuses it in its own sentence naming the field, which keeps one place
+ *  deciding what a legal request is. What this bounds is the `+` button, and a button is an
+ *  offer rather than a check: one that reliably produced a 400 would be an offer worth
+ *  nothing. Past the ceiling it says so instead of disappearing, because a control that
+ *  vanishes explains nothing about why. */
+export const MAX_HYPOTHESIS_AGENTS = 8;
+
+/** The form asking for one more hypothesis agent, standards re-cut to match.
+ *
+ *  The same pairing `StartRun.tsx` does when the number field changes: the count and the
+ *  standards are matched by position and the service refuses the pair when their lengths
+ *  disagree, so they move together or not at all. Returns the form unchanged at the
+ *  ceiling. */
+export function withOneMoreAgent(form: RunRequest): RunRequest {
+  const wanted = wantedAgents(form);
+  if (wanted >= MAX_HYPOTHESIS_AGENTS) return form;
+  return {
+    ...form,
+    hypothesis_agents: wanted + 1,
+    playbook_hypothesis: fromSlots(asSlots(form.playbook_hypothesis, wanted + 1)),
+  };
+}
+
+/**
+ * The form with one hypothesis slot taken back out.
+ *
+ * Removes *that* slot rather than the last one, so the standards below it move up and the
+ * card the `×` was on is the card that goes. Shrinking through the number field can only
+ * ever drop the tail, which is why this is a separate function and not a decrement.
+ *
+ * Never below one — the station always draws at least one figure because the API never
+ * sends fewer.
+ */
+export function withoutSlot(form: RunRequest, slot: number): RunRequest {
+  const wanted = wantedAgents(form);
+  if (wanted <= 1) return form;
+  const slots = asSlots(form.playbook_hypothesis, wanted);
+  if (slot < 0 || slot >= slots.length) return form;
+  slots.splice(slot, 1);
+  return {
+    ...form,
+    hypothesis_agents: wanted - 1,
+    playbook_hypothesis: fromSlots(slots),
+  };
+}
+
 /** What the form currently gives one card's slot — the reader `withPlaybookAt` writes.
  *
  *  Paired with it deliberately: a card's select shows this and sets that, so if the two ever

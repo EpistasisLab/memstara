@@ -14,7 +14,14 @@ import FitOnResize from "../components/FitOnResize";
 import Panel from "../components/Panel";
 import { chainEdgeTypes, chainNodeTypes } from "../components/chain";
 import { CHAIN, chainAgents, elapsedSince, linkIsLive } from "../lib/chain";
-import { playbookAt, withPlannedAgents, withPlaybookAt } from "../lib/planned";
+import {
+  MAX_HYPOTHESIS_AGENTS,
+  playbookAt,
+  withOneMoreAgent,
+  withPlannedAgents,
+  withPlaybookAt,
+  withoutSlot,
+} from "../lib/planned";
 import { STAGE_COLOR } from "../lib/stage";
 import { PLAYBOOK_STAGES, useControl, type PlaybookStage } from "../store/control";
 import { useScene, useViewer } from "../store/viewer";
@@ -165,6 +172,12 @@ export default function ChainPanel() {
               if (!stage) return;
               setForm((f) => withPlaybookAt(f, stage, agent.slot, book));
             },
+            // Only a figure the form invented and nothing has started. See `onRemove` in
+            // `ChainNodeData` for why an observed card does not get one.
+            onRemove:
+              !live && agent.state === "planned"
+                ? () => setForm((f) => withoutSlot(f, agent.slot))
+                : null,
           },
           draggable: false,
           selectable: false,
@@ -172,6 +185,32 @@ export default function ChainPanel() {
       }),
     );
   }, [steps, fetchedAt, form, live, playbookStages, setForm]);
+
+  // The dashed slot under the hypothesis stack. Placed at the row after the last card of
+  // that column, using the same centring the cards use so it sits in the column rather than
+  // beside it — and left out of that centring's own arithmetic, because a stack that shifts
+  // up by half a row the moment this appears would read as the cards moving.
+  //
+  // Found by stage rather than by index. The hypothesis column is first today, and the one
+  // thing this panel must not do is depend on that in a second place (`lib/chain.ts:CHAIN`
+  // is the first).
+  const addNode: Node | null = useMemo(() => {
+    if (live) return null;
+    const column = steps.findIndex((s) => s.stage === "hypothesis");
+    if (column < 0) return null;
+    const rows = steps[column].agents.length;
+    return {
+      id: "chain-add",
+      type: "chainAdd",
+      position: { x: column * STEP_X, y: (rows - (rows - 1) / 2) * ROW_Y },
+      data: {
+        onAdd: () => setForm(withOneMoreAgent),
+        atCeiling: form.hypothesis_agents >= MAX_HYPOTHESIS_AGENTS,
+      },
+      draggable: false,
+      selectable: false,
+    };
+  }, [steps, live, form.hypothesis_agents, setForm]);
 
   const edges: Edge[] = useMemo(
     () =>
@@ -264,7 +303,7 @@ export default function ChainPanel() {
       ) : (
         <div className="h-full w-full">
           <ReactFlow
-            nodes={nodes}
+            nodes={addNode ? [...nodes, addNode] : nodes}
             edges={edges}
             nodeTypes={chainNodeTypes}
             edgeTypes={chainEdgeTypes}

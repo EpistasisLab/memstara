@@ -7,8 +7,9 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import { motion } from "framer-motion";
-import { BookMarked } from "lucide-react";
+import { BookMarked, Plus, X } from "lucide-react";
 import { STAGE_ICON, STATE_ICON, STORE_ICON } from "../lib/icons";
+import { MAX_HYPOTHESIS_AGENTS } from "../lib/planned";
 import { STAGE_COLOR, STATE_LABEL } from "../lib/stage";
 import { useControl } from "../store/control";
 import type { SceneAgent } from "../types";
@@ -64,10 +65,18 @@ export interface ChainNodeData extends Record<string, unknown> {
   /** Writes `choice` back to the form. Called with a playbook stem, or `""` for the prompt
    *  as written. A no-op when `editable` is false; the select is not rendered then. */
   onPlaybook: (book: string) => void;
+  /** Takes this slot back out of the form, or null when it cannot be.
+   *
+   *  Only ever set on a `planned` card. Every other card stands for a worker the database
+   *  has a row for, and the form does not get to delete one of those: `withPlannedAgents`
+   *  drops a resting observed figure when the count falls, but it drops the tail, so an
+   *  `×` on such a card would remove a different card than the one it sits on. */
+  onRemove: (() => void) | null;
 }
 
 export function ChainNode({ data }: NodeProps) {
-  const { agent, step, elapsed, editable, choice, onPlaybook } = data as ChainNodeData;
+  const { agent, step, elapsed, editable, choice, onPlaybook, onRemove } =
+    data as ChainNodeData;
   const color = STAGE_COLOR[agent.stage];
   const busy = agent.state === "working";
   const tone = STATE_TONE[agent.state];
@@ -82,12 +91,35 @@ export function ChainNode({ data }: NodeProps) {
 
   return (
     <div
-      className={`w-44 rounded-xl border-2 bg-white px-3 py-2.5 shadow-sm transition
+      className={`relative w-44 rounded-xl border-2 bg-white px-3 py-2.5 shadow-sm transition
                   hover:shadow-md ${tone.ring}`}
       style={busy ? { borderColor: color } : undefined}
     >
       <Handle type="target" position={Position.Left} className="!bg-transparent !border-0" />
       <Handle type="source" position={Position.Right} className="!bg-transparent !border-0" />
+
+      {/* Takes back a slot the form asked for and nothing has started. The counterpart of
+          the `+` below the column: between them the stack is grown and shrunk where it is
+          drawn, which is what the `확장 슬롯` in the meeting's figure is
+
+          the left rail still does both and is still the only way to shrink past the
+          observed figures. */}
+      {onRemove && (
+        <button
+          type="button"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className="nodrag nopan absolute -right-2 -top-2 flex h-5 w-5 items-center
+                     justify-center rounded-full border border-paper-line bg-white
+                     text-ink-faint shadow-sm hover:border-ink hover:text-ink"
+          title="Do not start this one — take the slot back off the form"
+        >
+          <X className="h-3 w-3" strokeWidth={2.4} />
+        </button>
+      )}
 
       <div className="flex items-center gap-2">
         <div className="relative shrink-0">
@@ -256,6 +288,58 @@ export function ChainNode({ data }: NodeProps) {
   );
 }
 
+export interface ChainAddData extends Record<string, unknown> {
+  /** Adds one hypothesis slot to the run form. */
+  onAdd: () => void;
+  /** The form is already at `MAX_HYPOTHESIS_AGENTS`. Drawn and disabled rather than
+   *  removed: a control that disappears at its limit leaves the reader to guess whether
+   *  there is a limit or the screen broke. */
+  atCeiling: boolean;
+}
+
+/**
+ * The dashed slot at the foot of the hypothesis column — the meeting figure's `확장 슬롯`.
+ *
+
+ * and the third is dashed and labelled as an expansion slot, which is a statement about the
+ * screen and not only about the run: the stack is meant to look like something you add to.
+ * Until 2026-09-09 the only way to add one was the `Hypothesis` number in the left rail, so
+ * the drawing showed a stack that could grow and offered no way to grow it.
+ *
+ * It is not an agent and is not in `steps`, so it takes part in no edge and `onNodeClick`
+ * cannot find it — which is why the button carries its own stopped events rather than
+ * relying on the panel to ignore it.
+ */
+export function ChainAddNode({ data }: NodeProps) {
+  const { onAdd, atCeiling } = data as ChainAddData;
+  const color = STAGE_COLOR.hypothesis;
+
+  return (
+    <button
+      type="button"
+      disabled={atCeiling}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        onAdd();
+      }}
+      className="nodrag nopan flex w-44 items-center justify-center gap-1.5 rounded-xl
+                 border-2 border-dashed border-paper-line bg-white/60 px-3 py-2.5
+                 text-[11px] font-bold text-ink-faint transition hover:border-ink-faint
+                 hover:text-ink disabled:cursor-not-allowed disabled:opacity-60
+                 disabled:hover:border-paper-line disabled:hover:text-ink-faint"
+      title={atCeiling
+        ? `The service starts at most ${MAX_HYPOTHESIS_AGENTS} hypothesis agents ` +
+          `(src/memstara/control/request.py). The number field will still let you ask for ` +
+          `more, and the service will say why it refuses.`
+        : "Add a hypothesis agent to the next run"}
+    >
+      <Plus className="h-3.5 w-3.5" strokeWidth={2.4} style={atCeiling ? undefined : { color }} />
+      {atCeiling ? `max ${MAX_HYPOTHESIS_AGENTS}` : "hypothesis agent"}
+    </button>
+  );
+}
+
 export interface ChainEdgeData extends Record<string, unknown> {
   live: boolean;
   color: string;
@@ -308,5 +392,5 @@ export function ChainEdge({
   );
 }
 
-export const chainNodeTypes = { chain: ChainNode };
+export const chainNodeTypes = { chain: ChainNode, chainAdd: ChainAddNode };
 export const chainEdgeTypes = { chain: ChainEdge };
