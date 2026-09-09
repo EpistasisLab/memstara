@@ -43,11 +43,12 @@ export interface SceneAgent {
   slot: number;
   /** How many runs **this figure** stands for — 0 when it is resting.
    *
-   *  Only `hypothesis` is drawn as one figure per worker (`stores.SPLITTABLE`), so there
-   *  this is 1 on each. The other four are one figure however many run behind them, which
-   *  is what the meeting of 2026-08-26 asked for, and there this is the whole count. That
-   *  is why folding them is not the same as hiding them: `--data-agents 2` draws one data
-   *  character with a 2 on it, not two characters and not a silent one. */
+   *  Only `hypothesis` and `interpreter` are drawn as one figure per worker
+   *  (`stores.SPLITTABLE`), so there this is 1 on each. The other three are one figure
+   *  however many run behind them, which is what the meeting of 2026-08-26 asked for, and
+   *  there this is the whole count. That is why folding them is not the same as hiding
+   *  them: `--data-agents 2` draws one data character with a 2 on it, not two characters
+   *  and not a silent one. */
   running: number;
   name: string;
   state: AgentState;

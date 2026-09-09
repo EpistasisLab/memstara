@@ -412,21 +412,26 @@ def main() -> int:
     chk("6 character ids are unique", len({a["id"] for a in figures}) == len(figures),
         f"{len(figures)} figures, {len({a['id'] for a in figures})} ids")
 
-    # **Only the hypothesis station may show more than one figure.** The meeting of
-    # 2026-08-26 decided this in the other direction from how it first shipped: the
-    # backend may run N of any stage, and the screen shows the hypothesis agents split
-    # because that is the parallelism the user chose, while the data agent stays one
-    # character — the user does not need to know it is internally run more than once.
+    # **Only two of the five stations may show more than one figure.** The
+    # meeting of 2026-08-26 decided this in the other direction from how it first shipped:
+    # the backend may run N of any stage, and the screen shows the hypothesis and
+    # interpretation agents split because that is the parallelism the user chose, while the
+    # data agent stays one character — the user does not need to know it is internally run
+    # more than once. The design being argued about names those two stages with a count
+    # (*3–4 hypothesis agents → one data/ML → 3–4 interpretation agents → reporting*) and
+    # names the middle two as one, which is the whole of why the line falls here.
     #
-    # `"hypothesis"` is written out here rather than read from `stores.SPLITTABLE`, for
-    # the same reason this whole file reads the databases instead of the API: a check that
-    # asks the implementation what the rule is agrees with the implementation about
-    # everything, including what it has backwards. That is not a hypothetical — the first
-    # version of this split all five stations and three separate checks passed, because
-    # all three had been written from the code.
+    # The pair is written out here rather than read from `stores.SPLITTABLE`, for the same
+    # reason this whole file reads the databases instead of the API: a check that asks the
+    # implementation what the rule is agrees with the implementation about everything,
+    # including what it has backwards. That is not a hypothetical — the first version of
+    # this split all five stations and three separate checks passed, because all three had
+    # been written from the code. So when `interpreter` joined on 2026-09-08 it had to be
+    # typed again here, by hand, from the item rather than copied from the frozenset.
+    splits = {"hypothesis", "interpreter"}
     per_station = Counter(a["stage"] for a in figures)
-    folded = {s: n for s, n in per_station.items() if s != "hypothesis" and n > 1}
-    chk("6 only the hypothesis station splits", not folded, f"{folded} drawn more than once")
+    folded = {s: n for s, n in per_station.items() if s not in splits and n > 1}
+    chk("6 only the end stations split", not folded, f"{folded} drawn more than once")
 
     # And the fold must not be a disappearance. A station drawn once while two workers run
     # has to say two, or `--data-agents 2` and `--data-agents 1` are the same picture.
