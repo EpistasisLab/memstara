@@ -74,7 +74,14 @@ export type RunRequest = {
    *  Per-stage and not one `playbook` box because a run legitimately gives different
    *  stages different standards, and because the service refuses a standard aimed at a
    *  prompt that cannot receive one — a single box would have nowhere to say which
-   *  stage it was for. */
+   *  stage it was for.
+   *
+   *  **`playbook_hypothesis` may hold several stems separated by commas, one per agent**
+   *  (`A-32`): that stage provisions an agent per standard, so `hypothesis_agents: 3`
+   *  with three names is three agents that can disagree. The type stays `string` for all
+   *  five rather than becoming `string | string[]` for one, because the value is a
+   *  command-line argument and `--playbook-hypothesis` takes one. `StartRun.tsx` is the
+   *  only place that splits it. */
   [S in PlaybookStage as `playbook_${S}`]: string;
 };
 

@@ -56,8 +56,31 @@ function SkillSelect({ value, onChange }: { value: string; onChange: (v: string)
   );
 }
 
+/** The comma-separated `playbook_hypothesis` field as one entry per agent, padded to
+ *  *agents* and truncated to it.
+ *
+ *  The field is one string because `--playbook-hypothesis` is one argument; the form is
+ *  several selects because a person choosing three standards is choosing three things.
+ *  This is the only place the two shapes meet, and it is a pure function so that neither
+ *  side has to hold the other's state. */
+function asSlots(value: string, agents: number): string[] {
+  const chosen = value.split(",");
+  return Array.from({ length: agents }, (_, i) => chosen[i]?.trim() ?? "");
+}
+
+/** Slots back to the field. All-empty collapses to `""` — the prompt as written, which is
+ *  what every run before playbooks was and what `build_argv` reads as *no flag at all*.
+ *  A partly-filled set is joined as it stands, empties included, so the service sees the
+ *  mismatch it is going to refuse and says so in words. Quietly dropping the empties here
+ *  would turn "two of three chosen" into a request for two agents, which is not what the
+ *  form said. */
+function fromSlots(slots: string[]): string {
+  return slots.some((s) => s) ? slots.join(",") : "";
+}
+
 /**
- * One select per stage that can be handed a behavioural standard.
+ * One select per stage that can be handed a behavioural standard — and for the hypothesis
+ * stage, one per agent.
  *
  * **Both lists come from the service and neither is written here.** Which playbooks exist
  * is a directory; which stages can take one is read off the prompt files, because a
@@ -68,6 +91,15 @@ function SkillSelect({ value, onChange }: { value: string; onChange: (v: string)
  *
  * The consequence worth knowing: marking a third prompt is one line in one `.md` file and
  * a third row appears here. There is no list in this component to add it to.
+ *
+ * **The hypothesis row is the only one that grows, and that is not a layout choice.** Its
+ * workers set out independently and one agent is provisioned per standard (`A-32`), so
+ * three standards mean three agents whose agreement is worth something. Every other stage
+ * runs a single agent however many workers claim from the board, so a second select there
+ * would offer a standard that is accepted and never read. Which stage this is comes from
+ * `MULTI_PLAYBOOK_STAGES` in `src/memstara/control/request.py`, restated here as a
+ * comparison against the one name rather than copied as a list, because a second list is
+ * a second answer to keep in step.
  *
  * Renders nothing at all when there are no playbooks or no marked stages. An empty
  * disclosure is a promise of a feature this checkout does not have.
@@ -88,28 +120,51 @@ function PlaybookSelects({
     <details className="text-[11px]">
       <summary className="cursor-pointer text-ink-faint">Playbooks</summary>
       <div className="mt-2 space-y-2">
-        {stages.map((stage) => (
-          <label key={stage} className="block">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">
-              {stage}
-            </span>
-            <select
-              value={form[`playbook_${stage}`]}
-              onChange={(e) => onChange(stage, e.target.value)}
-              className="mt-1 w-full rounded-md border border-paper-line bg-white px-2 py-1
-                         font-mono text-xs focus:border-ink focus:outline-none"
-            >
-              {/* Named rather than blank. "none" would read as a missing setting; this
-                  says what the run is, and it is what every run before playbooks was. */}
-              <option value="">prompt as written</option>
-              {playbooks.map((book) => (
-                <option key={book} value={book}>
-                  {book}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
+        {stages.map((stage) => {
+          // One slot for every stage; the hypothesis stage is the one where that number
+          // can exceed 1, and it follows the agent count above rather than a control of
+          // its own. Two numbers meaning "how many hypothesis standards" would be two
+          // numbers to keep equal, and the service refuses the pair when they are not.
+          const slots =
+            stage === "hypothesis"
+              ? asSlots(form.playbook_hypothesis, form.hypothesis_agents)
+              : [form[`playbook_${stage}`]];
+          return (
+            <div key={stage} className="block">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">
+                {stage}
+              </span>
+              <div className="mt-1 space-y-1">
+                {slots.map((book, i) => (
+                  <select
+                    key={i}
+                    value={book}
+                    onChange={(e) => {
+                      const next = [...slots];
+                      next[i] = e.target.value;
+                      onChange(stage, slots.length > 1 ? fromSlots(next) : next[0]);
+                    }}
+                    className="w-full rounded-md border border-paper-line bg-white px-2 py-1
+                               font-mono text-xs focus:border-ink focus:outline-none"
+                  >
+                    {/* Named rather than blank. "none" would read as a missing setting;
+                        this says what the run is, and it is what every run before
+                        playbooks was. The agent number is on the option rather than on a
+                        label, so a stage with one agent looks exactly as it did. */}
+                    <option value="">
+                      prompt as written{slots.length > 1 ? ` — agent ${i + 1}` : ""}
+                    </option>
+                    {playbooks.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </details>
   );
@@ -231,10 +286,20 @@ export default function StartRun() {
                 drawing and false of the button — a browser could only ever start one, and
                 two meant going to the command line. The other three stages were fixed at
                 one each by the same meeting and are deliberately not offered. */}
+            {/* The standards move with the count, because they are paired by position and
+                a name past the last agent is one the service refuses and the form no
+                longer shows. Growing pads with "prompt as written"; shrinking drops the
+                tail, which is the one the disappearing select was showing. */}
             <Number_
               label="Hypothesis"
               value={form.hypothesis_agents}
-              onChange={(v) => set("hypothesis_agents", v)}
+              onChange={(v) =>
+                setForm((f) => ({
+                  ...f,
+                  hypothesis_agents: v,
+                  playbook_hypothesis: fromSlots(asSlots(f.playbook_hypothesis, v)),
+                }))
+              }
             />
           </div>
 
