@@ -35,12 +35,10 @@ const STATE_TONE: Record<SceneAgent["state"], { text: string; ring: string }> = 
 };
 
 export interface ChainNodeData extends Record<string, unknown> {
-  /** The worker that stands for the stage on this card — the one furthest along the
-   *  state order, not an arbitrary one. See `chainAgents`. */
+  /** One figure. At the hypothesis station that is one worker and the column holds a card
+   *  for each of them; at the other four it is the whole stage, and `agent.running` is how
+   *  many workers are behind this one card. See `chainAgents`. */
   agent: SceneAgent;
-  /** How many workers of this stage are on the floor. 1 for an ordinary run; the card
-   *  says so only when it is more, because "1 worker" beside every stage is noise. */
-  workers: number;
   /** 1-based, shown on the card. Steps read as a sequence far more readily when they are
    *  numbered — the one convention every stepper in the wild agrees on. */
   step: number;
@@ -49,7 +47,7 @@ export interface ChainNodeData extends Record<string, unknown> {
 }
 
 export function ChainNode({ data }: NodeProps) {
-  const { agent, workers, step, elapsed } = data as ChainNodeData;
+  const { agent, step, elapsed } = data as ChainNodeData;
   const color = STAGE_COLOR[agent.stage];
   const busy = agent.state === "working";
   const tone = STATE_TONE[agent.state];
@@ -97,21 +95,38 @@ export function ChainNode({ data }: NodeProps) {
           <div className="truncate text-[13px] font-bold leading-tight" title={agent.label}>
             {agent.label}
           </div>
+          {/* The worker's own name, and only when it has one. Every card of a stacked
+              column carries the station's label, so without this line three hypothesis
+              cards read identically and the stack says how many rather than which. It is
+              the same string the board writes to `claimed_by`, which is what lets a card
+              be matched against the task row that names its holder. */}
+          {agent.worker && (
+            <div className="truncate font-mono text-[10px] leading-tight" style={{ color }}
+                 title={agent.worker}>
+              {agent.worker}
+            </div>
+          )}
         </div>
       </div>
 
       <div className={`mt-2 flex items-center gap-1.5 text-[11px] font-bold ${tone.text}`}>
         <StateGlyph className={`h-3.5 w-3.5 shrink-0 ${busy ? "animate-spin" : ""}`} strokeWidth={2.2} />
         <span className="truncate">{STATE_LABEL[agent.state]}</span>
-        {/* The one thing this card would otherwise lose by staying a five-card chain: the
-            state word is one worker's, so without the count a stage running three of them
-            reads exactly like a stage running one. The floor plan draws them; this says
-            how many there are to look for. */}
-        {workers > 1 && (
+        {/* How many workers this **one card** stands for, which is only ever more than one
+            at a folded station. The hypothesis station is not folded — it gets a card per
+            worker — so this badge now appears exactly where a stage is running several and
+            drawing one, which is the case that would otherwise be invisible.
+
+            Read off `agent.running` rather than off a count of cards. Those are different
+            numbers and the difference is the whole point: `--data-agents 2` sends one
+            figure with `running: 2`, so counting cards would say 1 and say it silently.
+            Until 2026-09-09 this badge was fed by the card count and therefore never fired
+            for any folded stage at all — the one place it was needed. */}
+        {agent.running > 1 && (
           <span className="shrink-0 rounded-full px-1.5 font-mono text-[10px] font-bold"
                 style={{ backgroundColor: `${color}22`, color }}
-                title={`${workers} workers of this stage are on the floor plan`}>
-            x{workers}
+                title={`${agent.running} workers of this stage, drawn as one`}>
+            x{agent.running}
           </span>
         )}
         {/* Elapsed time is what separates "working" from "wedged". Without it a stuck run

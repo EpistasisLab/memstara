@@ -18,10 +18,17 @@ import { STAGE_COLOR } from "../lib/stage";
 import { useScene, useViewer } from "../store/viewer";
 
 /**
- * The pipeline as a left-to-right chain: six stages drawn as five cards in the order they
- * run, four links between them, and a dot travelling along a link while work is flowing
- * into the stage on its right. The curator shares the first card with the hypothesis
- * stage — `lib/chain.ts:CHAIN` says why.
+ * The pipeline as a left-to-right chain: six stages drawn as five columns in the order they
+ * run, links between them, and a dot travelling along a link while work is flowing into the
+ * stage on its right. The curator shares the first column with the hypothesis stage —
+ * `lib/chain.ts:CHAIN` says why.
+ *
+ * **The first column is a stack.** The hypothesis station draws one card per worker and
+ * every one of them points at the single data card, which is the screen the 2026-08-26
+ * meeting adopted over three tabs and over three complete pipeline rows
+
+ * one card however many workers run behind them and carry the count as a badge — the same
+ * split `stores.SPLITTABLE` makes on the floor plan, decided in the same meeting.
  *
  * This is the default view because it is the one that answers the first question anyone
  * asks of a running pipeline — how far along is it. The floor plan answers "who is
@@ -47,6 +54,15 @@ import { useScene, useViewer } from "../store/viewer";
  *  56px between cards. Change one without the other and they either crowd or drift. */
 const STEP_X = 232;
 
+/** The gap between two cards of one stacked column.
+ *
+ *  A card is between about 76px and 124px tall depending on how many of its optional lines
+ *  it is showing — the standard, the held card, the last tool — so this is the tallest of
+ *  those plus a margin rather than a measurement. React Flow does not lay out; a value too
+ *  small overlaps two cards silently, and `fitView` scales whatever this produces to the
+ *  panel, so being generous costs only zoom. */
+const ROW_Y = 148;
+
 export default function ChainPanel() {
   const scene = useScene();
   const fetchedAt = useViewer((s) => s.fetchedAt);
@@ -65,7 +81,8 @@ export default function ChainPanel() {
   // response, so it earns the same badge for the same reason.
   const stale = useViewer((s) => s.snapshot?.stale ?? false);
 
-  // One step per stage, however many workers are running it — see `chainAgents`.
+  // One column per stage; the hypothesis column holds one card per worker — see
+  // `chainAgents`.
   const steps = useMemo(() => chainAgents(scene?.agents ?? []), [scene]);
 
   const nodes: Node[] = useMemo(() => {
@@ -73,44 +90,58 @@ export default function ChainPanel() {
     // millisecond and render "3s" beside "2s" for the same instant.
     const now = Date.now();
 
-    return steps.map(({ agent, workers }, i) => ({
-      id: `chain-${agent.stage}`,
-      type: "chain",
-      position: { x: i * STEP_X, y: 0 },
-      // While a run is open, `since` is when it opened; otherwise the freshest thing the
-      // stage has is its last tool call. The state word beside the figure says which of
-      // the two is being counted.
-      data: {
-        agent,
-        workers,
-        step: i + 1,
-        elapsed: elapsedSince(agent.since ?? agent.last_tool?.at ?? null, now),
-      },
-      draggable: false,
-      selectable: false,
-    }));
+    return steps.flatMap(({ agents }, i) =>
+      agents.map((agent, row) => ({
+        id: `chain-${agent.id}`,
+        type: "chain",
+        // The column is centred on its own stack, so the four single-card columns line up
+        // with the middle of the hypothesis stack rather than with its top. A stack of one
+        // puts its card at y=0, which is where every card was before this panel stacked
+        // anything — a default run is laid out exactly as it always was.
+        position: { x: i * STEP_X, y: (row - (agents.length - 1) / 2) * ROW_Y },
+        // While a run is open, `since` is when it opened; otherwise the freshest thing the
+        // stage has is its last tool call. The state word beside the figure says which of
+        // the two is being counted.
+        data: {
+          agent,
+          step: i + 1,
+          elapsed: elapsedSince(agent.since ?? agent.last_tool?.at ?? null, now),
+        },
+        draggable: false,
+        selectable: false,
+      })),
+    );
   }, [steps, fetchedAt]);
 
   const edges: Edge[] = useMemo(
     () =>
-      steps.slice(0, -1).map(({ agent: from }, i) => {
-        const to = steps[i + 1].agent;
-        const live = linkIsLive(to);
-        const color = STAGE_COLOR[to.stage];
-        return {
-          id: `link-${from.stage}-${to.stage}`,
-          type: "chain",
-          source: `chain-${from.stage}`,
-          target: `chain-${to.stage}`,
-          data: { live, color },
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            width: 14,
-            height: 14,
-            color: live ? color : "#dcdbd4",
-          },
-        };
-      }),
+      // Every card of one column to every card of the next. With only the hypothesis
+      // station splitting that is a fan-in of N arrows onto the single data card and then
+      // one arrow per link the rest of the way — which is the meeting's figure. Written
+      // as a full cross product rather than special-casing `hypothesis` so that the panel
+      // stays correct if `stores.SPLITTABLE` ever gains a station; it would then be wrong
+      // about nothing, only busy.
+      steps.slice(0, -1).flatMap(({ agents: from }, i) =>
+        from.flatMap((source) =>
+          steps[i + 1].agents.map((to) => {
+            const live = linkIsLive(to);
+            const color = STAGE_COLOR[to.stage];
+            return {
+              id: `link-${source.id}-${to.id}`,
+              type: "chain",
+              source: `chain-${source.id}`,
+              target: `chain-${to.id}`,
+              data: { live, color },
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                width: 14,
+                height: 14,
+                color: live ? color : "#dcdbd4",
+              },
+            };
+          }),
+        ),
+      ),
     [steps],
   );
 
@@ -192,9 +223,14 @@ export default function ChainPanel() {
             zoomOnDoubleClick={false}
             preventScrolling={false}
             onNodeClick={(_, node) => {
-              const step = steps.find((s) => `chain-${s.agent.stage}` === node.id);
-              if (!step) return;
-              selectAgent(step.agent.name);
+              // Found by figure id, not by stage: with three hypothesis cards on screen a
+              // stage lookup would send all three to the same agent — the one thing three
+              // separate cards exist to stop.
+              const agent = steps
+                .flatMap((s) => s.agents)
+                .find((a) => `chain-${a.id}` === node.id);
+              if (!agent) return;
+              selectAgent(agent.name);
               setView("agents");
             }}
           >

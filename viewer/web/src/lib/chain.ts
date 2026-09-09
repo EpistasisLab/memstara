@@ -40,43 +40,51 @@ export const CHAIN: StageId[] = [
   "report",
 ];
 
-/** One entry per chain stage: the figure that stands for it, and how many are running. */
+/** One column of the chain: a stage, and every figure the scene sent for it. */
 export interface ChainStep {
-  agent: SceneAgent;
-  /** How many workers of this stage the scene sent. 1 for an ordinary run. */
-  workers: number;
+  stage: StageId;
+  /** The cards drawn in this column, in the order the API sent them — which is `slot`
+   *  order, so the stack does not reshuffle itself between polls.
+   *
+   *  One card for four of the five stages. The hypothesis station sends one agent per
+   *  worker (`stores.SPLITTABLE`) and each of them gets a card, because that is the
+   *  screen the 2026-08-26 meeting adopted. */
+  agents: SceneAgent[];
 }
 
 /**
  * The stages in chain order, skipping any the API did not send.
  *
- * **The chain stays five cards however many workers run.** It answers "how far along is
- * the work", and three hypothesis workers are three hands on one step of the pipeline,
- * not three steps — laid out in a row they would push `data`, `ml`, `interpreter` and
- * `report` off to the right and make the picture say the pipeline had grown. The floor
- * plan is the screen that draws one figure per worker; this one counts them.
+ * **The chain stays five columns however many workers run, and the hypothesis column
+ * stacks.** This panel answers "how far along is the work", and three hypothesis workers
+ * are three hands on one step of the pipeline rather than three steps — laid out **in a
+ * row** they would push `data`, `ml`, `interpreter` and `report` to the right and make the
+ * picture say the pipeline had grown. That was the reason this returned one card per stage
+ * until 2026-09-09, and it is still the right reason: it rules out a row. It does not rule
+ * out a **column**. Stacking them vertically leaves all five columns exactly where they
+ * are, and the several-into-one fan-in is the shape the meeting chose over three tabs and
+ * over three complete pipelines
+
  *
- * Grouping by `stage` and not by `id` is also what keeps the hypothesis card on screen at
+ * What replaced the count is not a smaller thing. An `x3` badge said *there are three of
+ * these somewhere*; three cards each carrying their own state, their own age and their own
+ * standard is the comparison itself.
+ *
+ * The other four stages still get one card however many workers run behind them — the API
+ * folds them and puts the whole count on `running`, which the card shows as a badge. That
+ * is the same decision as `SPLITTABLE`'s and it is deliberate: the user chooses how many
+ * hypothesis agents to run and should not have to know the rest are internally run more
+
+ *
+ * Grouping by `stage` and not by `id` is also what keeps the hypothesis column on screen at
  * all: since 2026-09-08 a stage running several workers sends no agent whose id is
  * `hypothesis`, so a lookup by id would silently return nothing for exactly the stage
  * `--hypothesis-agents` multiplies.
- *
- * The representative is whichever worker is furthest along the state order — a stage with
- * one worker working and two idle is a stage that is working, and a card that showed
- * `idle` because that happened to be the first worker in the array would be wrong about
- * the only thing this panel is for.
  */
-const STATE_RANK: Record<SceneAgent["state"], number> = {
-  unknown: 3, working: 2, moving: 1, idle: 0,
-};
-
 export function chainAgents(agents: SceneAgent[]): ChainStep[] {
   return CHAIN.map((stage) => {
     const mine = agents.filter((a) => a.stage === stage);
-    if (mine.length === 0) return null;
-    const agent = mine.reduce((best, a) =>
-      STATE_RANK[a.state] > STATE_RANK[best.state] ? a : best);
-    return { agent, workers: mine.length };
+    return mine.length === 0 ? null : { stage, agents: mine };
   }).filter((s): s is ChainStep => s !== null);
 }
 
