@@ -630,6 +630,40 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
         if stage is not None:
             live.setdefault(stores.drawn_as(stage), []).append(run_id)
 
+    # **A splittable station keeps a figure for every worker it has, not only for the ones
+    # mid-call.** The two lines above are "what is happening this instant", and for the
+    # four folded stations that is the whole question. For `hypothesis` it is not.
+    #
+    # Three workers propose their questions roughly together and finish roughly together,
+    # so with the rule above alone the column held three cards for **two minutes and
+    # twenty-seven seconds** of a run that lasted twenty (measured, 2026-09-09 07:03:01 to
+    # 07:05:28) and one card for the rest of it. Anyone who looked before or after saw a
+    # pipeline with a single hypothesis agent, which is the picture the stack was built to
+    # replace — and it was not wrong about this instant, it was answering a different
+    # question from the one being asked. The number of hypothesis agents is a property of
+    # the **run**, chosen on the form before it started; it does not drop to one because
+    # the workers happen to be between calls.
+    #
+    # A worker is known here by having named itself to the board, which is what
+    # `queries.TASK_TOUCHES` reads, and that query is already windowed at
+    # `RUN_ALIVE_SECONDS`. So this is bounded by the same 900s the rest of the scene
+    # treats as *recent*, and needs no separate notion of when a run is over: a station
+    # goes back to one figure a quarter of an hour after its last worker stopped touching
+    # the board. **Two runs of the same station less than 900s apart will show the workers
+    # of both**, which is the honest answer for a panel whose own header says `All runs`.
+    #
+    # Only splittable stations. Adding a resting figure at a folded station would put a
+    # second `data` character on the floor that the meeting asked to be drawn once.
+    for run_id, worker in workers.items():
+        if not worker:
+            continue
+        stage = stage_by_run.get(run_id)
+        if stage is None or stage not in stores.SPLITTABLE:
+            continue
+        character = stores.drawn_as(stage)
+        if run_id not in live[character]:
+            live[character].append(run_id)
+
     agents = []
     # run id -> the id of the figure drawn for it, filled in as the figures are built.
     # The flashes below are keyed by run and need it.
@@ -689,7 +723,8 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
         # screen, and without a count `--data-agents 2` would look exactly like
         # `--data-agents 1` with nothing anywhere to say otherwise.
         stands_for = [len(runs)] if folded else [
-            1 if run_id is not None else 0 for run_id, *_ in instances
+            1 if run_id is not None and (run_id in open_by_run or run_id in held) else 0
+            for run_id, *_ in instances
         ]
 
         # The id each figure is drawn under, and it is the id every other part of the
