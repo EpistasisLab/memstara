@@ -247,6 +247,63 @@ def test_every_playbook_stage_has_a_field():
 
 
 # --------------------------------------------------------------------------- #
+#  One standard per hypothesis agent (A-32)
+# --------------------------------------------------------------------------- #
+
+
+def test_the_hypothesis_stage_takes_one_standard_per_agent():
+    """The whole of `A-32` seen from the request side: three agents, three standards,
+    one flag carrying all three.
+
+    Commas rather than three fields, because `--playbook-hypothesis` is one argument on
+    the command line and `build_argv` returns a command line. A second encoding here
+    would be one the driver has to learn.
+    """
+    argv = build_argv(
+        {"playbook_hypothesis": "governance,ml_reporting", "hypothesis_agents": 2},
+        OFFERED, BOOKS, MARKED,
+    )
+    assert flags(argv)["--playbook-hypothesis"] == "governance,ml_reporting"
+
+
+def test_the_standards_have_to_be_one_per_agent():
+    """Two standards and three agents is refused rather than padded or truncated. They
+    are paired by position, so there is no third standard to invent and no rule for
+    which two of the three agents would get one."""
+    with pytest.raises(ValueError, match="2 standards.*and 3 agents"):
+        build_argv(
+            {"playbook_hypothesis": "governance,ml_reporting", "hypothesis_agents": 3},
+            OFFERED, BOOKS, MARKED,
+        )
+
+
+def test_a_single_agent_stage_is_refused_a_second_standard():
+    """`ml` runs one agent however many workers claim from the board, so a second name
+    would be accepted here and never reach a model. Refused where the person pressing
+    the button can read it, not in the child process's stderr."""
+    with pytest.raises(ValueError, match="takes one standard and was given 2"):
+        build_argv({"playbook_ml": "ml_reporting,governance"}, OFFERED, BOOKS, MARKED)
+
+
+def test_an_unknown_standard_is_caught_anywhere_in_the_list():
+    """The second name is checked as hard as the first. A list validated only at its
+    head is a list whose tail reaches `load_prompt`."""
+    with pytest.raises(ValueError, match="not a playbook this checkout has"):
+        build_argv(
+            {"playbook_hypothesis": "governance,no_such_standard", "hypothesis_agents": 2},
+            OFFERED, BOOKS, MARKED,
+        )
+
+
+def test_a_trailing_comma_is_not_a_nameless_standard():
+    """`"governance,"` is one standard, so it pairs with one agent and adds no empty
+    name. A form field or a shell history leaves these behind, and reading one as a
+    request would ask `load_prompt` for a playbook called ""."""
+    argv = build_argv({"playbook_hypothesis": "governance,"}, OFFERED, BOOKS, MARKED)
+    assert flags(argv)["--playbook-hypothesis"] == "governance"
+
+
+# --------------------------------------------------------------------------- #
 #  The copies of board.py's own vocabulary
 # --------------------------------------------------------------------------- #
 

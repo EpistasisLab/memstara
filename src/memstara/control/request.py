@@ -75,13 +75,24 @@ _MAX_HYPOTHESIS_AGENTS = 3
 #: imported for the reason in the module docstring — and `tests/test_control_request.py`
 #: compares the two lists, so the copy cannot drift without a test failing.
 #:
-#: **Every stage is here, and only some of them can actually take one.** A prompt has to
-#: carry a `{{playbook}}` line to receive a standard, and three of the five do not yet.
-#: That is not written into this file: which prompts are marked changes with a one-line
-#: edit to a `.md`, and a copy of it here would be a second answer to the same question,
-#: kept in step by hand. `GET /control/playbooks` reads the prompts themselves and the
-#: caller passes the answer in.
+#: **Every stage is here, and whether a stage can actually take one is not this file's
+#: answer.** A prompt has to carry a `{{playbook}}` line to receive a standard. All five
+#: carry it as of 2026-09-08 — but that is a fact about five `.md` files, changeable with a
+#: one-line edit, and a copy of it here would be a second answer to the same question kept
+#: in step by hand. `GET /control/playbooks` reads the prompts themselves and the caller
+#: passes the answer in. This list stays the *stages a flag exists for*, which is a
+#: different and slower-moving question.
 PLAYBOOK_STAGES = ("hypothesis", "data", "ml", "interpreter", "report")
+
+#: The one stage that may be given several standards, one per worker. Everything else runs
+#: a single agent however many workers claim from the board, so a second name there would
+#: be accepted and never read — `board.py` refuses it and so does `build_argv`, at the
+#: earlier of the two points.
+#:
+#: A tuple of one rather than a bare string: `hypothesis` is the only such stage because
+#: it is the only one whose workers set out independently, and if a second ever qualifies
+#: the check below does not change shape.
+MULTI_PLAYBOOK_STAGES = ("hypothesis",)
 
 DEFAULTS: dict[str, Any] = {
     "skill": "",
@@ -146,6 +157,13 @@ def build_argv(
             anything is allowed, and no playbook is the state every run was in until
             this field existed.
 
+    **`playbook_hypothesis` may name several standards, comma-separated, one per agent.**
+    That is the request half of `A-32`: the hypothesis stage provisions an agent per
+    standard, so two workers choosing the same column is two standards agreeing rather
+    than one standard asked twice. The count has to equal ``hypothesis_agents`` — they are
+    paired by position, and the check is here as well as in `board.py` so that a mismatch
+    is a red message under the button instead of a process that exits 2 into a log.
+
     Returns:
         The tail of the command line — `["--trials", "3", ...]`. The caller adds
         `--run-tag` and `--run-dir`, because those are its own bookkeeping and are
@@ -190,20 +208,42 @@ def build_argv(
     markable = set(playbook_stages)
     chosen: list[tuple[str, str]] = []
     for stage in PLAYBOOK_STAGES:
-        book = _text(body, f"playbook_{stage}")
-        if not book:
+        # Comma-separated, and for four of the five stages that only ever yields one name.
+        # The split is here rather than only in `board.py` so the person who pressed the
+        # button gets the message: `board.py` refuses the same things, but it does so in a
+        # child process whose stderr goes to a log nobody is looking at.
+        books = [b.strip() for b in _text(body, f"playbook_{stage}").split(",") if b.strip()]
+        if not books:
             continue
         if stage not in markable:
             raise ValueError(
                 f"the {stage} prompt has no {{{{playbook}}}} line, so it cannot be given "
-                f"the {book!r} standard. Ask GET /control/playbooks for the stages that can"
+                f"the {books[0]!r} standard. "
+                f"Ask GET /control/playbooks for the stages that can"
             )
-        if book not in known:
-            raise ValueError(
-                f"{book!r} is not a playbook this checkout has. "
-                f"Ask GET /control/playbooks for the list"
-            )
-        chosen.append((stage, book))
+        for book in books:
+            if book not in known:
+                raise ValueError(
+                    f"{book!r} is not a playbook this checkout has. "
+                    f"Ask GET /control/playbooks for the list"
+                )
+        if len(books) > 1:
+            if stage not in MULTI_PLAYBOOK_STAGES:
+                raise ValueError(
+                    f"the {stage} stage takes one standard and was given {len(books)} "
+                    f"({', '.join(books)}). Only the hypothesis stage runs an agent per "
+                    f"standard; the others run one agent however many workers claim from "
+                    f"the board, so a second name would never be read"
+                )
+            if len(books) != hypothesis_agents:
+                raise ValueError(
+                    f"the hypothesis stage was given {len(books)} standards "
+                    f"({', '.join(books)}) and {hypothesis_agents} agents. Give one "
+                    f"standard per agent, or one for all of them — they are paired by "
+                    f"position, and there is no order in which {len(books)} standards fit "
+                    f"{hypothesis_agents} agents that would not have to be guessed at"
+                )
+        chosen.append((stage, ",".join(books)))
 
     # --skill is passed even when it is empty, so that the run is confined by what this
     # request said and never by a value left over in the environment this service was
@@ -212,6 +252,11 @@ def build_argv(
     # --playbook-* is the opposite: written only when one was chosen. There is no value
     # of the flag that means "the prompt as written" — `board.py` reads its absence as
     # that — and passing an empty string would ask `load_prompt` for a playbook named "".
+    #
+    # `--playbook-hypothesis` may carry several names joined by commas, which is one
+    # argument and not several flags. That is `board.py`'s own shape, and it is what keeps
+    # this function's contract *the tail of a command line* rather than a second encoding
+    # the driver would have to learn.
     argv = [
         "--trials", str(trials),
         "--waves", str(waves),
