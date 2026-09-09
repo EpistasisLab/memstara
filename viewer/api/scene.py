@@ -378,16 +378,18 @@ async def _core_facts() -> dict[str, Any]:
             "touches": [dict(r) for r in await conn.fetch(queries.TASK_TOUCHES,
                                                           str(RUN_ALIVE_SECONDS))],
             "last_call": [dict(r) for r in await conn.fetch(queries.LAST_CALL)],
+            "roster": [dict(r) for r in await conn.fetch(queries.LAST_ROSTER,
+                                                         str(RUN_ALIVE_SECONDS))],
             "recent": [dict(r) for r in await conn.fetch(queries.RECENT_CALLS,
                                                         str(FLASH_SECONDS))],
             "feed": [dict(r) for r in await conn.fetch(queries.FEED)],
         }
 
-    # The empty shell to return when core is down. It has to carry **the same seven keys**
+    # The empty shell to return when core is down. It has to carry **the same eight keys**
     # as above. Leave even one out and a KeyError comes up below, turning "core is down"
     # into "the viewer crashed" — which makes everything guarded holds off pointless.
-    empty: dict[str, Any] = {"totals": [], "open": [], "access": [],
-                             "touches": [], "last_call": [], "recent": [], "feed": []}
+    empty: dict[str, Any] = {"totals": [], "open": [], "access": [], "touches": [],
+                             "last_call": [], "roster": [], "recent": [], "feed": []}
     return await pools.guarded("core", q, empty)
 
 
@@ -456,6 +458,9 @@ def _worker_names(touches: list[dict[str, Any]]) -> dict[str, str]:
     first one that does and keeps it. A run with no named call at all is absent from the
     map and gets drawn under a slot number instead, which is a worse label but not a
     wrong one.
+
+    Called on **both** `touches` and `roster`, which carry the same two columns and differ
+    only in what their window is anchored on. Nothing here has to know which it was given.
     """
     names: dict[str, str] = {}
     for t in touches:
@@ -567,7 +572,13 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
         for r in core["last_call"] if stores.stage_of_agent(r["name"]) is not None
     }
     held = _carrying(core["touches"])
-    workers = _worker_names(core["touches"])
+    # **Two sources, and the roster is the one that outlives the run.** `touches` is
+    # windowed on `now()`, so fifteen minutes after a run it is empty and every worker of
+    # it is nameless; `roster` asks the same question anchored on the run's own last call
+    # (`queries.LAST_ROSTER`) and so still names them. Merged rather than chosen between:
+    # while a run is live the two agree exactly, and `touches` is put second so anything
+    # happening this instant wins a disagreement.
+    workers = _worker_names(core["roster"]) | _worker_names(core["touches"])
 
     # Which stage a run belongs to. All three sources are read because they cover
     # different runs: `open` has only what is running, `last_call` only what has made a
@@ -610,7 +621,7 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
         seen = agents_at.get(character)
         if seen is None or r["started_at"] > seen[0]:
             agents_at[character] = (r["started_at"], r["name"])
-    for rows in (core["open"], core["last_call"], core["touches"]):
+    for rows in (core["open"], core["last_call"], core["touches"], core["roster"]):
         for r in rows:
             stage = stores.stage_of_agent(r["name"])
             if stage is not None and r.get("run_id") is not None:
@@ -644,13 +655,20 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
     # the **run**, chosen on the form before it started; it does not drop to one because
     # the workers happen to be between calls.
     #
-    # A worker is known here by having named itself to the board, which is what
-    # `queries.TASK_TOUCHES` reads, and that query is already windowed at
-    # `RUN_ALIVE_SECONDS`. So this is bounded by the same 900s the rest of the scene
-    # treats as *recent*, and needs no separate notion of when a run is over: a station
-    # goes back to one figure a quarter of an hour after its last worker stopped touching
-    # the board. **Two runs of the same station less than 900s apart will show the workers
-    # of both**, which is the honest answer for a panel whose own header says `All runs`.
+    # A worker is known here by having named itself to the board, and `workers` above now
+    # reads that from two queries rather than one. That is the half of this fix made on
+    # **2026-09-09 in the afternoon**, and the reason is that the paragraph above was still
+    # true for fifteen minutes and false afterwards: `TASK_TOUCHES` is windowed on `now()`,
+    # so the stack survived the run by exactly `RUN_ALIVE_SECONDS` and then folded back to
+    # one card. Measured — the 07:31 run's three cards were still there at 07:44:05 and the
+    # snapshot read at 08:02:31 had one, `idle`. The paragraph above says why that is the
+    # wrong answer, and it is no less wrong at minute sixteen than at minute two.
+    #
+    # `queries.LAST_ROSTER` asks the same question with the window anchored on the run's own
+    # newest call instead of on the clock, so the cohort is grouped the same way and simply
+    # does not expire. **Two runs of the same station less than 900s apart will show the
+    # workers of both**, which is unchanged, and is the honest answer for a panel whose own
+    # header says `All runs`.
     #
     # Only splittable stations. Adding a resting figure at a folded station would put a
     # second `data` character on the floor that the meeting asked to be drawn once.
