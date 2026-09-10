@@ -150,6 +150,13 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
     # character by character and store a JSON array of single letters — a task the
     # data stage then reports as 30-odd missing columns, which reads like a naming
     # problem and is not one.
+    from memstara.evaluation import active_plan
+    snapshot = active_plan()
+    if snapshot and (y_column != snapshot["y_column"] or run_tag != snapshot["run_tag"]):
+        return json.dumps({"error": "Task target or run differs from the immutable run configuration"})
+    if isinstance(columns, list) and (y_column in columns or (os.environ.get("MEMSTARA_OUTCOME_COLUMN")
+            and os.environ["MEMSTARA_OUTCOME_COLUMN"] in columns)):
+        return json.dumps({"error": "The target must not be included as a feature"})
     if isinstance(columns, str) or isinstance(okf_concept_ids, str):
         return json.dumps(
             {
@@ -175,12 +182,15 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
                 """
                 INSERT INTO memstara_blackboard
                     (run_tag, trial, perspective, status, task_type,
-                     hypothesis, columns, y_column, okf_concept_ids, question_id)
-                VALUES ($1, $2, $3, 'ready', 'data', $4, $5::jsonb, $6, $7::jsonb, $8)
+                     hypothesis, columns, y_column, okf_concept_ids, question_id, evaluation, hypothesis_id)
+                VALUES ($1, $2, $3, 'ready', 'data', $4, $5::jsonb, $6, $7::jsonb, $8, $9::jsonb,
+                    COALESCE((SELECT writer FROM memstara_questions WHERE question_id=$8), 'hypothesis'))
                 RETURNING task_id
                 """,
                 run_tag, trial, perspective, hypothesis, json.dumps(cols), y_column,
                 json.dumps(ids), (int(question_id) or None),
+                json.dumps({"config_hash": snapshot.get("config_hash"), "plan": snapshot["evaluation"],
+                            "skills": snapshot.get("books", {})} if snapshot else {}),
             )
         finally:
             await conn.close()
@@ -259,7 +269,7 @@ async def claim_task(task_type: str, run_tag: str = "", worker: str = "") -> str
                     )
                     RETURNING task_id, run_tag, trial, perspective, hypothesis,
                               columns, y_column, okf_concept_ids, subset_path,
-                              columns_used, auc, feature_importance, model, claimed_by
+                              columns_used, auc, feature_importance, model, claimed_by, evaluation, hypothesis_id
                     """,
                     task_type, run_tag, worker,
                 )
@@ -279,7 +289,7 @@ async def claim_task(task_type: str, run_tag: str = "", worker: str = "") -> str
     # values before being returned — left packed, the agent would have to parse JSON
     # out of a string a second time.
     # The empty default differs by field: [] for the lists, {} for the importances.
-    for k in ("columns", "okf_concept_ids", "columns_used", "feature_importance"):
+    for k in ("columns", "okf_concept_ids", "columns_used", "feature_importance", "evaluation"):
         out[k] = json.loads(out[k]) if out[k] else ([] if k != "feature_importance" else {})
     # default=str — JSON does not know values such as datetime, so they become strings.
     return json.dumps(out, ensure_ascii=False, default=str)
@@ -290,7 +300,7 @@ async def submit_result(task_id: int, subset_path: str = "",
                         columns_used: list[str] | None = None,
                         columns_missing: list[str] | None = None, auc: float | None = None,
                         feature_importance: str = "", model: str = "",
-                        interpretation: str = "", worker: str = "") -> str:
+                        interpretation: str = "", worker: str = "", error: str = "") -> str:
     """Write what you produced and hand the task to the next stage.
 
     Pass only the fields your stage produces; leave the rest out.
@@ -316,6 +326,7 @@ async def submit_result(task_id: int, subset_path: str = "",
             instruction: an agent that decides what the engine "should" be is guessing at
             something the tool already told it, and the first day the answer changes is
             the day the guess goes unnoticed.
+        error: explicit failure reason without patient values; requires the current worker.
         interpretation: interpretation stage — the write-up.
         worker: who you are — **the same string you passed to claim_task.** If the task
             is now held by somebody else this is refused and nothing is written, which
@@ -348,7 +359,7 @@ async def submit_result(task_id: int, subset_path: str = "",
         try:
             async with conn.transaction():
                 cur = await conn.fetchrow(
-                    "SELECT task_type, status, claimed_by FROM memstara_blackboard "
+                    "SELECT task_type, status, claimed_by, subset_path, evaluation, y_column FROM memstara_blackboard "
                     "WHERE task_id = $1 FOR UPDATE",
                     task_id,
                 )
@@ -376,7 +387,67 @@ async def submit_result(task_id: int, subset_path: str = "",
                                   f"Do not resubmit; claim a new task."}
                     )
 
+                if error:
+                    if not worker or worker != cur["claimed_by"]:
+                        return json.dumps({"error": "Reporting failure requires the current worker identity"})
+                    await conn.execute(
+                        "UPDATE memstara_blackboard SET status='failed', error=$2, claimed_by='', "
+                        "claimed_at=NULL, updated_at=now() WHERE task_id=$1", task_id, error[:2000])
+                    return json.dumps({"ok": True, "task_id": task_id, "status": "failed",
+                                       "task_type": cur["task_type"], "reason": error[:2000]})
+
                 stage = cur["task_type"]          # the stage this task is at now
+                if stage == "interpret" and not interpretation.strip():
+                    return json.dumps({"error": "Interpretation must contain a nonempty evidence-based write-up"})
+                if stage == "interpret":
+                    # Store actual interpreter identity with the final result, so the
+                    # report can distinguish skill-dependent perspectives across trials.
+                    from pathlib import Path
+                    previous = cur["evaluation"] or {}
+                    if isinstance(previous, str):
+                        previous = json.loads(previous)
+                    identity = cur["claimed_by"] or worker
+                    config_path = os.environ.get("MEMSTARA_RUN_CONFIG")
+                    config = json.loads(Path(config_path).read_text()) if config_path else {}
+                    books = config.get("books", {}).get("interpreter") or [""]
+                    suffix = identity.rsplit("#", 1)[-1]
+                    slot = int(suffix) - 1 if "#" in identity and suffix.isdigit() else 0
+                    skill = books[slot] if slot < len(books) else books[0]
+                    await conn.execute("UPDATE memstara_blackboard SET evaluation=$2::jsonb WHERE task_id=$1",
+                                       task_id, json.dumps({**previous, "interpreter": {
+                                           "worker": identity, "skill": skill}}))
+                if stage == "ml":
+                    from pathlib import Path
+                    from memstara.paths import DEFAULT_OUTPUT_DIR
+                    artifact = Path(cur["subset_path"]).resolve().with_suffix(".evaluation.json")
+                    root = Path(os.environ.get("MEMSTARA_OUTPUT_DIR") or DEFAULT_OUTPUT_DIR).resolve()
+                    try:
+                        artifact.relative_to(root)
+                        measured = json.loads(artifact.read_text())
+                    except (ValueError, OSError):
+                        return json.dumps({"error": "Train the claimed subset before submitting its ML result"})
+                    previous = cur["evaluation"]
+                    if isinstance(previous, str):
+                        previous = json.loads(previous)
+                    import hashlib
+                    if measured.get("y_column") != cur["y_column"]:
+                        return json.dumps({"error": "The measured target differs from the claimed task"})
+                    if previous and previous.get("config_hash") != measured.get("config_hash"):
+                        return json.dumps({"error": "The measured artifact belongs to another run configuration"})
+                    if measured["evaluation"]["dataset_sha256"] != hashlib.sha256(
+                            Path(cur["subset_path"]).read_bytes()).hexdigest():
+                        return json.dumps({"error": "The subset changed after training; evaluate it again"})
+                    if measured.get("status") == "failed":
+                        await conn.execute(
+                            "UPDATE memstara_blackboard SET status='failed', error=$2, "
+                            "evaluation=$3::jsonb, claimed_by='', claimed_at=NULL, updated_at=now() WHERE task_id=$1",
+                            task_id, measured["error"], json.dumps({**(previous or {}), **measured}))
+                        return json.dumps({"ok": True, "task_id": task_id, "status": "failed",
+                                           "task_type": "ml", "reason": measured["error"]})
+                    auc, model = measured["auc"], measured["model"]
+                    feature_importance = json.dumps(measured["feature_importance"])
+                    await conn.execute("UPDATE memstara_blackboard SET evaluation=$2::jsonb WHERE task_id=$1",
+                                       task_id, json.dumps({**(previous or {}), **measured}))
                 nxt = NEXT_STAGE.get(stage)       # the next stage (None = this was the last)
                 new_status = "ready" if nxt else "done"   # waiting again if there is a next
                 new_type = nxt or stage                   # on the last stage the type stays
@@ -447,11 +518,11 @@ async def submit_result(task_id: int, subset_path: str = "",
                             (task_id, run_tag, trial, perspective, hypothesis,
                              columns, columns_used, columns_missing,
                              okf_concept_ids, match_trace, question_id,
-                             y_column, auc, feature_importance, model, interpretation)
+                             y_column, auc, feature_importance, model, interpretation, evaluation, hypothesis_id)
                         SELECT task_id, run_tag, trial, perspective, hypothesis,
                                columns, columns_used, columns_missing,
                                okf_concept_ids, match_trace, question_id,
-                               y_column, auc, feature_importance, model, interpretation
+                               y_column, auc, feature_importance, model, interpretation, evaluation, hypothesis_id
                         FROM memstara_blackboard WHERE task_id = $1
                         """,
                         task_id,
@@ -667,7 +738,7 @@ async def read_results(run_tag: str = "", include_match_trace: bool = False) -> 
                 SELECT result_id, task_id, run_tag, trial, perspective, hypothesis,
                        columns, columns_used, columns_missing,
                        okf_concept_ids, match_trace, question_id,
-                       y_column, auc, feature_importance, model, interpretation, created_at
+                       y_column, auc, feature_importance, model, interpretation, created_at, evaluation, hypothesis_id
                 FROM memstara_results
                 WHERE ($1 = '' OR run_tag = $1)
                 ORDER BY trial, result_id
@@ -683,7 +754,7 @@ async def read_results(run_tag: str = "", include_match_trace: bool = False) -> 
     for r in rows:
         d = dict(r)
         for k in ("columns", "columns_used", "columns_missing",
-                  "okf_concept_ids", "match_trace", "feature_importance"):
+                  "okf_concept_ids", "match_trace", "feature_importance", "evaluation"):
             d[k] = json.loads(d[k]) if d[k] else ([] if k != "feature_importance" else {})
         # Summarised rather than dropped: a caller that cannot see the field at all has
         # no way to learn the record is there to ask for.
@@ -778,7 +849,7 @@ async def read_questions(status: str = "open", limit: int = 200) -> str:
             rows = await conn.fetch(
                 """
                 SELECT question_id, text, okf_tags, rationale, origin_run, origin_wave,
-                       times_used, best_auc, status, created_at,
+                       times_used, best_auc, status, created_at, writer,
                        -- Shown for the same reason claimed_by is shown on the board: a
                        -- claim nobody can see is a claim nobody trusts, and "who is
                        -- working this" is the question worth asking the moment there are
@@ -806,7 +877,7 @@ async def read_questions(status: str = "open", limit: int = 200) -> str:
 
 
 @mcp.tool()
-async def claim_question(run_tag: str = "", worker: str = "", stale_after: int = 600) -> str:
+async def claim_question(run_tag: str = "", worker: str = "", stale_after: int = 600, question_id: int = 0) -> str:
     """Take one open question out of the bank, so no other agent sets out from it.
 
     The hypothesis stage's equivalent of ``claim_task``. The other three stages take work
@@ -859,7 +930,7 @@ async def claim_question(run_tag: str = "", worker: str = "", stale_after: int =
                         claimed_at  = now()
                     WHERE question_id = (
                         SELECT question_id FROM memstara_questions
-                        WHERE status = 'open'
+                        WHERE status = 'open' AND ($4 = 0 OR question_id = $4)
                           AND (claimed_at IS NULL
                                OR claimed_at < now() - make_interval(secs => $3))
                         ORDER BY question_id DESC
@@ -869,7 +940,7 @@ async def claim_question(run_tag: str = "", worker: str = "", stale_after: int =
                     RETURNING question_id, text, okf_tags, rationale,
                               times_used, best_auc, claimed_run, claimed_by
                     """,
-                    run_tag, worker, max(0, int(stale_after)),
+                    run_tag, worker, max(0, int(stale_after)), question_id,
                 )
         finally:
             await conn.close()
@@ -887,7 +958,7 @@ async def claim_question(run_tag: str = "", worker: str = "", stale_after: int =
 
 
 @mcp.tool()
-async def propose_questions(questions: str, origin_run: str = "", origin_wave: int = 0) -> str:
+async def propose_questions(questions: str, origin_run: str = "", origin_wave: int = 0, writer: str = "") -> str:
     """Add questions to the bank. Duplicates are dropped, not rejected.
 
     Each question needs ``okf_tags``: which branches of the knowledge source it is
@@ -980,8 +1051,8 @@ async def propose_questions(questions: str, origin_run: str = "", origin_wave: i
                 qid = await conn.fetchval(
                     """
                     INSERT INTO memstara_questions
-                        (text, text_key, okf_tags, rationale, origin_run, origin_wave)
-                    VALUES ($1, $2, $3::jsonb, $4, $5, $6)
+                        (text, text_key, okf_tags, rationale, origin_run, origin_wave, writer)
+                    VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)
                     ON CONFLICT (text_key) DO NOTHING
                     RETURNING question_id
                     """,
@@ -990,7 +1061,7 @@ async def propose_questions(questions: str, origin_run: str = "", origin_wave: i
                     json.dumps(tags, ensure_ascii=False),
                     str(item.get("rationale", "")).strip(),
                     origin_run,
-                    int(origin_wave),
+                    int(origin_wave), writer,
                 )
                 if qid is None:
                     duplicates.append(text)

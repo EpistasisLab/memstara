@@ -205,7 +205,7 @@ CREATE TABLE IF NOT EXISTS memstara_blackboard (
     --
     -- So a row without this column records a quantity whose meaning cannot be recovered,
     -- and every comparison across rows is unsound. The tool has always returned the
-    -- engine (`mcp_servers/ml.py:335`); until 2026-09-08 nothing stored it, and the 81
+    -- engine (`mcp_servers/ml.py (at commit 0990ec5, lines 335)`); until 2026-09-08 nothing stored it, and the 81
     -- results already in the table are on an unrecorded scale for good — the engine was
     -- an environment variable read inside the call and written down nowhere else.
     --
@@ -430,6 +430,12 @@ ALTER TABLE memstara_blackboard ADD COLUMN IF NOT EXISTS claimed_by TEXT NOT NUL
 -- The question bank's own claim, added the same way. The bank is the oldest table here
 -- and the one most certain to already exist, so of every ALTER in this block these are
 -- the three least safe to leave out.
+ALTER TABLE memstara_questions ADD COLUMN IF NOT EXISTS writer TEXT NOT NULL DEFAULT '';
+ALTER TABLE memstara_blackboard ADD COLUMN IF NOT EXISTS evaluation JSONB NOT NULL DEFAULT '{{}}';
+ALTER TABLE memstara_results ADD COLUMN IF NOT EXISTS evaluation JSONB NOT NULL DEFAULT '{{}}';
+ALTER TABLE memstara_blackboard ADD COLUMN IF NOT EXISTS hypothesis_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE memstara_results ADD COLUMN IF NOT EXISTS hypothesis_id TEXT NOT NULL DEFAULT '';
+
 ALTER TABLE memstara_questions ADD COLUMN IF NOT EXISTS claimed_run TEXT NOT NULL DEFAULT '';
 ALTER TABLE memstara_questions ADD COLUMN IF NOT EXISTS claimed_by  TEXT NOT NULL DEFAULT '';
 ALTER TABLE memstara_questions ADD COLUMN IF NOT EXISTS claimed_at  TIMESTAMPTZ;
@@ -539,6 +545,11 @@ async def create() -> None:
     """Create the tables. Nothing happens if they already exist (safe to run repeatedly)."""
     conn = await asyncpg.connect(dsn())
     try:
+        # Schema maintenance must never queue behind a reader for an unbounded time.
+        # ALTER TABLE needs AccessExclusiveLock; without this bound one startup can sit
+        # in PostgreSQL's FIFO lock queue and block every viewer SELECT behind it.
+        await conn.execute("SET lock_timeout = '3s'")
+        await conn.execute("SET statement_timeout = '10s'")
         await conn.execute(SCHEMA)   # run the whole SCHEMA above
     finally:
         await conn.close()

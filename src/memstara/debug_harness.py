@@ -134,7 +134,8 @@ def do_data() -> None:
 
 
 def do_ml() -> None:
-    """Training. Put breakpoints on get_dummies at src/memstara/mcp_servers/ml.py:148 and features at :174."""
+    """Training. Put breakpoints on get_dummies at src/memstara/mcp_servers/ml.py
+# Historical source at commit 0990ec5, lines 148) and features at :174."""
     data, ml = load_server("memstara-data"), load_server("memstara-ml")
 
     cols = ["CURRENT_AGE", "SEX", "RACE_1", "MARITAL_STATUS", "n_diagnoses"]
