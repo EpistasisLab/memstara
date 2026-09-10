@@ -292,7 +292,7 @@ HOME: dict[str, dict[str, int]] = {
 # (`src/memstara/control/request.py:63`), which caps a browser-started run and says in its
 # own comment why the driver is deliberately left uncapped. A cap in *this* file would
 # silently hide a running worker, which is the exact failure `folded` was written to avoid.
-SPLITTABLE: frozenset[str] = frozenset({"hypothesis"})
+SPLITTABLE: frozenset[str] = frozenset({"hypothesis", "interpreter"})
 
 # Which character a stage is *drawn* as. **This is now a compatibility layer**, and it
 # is the reason a run from before 2026-09-07 still shows up on every screen.

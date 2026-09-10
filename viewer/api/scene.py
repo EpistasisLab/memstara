@@ -63,6 +63,7 @@ import asyncpg
 
 import queries
 import stores
+import run_artifacts
 from db import pools
 
 #: Seconds a computed snapshot may be reused. Every open tab asks for the same object at
@@ -76,11 +77,12 @@ SNAPSHOT_TTL = 1.5
 #: had exactly this bug in `pool.acquire()`; this is the same mistake in a lock.
 LOCK_WAIT = 3.0
 
-#: Seconds a single computation may take before the caller stops waiting for it. Well
-#: under nginx's 60s so the ceiling is ours and is explainable, and above the slowest
-#: healthy snapshot measured (2.5-6.2s while a pipeline was running) so an honestly busy
-#: database is not called a failure.
-SNAPSHOT_DEADLINE = 12.0
+#: Seconds a single computation may take before the caller stops waiting for it. The
+#: viewer polls every two seconds; waiting twelve seconds made a first page load look
+#: frozen and left the browser's loading state in place. Healthy snapshots normally
+#: finish below this ceiling. A slower one gets the complete degraded response below and
+#: the next poll can replace it.
+SNAPSHOT_DEADLINE = 4.0
 
 _snapshot_cache: dict[str | None, tuple[float, dict[str, Any]]] = {}
 _snapshot_locks: dict[str | None, asyncio.Lock] = {}
@@ -170,14 +172,33 @@ async def list_runs() -> list[dict[str, Any]]:
     # recorded in pools.health.
     # queries.RUNS orders newest first, so [0] is "the most recent run".
     async def q(conn: asyncpg.Connection) -> list[dict[str, Any]]:
-        rows = await conn.fetch(queries.RUNS)
-        return [
-            {"run_tag": r["run_tag"], "tasks": r["tasks"], "done": r["done"],
-             "first_seen": _iso(r["first_seen"]), "last_seen": _iso(r["last_seen"])}
-            for r in rows
-        ]
+        return await conn.fetch(queries.RUNS)
 
-    return await pools.guarded("memstara", q, [])
+    async def assemble():
+        rows = await pools.guarded("memstara", q, [])
+        configs = await asyncio.to_thread(run_artifacts.configs)
+        out = []
+        for r in rows:
+            tag = r["run_tag"]
+            config = configs.get(tag) or {}
+            out.append({
+                "run_tag": tag, "tasks": r["tasks"], "done": r["done"],
+                "first_seen": _iso(r["first_seen"]), "last_seen": _iso(r["last_seen"]),
+                "question": config.get("question", ""),
+                "hypotheses": config.get("hypotheses"), "trials": config.get("trials"),
+                "waves": config.get("waves"),
+                "model": (config.get("evaluation") or {}).get("engine"),
+                "status": ("completed" if r["done"] == r["tasks"] else "incomplete"),
+            })
+        return out
+
+    # Keep the bootstrap endpoint inside the browser's 5s budget. A blocked PostgreSQL
+    # reader must become an empty, explicitly degraded run list rather than holding the
+    # refresh screen until the pool's older 10s command timeout fires.
+    try:
+        return await asyncio.wait_for(assemble(), 4.0)
+    except TimeoutError:
+        return []
 
 
 async def _board(run_tag: str) -> list[dict[str, Any]]:
@@ -240,7 +261,8 @@ async def _results(run_tag: str) -> list[dict[str, Any]]:
              # stored, empty string included: `''` is *not recorded*, which is what every
              # result from before 2026-09-08 says, and turning it into "unknown" here
              # would put a word in the database's mouth on the screen's behalf.
-             "model": r["model"],
+             "model": r["model"], "evaluation": _jsonb(r["evaluation"], {}),
+             "hypothesis_id": r["hypothesis_id"],
              "interpretation": r["interpretation"], "created_at": _iso(r["created_at"])}
             for r in rows
         ]
@@ -335,7 +357,8 @@ async def result_detail(result_id: int) -> dict[str, Any] | None:
             "y_column": r["y_column"], "auc": r["auc"],
             # Same field and same reasoning as `_results` above: the scale the numbers in
             # `importance` are on. `''` means it was never written down.
-            "model": r["model"],
+            "model": r["model"], "evaluation": _jsonb(r["evaluation"], {}),
+             "hypothesis_id": r["hypothesis_id"],
             "interpretation": r["interpretation"], "created_at": _iso(r["created_at"]),
             "match_trace": _trace_groups(r["match_trace"], asked, used),
             # `match_trace_calls` is the number of calls **stored**, before flattening,
@@ -347,7 +370,7 @@ async def result_detail(result_id: int) -> dict[str, Any] | None:
     return await pools.guarded("memstara", q, None)
 
 
-async def _core_facts() -> dict[str, Any]:
+async def _core_facts(run_ids: list[str] | None = None) -> dict[str, Any]:
     """Everything from core's database, in one connection acquisition.
 
     Why seven queries but not seven calls to `guarded`:
@@ -369,20 +392,36 @@ async def _core_facts() -> dict[str, Any]:
         # Read-only accounts may still do this: CREATE TEMPORARY is granted to PUBLIC by
         # default, and it was checked on this database with this account rather than
         # assumed.
+        def scoped(sql):
+            if run_ids is None:
+                return sql
+            return sql.replace("agent_runs r", "(SELECT source.* FROM agent_runs source "
+                               "JOIN selected_run_ids scope ON scope.id=source.id) r")
+
+        if run_ids is not None:
+            import uuid
+            ids = [uuid.UUID(value) for value in run_ids]
+            await conn.execute("CREATE TEMP TABLE IF NOT EXISTS selected_run_ids (id uuid PRIMARY KEY)")
+            await conn.execute("TRUNCATE selected_run_ids")
+            if ids:
+                await conn.executemany("INSERT INTO selected_run_ids VALUES ($1) ON CONFLICT DO NOTHING",
+                                       [(value,) for value in ids])
         await conn.execute(queries.FLAT_TEMP_TABLE)
+        if run_ids is not None:
+            await conn.execute("DELETE FROM flat WHERE run_id NOT IN (SELECT id FROM selected_run_ids)")
         return {
-            "totals": [dict(r) for r in await conn.fetch(queries.AGENT_TOTALS)],
-            "open": [dict(r) for r in await conn.fetch(queries.OPEN_RUNS,
+            "totals": [dict(r) for r in await conn.fetch(scoped(queries.AGENT_TOTALS))],
+            "open": [dict(r) for r in await conn.fetch(scoped(queries.OPEN_RUNS),
                                                        str(RUN_ALIVE_SECONDS))],
-            "access": [dict(r) for r in await conn.fetch(queries.ACCESS)],
-            "touches": [dict(r) for r in await conn.fetch(queries.TASK_TOUCHES,
+            "access": [dict(r) for r in await conn.fetch(scoped(queries.ACCESS))],
+            "touches": [dict(r) for r in await conn.fetch(scoped(queries.TASK_TOUCHES),
                                                           str(RUN_ALIVE_SECONDS))],
-            "last_call": [dict(r) for r in await conn.fetch(queries.LAST_CALL)],
-            "roster": [dict(r) for r in await conn.fetch(queries.LAST_ROSTER,
+            "last_call": [dict(r) for r in await conn.fetch(scoped(queries.LAST_CALL))],
+            "roster": [dict(r) for r in await conn.fetch(scoped(queries.LAST_ROSTER),
                                                          str(RUN_ALIVE_SECONDS))],
-            "recent": [dict(r) for r in await conn.fetch(queries.RECENT_CALLS,
+            "recent": [dict(r) for r in await conn.fetch(scoped(queries.RECENT_CALLS),
                                                         str(FLASH_SECONDS))],
-            "feed": [dict(r) for r in await conn.fetch(queries.FEED)],
+            "feed": [dict(r) for r in await conn.fetch(scoped(queries.FEED))],
         }
 
     # The empty shell to return when core is down. It has to carry **the same eight keys**
@@ -425,7 +464,7 @@ def _carrying(touches: list[dict[str, Any]]) -> dict[str, int]:
         task_id = int(t["task_id"])
         if t["tool"] == "claim_task":
             held[run_id] = task_id
-        elif t["tool"] == "submit_result":
+        elif t["tool"] == "submit_result" and t.get("succeeded", True):
             # Cleared **by task**, across runs, rather than "clear whatever this run
             # holds". Both halves of that matter and they are separate points.
             #
@@ -672,7 +711,17 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
     #
     # Only splittable stations. Adding a resting figure at a folded station would put a
     # second `data` character on the floor that the meeting asked to be drawn once.
-    for run_id, worker in workers.items():
+    active_hypotheses = [r for r in core["open"]
+                         if stores.stage_of_agent(r["name"]) == "hypothesis"]
+    active_names = {r["name"] for r in active_hypotheses}
+    active_start = min((r["created_at"] for r in active_hypotheses), default=None)
+    roster_time = {str(r["run_id"]): r["started_at"] for r in core["roster"]}
+    for run_id, worker in _worker_names(core["roster"]).items():
+        # A new hypothesis call may not have reached a board tool yet. Do not fill
+        # the gap with the previous pipeline's idle roster while its first LLM runs.
+        if (active_start is not None and agent_by_run.get(run_id) not in active_names
+                and roster_time[run_id] < active_start):
+            continue
         if not worker:
             continue
         stage = stage_by_run.get(run_id)
@@ -701,6 +750,22 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
 
         runs = sorted(live.get(character, []),
                       key=lambda rid: _slot_key(rid, workers.get(rid, "")))
+
+        aliases: dict[str, list[str]] = {}
+        if character in stores.SPLITTABLE:
+            logical: dict[str, list[str]] = {}
+            for rid in runs:
+                name = agent_by_run.get(rid, "")
+                # Legacy unskilled workers can share an agent definition. Skilled V1
+                # agents have distinct durable names, independent of trial/call IDs.
+                key = name if stores.playbook_of(name) else workers.get(rid) or rid
+                logical.setdefault(key, []).append(rid)
+            for group in logical.values():
+                chosen = max(group, key=lambda rid: (
+                    rid in open_by_run, rid in held, _recency(rid, last_by_run.get(rid), open_by_run)
+                ))
+                aliases[chosen] = group
+            runs = list(aliases)
 
         # One entry per figure. A character with nothing running still puts one figure
         # down — resting at home is a state, not an absence — and that entry carries no
@@ -787,7 +852,8 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
         first_figure[character] = ids[0]
         for slot, (run_id, run, last, run_stage) in enumerate(instances):
             if run_id is not None:
-                figure_of_run[run_id] = ids[slot]
+                for alias in aliases.get(run_id, [run_id]):
+                    figure_of_run[alias] = ids[slot]
             carrying = held.get(run_id) if run_id is not None else None
 
             if not core_up:
@@ -868,6 +934,7 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
                 # and "the suffix was dropped on the way here" look identical when the
                 # answer is empty, and those two need opposite fixes.
                 "playbook": stores.playbook_of(ran_as),
+                "last_status": last.get("run_status") if last else None,
                 "state": state,
                 "at": at,
                 "home": stores.HOME[character],
@@ -1108,7 +1175,7 @@ async def snapshot(run_tag: str | None) -> dict[str, Any]:
         # been ours; the previous one is close enough and is here now.
         stale = _stale(run_tag)
         if stale is None:
-            raise
+            return _timeout_snapshot(run_tag, "The snapshot is still being assembled.")
         return stale
     try:
         hit = _snapshot_cache.get(run_tag)
@@ -1119,7 +1186,7 @@ async def snapshot(run_tag: str | None) -> dict[str, Any]:
         except TimeoutError:
             stale = _stale(run_tag)
             if stale is None:
-                raise
+                return _timeout_snapshot(run_tag, "The snapshot timed out while reading the stores.")
             return stale
         if pools.hiccup():
             # A store dropped exactly one read while this was computed, so `fresh` is
@@ -1151,6 +1218,40 @@ def _stale(run_tag: str | None) -> dict[str, Any] | None:
     return None if hit is None else {**hit[1], "stale": True}
 
 
+def _timeout_snapshot(run_tag: str | None, reason: str) -> dict[str, Any]:
+    """Return a complete, honest response when the first snapshot misses its deadline.
+
+    The old behaviour raised ``TimeoutError`` here.  That produced a 500 response with
+    no JSON shape at all, so the browser stayed in its initial loading state until its
+    own fetch timeout.  A degraded snapshot is better: every panel can render its empty
+    state immediately, the health banner explains what happened, and the next poll can
+    replace it with real data without a page reload.
+    """
+    health = pools.health.as_dict()
+    health["memstara"] = {"up": False, "error": reason}
+    health["core"] = {"up": False, "error": reason}
+    return {
+        "run_tag": run_tag or "",
+        "run_configuration": None,
+        "report": None,
+        "pipeline": None,
+        "scene_scope": "selected_run",
+        "runs": [],
+        "stale": True,
+        "generated_at": _iso(datetime.now(timezone.utc)),
+        "health": health,
+        "scene": {"places": stores.PLACES, "agents": [], "flashes": []},
+        "board": {"lanes": {}, "tasks": []},
+        "agents": [],
+        "access": {"rows": [], "windows": [
+            {**window, "calls": 0, "called_by_agent": False}
+            for window in stores.BOARD_WINDOWS
+        ]},
+        "feed": [],
+        "results": [],
+    }
+
+
 async def _snapshot_uncached(run_tag: str | None) -> dict[str, Any]:
     """The real work. Call `snapshot` instead — it is the one that bounds the load."""
     runs = await list_runs()
@@ -1158,7 +1259,22 @@ async def _snapshot_uncached(run_tag: str | None) -> dict[str, Any]:
 
     board = await _board(tag)
     results = await _results(tag)
-    core = await _core_facts()
+    from run_artifacts import lookup
+    # `lookup` reads execution manifests and reports from the mounted run archive.
+    # It is intentionally cached, but the first read can still be several megabytes.
+    # Never perform that synchronous filesystem work on the async API event loop: doing
+    # so made `asyncio.wait_for` ineffective because the loop could not run the timeout
+    # callback while the file read was in progress.
+    artifacts = await asyncio.to_thread(lookup, tag)
+    calls = artifacts["calls"] if artifacts else []
+    core = await _core_facts([c["run_id"] for c in calls if c.get("run_id")] if tag else [])
+    terminal = {c["run_id"] for c in calls if c.get("status") in ("failed", "completed", "cancelled")}
+    core["open"] = [r for r in core["open"] if str(r["run_id"]) not in terminal]
+    if pools.health.memstara:
+        task_status = {t["task_id"]: t["status"] for t in board}
+        core["touches"] = [t for t in core["touches"] if not (
+            t["tool"] == "claim_task" and t.get("task_id") and
+            task_status.get(int(t["task_id"])) in ("done", "failed"))]
     core_up = pools.health.core
     # There is an order to this: first fetch the run list and settle the tag (the most
     # recent one if none was given), then read the board and results with that tag, then
@@ -1174,8 +1290,19 @@ async def _snapshot_uncached(run_tag: str | None) -> dict[str, Any]:
     for t in board:
         lanes[t["status"]] = lanes.get(t["status"], 0) + 1
 
+    rendered_scene = _build_scene(core, core_up)
+    if artifacts:
+        books = artifacts["config"].get("books") or {}
+        for agent in rendered_scene["agents"]:
+            if agent["stage"] not in ("hypothesis", "interpreter"):
+                agent["playbook"] = (books.get(agent["stage"]) or [""])[0]
+
     return {
         "run_tag": tag,
+        "run_configuration": artifacts["config"] if artifacts else None,
+        "report": artifacts["report"] if artifacts else None,
+        "pipeline": artifacts["pipeline"] if artifacts else None,
+        "scene_scope": "selected_run",
         "runs": runs,
         # Always present, so the screen never has to read "key missing" as "fresh".
         # `snapshot` flips it on the copy it hands back when it gave up waiting; see
@@ -1183,7 +1310,7 @@ async def _snapshot_uncached(run_tag: str | None) -> dict[str, Any]:
         "stale": False,
         "generated_at": _iso(datetime.now(timezone.utc)),
         "health": pools.health.as_dict(),
-        "scene": _build_scene(core, core_up),
+        "scene": rendered_scene,
         "board": {"lanes": lanes, "tasks": board},
         "agents": _agent_totals(core),
         "access": _access(core),

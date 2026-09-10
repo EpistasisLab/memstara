@@ -30,8 +30,8 @@ import stores  # noqa: E402
 #  (viewer/web/src/components/nodes.tsx:53). A figure is drawn from `home.x - 64`, which
 #  is half its width, so it stands centred on its station.
 FIGURE_WIDTH = 128
-SLOT_STEP_X = 22
-CEILING = 3  # slots 0..2; see `_MAX_HYPOTHESIS_AGENTS` in src/memstara/control/request.py
+SLOT_STEP_X = 0  # Vertical stacks keep every slot in the same column.
+CEILING = 4  # slots 0..3; see `_MAX_HYPOTHESIS_AGENTS` in src/memstara/control/request.py
 
 
 def _span(station: str, slots: int) -> tuple[int, int]:
@@ -50,9 +50,8 @@ def test_every_splittable_station_is_a_station():
 def test_a_full_stack_does_not_reach_the_next_station():
 
 
-    Three figures span 172 and the stations sit 175 apart, so a full stack clears the
-    next station's column by 3px. The stack grows up and to the right, so the neighbour
-    that matters is the right-hand one, and only a splittable station can have a stack.
+    Four figures stack vertically. Increasing the count must not consume the next
+    stage column; the horizontal footprint stays one figure wide.
     """
     ordered = sorted(stores.HOME, key=lambda s: stores.HOME[s]["x"])
     for station, neighbour in zip(ordered, ordered[1:], strict=False):
@@ -82,7 +81,7 @@ def test_every_station_has_the_same_room_whether_it_uses_it_or_not():
         assert right < left, f"{station} could not hold {CEILING} figures before {neighbour}"
 
 
-def test_only_the_hypothesis_station_is_drawn_per_worker():
+def test_hypothesis_and_interpreter_stations_are_drawn_per_worker():
     """The design's own shape, and the half of it that is easy to lose while implementing
     the other half.
 
@@ -97,4 +96,13 @@ def test_only_the_hypothesis_station_is_drawn_per_worker():
     design. This test is written as an equality rather than as four `not in`s so that
     adding a station fails here and has to be argued for.
     """
-    assert stores.SPLITTABLE == frozenset({"hypothesis"})
+    # Extended multi-agent scope: independently configured interpreters are visible,
+    # while replicated data/ML workers remain one role on screen.
+    assert stores.SPLITTABLE == frozenset({"hypothesis", "interpreter"})
+
+
+def test_floor_plan_uses_vertical_slots_for_both_parallel_stages():
+    source = (Path(__file__).resolve().parents[1] / "viewer/web/src/panels/ScenePanel.tsx").read_text()
+    assert "x: 24 + column * 208" in source
+    assert "(row + (rows - count) / 2) * 116" in source
+    assert "Math.max(form.hypothesis_agents, form.interpret_agents)" in source

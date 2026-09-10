@@ -108,7 +108,7 @@ a value.
 #: Leave it out and the one stage `--hypothesis-agents` actually multiplies is the one
 #: stage whose workers cannot be told apart. Its payload is cheap: the result is a single
 #: question row, not model output.
-BOARD_TOOLS = ("create_task", "claim_task", "claim_question", "submit_result")
+BOARD_TOOLS = ("create_task", "claim_task", "claim_question", "submit_result", "propose_questions")
 _TOOLS_SQL = "('" + "', '".join(BOARD_TOOLS) + "')"
 
 
@@ -225,11 +225,13 @@ ORDER BY task_id
 #   `TEXT NOT NULL DEFAULT ''` and the empty string means *not recorded*: the 81 results
 #   stored before 2026-09-08 take it and cannot be backfilled, because the engine was an
 #   environment variable read inside the call and was never written down
-#   (`src/memstara/mcp_servers/ml.py:194`). Three states reach the screen, not two.
+#   (`src/memstara/mcp_servers/ml.py (at commit 0990ec5, lines 194)`). Three states reach the screen, not two.
 RESULTS = """
 SELECT result_id, task_id, run_tag, trial, perspective, hypothesis,
        columns_used, columns_missing, feature_importance, okf_concept_ids,
-       y_column, auc, model, interpretation, created_at
+       y_column, auc, model, interpretation, created_at,
+       COALESCE(to_jsonb(memstara_results)->'evaluation', '{}'::jsonb) AS evaluation,
+       COALESCE(to_jsonb(memstara_results)->>'hypothesis_id', '') AS hypothesis_id
 FROM memstara_results
 WHERE ($1 = '' OR run_tag = $1)
 ORDER BY result_id
@@ -250,7 +252,9 @@ ORDER BY result_id
 RESULT_ONE = """
 SELECT result_id, task_id, run_tag, trial, perspective, hypothesis,
        columns, columns_used, columns_missing, feature_importance, okf_concept_ids,
-       match_trace, y_column, auc, model, interpretation, created_at
+       match_trace, y_column, auc, model, interpretation, created_at,
+       COALESCE(to_jsonb(memstara_results)->'evaluation', '{}'::jsonb) AS evaluation,
+       COALESCE(to_jsonb(memstara_results)->>'hypothesis_id', '') AS hypothesis_id
 FROM memstara_results
 WHERE result_id = $1
 """
@@ -364,6 +368,7 @@ TASK_TOUCHES = FLAT_CALLS + f"""
 SELECT a.name,
        f.run_id,
        f.tool,
+       NOT ((f.result::jsonb) ? 'error') AS succeeded,
        f.started_at,
        coalesce(
            (f.result::json)->>'task_id',
@@ -408,7 +413,7 @@ ORDER BY f.started_at
 # has ended still has to say what it last did.
 LAST_CALL = FLAT_CALLS + """
 SELECT DISTINCT ON (a.name, f.run_id)
-       a.name, f.server, f.tool, f.started_at, f.run_id
+       a.name, f.server, f.tool, f.started_at, f.run_id, r.status AS run_status
 FROM flat f
 JOIN agent_runs r ON r.id = f.run_id
 JOIN agents a ON a.id = r.agent_id
@@ -445,19 +450,26 @@ ORDER BY a.name, f.run_id, f.started_at DESC
 # the same question about the same cohort asked from a different anchor.)
 LAST_ROSTER = FLAT_CALLS + f"""
 WITH named AS (
-    SELECT a.name, f.run_id, f.started_at, f.arguments->>'worker' AS worker
+    SELECT a.name, f.run_id, f.started_at,
+           coalesce(nullif(f.arguments->>'worker', ''), f.arguments->>'writer') AS worker,
+           coalesce(nullif(f.arguments->>'run_tag', ''),
+                    nullif(f.arguments->>'origin_run', ''),
+                    nullif((f.result::json)->>'run_tag', '')) AS pipeline_tag
     FROM flat f
     JOIN agent_runs r ON r.id = f.run_id
     JOIN agents a ON a.id = r.agent_id
     WHERE f.tool IN {_TOOLS_SQL}
-      AND coalesce(f.arguments->>'worker', '') <> ''
+      AND coalesce(nullif(f.arguments->>'worker', ''), f.arguments->>'writer', '') <> ''
 ),
-anchor AS (SELECT max(started_at) AS newest FROM named)
+anchor AS (SELECT pipeline_tag, started_at AS newest FROM named ORDER BY started_at DESC LIMIT 1)
 SELECT DISTINCT ON (n.run_id)
        n.name, n.run_id, n.worker, n.started_at
 FROM named n, anchor
-WHERE n.started_at > anchor.newest - ($1::text || ' seconds')::interval
+WHERE (anchor.pipeline_tag IS NOT NULL AND n.pipeline_tag = anchor.pipeline_tag)
+   OR (anchor.pipeline_tag IS NULL
+       AND n.started_at > anchor.newest - ($1::text || ' seconds')::interval)
 ORDER BY n.run_id, n.started_at
+
 """
 
 # Recent calls, for the flashing lines. Window is applied in Python so the value lives

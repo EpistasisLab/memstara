@@ -17,6 +17,8 @@ services:
     environment:
       MEMSTARA_VIEWER_DSN: postgresql://memstara_viewer:viewer@host.docker.internal:5463/memstara
       CORE_VIEWER_DSN: postgresql://memstara_viewer:viewer@host.docker.internal:5453/motoro
+    volumes:
+      - ../outputs/runs:/runs:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
