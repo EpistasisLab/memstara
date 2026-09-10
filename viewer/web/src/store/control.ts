@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { useViewer } from "./viewer";
+import type { RunConfiguration } from "../types";
 
 /**
  * The one thing on this screen that is not read-only, kept in its own store.
@@ -24,6 +25,7 @@ export interface Skill {
 }
 
 export interface RunningRun {
+  configuration?: RunConfiguration;
   run_tag: string;
   run_dir: string;
   skill: string;
@@ -49,7 +51,11 @@ export type PlaybookStage = (typeof PLAYBOOK_STAGES)[number];
 
 /** The twelve fields a run takes. The same names the service's allow-list uses, so a typo
  *  here comes back as a 400 naming the field rather than being silently dropped. */
+export type EvaluationPlan = { engine: string; seed: number; test_size: number; folds: number; replicates: number; search_trials: number };
+export type SkillInfo = { evaluation?: Partial<EvaluationPlan>; id: string; title: string; stage: PlaybookStage; description: string; content: string; hash: string; source: string };
 export type RunRequest = {
+  question: string;
+  evaluation: EvaluationPlan;
   skill: string;
   trials: number;
   waves: number;
@@ -65,6 +71,7 @@ export type RunRequest = {
    *  fan could draw; the fan now divides its envelope, so the drawing no longer caps the
    *  number.) */
   hypothesis_agents: number;
+  interpret_agents: number;
   y_column: string;
   provider: string;
   model: string;
@@ -101,10 +108,13 @@ export type RunRequest = {
  *  never a feature — the catalogue the data stage picks columns from does not contain it,
  *  which is what keeps it out of every agent's reach. */
 export const DEFAULT_REQUEST: RunRequest = {
+  question: "",
+  evaluation: { engine: "xgboost", seed: 42, test_size: .25, folds: 0, replicates: 1, search_trials: 1 },
   skill: "",
   trials: 3,
   waves: 1,
   hypothesis_agents: 1,
+  interpret_agents: 1,
   y_column: "HIV_DETECTABLE",
   provider: "azure_foundry",
   model: "claude-sonnet-4-6",
@@ -112,14 +122,19 @@ export const DEFAULT_REQUEST: RunRequest = {
   // what the form must still start as. A default playbook would make a standard the
   // silent condition of every run on this screen, and the run record would show it as
   // deliberate.
-  playbook_hypothesis: "",
+  playbook_hypothesis: "treatment-toxicity",
   playbook_data: "",
-  playbook_ml: "",
-  playbook_interpreter: "",
-  playbook_report: "",
+  playbook_ml: "ml_governance",
+  playbook_interpreter: "interpreter_review_pending",
+  playbook_report: "report_evidence",
 };
 
 interface ControlState {
+  preview: boolean;
+  catalog: SkillInfo[];
+  editor: { stage: PlaybookStage; slot: number; add: boolean } | null;
+  openEditor: (stage: PlaybookStage, slot?: number, add?: boolean) => void;
+  closeEditor: () => void;
   /** Null until the first answer — "not asked yet" is not the same as "not there". */
   up: boolean | null;
   bundle: { path?: string; documents?: number; error?: string } | null;
@@ -179,6 +194,7 @@ interface ControlState {
  *  browser holding every one of them in a scroll region is what makes a viewer that was
  *  fine for ten minutes unusable after an hour. */
 const LOG_LINES = 2000;
+let controlPollInFlight = false;
 
 /** The service answers every refusal as `{"error": "..."}`, so the message a person
  *  reads is the one the service wrote rather than a status code. */
@@ -218,7 +234,24 @@ async function readError(res: Response): Promise<string> {
   return `${res.status} ${res.statusText}`;
 }
 
+export function applyRunConfiguration(form: RunRequest, config: RunConfiguration): RunRequest {
+  return { ...form, ...Object.fromEntries(["question", "y_column", "provider", "model"].flatMap(k => {
+    const value = config[k as keyof RunConfiguration]; return typeof value === "string" ? [[k, value]] : [];
+  })), hypothesis_agents: config.hypotheses, interpret_agents: config.interpreters ?? 1, trials: config.trials, waves: config.waves,
+    evaluation: { ...form.evaluation, ...config.evaluation } as EvaluationPlan,
+    ...Object.fromEntries(PLAYBOOK_STAGES.map(stage => [`playbook_${stage}`, (config.books[stage] ?? []).join(",")])) };
+}
+
+function liveAgents(): boolean {
+  return (useViewer.getState().snapshot?.scene.agents ?? []).some(a => a.state === "working" || a.state === "moving");
+}
+
 export const useControl = create<ControlState>((set, get) => ({
+  preview: false,
+  catalog: [],
+  editor: null,
+  openEditor: (stage, slot = 0, add = false) => { if (!get().running && !get().busy && !liveAgents()) set({ editor: { stage, slot, add } }); },
+  closeEditor: () => set({ editor: null }),
   up: null,
   bundle: null,
   skills: [],
@@ -228,13 +261,26 @@ export const useControl = create<ControlState>((set, get) => ({
   error: null,
   busy: false,
 
-  form: DEFAULT_REQUEST,
+  form: (() => {
+    try { const saved = JSON.parse(localStorage.getItem("memstara-draft-v1") ?? "null");
+      return saved ? { ...DEFAULT_REQUEST, ...saved, evaluation: { ...DEFAULT_REQUEST.evaluation, ...saved.evaluation } } : DEFAULT_REQUEST;
+    } catch { return DEFAULT_REQUEST; }
+  })(),
   // An updater rather than a whole-object setter, because the two callers that already
   // existed in `StartRun` both computed the next form from the current one — one field at a
   // time, and one case (`hypothesis_agents`) that has to re-cut `playbook_hypothesis` in
   // the same breath so the number of agents and the number of standards can never be seen
   // disagreeing.
-  setForm: (update) => set((s) => ({ form: update(s.form) })),
+  setForm: (update) => {
+    const state = get();
+    const viewer = useViewer.getState();
+    if (state.running || state.busy || liveAgents()) return;
+    const config = !viewer.newRunMode ? viewer.snapshot?.run_configuration : null;
+    const form = update(config ? applyRunConfiguration(state.form, config) : state.form);
+    try { localStorage.setItem("memstara-draft-v1", JSON.stringify(form)); } catch { /* Session still works. */ }
+    set({ form, preview: true });
+    if (!viewer.newRunMode) viewer.setRunTag(null);
+  },
 
   logTag: null,
   logLines: [],
@@ -243,11 +289,14 @@ export const useControl = create<ControlState>((set, get) => ({
   logOffset: 0,
 
   poll: async () => {
+    if (controlPollInFlight) return;
+    controlPollInFlight = true;
     try {
-      const res = await fetch("/control/health");
+      const res = await fetch("/control/health", { signal: AbortSignal.timeout(10000) });
       if (!res.ok) throw new Error(await readError(res));
       const body = await res.json();
       const wasDown = get().up !== true;
+      // Live run metadata must never overwrite the user's independently saved draft.
       set({ up: true, bundle: body.bundle ?? null, running: body.running ?? null });
       // Only when it comes back, not on every tick: the branch list is one read of a
       // 312-document bundle and it does not change while a service is up.
@@ -261,8 +310,8 @@ export const useControl = create<ControlState>((set, get) => ({
       // No error message here. A control service nobody started is the normal state of
       // this screen, and writing "failed to fetch" under the dot every two seconds
       // would make the ordinary case look like a fault.
-      set({ up: false, running: null });
-    }
+      set({ up: false });
+    } finally { controlPollInFlight = false; }
   },
 
   loadSkills: async () => {
@@ -288,7 +337,7 @@ export const useControl = create<ControlState>((set, get) => ({
       const stages: PlaybookStage[] = (body.stages ?? []).filter(
         (s: string): s is PlaybookStage => (PLAYBOOK_STAGES as readonly string[]).includes(s),
       );
-      set({ playbooks: body.playbooks ?? [], playbookStages: stages });
+      set({ playbooks: body.playbooks ?? [], catalog: body.catalog ?? [], playbookStages: stages });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e) });
     }
@@ -304,7 +353,7 @@ export const useControl = create<ControlState>((set, get) => ({
       });
       if (!res.ok) throw new Error(await readError(res));
       const run: RunningRun = await res.json();
-      set({ running: run });
+      set({ running: run, preview: false });
       // The one line where the two stores meet. The run has no rows on the board yet —
       // selecting it now means the poll that is already running shows it filling up,
       // instead of the person having to find it in the list a minute later.
@@ -330,7 +379,9 @@ export const useControl = create<ControlState>((set, get) => ({
    */
   pollLog: async () => {
     try {
-      const res = await fetch(`/control/runs/latest/log?offset=${get().logOffset}`);
+      const selected = useViewer.getState().runTag || "latest";
+      const offset = selected === get().logTag || selected === "latest" ? get().logOffset : 0;
+      const res = await fetch(`/control/runs/${encodeURIComponent(selected)}/log?offset=${offset}`);
       if (res.status === 404) {
         // No run at all. Not an error: this is the state of the screen before anyone has
         // pressed Start, and it must not read as a fault.

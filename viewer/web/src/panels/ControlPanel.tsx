@@ -1,9 +1,13 @@
+import Help from "../components/Help";
+import { HELP } from "../lib/help";
+import { withPlannedAgents } from "../lib/planned";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { Activity, Compass, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "../lib/cn";
 import { VIEWS, VIEW_ORDER } from "../lib/views";
 import { useControl } from "../store/control";
 import { POLL_MS, useHealth, useViewer } from "../store/viewer";
+import { useRunForm } from "../lib/useRunForm";
 import StartRun from "./StartRun";
 
 /**
@@ -36,7 +40,7 @@ function HealthDot({ up, label, error }: { up: boolean; label: string; error: st
   return (
     <Tooltip.Root>
       <Tooltip.Trigger asChild>
-        <span className="flex cursor-default items-center gap-1.5">
+        <span tabIndex={0} className="flex cursor-help items-center gap-1.5">
           <span
             className={cn(
               "h-2 w-2 shrink-0 rounded-full",
@@ -51,7 +55,8 @@ function HealthDot({ up, label, error }: { up: boolean; label: string; error: st
           sideOffset={6}
           className="max-w-sm rounded-md bg-ink px-2.5 py-1.5 text-xs text-white shadow-lg"
         >
-          {up ? "Healthy" : error || "Not connected"}
+          <div>{HELP[label]}</div>
+          <div className="mt-1">{up ? "Connected" : error || "Not connected"}</div>
           <Tooltip.Arrow className="fill-ink" />
         </Tooltip.Content>
       </Tooltip.Portal>
@@ -60,9 +65,11 @@ function HealthDot({ up, label, error }: { up: boolean; label: string; error: st
 }
 
 export default function ControlPanel() {
+  const knownRuns = useViewer(s => s.knownRuns);
   const view = useViewer((s) => s.view);
   const setView = useViewer((s) => s.setView);
   const runTag = useViewer((s) => s.runTag);
+  const newRunMode = useViewer((s) => s.newRunMode);
   const setRunTag = useViewer((s) => s.setRunTag);
   const snapshot = useViewer((s) => s.snapshot);
   const error = useViewer((s) => s.error);
@@ -73,21 +80,34 @@ export default function ControlPanel() {
   const toggleNav = useViewer((s) => s.toggleNav);
   const health = useHealth();
   const controlUp = useControl((s) => s.up);
+  const form = useRunForm();
 
   /** Hidden only once the rail is narrow, which only happens at `lg` and up. */
   const wide = collapsed ? "lg:hidden" : undefined;
+  const runLabel = (r: NonNullable<typeof snapshot>["runs"][number]) => {
+    const when = r.first_seen ? new Date(r.first_seen).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : r.run_tag;
+    const details = [
+      r.hypotheses ? `${r.hypotheses} hypotheses` : "",
+      r.trials ? `${r.trials} trials` : "",
+      r.model || "",
+      r.status || "",
+    ].filter(Boolean).join(" · ");
+    const question = (r.question || "No research question").replace(/\s+/g, " ").trim();
+    return `${when} · ${r.run_tag} · ${details || `${r.tasks} tasks · ${r.done} done`} · ${question.slice(0, 54)}${question.length > 54 ? "…" : ""}`;
+  };
 
   return (
     <aside
       className={cn(
         "flex min-h-0 flex-col overflow-hidden rounded-xl border border-paper-line",
         "bg-paper-panel shadow-sm transition-[width] duration-200",
-        collapsed ? "lg:w-14" : "lg:w-60",
+        "w-full",
       )}
     >
       <header className="flex shrink-0 items-center gap-2 border-b border-paper-line px-3 py-2.5">
         <Activity className="h-5 w-5 shrink-0" strokeWidth={2.2} />
         <h1 className={cn("truncate text-sm font-bold tracking-tight", wide)}>Memstara Viewer</h1>
+        <span className={wide}><Help topic="Control panel" /></span>
         <button
           type="button"
           onClick={toggleRail}
@@ -103,7 +123,7 @@ export default function ControlPanel() {
         <section className={cn("border-b border-paper-line px-3 py-3", wide)}>
           <label className="block">
             <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">
-              Run
+              Run <Help topic="Run" />
             </span>
             <select
               value={runTag ?? ""}
@@ -111,9 +131,10 @@ export default function ControlPanel() {
               className="mt-1 w-full rounded-md border border-paper-line bg-white px-2 py-1
                          font-mono text-xs focus:border-ink focus:outline-none"
             >
-              {(snapshot?.runs ?? []).map((r) => (
+              <option value="">New run — no saved analysis</option>
+              {(snapshot?.runs ?? knownRuns).map((r) => (
                 <option key={r.run_tag} value={r.run_tag}>
-                  {r.run_tag} — {r.tasks} tasks · {r.done} done
+                  {runLabel(r)}
                 </option>
               ))}
             </select>
@@ -137,7 +158,8 @@ export default function ControlPanel() {
           {VIEW_ORDER.map((id) => {
             const item = VIEWS[id];
             const active = view === id;
-            const count = snapshot ? item.count?.(snapshot) : undefined;
+            const count = snapshot ? (id === "chain" || id === "scene"
+              ? withPlannedAgents(snapshot.scene.agents, form).length : item.count?.(snapshot)) : undefined;
             const button = (
               <button
                 type="button"
@@ -147,7 +169,7 @@ export default function ControlPanel() {
                   "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition",
                   collapsed && "lg:justify-center",
                   active
-                    ? "bg-ink font-bold text-white"
+                    ? "bg-accent font-bold text-accent-contrast"
                     : "text-ink-soft hover:bg-paper hover:text-ink",
                 )}
               >
@@ -167,31 +189,13 @@ export default function ControlPanel() {
               </button>
             );
 
-            // Once the rail is icons only, the label has to live somewhere or it becomes
-            // a guessing game.
-            return collapsed ? (
-              <Tooltip.Root key={id}>
-                <Tooltip.Trigger asChild>{button}</Tooltip.Trigger>
-                <Tooltip.Portal>
-                  <Tooltip.Content
-                    side="right"
-                    sideOffset={6}
-                    className="rounded-md bg-ink px-2.5 py-1.5 text-xs text-white shadow-lg"
-                  >
-                    {item.label}
-                    <Tooltip.Arrow className="fill-ink" />
-                  </Tooltip.Content>
-                </Tooltip.Portal>
-              </Tooltip.Root>
-            ) : (
-              <div key={id}>{button}</div>
-            );
+            return <Help key={id} topic={item.label}>{button}</Help>;
           })}
 
           {/* Not a view. The navigator is a column of its own that stays beside whichever
               view is showing, so it toggles rather than selects — putting it in the list
               above would make it look like a seventh thing that replaces the others. */}
-          <button
+          <Help topic="Navigator"><button
             type="button"
             onClick={toggleNav}
             aria-pressed={navOpen}
@@ -208,7 +212,7 @@ export default function ControlPanel() {
             <span className={cn("ml-auto shrink-0 text-[11px] text-ink-faint", wide)}>
               {navOpen ? "on" : "off"}
             </span>
-          </button>
+          </button></Help>
         </nav>
       </div>
 
@@ -234,7 +238,7 @@ export default function ControlPanel() {
         )}
 
         {/* A frozen poller would otherwise look identical to a quiet system. */}
-        {error ? (
+        {error && !newRunMode ? (
           <div className="font-mono font-bold text-red-700">API lost</div>
         ) : (
           <div className="font-mono text-ink-faint">

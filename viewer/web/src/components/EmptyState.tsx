@@ -38,6 +38,10 @@ export default function EmptyState({
 }) {
   const error = useViewer((s) => s.error);
   const loading = useViewer((s) => s.loading);
+  const newRunMode = useViewer((s) => s.newRunMode);
+
+  if (newRunMode)
+    return <div className={cn("p-8 text-ink-faint", className)}>New analysis ready — configure the run and press Start run.</div>;
 
   if (error !== null)
     return (

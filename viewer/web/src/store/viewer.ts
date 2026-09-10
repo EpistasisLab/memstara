@@ -1,6 +1,16 @@
 import { create } from "zustand";
 import type { Snapshot } from "../types";
 
+const SELECTION_KEY = "memstara-selection-v1";
+function restoredSelection(): string | null | undefined {
+  try {
+    const value = JSON.parse(localStorage.getItem(SELECTION_KEY) ?? "{}");
+    return value.runTag === null || typeof value.runTag === "string" ? value.runTag
+      : localStorage.getItem("memstara-draft-v1") ? null : undefined;
+  } catch { return undefined; }
+}
+const initialSelection = restoredSelection();
+
 /**
  * One store, one poller.
  *
@@ -19,7 +29,7 @@ export const POLL_MS = 2000;
 
 /** What the main area shows. Results is not here on purpose: ResultsPanel is always on
  *  screen at bottom-right, so a nav entry for it would be a second door to one room. */
-export type ViewId = "chain" | "scene" | "log" | "board" | "task" | "agents" | "access";
+export type ViewId = "clinician" | "chain" | "scene" | "log" | "report" | "board" | "task" | "agents" | "access";
 
 interface ViewerState {
   snapshot: Snapshot | null;
@@ -28,6 +38,9 @@ interface ViewerState {
   /** Set when the API itself is unreachable — different from a database being down. */
   error: string | null;
   runTag: string | null;
+  knownRuns: Snapshot["runs"];
+  /** True when the user is preparing a new run rather than browsing a saved one. */
+  newRunMode: boolean;
   view: ViewId;
   selectedTask: number | null;
   selectedAgent: string | null;
@@ -69,10 +82,15 @@ let refetchWanted = false;
 
 export const useViewer = create<ViewerState>((set, get) => ({
   snapshot: null,
-  loading: true,
+  loading: initialSelection !== null,
   error: null,
-  runTag: null,
-  view: "chain",
+  runTag: initialSelection ?? null,
+  knownRuns: [],
+  newRunMode: initialSelection === null,
+  view: (() => {
+    try { return localStorage.getItem("memstara-workspace-v1") === "clinician" ? "clinician" : "chain"; }
+    catch { return "chain"; }
+  })(),
   selectedTask: null,
   selectedAgent: null,
   ticks: 0,
@@ -80,11 +98,25 @@ export const useViewer = create<ViewerState>((set, get) => ({
   railCollapsed: false,
   navOpen: true,
 
-  setView: (view) => set({ view }),
+  setView: (view) => {
+    try { localStorage.setItem("memstara-workspace-v1", view === "clinician" ? "clinician" : "research"); } catch { /* Session still works. */ }
+    set({ view });
+  },
   toggleRail: () => set((s) => ({ railCollapsed: !s.railCollapsed })),
   toggleNav: () => set((s) => ({ navOpen: !s.navOpen })),
   setRunTag: (runTag) => {
-    set({ runTag, loading: true, selectedTask: null });
+    try { localStorage.setItem(SELECTION_KEY, JSON.stringify({ runTag })); } catch { /* Session still works. */ }
+    set({
+      knownRuns: get().snapshot?.runs ?? get().knownRuns,
+      runTag,
+      newRunMode: runTag === null,
+      snapshot: null,
+      // A null tag is an intentional "new run" state, not an API load.
+      loading: runTag !== null,
+      error: null,
+      fetchedAt: null,
+      selectedTask: null,
+    });
     // A user action, so it must actually happen. If a request for the run being left is
     // still open, the call below is swallowed by `inFlight` and the new run would not be
     // asked for until the next tick — up to POLL_MS of the old run's board, results and
@@ -96,6 +128,16 @@ export const useViewer = create<ViewerState>((set, get) => ({
   selectAgent: (selectedAgent) => set({ selectedAgent }),
 
   fetchOnce: async () => {
+    if (get().newRunMode) {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const response = await fetch("/api/runs", { signal: AbortSignal.timeout(5000) });
+        if (response.ok) set({ knownRuns: (await response.json()).runs ?? [] });
+      } catch { /* Retain the last run index; the draft does not depend on the API. */ }
+      finally { inFlight = false; }
+      return;
+    }
     if (inFlight) return;
     inFlight = true;
     // Cleared here rather than after the request: a switch that arrives *during* this
@@ -104,12 +146,31 @@ export const useViewer = create<ViewerState>((set, get) => ({
     // The run this request is for. `runTag` can change while it is open — that is exactly
     // what clicking the run selector does — and the response carries nothing that says
     // which of the two it answered, so the question has to be asked before sending.
-    const askedFor = get().runTag;
+    let askedFor = get().runTag;
     try {
+      // Bootstrap through the lightweight run index. The old no-tag snapshot had to
+      // discover the latest run and assemble all five panels in the same request; on a
+      // cold refresh that could occupy the API worker long enough for the browser to
+      // report `signal timed out`. Once the tag is known, the normal scoped snapshot is
+      // both smaller and independently cacheable.
+      if (!askedFor) {
+        const runsRes = await fetch("/api/runs", { signal: AbortSignal.timeout(5000) });
+        if (!runsRes.ok) throw new Error(`${runsRes.status} ${runsRes.statusText}`);
+        const runs = (await runsRes.json()).runs as Array<{ run_tag?: string }>;
+        if (get().newRunMode || get().runTag !== askedFor) return;
+        const latest = runs[0]?.run_tag;
+        if (latest) {
+          askedFor = latest;
+          set({ runTag: latest, newRunMode: false });
+        }
+      }
       const url = askedFor
         ? `/api/snapshot?run_tag=${encodeURIComponent(askedFor)}`
         : "/api/snapshot";
-      const res = await fetch(url);
+      // The API returns a structured degraded snapshot after four seconds. Keep the
+      // browser timeout slightly above that ceiling so it never sits in Loading after
+      // the API has already decided what happened.
+      const res = await fetch(url, { signal: AbortSignal.timeout(7000) });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       const snapshot: Snapshot = await res.json();
       // Left this run while its answer was in the air. Applying it would draw one run's
@@ -118,6 +179,16 @@ export const useViewer = create<ViewerState>((set, get) => ({
       if (get().runTag !== askedFor) {
         refetchWanted = true;
         return;
+      }
+      const previous = get().snapshot;
+      if (previous?.run_tag === snapshot.run_tag) {
+        if (!snapshot.health.memstara.up) {
+          snapshot.board = previous.board; snapshot.results = previous.results; snapshot.stale = true;
+        }
+        if (!snapshot.health.core.up) {
+          snapshot.scene = previous.scene; snapshot.agents = previous.agents;
+          snapshot.feed = previous.feed; snapshot.access = previous.access; snapshot.stale = true;
+        }
       }
       set((s) => ({
         snapshot,

@@ -32,6 +32,7 @@ export interface Place {
 }
 
 export interface SceneAgent {
+  last_status?: string | null;
   /** One **worker**, not one stage — so this is not a `StageId`.
    *
    *  A stage that runs a single worker keeps the stage's own id (`hypothesis`), which is
@@ -179,6 +180,21 @@ export interface Window {
 }
 
 export interface Result {
+  hypothesis_id?: string;
+  evaluation?: {
+    interpreter?: { worker: string; skill: string };
+    seed?: number; test_size?: number; auc_std?: number;
+    config_hash?: string;
+    data_quality?: { preprocessing?: string; missing_predictor_cells?: number; warnings?: string[] };
+    evaluation?: { plan?: Record<string, unknown>; duration_seconds?: number };
+    explanation?: { method?: string; scope?: string; actionability?: string; review_status?: string;
+      operating_point?: { probability_cutoff: number; sensitivity: number; specificity: number; precision: number | null;
+        false_positive: number; false_negative: number; selection: string; status: string };
+      feature_effects?: { feature: string; range_start: number; range_end: number; probability_before: number;
+        probability_after: number; direction: string; validation_needed: string }[];
+      shap?: { method?: string; units?: string; status?: string; reason?: string; mean_absolute?: Record<string, number>; mean_signed?: Record<string, number> };
+      partial_dependence?: { feature: string; values: number[]; predicted_probability: number[] }[] };
+  };
   result_id: number;
   /** Null once the board row has been cleaned up. The result still describes itself —
    *  everything below is on the result row, so none of it depends on the board. */
@@ -266,6 +282,12 @@ export interface RunSummary {
   done: number;
   first_seen: string;
   last_seen: string;
+  question?: string;
+  hypotheses?: number | null;
+  trials?: number | null;
+  waves?: number | null;
+  model?: string | null;
+  status?: string;
 }
 
 export interface Health {
@@ -273,7 +295,18 @@ export interface Health {
   core: { up: boolean; error: string };
 }
 
+export interface RunConfiguration {
+  interpreters?: number;
+  question?: string; y_column?: string; provider?: string; model?: string;
+  hypotheses: number; books: Record<string, string[]>; evaluation: Record<string, number | string>;
+  trials: number; waves: number;
+}
+
 export interface Snapshot {
+  run_configuration?: RunConfiguration | null;
+  scene_scope?: string;
+  report?: { status: string; text: string; error?: string | null } | null;
+  pipeline?: { status: string; report_completed?: boolean } | null;
   run_tag: string;
   runs: RunSummary[];
   /** The API gave up waiting for a fresh computation and re-sent its previous answer.

@@ -1,8 +1,10 @@
+import Help from "../components/Help";
 import { Play, Square } from "lucide-react";
 import { useEffect } from "react";
-import { asSlots, fromSlots, withPlaybookAt } from "../lib/planned";
-import { useControl, type PlaybookStage, type RunRequest } from "../store/control";
+import { asSlots, MAX_HYPOTHESIS_AGENTS } from "../lib/planned";
+import { useControl, type RunRequest } from "../store/control";
 import { POLL_MS } from "../store/viewer";
+import { useRunForm } from "../lib/useRunForm";
 
 /**
  * The only control on this screen that starts something.
@@ -28,123 +30,55 @@ import { POLL_MS } from "../store/viewer";
 
 /** The branch list is one read of the bundle; a run confined to nothing is not offered,
  *  so "whole bundle" is the only entry with no filter behind it. */
-function SkillSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function KnowledgeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const skills = useControl((s) => s.skills);
   const documents = useControl((s) => s.bundle?.documents);
 
   return (
     <label className="block">
-      <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">Skill</span>
+      <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">Knowledge sources <Help topic="Skill" /></span>
       <select
+        aria-label="Knowledge sources"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="mt-1 w-full rounded-md border border-paper-line bg-white px-2 py-1
-                   font-mono text-xs focus:border-ink focus:outline-none"
+                   text-xs focus:border-ink focus:outline-none"
       >
-        <option value="">whole bundle{documents ? ` — ${documents}` : ""}</option>
+        <option value="">All available knowledge{documents != null ? ` · ${documents} documents` : ""}</option>
         {skills.map((s) => (
           <option key={s.skill} value={s.skill}>
-            {s.label} — {s.documents}
+            {s.label} · {s.documents} documents
           </option>
         ))}
       </select>
+      <span className="mt-1 block text-[11px] font-normal leading-relaxed text-ink-faint">Choose the evidence available to this analysis. Agent instructions below control how it is used.</span>
     </label>
   );
 }
 
-/**
- * One select per stage that can be handed a behavioural standard — and for the hypothesis
- * stage, one per agent.
- *
- * **Both lists come from the service and neither is written here.** Which playbooks exist
- * is a directory; which stages can take one is read off the prompt files, because a
- * playbook only reaches a model through a prompt carrying a `{{playbook}}` line and the
- * driver refuses the pair otherwise. Offering a row for a stage without the marker would
- * be a form that lies about what it can start — the run would be refused after the button
- * was pressed, which is the one place a form is not allowed to be wrong.
- *
- * The consequence worth knowing: marking a third prompt is one line in one `.md` file and
- * a third row appears here. There is no list in this component to add it to.
- *
- * **The hypothesis row is the only one that grows, and that is not a layout choice.** Its
- * workers set out independently and one agent is provisioned per standard (`A-32`), so
- * three standards mean three agents whose agreement is worth something. Every other stage
- * runs a single agent however many workers claim from the board, so a second select there
- * would offer a standard that is accepted and never read. Which stage this is comes from
- * `MULTI_PLAYBOOK_STAGES` in `src/memstara/control/request.py`, restated here as a
- * comparison against the one name rather than copied as a list, because a second list is
- * a second answer to keep in step.
- *
- * Renders nothing at all when there are no playbooks or no marked stages. An empty
- * disclosure is a promise of a feature this checkout does not have.
- *
- * **It is no longer the only way to set one.** Since `A-44` each card in the Pipeline view
- * carries the same choice, which is what the 2026-08-26 figure asked for — a skill shown
- * and chosen on the agent it belongs to
-
- * `withPlaybookAt`, so this disclosure stays the place to see all five stages at once and
- * neither control can produce a field value the other would not.
- */
-function PlaybookSelects({
-  form,
-  onChange,
-}: {
-  form: RunRequest;
-  onChange: (stage: PlaybookStage, slot: number, book: string) => void;
-}) {
-  const playbooks = useControl((s) => s.playbooks);
-  const stages = useControl((s) => s.playbookStages);
-
-  if (!playbooks?.length || !stages.length) return null;
-
-  return (
-    <details className="text-[11px]">
-      <summary className="cursor-pointer text-ink-faint">Playbooks</summary>
-      <div className="mt-2 space-y-2">
-        {stages.map((stage) => {
-          // One slot for every stage; the hypothesis stage is the one where that number
-          // can exceed 1, and it follows the agent count above rather than a control of
-          // its own. Two numbers meaning "how many hypothesis standards" would be two
-          // numbers to keep equal, and the service refuses the pair when they are not.
-          const slots =
-            stage === "hypothesis"
-              ? asSlots(form.playbook_hypothesis, form.hypothesis_agents)
-              : [form[`playbook_${stage}`]];
-          return (
-            <div key={stage} className="block">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">
-                {stage}
-              </span>
-              <div className="mt-1 space-y-1">
-                {slots.map((book, i) => (
-                  <select
-                    key={i}
-                    value={book}
-                    onChange={(e) => onChange(stage, i, e.target.value)}
-                    className="w-full rounded-md border border-paper-line bg-white px-2 py-1
-                               font-mono text-xs focus:border-ink focus:outline-none"
-                  >
-                    {/* Named rather than blank. "none" would read as a missing setting;
-                        this says what the run is, and it is what every run before
-                        playbooks was. The agent number is on the option rather than on a
-                        label, so a stage with one agent looks exactly as it did. */}
-                    <option value="">
-                      prompt as written{slots.length > 1 ? ` — agent ${i + 1}` : ""}
-                    </option>
-                    {playbooks.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
-                    ))}
-                  </select>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </details>
-  );
+/** A compact overview; editing uses the same panel as the pipeline cards. */
+function PlaybookSelects({ form }: { form: RunRequest }) {
+  const stages = useControl(s => s.playbookStages);
+  const catalog = useControl(s => s.catalog);
+  const open = useControl(s => s.openEditor);
+  const labels: Record<string, string> = { hypothesis: "Hypothesis", ml: "Machine learning", interpreter: "Interpretation", report: "Report" };
+  return <details className="rounded-lg border border-paper-line bg-white p-2 text-xs" open>
+    <summary className="cursor-pointer font-bold text-ink-soft">Agent settings summary <Help topic="Agent skills" /></summary>
+    <p className="my-2 text-[11px] leading-relaxed text-ink-faint">How each agent analyzes the evidence. Select an agent to change its instructions.</p>
+    <div className="space-y-2">{stages.filter(s => s !== "data").map(stage => {
+      const slots = stage === "hypothesis" ? asSlots(form.playbook_hypothesis, form.hypothesis_agents) : stage === "interpreter" ? asSlots(form.playbook_interpreter, form.interpret_agents) : [form[`playbook_${stage}`]];
+      return slots.map((book, i) => {
+        const skill = catalog.find(item => item.id === book);
+        const agent = `${labels[stage] || stage}${slots.length > 1 ? ` ${i + 1}` : ""}`;
+        return <button key={`${stage}-${i}`} type="button" onClick={() => open(stage, i)}
+          aria-label={`Change instructions for ${agent}`}
+          className="block w-full rounded-md border border-paper-line px-2 py-2 text-left hover:bg-paper focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink">
+          <span className="flex items-center justify-between gap-2"><span className="font-bold text-ink-soft">{agent}</span><span className="text-[10px] text-ink-faint">Edit</span></span>
+          <span className="mt-1 block break-words text-[11px] leading-relaxed text-ink-soft">{skill?.title || (book ? "Saved instructions · view details" : "Default agent instructions")}</span>
+        </button>;
+      });
+    })}</div>
+  </details>;
 }
 
 function Number_({
@@ -157,8 +91,8 @@ function Number_({
   onChange: (v: number) => void;
 }) {
   return (
-    <label className="block flex-1">
-      <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">{label}</span>
+    <label className="block min-w-0 flex-1">
+      <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">{label} <Help topic={label} /></span>
       <input
         type="number"
         value={value}
@@ -181,7 +115,7 @@ function Text_({
 }) {
   return (
     <label className="block">
-      <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">{label}</span>
+      <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">{label} <Help topic={label} /></span>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -204,7 +138,7 @@ export default function StartRun() {
   // private business the moment something else on the screen answered to it. Nothing about
   // how the form behaves changed — both writers below already computed the next form from
   // the current one, which is exactly what `setForm` takes.
-  const form = useControl((s) => s.form);
+  const form = useRunForm();
   const setForm = useControl((s) => s.setForm);
   const set = <K extends keyof RunRequest>(k: K, v: RunRequest[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -238,16 +172,16 @@ export default function StartRun() {
   return (
     <div className="space-y-2">
       <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">
-        Start a run
+        Start a run <Help topic="Start a run" />
       </span>
 
       {running ? (
         <div className="space-y-2">
           <div className="font-mono text-[11px] leading-snug">
             <div className="font-bold">{running.run_tag}</div>
-            <div className="text-ink-faint">{running.skill || "whole bundle"}</div>
+            <div className="text-ink-faint">{running.skill || "All available knowledge"}</div>
           </div>
-          <button
+          <Help topic="Stop"><button
             type="button"
             onClick={() => void stopRun()}
             disabled={busy}
@@ -256,12 +190,16 @@ export default function StartRun() {
                        disabled:opacity-50"
           >
             <Square className="h-3.5 w-3.5" /> Stop
-          </button>
+          </button></Help>
         </div>
       ) : (
         <>
-          <SkillSelect value={form.skill} onChange={(v) => set("skill", v)} />
-          <div className="flex gap-2">
+          <label className="block text-[11px] font-bold">Research question <Help topic="Research question" />
+            <textarea value={form.question} onChange={e => set("question", e.target.value)} rows={3}
+              className="mt-1 w-full rounded border border-paper-line bg-white p-2 font-normal" />
+          </label>
+          <KnowledgeSelect value={form.skill} onChange={(v) => set("skill", v)} />
+          <div className="grid grid-cols-2 gap-2">
             <Number_ label="Trials" value={form.trials} onChange={(v) => set("trials", v)} />
             <Number_ label="Waves" value={form.waves} onChange={(v) => set("waves", v)} />
             {/* The one stage count on this form, and the reason it is here at all: until
@@ -273,44 +211,39 @@ export default function StartRun() {
                 a name past the last agent is one the service refuses and the form no
                 longer shows. Growing pads with "prompt as written"; shrinking drops the
                 tail, which is the one the disappearing select was showing. */}
-            <Number_
-              label="Hypothesis"
-              value={form.hypothesis_agents}
-              onChange={(v) =>
-                setForm((f) => ({
-                  ...f,
-                  hypothesis_agents: v,
-                  playbook_hypothesis: fromSlots(asSlots(f.playbook_hypothesis, v)),
-                }))
-              }
-            />
+            <div className="col-span-2 flex items-center gap-1"><button type="button" className="flex-1 rounded border border-paper-line px-2 py-1 text-xs"
+              disabled={form.hypothesis_agents >= MAX_HYPOTHESIS_AGENTS}
+              onClick={() => useControl.getState().openEditor("hypothesis", form.hypothesis_agents, true)}>
+              + Hypothesis ({form.hypothesis_agents}/{MAX_HYPOTHESIS_AGENTS})
+            </button><Help topic="Add hypothesis" /></div>
+            <button type="button" className="col-span-2 rounded border border-paper-line px-2 py-1 text-xs"
+              disabled={form.interpret_agents >= 4}
+              onClick={() => useControl.getState().openEditor("interpreter", form.interpret_agents, true)}>
+              + Interpreter ({form.interpret_agents}/4)
+            </button>
+            <p className="col-span-2 text-[10px] text-ink-faint">Each hypothesis is interpreted once by an available interpreter. Different skills can produce different perspectives across hypotheses.</p>
           </div>
 
-          <PlaybookSelects
-            form={form}
-            onChange={(stage, slot, book) =>
-              setForm((f) => withPlaybookAt(f, stage, slot, book))
-            }
-          />
+          <PlaybookSelects form={form} />
 
           <details className="text-[11px]">
-            <summary className="cursor-pointer text-ink-faint">Model and target</summary>
+            <summary className="cursor-pointer text-ink-faint">Model and target <Help topic="Model and target" /></summary>
             <div className="mt-2 space-y-2">
               <Text_ label="Y column" value={form.y_column} onChange={(v) => set("y_column", v)} />
               <Text_ label="Provider" value={form.provider} onChange={(v) => set("provider", v)} />
-              <Text_ label="Model" value={form.model} onChange={(v) => set("model", v)} />
+              <Text_ label="LLM model" value={form.model} onChange={(v) => set("model", v)} />
             </div>
           </details>
 
-          <button
+          <Help topic="Start run"><button
             type="button"
             onClick={() => void startRun(form)}
             disabled={busy}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-ink px-2
-                       py-1.5 text-xs font-bold text-white hover:bg-ink/90 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-accent px-2
+                       py-1.5 text-xs font-bold text-accent-contrast hover:bg-accent/90 disabled:opacity-50"
           >
             <Play className="h-3.5 w-3.5" /> Start run
-          </button>
+          </button></Help>
         </>
       )}
 

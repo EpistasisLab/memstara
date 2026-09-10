@@ -1,3 +1,4 @@
+import Help from "./Help";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "../lib/cn";
@@ -50,7 +51,8 @@ export default function Panel({
                    bg-paper-panel/95 px-4 py-2.5 backdrop-blur"
       >
         <Icon className="h-4 w-4 shrink-0 text-ink-soft" strokeWidth={2.2} />
-        <h2 className="truncate text-sm font-bold tracking-tight">{title}</h2>
+        <Help topic={title}><h2 tabIndex={0} className="cursor-help truncate text-sm font-bold tracking-tight">{title}</h2></Help>
+        <Help topic={title} />
         {count !== undefined && (
           <span className="shrink-0 rounded-full bg-paper px-2 py-0.5 font-mono text-[11px] text-ink-soft">
             {count}

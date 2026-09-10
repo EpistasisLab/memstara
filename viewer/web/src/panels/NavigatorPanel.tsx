@@ -82,12 +82,12 @@ function TaskRow({
         aria-current={selected ? "true" : undefined}
         className={cn(
           "flex w-full items-start gap-2 rounded-md py-1 pl-6 pr-2 text-left text-xs transition",
-          selected ? "bg-ink text-white" : "hover:bg-paper",
+          selected ? "bg-accent text-accent-contrast" : "hover:bg-paper",
         )}
       >
         <Icon
           className="mt-0.5 h-3.5 w-3.5 shrink-0"
-          style={{ color: selected ? "#fff" : STAGE_COLOR[stage] }}
+          style={{ color: selected ? "rgb(var(--accent-contrast))" : STAGE_COLOR[stage] }}
           strokeWidth={2.2}
         />
 
