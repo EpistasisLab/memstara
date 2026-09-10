@@ -126,3 +126,6 @@ scripts/backlog_to_issues.py
 # ---------------------------------------------------------------------------
 .DS_Store
 ~$*
+
+# HEIC images (case-insensitive extension).
+*.[hH][eE][iI][cC]
