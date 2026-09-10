@@ -77,7 +77,7 @@ export default function FeedPanel() {
       icon={Radio}
       title="Activity feed"
       count={feed?.length}
-      status={<span>All runs</span>}
+      status={<span>Selected run</span>}
       bodyClassName="p-0"
     >
       {!feed ? (

@@ -1,9 +1,12 @@
+import FinalReport from "../components/FinalReport";
+import ExplanationEvidence from "../components/ExplanationEvidence";
+import Help from "../components/Help";
 import { BarChart3 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import EmptyState from "../components/EmptyState";
 import Panel from "../components/Panel";
 import WhyColumns from "../components/WhyColumns";
-import { useResults } from "../store/viewer";
+import { useBoard, useResults, useViewer } from "../store/viewer";
 
 /**
  * Finished results — the results table, not the board.
@@ -51,11 +54,22 @@ function scaleNote(model: string): string {
 
 export default function ResultsPanel() {
   const results = useResults();
+  const dataUnavailable = useViewer(s => !s.newRunMode && (s.snapshot?.health.memstara.up === false || !!s.error));
+  const pipeline = useViewer(s => s.snapshot?.pipeline);
+  const failed = (useBoard()?.tasks ?? []).filter(task => task.status === "failed");
 
-  const compare = (results ?? []).map((r) => ({ name: `trial ${r.trial}`, auc: r.auc ?? 0 }));
+  const compare = (results ?? []).filter(r => r.auc != null).map((r) => ({ name: `trial ${r.trial}`, auc: r.auc }));
 
   return (
     <Panel id="results-panel" icon={BarChart3} title="Results" count={results?.length}>
+      {pipeline && pipeline.status !== "completed" && <p role="status" className="m-4 text-sm text-amber-800">Pipeline status: {pipeline.status}. Check stage results and report status.</p>}
+      {dataUnavailable && <p role="status" className="m-4 text-sm text-amber-800">Connection interrupted. Showing the last available results; this is not an empty or completed run.</p>}
+      <FinalReport />
+      {failed.length > 0 && <div role="status" className="m-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+        <p className="font-bold">{failed.length} trial(s) could not be completed</p>
+        <p>Other trials can continue. Failed trials have no reported performance.</p>
+        {failed.map(task => <p key={task.task_id} className="mt-2">Trial {task.trial} · {task.task_type}: {task.error || "No diagnostic recorded"}</p>)}
+      </div>}
       {!results ? (
         <EmptyState what="the results" />
       ) : results.length === 0 ? (
@@ -63,7 +77,7 @@ export default function ResultsPanel() {
       ) : (
         <div className="space-y-5 p-4">
           <section className="rounded-lg border border-paper-line p-3">
-            <h3 className="mb-2 text-sm font-bold">Performance by trial</h3>
+            <h3 className="mb-2 text-sm font-bold">Performance by trial <Help topic="Performance by trial" /></h3>
             <ResponsiveContainer width="100%" height={160}>
               <BarChart data={compare}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#eceae4" vertical={false} />
@@ -117,6 +131,23 @@ export default function ResultsPanel() {
                     ` · ${r.okf_concept_ids.length} OKF concept${r.okf_concept_ids.length === 1 ? "" : "s"} behind them`}
                 </p>
 
+                <section className="mt-3 rounded-lg border border-[#c9d9e8] bg-[#f6f9fc] p-3" aria-label="Clinical interpretation summary">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-sm font-bold text-ink">Clinical interpretation</h4>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${r.auc == null ? "bg-slate-100 text-slate-600" : r.auc <= 0.5 ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"}`}>
+                      {r.auc == null ? "Evidence unavailable" : r.auc <= 0.5 ? "Hypothesis not supported by discrimination" : "Exploratory signal · requires validation"}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-ink-soft">The model used these features for this trial:</p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {(r.columns_used ?? []).map(column => <span key={column} className="rounded border border-[#c9d9e8] bg-white px-1.5 py-0.5 font-mono text-[10px] text-ink-soft">{column}</span>)}
+                    {(r.columns_used ?? []).length === 0 && <span className="text-xs text-ink-faint">No features were recorded.</span>}
+                  </div>
+                  {r.evaluation?.interpreter && <p className="mt-2 text-xs text-ink-faint">Interpreter: {r.evaluation.interpreter.worker} · Skill: {r.evaluation.interpreter.skill || "Default instructions"}</p>}
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-ink">{r.interpretation || "No clinician-readable interpretation was recorded."}</p>
+                  <p className="mt-2 text-[10px] text-ink-faint">Predictive association is not causation. A model response curve is not a validated treatment threshold.</p>
+                </section>
+
                 {/* Same red as a negative bar below — in this panel that colour means
                     "this is the direction that hurt", and a column the agent asked for
                     and did not get is that. */}
@@ -128,7 +159,7 @@ export default function ResultsPanel() {
 
                 {imp.length > 0 && (
                   <div className="mt-4">
-                    <h4 className="text-sm font-bold">Contributions</h4>
+                    <h4 className="text-sm font-bold">Contributions <Help topic="Contributions" /></h4>
                     {/* The scale, beside the bars. Two engines produce two quantities and
                         neither the chart nor the tooltip could say which: gain sums to
                         about 1 and is never negative, permutation is an AUC delta on no
@@ -136,7 +167,7 @@ export default function ResultsPanel() {
                         bar looks directly comparable to another's, and for two engines it
                         is not — the same reading `ml._importance` warns against. */}
                     <p className="mb-2 font-mono text-[11px] text-ink-faint">
-                      {scaleNote(r.model)}
+                      {r.evaluation?.explanation?.method === "holdout_permutation_auc" ? "Hold-out permutation importance · change in AUC" : scaleNote(r.model)}
                     </p>
                     <ResponsiveContainer width="100%" height={Math.max(140, imp.length * 26)}>
                       <BarChart data={imp} layout="vertical" margin={{ left: 12, right: 24 }}>
@@ -156,9 +187,10 @@ export default function ResultsPanel() {
                   </div>
                 )}
 
+                <ExplanationEvidence result={r} />
                 <details className="mt-3">
                   <summary className="cursor-pointer text-sm font-bold hover:text-ink-soft">
-                    Interpretation
+                    Raw interpretation <Help topic="Interpretation" />
                   </summary>
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{r.interpretation}</p>
                 </details>
@@ -166,6 +198,29 @@ export default function ResultsPanel() {
                 {/* The one thing on this panel that is not in the snapshot. The matcher
                     record is too big to poll, so it is fetched per result when opened —
                     see WhyColumns. */}
+                {r.evaluation?.data_quality && <div className="mt-3 rounded-lg border border-paper-line p-3 text-sm">
+                  <p className="font-bold">Data quality &amp; training safeguards</p>
+                  <p>{r.evaluation.data_quality.preprocessing}</p>
+                  <p>Missing/non-finite predictor cells: {r.evaluation.data_quality.missing_predictor_cells}</p>
+                  {r.evaluation.data_quality.warnings?.map((warning, index) => <p key={index} className="mt-1">{warning}</p>)}
+                </div>}
+                {r.evaluation && Object.keys(r.evaluation).length > 0 && <details className="mt-3 text-sm">
+                  <summary className="cursor-pointer font-bold">Evaluation and explainability <Help topic="Evaluation and explainability" /></summary>
+                  <p className="mt-2">{r.hypothesis_id} · seed {r.evaluation.seed ?? "not recorded"} · hold-out {r.evaluation.test_size ?? "not recorded"}</p>
+                  <pre className="mt-2 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(r.evaluation.evaluation?.plan, null, 2)}</pre>
+                  <p className="mt-2 text-xs">{r.evaluation.explanation?.scope}</p>
+                  {r.evaluation.explanation?.shap?.mean_absolute && <div className="mt-2">
+                    <p className="font-bold">TreeSHAP · mean absolute contribution ({r.evaluation.explanation.shap.units})</p>
+                    {Object.entries(r.evaluation.explanation.shap.mean_absolute).sort((a,b) => b[1]-a[1]).slice(0,10).map(([name, value]) =>
+                      <p key={name} className="text-xs">{name}: {value.toFixed(4)}</p>)}
+                  </div>}
+                  {r.evaluation.explanation?.partial_dependence?.map(curve => <div key={curve.feature} className="mt-2">
+                    <p className="text-xs font-bold">{curve.feature} · model response (not a clinical threshold)</p>
+                    <table className="w-full text-xs"><thead><tr><th>Value</th><th>Predicted probability</th></tr></thead>
+                      <tbody>{curve.values.map((v,i) => <tr key={i}><td>{v.toPrecision(4)}</td><td>{curve.predicted_probability[i]?.toFixed(3)}</td></tr>)}</tbody></table>
+                  </div>)}
+                  <p className="mt-2 text-xs text-ink-soft">{r.evaluation.explanation?.actionability}</p>
+                </details>}
                 <WhyColumns resultId={r.result_id} />
               </article>
             );
