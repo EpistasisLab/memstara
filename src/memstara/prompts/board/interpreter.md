@@ -49,4 +49,20 @@ The task you claim carries everything the earlier stages left on it — the hypo
 - If the hypothesis was rejected, say so. Do not paper over it.
 - Treat an AUC of 0.5 as equivalent to chance.
 
-Three to five sentences, passed to submit_result. That closes the task.
+Write a concise, clinician-readable interpretation using these labels, then pass it to
+submit_result:
+
+**Assessment:** supported, weakened, or not supported by the measured result.
+**Biological/clinical meaning:** what the selected features and knowledge evidence could mean in context; separate association from causation.
+**How the model uses the features:** name the actual features and describe the observed direction or response curve only when the artifact provides it.
+**Actionability and threshold:** state whether an action is suggested. If no validated threshold was measured, say `No validated clinical threshold available`.
+**Limitations and next validation:** uncertainty, missing features, data quality, subgroup or external-validation needs.
+
+Do not use a laundry list of metrics. Explain what a clinician can and cannot conclude.
+
+When evaluation.explanation.review_status marks the implementation as provisional,
+include `reviewer original required — replace the provisional specification` in the
+interpretation. The measured operating_point is a fixed model probability cutoff,
+not a clinical intervention threshold. Explain its sensitivity, specificity and
+false-positive/false-negative counts. Use feature_effects to describe the recorded
+response range and direction, and state the validation needed for actionability.
