@@ -1,0 +1,60 @@
+/* Scoped to the spatial view; the surrounding workspace retains its visual identity. */
+.floor-observatory { display:flex; flex-direction:column; height:100%; width:100%; color:#334155; background:#fcfdfd; }
+.floor-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:15px 19px; border-bottom:1px solid #e4ebe9; background:linear-gradient(110deg,#f3f7f4,#fcfdfd); }
+.floor-title,.floor-actions { display:flex; align-items:center; gap:12px; }
+.floor-emblem { display:grid; place-items:center; width:38px; height:38px; border:1px solid #ceded6; border-radius:12px; color:#2f6b47; background:linear-gradient(145deg,#e8f1e8,#ffffff); box-shadow:inset 0 1px #ffffff,0 4px 10px #2f6b4708; }
+.floor-eyebrow { font-size:8px; letter-spacing:2px; color:#789183; font-weight:700; }
+.floor-title h3 { font-size:17px; letter-spacing:-.5px; font-weight:600; margin-top:2px; }
+.floor-actions { gap:7px; font-size:10px; }
+.floor-actions button { display:flex; align-items:center; gap:6px; padding:7px 9px; border:1px solid #dce5e1; border-radius:7px; color:#64748b; background:#ffffff; cursor:pointer; }
+.floor-actions button[aria-pressed=true] { color:#2f6b47; border-color:#bbd2c4; background:#edf5ef; }
+.floor-actions button:hover { background:#f0f5f2; }
+.floor-live { display:flex; align-items:center; gap:5px; color:#4f7660; margin-right:5px; font-variant-numeric:tabular-nums; }
+.floor-canvas { position:relative; background:radial-gradient(ellipse at 18% 40%,#e7f1e97a,transparent 55%),radial-gradient(ellipse at 85% 65%,#eeebf54d,transparent 55%),linear-gradient(155deg,#fcfdfd,#f8faf9 60%,#f7f9fb); }
+.floor-canvas:before { content:""; position:absolute; pointer-events:none; inset:0; box-shadow:inset 0 0 65px #e7eeeb55; z-index:1; }
+.floor-zone { background:linear-gradient(115deg,#ffffffaa,#f4f7f8aa)!important; border:1px solid #dce5e6!important; border-radius:20px!important; box-shadow:inset 0 1px #fff; }
+.floor-zone-execution { background:linear-gradient(115deg,#f0f5f1aa,#f7f8fcaa)!important; border-color:#dbe5df!important; }
+.floor-zone > div > span:first-child { color:#64796c; font-size:9px; letter-spacing:2.2px; }
+.floor-zone > div > span:last-child { color:#94a3b0; }
+.floor-zone > div > span:nth-child(2) { background:linear-gradient(90deg,#cad9d3,transparent); }
+.floor-resource { background:linear-gradient(145deg,#ffffff,#f9fbfb)!important; border-color:#dfe7e9!important; box-shadow:0 5px 14px #233b4807,inset 0 1px #fff!important; border-radius:13px!important; }
+.floor-resource:hover { border-color:#9bb7ac!important; transform:translateY(-2px); }
+.floor-resource > div > div { background:#f2f6f6; border-color:#e7eeee; }
+.floor-resource svg { color:#64748b; }
+.floor-resource > div > span { color:#475569; }
+.floor-resource > span { color:#94a3b8; }
+.floor-agent { background:linear-gradient(145deg,#ffffff,#f0f5f6)!important; box-shadow:0 8px 20px #213f4b0b,0 1px 0 #ffffff inset!important; border-color:#dce4e5!important; cursor:pointer; transition:box-shadow .2s,transform .2s,opacity .2s!important; }
+.floor-agent:hover { transform:translateY(-3px); box-shadow:0 12px 24px #213f4b14,0 0 0 2px #d2e3db!important; }
+.floor-agent-selected { outline:2px solid #729782; outline-offset:5px; box-shadow:0 0 0 6px #dfeae477,0 10px 24px #213f4b12!important; }
+.floor-agent-busy:after { content:""; position:absolute; pointer-events:none; top:0; left:12%; right:12%; height:2px; background:linear-gradient(90deg,transparent,#55c6b3,transparent); }
+.floor-canvas .react-flow__edge-path { transition:opacity .2s; }
+.floor-route-edge .react-flow__edge-path { stroke:#b8c5d1!important; stroke-width:1.6; }
+.floor-tool-edge .react-flow__edge-path { stroke-width:2; filter:drop-shadow(0 1px 2px #33415518); }
+.floor-tool-edge .react-flow__edge-textbg { fill:#fff; stroke:#dce5e0; stroke-width:1; }
+.floor-tool-edge .react-flow__edge-text { font-size:9px!important; }
+.floor-canvas .react-flow__controls { border:1px solid #dce5e1; box-shadow:0 5px 18px #3341550b; border-radius:9px; overflow:hidden; bottom:13px; left:5px; }
+.floor-canvas .react-flow__controls-button { background:#fff; border-color:#e9eeeb; fill:#64748b; width:26px; height:26px; }
+.floor-canvas .react-flow__controls-button:hover { background:#edf3ef; }
+.floor-map-key { position:absolute; bottom:13px; right:16px; display:flex; gap:14px; font-size:8px; color:#789184; pointer-events:none; }
+.floor-map-key span { display:flex; align-items:center; gap:5px; }
+.floor-map-key i { width:16px; border-top:1px solid #b8c5d1; }
+.floor-map-key .floor-key-tool { border-top:2px dashed #2f6b47; }
+.floor-inspector { min-height:80px; display:flex; align-items:center; gap:12px; padding:13px 19px; border-top:1px solid #dfe8e3; background:linear-gradient(120deg,#f4f8f5,#fcfdfd); }
+.floor-inspector-icon { flex-shrink:0; background:#e9f1eb; border:1px solid #d0dfd5; border-radius:10px; width:34px; height:34px; display:grid; place-items:center; color:#2f6b47; }
+.floor-inspector-copy { flex:1; min-width:0; }
+.floor-inspector-copy strong { font-size:11px; font-weight:600; color:#334155; }
+.floor-inspector-copy strong span { margin-left:8px; color:#56806a; font-size:9px; font-weight:400; }
+.floor-inspector-copy p { font-size:10px; line-height:1.5; color:#64748b; overflow-wrap:anywhere; }
+.floor-inspector-copy p:last-child { color:#81908b; font-size:9px; margin-top:2px; }
+.floor-details,.floor-close { display:flex; align-items:center; gap:4px; color:#2f6b47; border:1px solid #d8e4dd; border-radius:6px; padding:6px 8px; font-size:10px; cursor:pointer; }
+.floor-details:hover,.floor-close:hover { background:#eaf2ed; }
+.floor-observatory button:focus-visible,.floor-agent:focus-visible { outline:2px solid #729782; outline-offset:3px; }
+.floor-still .react-flow__edge.animated path,.floor-still .animate-pulse { animation:none!important; }
+@media(prefers-reduced-motion:reduce) { .floor-observatory * { animation:none!important; transition:none!important; } }
+@media(max-width:1100px) { .floor-toolbar { padding:10px 13px; gap:8px; } .floor-title h3 { font-size:14px; } .floor-eyebrow { letter-spacing:1.3px; } .floor-inspector { padding:10px 13px; gap:8px; } .floor-live { display:none; } }
+.floor-toolbar { padding-top:10px; padding-bottom:10px; }
+.floor-inspector { min-height:64px; padding-top:9px; padding-bottom:9px; }
+.floor-agent > div > .truncate { font-size:11px; }
+.floor-resource > div > span { font-size:13px; }
+.floor-resource > span { font-size:11px; }
+.floor-canvas .react-flow__node { transition:opacity .2s; }

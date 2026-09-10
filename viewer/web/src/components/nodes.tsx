@@ -1,180 +1,72 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { motion } from "framer-motion";
 import { STAGE_ICON, STORE_ICON } from "../lib/icons";
 import { STAGE_COLOR, STATE_LABEL } from "../lib/stage";
 import type { SceneAgent, Place } from "../types";
+import Help from "./Help";
 
-/** Custom React Flow nodes: the places agents reach, and the agents themselves. */
+const hiddenHandle = "!h-1 !w-1 !border-0 !bg-transparent";
+
+/** Noninteractive architectural layers, behind the actual nodes and their edges. */
+function ZoneNode({ data }: NodeProps) {
+  return <div className={`floor-zone ${data.execution ? "floor-zone-execution" : ""} pointer-events-none rounded-2xl border border-slate-200/80 bg-white/50`}
+    style={{ width: Number(data.width), height: Number(data.height),
+      background: data.execution ? 'linear-gradient(135deg, #f1f5f9 0%, #fafbf9 70%)' : '#f9fafb' }}>
+    <div className="flex items-center gap-3 px-5 py-3">
+      <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">{String(data.title)}</span>
+      <span className="h-px flex-1 bg-slate-200" />
+      <span className="text-[10px] text-slate-400">{String(data.caption)}</span>
+    </div>
+  </div>;
+}
 
 export function PlaceNode({ data }: NodeProps) {
   const place = data.place as Place;
-  const count = data.count as number | undefined;
-  // From the shared vocabulary, and exhaustive over StoreId — the table this replaced
-  // had no `matcher` entry and fell through to the dataset's icon, drawing two different
-  // places with one picture.
   const Icon = STORE_ICON[place.id];
-
-  return (
-    <div
-      className="w-56 rounded-xl border border-paper-line bg-white px-4 py-3 shadow-sm
-                 transition hover:border-ink-faint hover:shadow-md"
-    >
-      {/* Handles on every side so edges from any character meet the box cleanly. */}
-      <Handle type="target" position={Position.Top} className="!bg-transparent !border-0" />
-      <Handle type="target" position={Position.Bottom} className="!bg-transparent !border-0" />
-      <Handle type="target" position={Position.Left} className="!bg-transparent !border-0" />
-      <Handle type="target" position={Position.Right} className="!bg-transparent !border-0" />
-
-      <div className="flex items-start gap-3">
-        <Icon className="mt-0.5 h-5 w-5 shrink-0 text-ink-soft" strokeWidth={1.8} />
-        <div className="min-w-0">
-          <div className="font-bold leading-tight">{place.label}</div>
-          <div className="truncate font-mono text-[11px] text-ink-faint">{place.sub}</div>
-        </div>
-      </div>
-
-      {count !== undefined && (
-        <div className="mt-2 border-t border-paper-line pt-2 text-[11px] text-ink-soft">
-          {count} items
-        </div>
-      )}
+  return <div className="floor-resource flex h-[76px] w-[152px] flex-col justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-[0_2px_6px_rgba(15,23,42,0.04)] transition hover:border-slate-400 hover:shadow-md">
+    <Handle type="target" position={Position.Bottom} className={hiddenHandle} />
+    <div className="flex items-center gap-2">
+      <div className="rounded-md border border-slate-100 bg-slate-50 p-1.5"><Icon size={14} className="text-slate-500" /></div>
+      <span className="text-[12px] font-semibold leading-tight text-slate-700">{place.label}</span>
     </div>
-  );
+    <span className="truncate text-[10px] text-slate-400" title={place.sub}>{place.sub}</span>
+  </div>;
 }
 
 export function AgentNode({ data }: NodeProps) {
   const agent = data.agent as SceneAgent;
   const color = STAGE_COLOR[agent.stage];
   const busy = agent.state === "working";
-  const unknown = agent.state === "unknown";
-  // Asked for on the form and not started — invented by the browser, never sent by the API.
-  // See `lib/planned.ts`.
   const planned = agent.state === "planned";
   const Icon = STAGE_ICON[agent.stage];
-
-  return (
-    <div className="flex w-32 flex-col items-center">
-      <Handle type="source" position={Position.Top} className="!bg-transparent !border-0" />
-      <Handle type="source" position={Position.Left} className="!bg-transparent !border-0" />
-      <Handle type="source" position={Position.Right} className="!bg-transparent !border-0" />
-
-      <div className="relative">
-        {/* A pulse only while a run is genuinely open — see RUN_ALIVE_SECONDS. */}
-        {busy && (
-          <motion.span
-            className="absolute inset-0 rounded-full"
-            style={{ border: `2px solid ${color}` }}
-            animate={{ scale: [1, 1.5], opacity: [0.7, 0] }}
-            transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut" }}
-          />
-        )}
-        <motion.div
-          className={cnCircle(unknown, planned)}
-          style={planned
-            ? { borderColor: color, color }
-            : { backgroundColor: unknown ? "#c9c7c1" : color }}
-          animate={busy ? { y: [0, -3, 0] } : { y: 0 }}
-          transition={busy ? { duration: 1.4, repeat: Infinity } : { duration: 0.3 }}
-        >
-          {/* The stage's own pictogram, not two letters of its name. "In" and "Re" were
-              the interpreter and the report agent, which is a thing to be worked out
-              rather than seen. */}
-          <Icon className="h-6 w-6" strokeWidth={1.8} />
-        </motion.div>
-
-        {/* How many workers this one figure stands for. Only `hypothesis` is drawn one
-            figure per worker; `data`, `ml`, `interpreter` and `report` are a single
-            character however many run behind them, because that is what the meeting asked
-            for — the user chooses the number of hypothesis agents and should not have to
-            know the rest are internally run more than once.
-
-            "Should not have to know" is not "must not be able to find out", and this badge
-            is the difference. Without it a folded station is indistinguishable from a
-            station running one worker, and A-13 — which put the parallelism on the screen
-            in the first place — would be undone for four stages out of five.
-
-            Left of the circle, opposite the card on the right, so a data agent that is
-            both running two workers and holding a task shows both without them
-            overlapping. */}
-        {agent.running > 1 && (
-          <div
-            className="absolute -left-9 -top-3 rounded-full border-2 bg-white px-1.5 py-0.5
-                       font-mono text-[11px] font-bold leading-none shadow-sm"
-            style={{ borderColor: color, color }}
-            title={`${agent.running} workers, drawn as one`}
-          >
-            ×{agent.running}
-          </div>
-        )}
-
-        {/* The card it is holding: claimed but not yet submitted. */}
-        {agent.carrying !== null && (
-          <motion.div
-            initial={{ scale: 0.6, opacity: 0, x: -8 }}
-            animate={{ scale: 1, opacity: 1, x: 0 }}
-            className="absolute -right-10 -top-3 rounded-md border-2 bg-white px-2 py-1
-                       font-mono text-[11px] font-bold shadow-sm"
-            style={{ borderColor: color, color }}
-          >
-            #{agent.carrying}
-          </motion.div>
-        )}
+  const labels = { curator: 'Knowledge curator', hypothesis: `Hypothesis ${agent.slot + 1}`, data: 'Data', ml: 'Machine learning', interpreter: 'Interpreter', report: 'Report' };
+  const summary = agent.playbook ? agent.playbook.replaceAll('-', ' ').replaceAll('_', ' ') : {
+    curator: 'Review knowledge', hypothesis: 'Knowledge to hypothesis', data: 'Extract selected features', ml: 'Train & evaluate',
+    interpreter: 'Explain the evidence', report: 'Synthesize findings',
+  }[agent.stage];
+  return <div
+    className={`floor-agent ${busy ? "floor-agent-busy" : ""} ${data.selected ? "floor-agent-selected" : ""} relative h-[108px] w-[184px] overflow-hidden rounded-xl border bg-white transition hover:shadow-lg ${planned ? 'border-dashed' : ''}`}
+    style={{ borderColor: busy ? color : '#dfe4e9', boxShadow: busy ? `0 0 0 3px color-mix(in srgb, ${color} 7%, transparent), 0 5px 18px color-mix(in srgb, ${color} 7%, transparent)` : '0 3px 10px #0f172a08' }}>
+    <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: color, opacity: planned ? .4 : 1 }} />
+    <Handle type="target" position={Position.Left} className={hiddenHandle} />
+    <Handle type="source" id="flow" position={Position.Right} className={hiddenHandle} />
+    <Handle type="source" id="tool" position={Position.Top} className={hiddenHandle} />
+    <div className="px-3 pt-3">
+      <div className="flex items-center gap-2">
+        <div className="rounded-lg p-1.5" style={{ background: `color-mix(in srgb, ${color} 7%, transparent)`, color }}><Icon size={17} /></div>
+        <button type="button" className="min-w-0 flex-1 text-left text-[14px] font-bold leading-tight text-slate-700"
+          aria-label={`Inspect ${labels[agent.stage]}`} onClick={event => { event.stopPropagation(); (data.inspect as (() => void))?.(); }}>{labels[agent.stage]}</button>
+        <Help topic={agent.stage} />
       </div>
-
-      <div className="mt-2 text-center">
-        <div className="text-sm font-bold leading-tight">{agent.label}</div>
-        {/* The worker's own name, and only when it has one. Two figures at one station
-            are both labelled "Hypothesis", so without this line the fix for drawing N of
-            them stops one step short: they would be visible and still not tellable
-            apart. It is the same string the board writes to `claimed_by`, so the figure
-            holding card #12 can be matched against the row that says who holds it.
-            Monospaced because it is an identifier, not prose. */}
-        {agent.worker && (
-          <div className="font-mono text-[10px] leading-tight" style={{ color }}>
-            {agent.worker}
-          </div>
-        )}
-        {/* The standard it is running under. Same rule as the pipeline card: always on a
-            hypothesis figure because the stack is there to be compared and a blank would
-            not say which of "none" and "lost on the way" it meant, and elsewhere only when
-            there is one. Two stacked figures reading `Hypothesis` over `hypothesis#1` and
-            `hypothesis#2` say which worker; this is what says what each was told. */}
-        {(agent.playbook || agent.stage === "hypothesis") && (
-          <div
-            className={agent.playbook
-              ? "truncate font-mono text-[10px] font-bold leading-tight"
-              : "truncate text-[10px] leading-tight text-ink-faint"}
-            style={agent.playbook ? { color } : undefined}
-            title={agent.playbook
-              ? `Running under the ${agent.playbook} standard`
-              : "No standard attached — the prompt as written"}
-          >
-            {agent.playbook || "no standard"}
-          </div>
-        )}
-        <div className={unknown ? "text-[11px] font-bold text-amber-700" : "text-[11px] text-ink-faint"}>
-          {STATE_LABEL[agent.state]}
-        </div>
-      </div>
+      <div className="mt-2 truncate text-[10px] text-slate-500" title={agent.playbook || summary}>{summary}</div>
     </div>
-  );
+    <div className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t border-slate-100 bg-slate-50/70 px-3 py-1.5 text-[10px]">
+      <span className="flex items-center gap-1.5" style={{ color: busy ? color : '#64748b' }}>
+        <span className={`h-1.5 w-1.5 rounded-full ${busy ? 'motion-safe:animate-pulse' : ''}`} style={{ background: busy ? color : agent.state === 'unknown' ? '#d97706' : '#cbd5e1' }} />
+        {STATE_LABEL[agent.state]}
+      </span>
+      <span className="text-slate-400">{agent.carrying !== null ? `Task #${agent.carrying}` : agent.running > 1 ? `${agent.running} workers` : `0${Number(data.step)}`}</span>
+    </div>
+  </div>;
 }
 
-/** `planned` is drawn as the outline of a figure rather than a figure: no fill, a dashed
- *  ring in the stage's colour, and the pictogram in that colour instead of in white.
- *
- *  It has to differ at the silhouette, not at the caption. Every other figure on this floor
- *  is a filled disc, so a planned one drawn filled reads as an agent that ran and stopped —
- *  the caption "Not started" underneath is four words down and is not what anyone scanning
- *  a floor plan looks at. The dashed outline is the same signal `STATE_TONE` gives the
- *  pipeline card, so the two views say the same thing in the same way. */
-function cnCircle(unknown: boolean, planned: boolean) {
-  return [
-    "flex h-14 w-14 items-center justify-center rounded-full",
-    "text-sm font-bold shadow-sm",
-    planned ? "border-2 border-dashed bg-white" : "text-white",
-    unknown ? "opacity-70" : "",
-  ].join(" ");
-}
-
-export const nodeTypes = { place: PlaceNode, agent: AgentNode };
+export const nodeTypes = { place: PlaceNode, agent: AgentNode, zone: ZoneNode };

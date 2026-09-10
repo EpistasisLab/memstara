@@ -1,3 +1,5 @@
+import PipelineStage from "./PipelineStage";
+import Help from "./Help";
 import {
   BaseEdge,
   Handle,
@@ -6,12 +8,10 @@ import {
   type EdgeProps,
   type NodeProps,
 } from "@xyflow/react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { BookMarked, Plus, X } from "lucide-react";
 import { STAGE_ICON, STATE_ICON, STORE_ICON } from "../lib/icons";
-import { MAX_HYPOTHESIS_AGENTS } from "../lib/planned";
 import { STAGE_COLOR, STATE_LABEL } from "../lib/stage";
-import { useControl } from "../store/control";
 import type { SceneAgent } from "../types";
 
 /**
@@ -49,6 +49,8 @@ export interface ChainNodeData extends Record<string, unknown> {
   /** 1-based, shown on the card. Steps read as a sequence far more readily when they are
    *  numbered — the one convention every stepper in the wild agrees on. */
   step: number;
+  inspected?: boolean;
+  onInspect?: () => void;
   /** Pre-formatted by the panel so every card on one frame measures from one `now`. */
   elapsed: string | null;
   /** Whether this card's standard may be **chosen** here rather than only read.
@@ -65,6 +67,8 @@ export interface ChainNodeData extends Record<string, unknown> {
   /** Writes `choice` back to the form. Called with a playbook stem, or `""` for the prompt
    *  as written. A no-op when `editable` is false; the select is not rendered then. */
   onPlaybook: (book: string) => void;
+  onConfigure: () => void;
+  predictiveModel: string | null;
   /** Takes this slot back out of the form, or null when it cannot be.
    *
    *  Only ever set on a `planned` card. Every other card stands for a worker the database
@@ -75,15 +79,16 @@ export interface ChainNodeData extends Record<string, unknown> {
 }
 
 export function ChainNode({ data }: NodeProps) {
-  const { agent, step, elapsed, editable, choice, onPlaybook, onRemove } =
+  const { agent, step, elapsed, editable, choice, onConfigure, onRemove, predictiveModel } =
     data as ChainNodeData;
+  const { inspected, onInspect } = data as ChainNodeData;
+  const reducedMotion = useReducedMotion();
   const color = STAGE_COLOR[agent.stage];
   const busy = agent.state === "working";
   const tone = STATE_TONE[agent.state];
   // Read here rather than passed down: it is one list for the whole screen, it changes only
   // when the control service comes back up, and threading it through the panel's node data
   // would put a new array into every card's props on every poll.
-  const playbooks = useControl((s) => s.playbooks);
 
   const StageGlyph = STAGE_ICON[agent.stage];
   const StateGlyph = STATE_ICON[agent.state];
@@ -91,9 +96,11 @@ export function ChainNode({ data }: NodeProps) {
 
   return (
     <div
-      className={`relative w-44 rounded-xl border-2 bg-white px-3 py-2.5 shadow-sm transition
+      role="group" tabIndex={0} aria-label={`${agent.label}: ${STATE_LABEL[agent.state]}`}
+      onKeyDown={event => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onInspect?.(); } }}
+      className={`relative w-56 rounded-xl border-2 border-t-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 bg-white px-4 py-3.5 shadow-sm transition
                   hover:shadow-md ${tone.ring}`}
-      style={busy ? { borderColor: color } : undefined}
+      style={{ borderTopColor: color, ...(busy ? { borderColor: color } : {}), ...(inspected ? { boxShadow: `0 0 0 3px color-mix(in srgb, ${color} 19%, transparent), 0 8px 24px #00000010` } : {}) }}
     >
       <Handle type="target" position={Position.Left} className="!bg-transparent !border-0" />
       <Handle type="source" position={Position.Right} className="!bg-transparent !border-0" />
@@ -112,19 +119,21 @@ export function ChainNode({ data }: NodeProps) {
             e.stopPropagation();
             onRemove();
           }}
-          className="nodrag nopan absolute -right-2 -top-2 flex h-5 w-5 items-center
+          className="nodrag nopan absolute -right-2 -top-2 flex h-7 w-7 items-center
                      justify-center rounded-full border border-paper-line bg-white
                      text-ink-faint shadow-sm hover:border-ink hover:text-ink"
-          title="Do not start this one — take the slot back off the form"
+          aria-label={`Remove ${agent.stage} ${agent.slot + 1}`}
+          title={`Remove this ${agent.stage} and its skill from the next run`}
         >
           <X className="h-3 w-3" strokeWidth={2.4} />
         </button>
       )}
 
       <div className="flex items-center gap-2">
+        <Help topic={agent.stage} />
         <div className="relative shrink-0">
           {/* The pulse marks a run that is genuinely open, not merely a recent call. */}
-          {busy && (
+          {busy && !reducedMotion && (
             <motion.span
               className="absolute inset-0 rounded-full"
               style={{ border: `2px solid ${color}` }}
@@ -141,8 +150,8 @@ export function ChainNode({ data }: NodeProps) {
         </div>
 
         <div className="min-w-0">
-          <div className="font-mono text-[10px] leading-none text-ink-faint">{step}</div>
-          {/* The label gets about 108px here (w-44, less the padding, the border, the
+          <div className="font-mono text-xs leading-none text-ink-faint">{step}</div>
+          {/* The label gets about 108px here (w-56, less the padding, the border, the
               32px glyph and the gap), which is roughly 15 characters at this size. A
               longer one is cut with an ellipsis and nothing is raised anywhere, so the
               `title` is what keeps that from being silent. "Report · Insight" is the
@@ -157,7 +166,7 @@ export function ChainNode({ data }: NodeProps) {
               the same string the board writes to `claimed_by`, which is what lets a card
               be matched against the task row that names its holder. */}
           {agent.worker && (
-            <div className="truncate font-mono text-[10px] leading-tight" style={{ color }}
+            <div className="truncate font-mono text-xs leading-tight" style={{ color }}
                  title={agent.worker}>
               {agent.worker}
             </div>
@@ -165,9 +174,9 @@ export function ChainNode({ data }: NodeProps) {
         </div>
       </div>
 
-      <div className={`mt-2 flex items-center gap-1.5 text-[11px] font-bold ${tone.text}`}>
-        <StateGlyph className={`h-3.5 w-3.5 shrink-0 ${busy ? "animate-spin" : ""}`} strokeWidth={2.2} />
-        <span className="truncate">{STATE_LABEL[agent.state]}</span>
+      <div className={`mt-2 flex items-center gap-1.5 text-xs font-bold ${tone.text}`}>
+        <StateGlyph className={`h-3.5 w-3.5 shrink-0 ${busy && !reducedMotion ? "animate-spin" : ""}`} strokeWidth={2.2} />
+        <Help topic={STATE_LABEL[agent.state]}><span tabIndex={0} className="cursor-help truncate">{STATE_LABEL[agent.state]}</span></Help>
         {/* How many workers this **one card** stands for, which is only ever more than one
             at a folded station. The hypothesis station is not folded — it gets a card per
             worker — so this badge now appears exactly where a stage is running several and
@@ -179,8 +188,8 @@ export function ChainNode({ data }: NodeProps) {
             Until 2026-09-09 this badge was fed by the card count and therefore never fired
             for any folded stage at all — the one place it was needed. */}
         {agent.running > 1 && (
-          <span className="shrink-0 rounded-full px-1.5 font-mono text-[10px] font-bold"
-                style={{ backgroundColor: `${color}22`, color }}
+          <span className="shrink-0 rounded-full px-1.5 font-mono text-xs font-bold"
+                style={{ backgroundColor: `color-mix(in srgb, ${color} 13%, transparent)`, color }}
                 title={`${agent.running} workers of this stage, drawn as one`}>
             x{agent.running}
           </span>
@@ -204,7 +213,7 @@ export function ChainNode({ data }: NodeProps) {
           of the line deliberately: attaching a skill to the data agent was not among the
           roles the meeting listed (`:157`). */}
       {(editable || agent.playbook || agent.stage === "hypothesis") && (
-        <div className="mt-1.5 flex items-center gap-1 text-[10px] leading-tight">
+        <div className="mt-1.5 flex items-center gap-1 text-xs leading-tight">
           <BookMarked className="h-3 w-3 shrink-0"
                       style={{ color: (editable ? choice : agent.playbook) ? color : "#9c9a94" }}
                       strokeWidth={1.8} />
@@ -219,28 +228,11 @@ export function ChainNode({ data }: NodeProps) {
             // press inside a node as the start of a drag, and this panel's `onNodeClick`
             // navigates to the agents view: without both, opening this select leaves the
             // page instead.
-            <select
-              value={choice}
-              onChange={(e) => onPlaybook(e.target.value)}
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-              className={`nodrag nopan min-w-0 flex-1 cursor-pointer truncate rounded
-                          border border-dashed border-paper-line bg-white px-1 py-0.5
-                          text-[10px] leading-tight focus:border-ink focus:outline-none
-                          ${choice ? "font-mono font-bold" : "text-ink-faint"}`}
-              style={choice ? { color } : undefined}
-              title={choice
-                ? `The next run gives this agent the ${choice} standard`
-                : "No standard — this agent gets the prompt as written"}
-            >
-              {/* Named rather than blank, and worded exactly as the disclosure words it:
-                  two controls over one value that describe it differently read as two
-                  different settings. */}
-              <option value="">prompt as written</option>
-              {(playbooks ?? []).map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
+            <button type="button" onClick={e => { e.stopPropagation(); onConfigure(); }}
+              className="nodrag nopan min-w-0 flex-1 truncate rounded border border-dashed border-paper-line px-1 py-0.5 text-left text-xs font-bold"
+              style={{ color }} title="Read or change this agent's skill">
+              {choice || "Choose skill"}
+            </button>
           ) : (
             <span
               className={agent.playbook ? "truncate font-mono font-bold" : "truncate text-ink-faint"}
@@ -255,20 +247,23 @@ export function ChainNode({ data }: NodeProps) {
         </div>
       )}
 
+      {agent.last_status && agent.state !== "planned" && !busy && <p className={`mt-1 text-xs ${agent.last_status === "failed" ? "text-red-700" : "text-ink-faint"}`}>Last call: {agent.last_status}</p>}
+      {predictiveModel && <div className="mt-1 truncate font-mono text-xs text-ink-faint" title="Selected predictive model">{predictiveModel}</div>}
+
       {/* What this figure's **last** run was given, when that is not what the select above
           would give its next one. The select has to show the form or it is a control that
           sets one thing and displays another; this line is what keeps that from erasing the
           record on the card. It appears only where the two genuinely differ, so an
           untouched screen does not grow a second line under every card. */}
       {editable && agent.playbook && agent.playbook !== choice && (
-        <div className="truncate pl-4 font-mono text-[10px] leading-tight text-ink-faint"
+        <div className="truncate pl-4 font-mono text-xs leading-tight text-ink-faint"
              title={`This agent's last run used the ${agent.playbook} standard`}>
           ran as {agent.playbook}
         </div>
       )}
 
       {agent.carrying !== null && (
-        <div className="mt-1.5 inline-flex rounded-md border px-1.5 py-0.5 font-mono text-[10px]
+        <div className="mt-1.5 inline-flex rounded-md border px-1.5 py-0.5 font-mono text-xs
                         font-bold"
              style={{ borderColor: color, color }}>
           holding #{agent.carrying}
@@ -279,7 +274,7 @@ export function ChainNode({ data }: NodeProps) {
           last did, and when, is still a readable picture of where a run stopped. */}
       {StoreGlyph && agent.last_tool && (
         <div className="mt-1.5 flex items-center gap-1.5 border-t border-paper-line pt-1.5
-                        text-[10px] text-ink-faint">
+                        text-xs text-ink-faint">
           <StoreGlyph className="h-3 w-3 shrink-0" strokeWidth={1.8} />
           <span className="truncate font-mono">{agent.last_tool.tool}</span>
         </div>
@@ -289,30 +284,16 @@ export function ChainNode({ data }: NodeProps) {
 }
 
 export interface ChainAddData extends Record<string, unknown> {
-  /** Adds one hypothesis slot to the run form. */
+  stage: "hypothesis" | "interpreter";
+  maximum: number;
   onAdd: () => void;
-  /** The form is already at `MAX_HYPOTHESIS_AGENTS`. Drawn and disabled rather than
-   *  removed: a control that disappears at its limit leaves the reader to guess whether
-   *  there is a limit or the screen broke. */
   atCeiling: boolean;
 }
 
-/**
- * The dashed slot at the foot of the hypothesis column — the meeting figure's `확장 슬롯`.
- *
-
- * and the third is dashed and labelled as an expansion slot, which is a statement about the
- * screen and not only about the run: the stack is meant to look like something you add to.
- * Until 2026-09-09 the only way to add one was the `Hypothesis` number in the left rail, so
- * the drawing showed a stack that could grow and offered no way to grow it.
- *
- * It is not an agent and is not in `steps`, so it takes part in no edge and `onNodeClick`
- * cannot find it — which is why the button carries its own stopped events rather than
- * relying on the panel to ignore it.
- */
+/** Expansion controls open the skill editor without becoming pipeline agents. */
 export function ChainAddNode({ data }: NodeProps) {
-  const { onAdd, atCeiling } = data as ChainAddData;
-  const color = STAGE_COLOR.hypothesis;
+  const { stage, maximum, onAdd, atCeiling } = data as ChainAddData;
+  const color = STAGE_COLOR[stage];
 
   return (
     <button
@@ -323,19 +304,18 @@ export function ChainAddNode({ data }: NodeProps) {
         e.stopPropagation();
         onAdd();
       }}
-      className="nodrag nopan flex w-44 items-center justify-center gap-1.5 rounded-xl
+      className="nodrag nopan flex w-56 items-center justify-center gap-1.5 rounded-xl
                  border-2 border-dashed border-paper-line bg-white/60 px-3 py-2.5
-                 text-[11px] font-bold text-ink-faint transition hover:border-ink-faint
+                 text-xs font-bold text-ink-faint transition hover:border-ink-faint
                  hover:text-ink disabled:cursor-not-allowed disabled:opacity-60
                  disabled:hover:border-paper-line disabled:hover:text-ink-faint"
+      aria-label={`Add ${stage} agent`}
       title={atCeiling
-        ? `The service starts at most ${MAX_HYPOTHESIS_AGENTS} hypothesis agents ` +
-          `(src/memstara/control/request.py). The number field will still let you ask for ` +
-          `more, and the service will say why it refuses.`
-        : "Add a hypothesis agent to the next run"}
+        ? `Maximum of ${maximum} ${stage} agents reached.`
+        : `Add a ${stage} agent with a different skill to the next run`}
     >
       <Plus className="h-3.5 w-3.5" strokeWidth={2.4} style={atCeiling ? undefined : { color }} />
-      {atCeiling ? `max ${MAX_HYPOTHESIS_AGENTS}` : "hypothesis agent"}
+      {atCeiling ? `${stage} agents · max ${maximum}` : `${stage} agent`}
     </button>
   );
 }
@@ -365,6 +345,7 @@ export function ChainEdge({
   markerEnd,
   data,
 }: EdgeProps) {
+  const reducedMotion = useReducedMotion();
   const [edgePath] = getSmoothStepPath({
     sourceX,
     sourceY,
@@ -383,7 +364,7 @@ export function ChainEdge({
         markerEnd={markerEnd}
         style={{ stroke: live ? color : "#dcdbd4", strokeWidth: live ? 2.5 : 1.5 }}
       />
-      {live && (
+      {live && !reducedMotion && (
         <circle r="4.5" fill={color}>
           <animateMotion dur="1.8s" repeatCount="indefinite" path={edgePath} />
         </circle>
@@ -392,5 +373,5 @@ export function ChainEdge({
   );
 }
 
-export const chainNodeTypes = { chain: ChainNode, chainAdd: ChainAddNode };
+export const chainNodeTypes = { pipelineStage: PipelineStage, chain: ChainNode, chainAdd: ChainAddNode };
 export const chainEdgeTypes = { chain: ChainEdge };

@@ -1,24 +1,25 @@
-import { useMemo } from "react";
+import { useRunForm } from "../lib/useRunForm";
+import { useMemo, useState } from "react";
 import {
   Background,
   BackgroundVariant,
   Controls,
-  MiniMap,
   MarkerType,
   ReactFlow,
   type Edge,
   type Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Map } from "lucide-react";
+import { Map, Activity, Layers3, Sparkles, ArrowUpRight, X, Pause, Play } from "lucide-react";
+import FitOnResize from "../components/FitOnResize";
 import EmptyState from "../components/EmptyState";
 import Panel from "../components/Panel";
 import { nodeTypes } from "../components/nodes";
 import { withPlannedAgents } from "../lib/planned";
-import { STAGE_COLOR } from "../lib/stage";
-import { useControl } from "../store/control";
-import { useBoard, useScene, useViewer } from "../store/viewer";
+import { STAGE_COLOR, STATE_LABEL } from "../lib/stage";
+import { useScene, useViewer } from "../store/viewer";
 import type { SceneAgent, StageId } from "../types";
+import "./floor-plan.css";
 
 /**
  * The floor plan: every agent and every store at once, laid out by place.
@@ -30,8 +31,8 @@ import type { SceneAgent, StageId } from "../types";
  * the store it touched. React Flow gives pan, zoom, a minimap and clean edge routing for
  * free — all of which a hand-rolled SVG had to do without.
  *
- * Positions come from the API (`stores.PLACES` / `stores.HOME`), so the layout stays in
- * one place and a character cannot end up somewhere its place no longer is.
+ * Places use a spaced grid and agents stay in stage columns. Stable positions prevent
+ * simultaneous calls to one store from stacking several characters over one another.
  *
  * This panel shares one slot with `ChainPanel` and the `tabs/*` views: the control panel's
  * nav decides which of them the top-right region holds. `FeedPanel` and `ResultsPanel`
@@ -40,10 +41,13 @@ import type { SceneAgent, StageId } from "../types";
 
 export default function ScenePanel() {
   const scene = useScene();
-  const board = useBoard();
+  const stale = useViewer(s => !s.newRunMode && (s.snapshot?.stale || !!s.error));
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showTools, setShowTools] = useState(true);
+  const [motion, setMotion] = useState(true);
   const setView = useViewer((s) => s.setView);
   const selectAgent = useViewer((s) => s.selectAgent);
-  const form = useControl((s) => s.form);
+  const form = useRunForm();
 
   // The figures the API sent, with the hypothesis station brought to the number the run form
   // asks for (`lib/planned.ts`): short of it, `planned` figures; past it, resting figures
@@ -58,71 +62,56 @@ export default function ScenePanel() {
     [scene, form],
   );
 
+  const selected = drawn.find(a => a.id === selectedId);
+  const selectedFlash = scene?.flashes.find(f => {
+    const source = scene.agents.find(a => a.id === f.agent);
+    return selected && (selected.id === f.agent || (selected.stage === "hypothesis" &&
+      source?.stage === "hypothesis" && source.playbook === selected.playbook));
+  });
+
   const nodes: Node[] = useMemo(() => {
     if (!scene) return [];
 
-    const counts: Record<string, number> = {
-      board: board?.tasks.filter((t) => t.status !== "done").length ?? 0,
-      results: board?.tasks.filter((t) => t.status === "done").length ?? 0,
-    };
-
-    const places: Node[] = scene.places.map((p) => ({
+    const places: Node[] = scene.places.map((p, index) => ({
       id: `place-${p.id}`,
       type: "place",
-      position: { x: p.x - 112, y: p.y - 40 },
-      data: { place: p, count: counts[p.id] },
+      position: { x: 24 + index * 172, y: 40 },
+      data: { place: p },
       draggable: false,
     }));
 
     const agents: Node[] = drawn.map((a) => {
-      // Working characters stand at the store they last touched; the rest stay home.
-      const at = a.state === "working" && a.at
-        ? scene.places.find((p) => p.id === a.at)
-        : null;
-      const base = at ? { x: at.x - 64, y: at.y + 80 } : { x: a.home.x - 64, y: a.home.y };
-      // Several workers of one stage would otherwise be drawn on the same spot — the
-      // position is settled by the station or the store, and every worker of a stage
-      // shares both. Stacking upwards rather than sideways: the five homes sit 175 apart
-      // on one row (`stores.HOME`), so a sideways fan walks into the next stage's slot,
-      // whereas the space above the row is empty down to y=300. The small x step keeps
-      // the figures from looking like one column and hiding the one behind.
-      //
-      // **One of the five stations stacks** (`stores.SPLITTABLE`), and the row has room
-      // for a stack at any of them: a figure is 128 wide and the stations are 175 apart,
-      // so a stack has 47px of sideways travel and 124px of upward travel before it
-      // reaches the store row at y=300. Both were fixed steps — 22 and 62 — until
-      // 2026-09-09, which is the same as saying the drawing was correct for three figures
-      // and drew the fourth on top of the next station. That is why the request checker
-      // capped the count at three, and the cap is now 8 because this is no longer true.
-      //
-      // The envelope is divided rather than the step being fixed: the whole stack occupies
-      // the space three figures occupied, however many there are, so there is no N at which
-      // a figure lands somewhere it does not belong. The cost is honest and worth stating —
-      // past three the figures overlap more the more of them there are, and the **Pipeline**
-      // view is the one that stays legible at that point, because it stacks in a column
-      // with room below it (`ChainPanel`, `ROW_Y = 148`).
-      //
-      // For one, two or three workers this computes 0, 22 and 62 exactly, so the floor plan
-      // is pixel-identical to what it was for every run made before today.
-      // Counted over `drawn`, so a planned figure gets room made for it rather than being
-      // laid on top of the last observed one. This is what makes the preview honest at 5:
-      // the stack tightens to fit as the number on the form goes up.
-      const mine = drawn.filter((b) => b.stage === a.stage).length;
-      const spread = Math.max(1, mine - 1);
-      const xStep = Math.min(22, 47 / spread);
-      const yStep = Math.min(62, 124 / spread);
-      const pos = { x: base.x + a.slot * xStep, y: base.y - a.slot * yStep };
+      // Keep stations stable while tools run. Live edges identify the touched store;
+      // moving several agents to that store made their labels occupy the same pixels.
+      const stages = ["hypothesis", "data", "ml", "interpreter", "report"];
+      const column = stages.indexOf(a.stage);
+      const row = drawn.filter(b => b.stage === a.stage).findIndex(b => b.id === a.id);
+      const rows = Math.max(form.hypothesis_agents, form.interpret_agents);
+      const count = drawn.filter(b => b.stage === a.stage).length;
+      const pos = { x: 24 + column * 208, y: 194 + (row + (rows - count) / 2) * 116 };
       return {
         id: `agent-${a.id}`,
         type: "agent",
         position: pos,
-        data: { agent: a },
+        data: { agent: a, step: column + 1, selected: selectedId === a.id, inspect: () => setSelectedId(a.id) },
         draggable: false,
       };
     });
 
-    return [...places, ...agents];
-  }, [scene, board, drawn]);
+    const rows = Math.max(1, form.hypothesis_agents, form.interpret_agents);
+    const zones: Node[] = [
+      { id: "resources-zone", type: "zone", position: { x: 0, y: 0 }, zIndex: -2,
+        data: { title: "Resources", caption: "Knowledge · Data · Tools", width: 1056, height: 134 }, selectable: false, draggable: false },
+      { id: "execution-zone", type: "zone", position: { x: 0, y: 150 }, zIndex: -2,
+        data: { title: "Agent workspace", caption: `${form.hypothesis_agents} hypothesis · ${form.interpret_agents} interpretation · 5 stages`,
+          width: 1056, height: 164 + (rows - 1) * 116, execution: true }, selectable: false, draggable: false },
+    ];
+    const focused = drawn.find(a => a.id === selectedId);
+    const touched = focused?.last_tool?.store ?? selectedFlash?.place;
+    return [...zones, ...places.map(p => ({ ...p, style: { opacity: focused && p.id !== `place-${touched}` &&
+      !(focused.carrying !== null && p.id === "place-board") ? .45 : 1 } })),
+      ...agents.map(a => ({ ...a, style: { opacity: focused && a.id !== `agent-${focused.id}` ? .58 : 1 } }))];
+  }, [scene, drawn, selectedId, selectedFlash]);
 
   const edges: Edge[] = useMemo(() => {
     if (!scene) return [];
@@ -143,13 +132,20 @@ export default function ScenePanel() {
     // which is the very thing the scene stopped doing.
     const seen = new Set<string>();
     const live: Edge[] = [];
+    const visibleId = (id: string) => {
+      const source = scene.agents.find(a => a.id === id);
+      return drawn.find(a => a.id === id || (source && a.stage === source.stage &&
+        a.playbook === source.playbook))?.id;
+    };
     for (const f of scene.flashes) {
-      if (seen.has(f.agent) || f.place === "unknown") continue;
-      seen.add(f.agent);
+      const source = visibleId(f.agent);
+      if (!source || !scene.places.some(p => p.id === f.place)) continue;
+      if (seen.has(source) || f.place === "unknown") continue;
+      seen.add(source);
       const color = STAGE_COLOR[stageOf[f.agent]];
       live.push({
         id: `flash-${f.agent}-${f.at}`,
-        source: `agent-${f.agent}`,
+        source: `agent-${source}`, sourceHandle: "tool",
         target: `place-${f.place}`,
         label: f.tool,
         animated: true,
@@ -162,11 +158,11 @@ export default function ScenePanel() {
 
     // A character holding a card keeps a standing line back to the board — the visible
     // form of "claimed but not yet submitted".
-    for (const a of scene.agents) {
+    for (const a of drawn) {
       if (a.carrying === null) continue;
       live.push({
         id: `hold-${a.id}`,
-        source: `agent-${a.id}`,
+        source: `agent-${a.id}`, sourceHandle: "tool",
         target: "place-board",
         style: { stroke: STAGE_COLOR[a.stage], strokeWidth: 1.5, strokeDasharray: "4 4" },
       });
@@ -189,28 +185,40 @@ export default function ScenePanel() {
     // Over `drawn`, so a planned figure is wired into the shape like any other. It is the
     // shape of the pipeline that is being drawn here, not the traffic on it, and a figure
     // standing on the floor with no line leaving it would read as one that feeds nothing.
-    const dataFigure = drawn.find((a) => a.stage === "data");
-    const pipe: Edge[] = dataFigure
-      ? drawn
-          .filter((a) => a.stage === "hypothesis")
-          .map((a) => ({
-            id: `feeds-${a.id}`,
-            source: `agent-${a.id}`,
-            target: `agent-${dataFigure.id}`,
-            animated: false,
-            selectable: false,
-            style: { stroke: "#cbd5e1", strokeWidth: 1.5 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#cbd5e1",
-                         width: 14, height: 14 },
-          }))
-      : [];
+    const flowStages = ["hypothesis", "data", "ml", "interpreter", "report"];
+    const pipe: Edge[] = flowStages.slice(0, -1).flatMap((stage, index) =>
+      drawn.filter(a => a.stage === stage).flatMap(source =>
+        drawn.filter(a => a.stage === flowStages[index + 1]).map(target => ({
+          id: `feeds-${source.id}-${target.id}`,
+          source: `agent-${source.id}`, sourceHandle: "flow",
+          target: `agent-${target.id}`, type: "smoothstep",
+          animated: false, selectable: false,
+          style: { stroke: "#cbd5e1", strokeWidth: 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#cbd5e1", width: 14, height: 14 },
+        })),
+      ),
+    );
 
     // The static arrows go first so React Flow paints them under the flashes: a pale line
     // crossing a live one should be the one that gives way.
+    const order = ["data", "ml", "interpreter", "report"];
+    for (let i = 0; i < order.length - 1; i++) {
+      const from = drawn.find(a => a.stage === order[i]);
+      const to = drawn.find(a => a.stage === order[i + 1]);
+      if (from && to) pipe.push({ id: `route-${from.id}`, source: `agent-${from.id}`, sourceHandle: "flow",
+        target: `agent-${to.id}`, type: "smoothstep", selectable: false,
+        style: { stroke: "#b8c5d1", strokeWidth: 1.5 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: "#b8c5d1" } });
+    }
     return [...pipe, ...live];
   }, [scene, drawn]);
 
-  const working = scene?.agents.filter((a) => a.state === "working").length ?? 0;
+  const working = drawn.filter((a) => a.state === "working").length;
+  const visibleEdges = edges.filter(e => showTools || (!e.id.startsWith("flash-") && !e.id.startsWith("hold-")))
+    .map(e => ({ ...e, animated: Boolean(e.animated && motion),
+      className: e.id.startsWith("flash-") ? "floor-tool-edge" : "floor-route-edge",
+      style: { ...e.style, opacity: selected && e.source !== `agent-${selected.id}` && e.target !== `agent-${selected.id}` ? .14 : 1 },
+    }));
 
   return (
     <Panel
@@ -231,9 +239,7 @@ export default function ScenePanel() {
                 so picking an older run would show the current picture under that run's
                 name. Labelling it is the honest half of the fix; actually scoping the
                 scene to a run is a larger change and is not done here. */}
-            <span title="The floor plan always shows what is running now, not the run selected above.">
-              All runs
-            </span>
+            <span>{stale ? "Last known state · connection delayed" : "Selected run"}</span>
             <span>{working} working</span>
           </>
         ) : undefined
@@ -245,17 +251,31 @@ export default function ScenePanel() {
       {!scene ? (
         <EmptyState what="the floor plan" />
       ) : (
-        <div className="h-full w-full">
+        <div className={`floor-observatory ${motion ? "" : "floor-still"}`}>
+          <div className="floor-toolbar">
+            <div className="floor-title"><span className="floor-emblem"><Layers3 size={18} /></span>
+              <div><div className="floor-eyebrow">MEMSTARA / SPATIAL VIEW</div><h3>Research workspace</h3></div>
+            </div>
+            <div className="floor-actions">
+              <span className="floor-live"><Activity size={12} />{working} working</span>
+              <button type="button" aria-pressed={showTools} onClick={() => setShowTools(v => !v)}><Layers3 size={13} />Tool activity</button>
+              <button type="button" aria-label={motion ? "Pause flow animation" : "Resume flow animation"}
+                aria-pressed={motion} onClick={() => setMotion(v => !v)}>{motion ? <Pause size={13} /> : <Play size={13} />}</button>
+            </div>
+          </div>
+          <div className="floor-canvas min-h-0 flex-1">
           <ReactFlow
             nodes={nodes}
-            edges={edges}
+            edges={visibleEdges}
             nodeTypes={nodeTypes}
             fitView
-            fitViewOptions={{ padding: 0.15 }}
-            minZoom={0.4}
+            fitViewOptions={{ padding: 0.08 }}
+            minZoom={0.15}
             maxZoom={1.6}
             proOptions={{ hideAttribution: true }}
             nodesConnectable={false}
+            elementsSelectable={false}
+            onPaneClick={() => setSelectedId(null)}
             onNodeClick={(_, node) => {
               if (node.id === "place-board") setView("board");
               else if (node.id === "place-results") {
@@ -267,25 +287,33 @@ export default function ScenePanel() {
                 const agent = node.data.agent as SceneAgent;
                 // Nothing to open for a figure that has not run — its agent row may not
                 // exist yet. Same rule as `ChainPanel`.
-                if (agent.state === "planned") return;
-                selectAgent(agent.name);
-                setView("agents");
+                setSelectedId(agent.id);
               }
             }}
           >
-            <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#dcdbd4" />
+            <Background variant={BackgroundVariant.Dots} gap={20} size={0.65} color="#dfe6eb" />
             <Controls showInteractive={false} />
-            <MiniMap
-              pannable
-              zoomable
-              nodeColor={(n) =>
-                n.type === "agent"
-                  ? STAGE_COLOR[(n.data.agent as { stage: StageId }).stage]
-                  : "#dcdbd4"
-              }
-              className="!bg-white"
-            />
+            <FitOnResize padding={0.08} />
           </ReactFlow>
+          <div className="floor-map-key" aria-hidden="true"><span><i />Stage sequence</span><span><i className="floor-key-tool" />Recent tool call</span></div>
+          </div>
+          <div className="floor-inspector" aria-live="polite">
+            {selected ? <>
+              <div className="floor-inspector-icon" style={{ color: STAGE_COLOR[selected.stage] }}><Sparkles size={18} /></div>
+              <div className="floor-inspector-copy"><strong>{selected.label} <span>{STATE_LABEL[selected.state]}</span></strong>
+                <p>{selected.playbook ? `Skill: ${selected.playbook}` : "Default stage instructions"}
+                  {selected.carrying !== null ? ` · Task #${selected.carrying}` : ""}
+                  {selected.running > 1 ? ` · ${selected.running} concurrent workers` : ""}</p>
+                <p>{selected.last_tool || selectedFlash ? `Last observed tool: ${selected.last_tool?.tool ?? selectedFlash?.tool}` : "No tool activity recorded for this agent."}</p>
+              </div>
+              {selected.state !== "planned" && <button className="floor-details" onClick={() => { selectAgent(selected.name); setView("agents"); }}>Details <ArrowUpRight size={14} /></button>}
+              <button className="floor-close" aria-label="Clear agent selection" onClick={() => setSelectedId(null)}><X size={15} /></button>
+            </> : <><div className="floor-inspector-icon"><Sparkles size={18} /></div><div className="floor-inspector-copy">
+              <strong>One view. Multiple research paths.</strong>
+              <p>Select an agent to trace its connections. Shared stages can represent multiple workers.</p>
+              <p>Tool activity shows recent observations, not continuous data transfer. Scope: selected run.</p>
+            </div></>}
+          </div>
         </div>
       )}
     </Panel>
