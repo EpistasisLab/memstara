@@ -7,15 +7,16 @@ export default {
         // One colour per stage, used for the character, its card and its lines, so a
         // task keeps the same identity as it moves between places.
         stage: {
-          curator: "#1f6f77",
-          hypothesis: "#2f6b47",
-          data: "#2a5f8f",
-          ml: "#8a5f12",
-          interpreter: "#6b3f8f",
-          report: "#8f2f4f",
+          curator: "rgb(var(--stage-curator) / <alpha-value>)",
+          hypothesis: "rgb(var(--stage-hypothesis) / <alpha-value>)",
+          data: "rgb(var(--stage-data) / <alpha-value>)",
+          ml: "rgb(var(--stage-ml) / <alpha-value>)",
+          interpreter: "rgb(var(--stage-interpreter) / <alpha-value>)",
+          report: "rgb(var(--stage-report) / <alpha-value>)",
         },
-        ink: { DEFAULT: "#17171a", soft: "#52514e", faint: "#8a8880" },
-        paper: { DEFAULT: "#faf9f6", panel: "#ffffff", line: "#dcdbd4" },
+        accent: { DEFAULT: "rgb(var(--accent) / <alpha-value>)", contrast: "rgb(var(--accent-contrast) / <alpha-value>)" },
+        ink: { DEFAULT: "rgb(var(--ink) / <alpha-value>)", soft: "rgb(var(--ink-soft) / <alpha-value>)", faint: "rgb(var(--ink-faint) / <alpha-value>)" },
+        paper: { DEFAULT: "rgb(var(--paper) / <alpha-value>)", panel: "rgb(var(--panel) / <alpha-value>)", line: "rgb(var(--line) / <alpha-value>)" },
       },
       fontFamily: {
         sans: ['"Apple SD Gothic Neo"', '"Noto Sans KR"', "system-ui", "sans-serif"],

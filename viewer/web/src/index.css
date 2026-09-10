@@ -4,3 +4,61 @@
 
 html, body, #root { height: 100%; }
 body { @apply bg-paper text-ink font-sans antialiased; }
+
+
+:root {
+  --ink: 37 42 48; --ink-soft: 82 88 94; --ink-faint: 113 117 121;
+  --paper: 245 243 238; --panel: 255 254 251; --line: 220 216 207;
+  --accent: 34 122 120; --accent-contrast: 255 255 255; --window-shadow: 0 3px 12px #302b2010;
+  --stage-curator: 31 111 119; --stage-hypothesis: 47 107 71; --stage-data: 42 95 143;
+  --stage-ml: 138 95 18; --stage-interpreter: 107 63 143; --stage-report: 143 47 79;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --ink: 228 234 242; --ink-soft: 186 198 214; --ink-faint: 151 168 188;
+  --paper: 16 23 34; --panel: 27 38 53; --line: 52 68 89;
+  --accent: 103 200 194; --accent-contrast: 16 23 34; --window-shadow: 0 4px 16px #00000020;
+  --stage-curator: 108 196 204; --stage-hypothesis: 129 197 151; --stage-data: 129 181 231;
+  --stage-ml: 224 187 111; --stage-interpreter: 188 159 227; --stage-report: 222 147 174;
+  color-scheme: dark;
+}
+[class*="bg-white"] { background-color: rgb(var(--panel) / .96); }
+[data-theme="dark"] [class*="bg-white"] { background-color: rgb(var(--panel) / .96); }
+[data-theme="dark"] .bg-ink { color: #17171a; }
+[data-theme="dark"] .react-flow { --xy-background-color: #101722; --xy-edge-stroke: #8594aa; }
+.theme-toggle { position: fixed; right: 16px; top: 7px; z-index: 60; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid rgb(var(--line)); border-radius: 50%; background: rgb(var(--panel)); color: rgb(var(--ink)); }
+.window-workspace-shell { height: 100%; display: flex; flex-direction: column; padding: 0 12px 12px; }
+.window-workspace { position: relative; flex: 1; min-height: 0; }
+.floating-window { position: absolute; display: flex; flex-direction: column; border: 1px solid rgb(var(--line)); border-radius: 12px; background: rgb(var(--panel)); box-shadow: var(--window-shadow); }
+.window-titlebar { height: 28px; flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; padding: 0 10px; font-size: 11px; font-weight: 600; color: rgb(var(--ink-soft)); cursor: move; touch-action: none; user-select: none; border-bottom: 1px solid rgb(var(--line)); }
+.window-titlebar button { padding: 3px; border-radius: 4px; }
+.window-content { display: grid; flex: 1; min-width: 0; min-height: 0; overflow: hidden; border-radius: 0 0 12px 12px; }
+.window-content > * { min-width: 0; min-height: 0; }
+.window-edge { position: absolute; touch-action: none; z-index: 3; }
+.window-edge:focus-visible { outline: 2px solid rgb(var(--ink-soft)); }
+.window-edge-n, .window-edge-s { left: 12px; right: 12px; height: 8px; cursor: ns-resize; }
+.window-edge-n { top: -4px; } .window-edge-s { bottom: -4px; }
+.window-edge-e, .window-edge-w { top: 12px; bottom: 12px; width: 8px; cursor: ew-resize; }
+.window-edge-e { right: -4px; } .window-edge-w { left: -4px; }
+.window-edge-ne, .window-edge-nw, .window-edge-se, .window-edge-sw { width: 14px; height: 14px; }
+.window-edge-ne { top: -4px; right: -4px; cursor: nesw-resize; } .window-edge-nw { top: -4px; left: -4px; cursor: nwse-resize; }
+.window-edge-se { bottom: -4px; right: -4px; cursor: nwse-resize; border-bottom: 2px solid rgb(var(--ink-faint)); border-right: 2px solid rgb(var(--ink-faint)); border-radius: 0 0 8px 0; }
+.window-edge-sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+@media (max-width: 1023px) {
+  .window-workspace-shell { height: auto; min-height: 100%; }
+  .window-workspace { display: grid; gap: 12px; }
+  .floating-window { position: relative; left: auto !important; top: auto !important; width: 100% !important; height: 520px !important; z-index: auto !important; }
+  .window-edge, .window-titlebar button { display: none; }
+  .window-titlebar { cursor: default; }
+}
+
+[data-theme="dark"] .floor-observatory, [data-theme="dark"] .floor-toolbar, [data-theme="dark"] .floor-canvas { background: rgb(var(--paper)); color: rgb(var(--ink-soft)); }
+[data-theme="dark"] .floor-zone, [data-theme="dark"] .floor-agent, [data-theme="dark"] .floor-resource { background: rgb(var(--panel)) !important; border-color: rgb(var(--line)) !important; box-shadow: none !important; }
+[data-theme="dark"] .react-flow__controls-button { background: rgb(var(--panel)); color: rgb(var(--ink)); fill: currentColor; border-color: rgb(var(--line)); }
+
+/* Keep the dark pipeline canvas quiet; the light theme retains its dot grid. */
+[data-theme="dark"] .pipeline-background { visibility: hidden; }
+
+.theme-toggle:hover, .window-titlebar button:hover { background: rgb(var(--accent) / .12); color: rgb(var(--accent)); }
+.window-titlebar { background: rgb(var(--accent) / .035); border-radius: 12px 12px 0 0; }
+button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 2px; }
