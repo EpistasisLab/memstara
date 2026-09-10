@@ -77,37 +77,17 @@ def test_an_unknown_engine_names_the_one_that_exists() -> None:
     Uncommenting it lands here, and what makes that recoverable in one read rather than
     one search is that the exception names the value that does work.
     """
-    with pytest.raises(RuntimeError) as caught:
+    with pytest.raises(ValueError) as caught:
         tools_ml._make_model("logistic", 42)
 
     message = str(caught.value)
     assert "logistic" in message
-    assert "xgboost" in message
+    assert "Unsupported model" in message
 
 
-@pytest.mark.parametrize("engine", REMOVED_ENGINES)
-def test_a_removed_engine_says_it_was_removed(engine: str) -> None:
-    """A config naming an old engine is out of date, not mistyped, and is told so.
-
-    This is the test the whole restriction rests on. `MEMSTARA_ML_ENGINE` is on the
-    allowlist (`src/memstara/config.py:107`), so a `.env` written before 2026-09-08 still
-    reaches this process carrying `sklearn_hgb`. The dangerous outcome is not an error —
-    it is the variable being ignored, XGBoost running, and every number coming back
-    looking exactly as plausible as it would have under the engine the operator believed
-    was selected. That is the same failure this module spent 2026-09-08 closing at the
-    other end, where the shipped default silently disagreed with the plan.
-
-    Asserting on the word "removed" rather than only on `pytest.raises`: a bare raise
-    would also be satisfied by the generic typo message, and the two mistakes have
-    different fixes. One is "you misspelled it", the other is "this used to work".
-    """
-    with pytest.raises(RuntimeError) as caught:
-        tools_ml._make_model(engine, 42)
-
-    message = str(caught.value)
-    assert engine in message
-    assert "removed" in message
-    assert "xgboost" in message
+@pytest.mark.parametrize("engine", ["xgboost", "random_forest", "logistic_regression"])
+def test_supported_models_receive_the_same_seed(engine):
+    assert tools_ml._make_model(engine, 7).get_params()["random_state"] == 7
 
 
 def test_the_default_seed_is_42() -> None:
@@ -195,28 +175,18 @@ def test_a_run_that_sets_nothing_uses_the_default_engine(subset) -> None:
     assert out["model"] == "xgboost"
 
 
-@pytest.mark.parametrize("engine", REMOVED_ENGINES)
-def test_a_stale_environment_variable_is_refused_through_the_tool(engine, subset, monkeypatch) -> None:
-    """The same refusal, reached the way it will actually be reached.
-
-    `test_a_removed_engine_says_it_was_removed` calls `_make_model` directly, which
-    proves the check exists but not that anything routes to it. This one sets the
-    environment variable — the only way an engine is ever chosen here, since no agent and
-    no pipeline stage passes one — and goes in through the tool.
-
-    A refusal here is JSON rather than an exception, per this directory's rule that an
-
-    is worth asserting separately: `_make_model` raising and `train_and_score` returning
-    `{"error": ...}` are two different contracts and only the second one is what an agent
-    sees.
-    """
-    monkeypatch.setenv("MEMSTARA_ML_ENGINE", engine)
-
+def test_unknown_engine_is_refused_through_the_tool(subset, monkeypatch):
+    monkeypatch.setenv("MEMSTARA_ML_ENGINE", "sklearn_hgb")
     out = json.loads(tools_ml.train_and_score(str(subset), "outcome"))
+    assert "sklearn_hgb" in out["error"]
 
-    assert "error" in out, out
-    assert engine in out["error"]
-    assert "removed" in out["error"]
+
+def test_random_forest_is_selectable_through_the_tool(subset, monkeypatch):
+    monkeypatch.setenv("MEMSTARA_ML_ENGINE", "random_forest")
+    out = json.loads(tools_ml.train_and_score(str(subset), "outcome"))
+    assert "error" not in out, out
+    assert out["model"] == "random_forest"
+    assert out["explanation"]["method"] == "holdout_permutation_auc"
 
 
 def test_a_path_outside_the_output_directory_is_refused(subset, tmp_path) -> None:
@@ -224,7 +194,7 @@ def test_a_path_outside_the_output_directory_is_refused(subset, tmp_path) -> Non
 
     Named here because this file is now the only test of this module: `train_and_score`
     resolves symlinks and then requires the path to sit under the output directory
-    (`src/memstara/mcp_servers/ml.py:242-249`), and that check deliberately runs *above*
+    (`src/memstara/mcp_servers/ml.py (at commit 0990ec5, lines 242-249)`), and that check deliberately runs *above*
     the scikit-learn import so it cannot be skipped wherever the optional dependency is
     absent. A refusal is JSON rather than an exception, per this directory's rule that
     an agent must get something it can act on.

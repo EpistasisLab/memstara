@@ -53,14 +53,15 @@ dependencies = [
     "pandas",
     "scikit-learn",
     "numpy",
-    # The ML engine since 2026-09-08, and as of the same day the only one
-    # (`src/memstara/mcp_servers/ml.py:93`). The 2.4MB arm64 wheel is why this is
+    # Default ML engine; the evaluation MCP also supports scikit-learn models.
+    # Historical single-engine implementation:
+    # (`src/memstara/mcp_servers/ml.py (at commit 0990ec5, lines 93)`). The 2.4MB arm64 wheel is why this is
     # affordable where torch is not — it pulls only numpy and scipy, both of which
     # scikit-learn already requires.
     #
     # scikit-learn stays declared above it and did not become dead weight when the two
     # scikit-learn engines were removed. It is down to two imports, both in
-    # `train_and_score` (`src/memstara/mcp_servers/ml.py:273-274`) — `train_test_split`
+    # `train_and_score` (`src/memstara/mcp_servers/ml.py (at commit 0990ec5, lines 273-274)`) — `train_test_split`
     # and `roc_auc_score` — but those two produce every number this server reports, so
     # it is a hard requirement rather than a leftover. Nothing else in the repository
     # imports it; the matcher runs on numpy and sentence-transformers.
