@@ -126,7 +126,8 @@ def output_dir() -> Path:
     """Where subsets and catalogs are written, honouring `MEMSTARA_OUTPUT_DIR`.
 
     A function rather than a constant because the tool servers are child processes:
-    core hands them the variable at spawn time, and `src/memstara/mcp_servers/ml.py:69-72` has always
+    core hands them the variable at spawn time, and `src/memstara/mcp_servers/ml.py
+# Historical source at commit 0990ec5, lines 69-72)` has always
     read it per call. Freezing it at import would be a behaviour change disguised as
     a tidy-up.
 

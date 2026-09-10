@@ -474,37 +474,13 @@ QUESTION_SERVERS = {"okf", "memstara-blackboard"}
 
 
 def hypothesis_agent_names(playbooks: Sequence[str]) -> list[str]:
-    """One durable agent name per hypothesis playbook, in worker order.
+    """One durable identity per skill, including single-hypothesis configurations.
 
-    **With fewer than two playbooks the answer is the one name it has always been.**
-    That is the whole of what keeps every run made before this function existed
-    identical: a run with no standard and a run with one both provision
-    `memstara-board-hypothesis` and update it in place, exactly as they did.
-
-    With two or more, each agent is named for the standard it carries —
-    `memstara-board-hypothesis-cardiometabolic`. The alternative was a positional
-    suffix (`-1`, `-2`), and it was rejected: an agent is a durable row found by
-    name, so `-2` would mean a different standard in every run and the second run's
-    provisioning would silently rewrite the first run's agent. A name that says which
-    standard it carries cannot do that, and it makes the row in motoro's database
-    readable without opening the run directory that produced it.
-
-    The cost is that renaming or retiring a playbook leaves an agent behind under the
-    old name. That is preferred to the alternative's cost, which is two runs that
-    cannot be told apart afterwards.
-
-    Args:
-        playbooks: The standards the hypothesis stage was given, in worker order. An
-            empty sequence and one empty string both mean the prompt as written.
-
-    Returns:
-        One name per element, or the single unsuffixed name when there are fewer
-        than two.
+    The legacy unsuffixed name remains for an empty skill. A nonempty skill must
+    keep the same identity when another hypothesis is added or removed.
     """
     base = BOARD_AGENT_NAMES["hypothesis"]
-    if len(playbooks) < 2:
-        return [base]
-    return [f"{base}-{book}" for book in playbooks]
+    return [f"{base}-{book}" if book else base for book in (playbooks or [""])]
 
 
 def _sole(books: dict[str, list[str]], stage: str) -> str:
@@ -547,7 +523,13 @@ def board_workers(playbooks: dict[str, list[str]] | None = None) -> dict[str, tu
         )
     }
     for stage in ("data", "ml", "interpreter", "report"):
-        out[stage] = (BOARD_AGENT_NAMES[stage], _sole(books, stage))
+        choices = (books.get(stage) or [""]) if stage == "interpreter" else [_sole(books, stage)]
+        for k, book in enumerate(choices):
+            key = stage if k == 0 else f"{stage}#{k + 1}"
+            name = BOARD_AGENT_NAMES[stage]
+            if stage == "interpreter" and book:
+                name += f"-{book}"
+            out[key] = (name, book)
     return out
 
 

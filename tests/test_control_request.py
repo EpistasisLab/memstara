@@ -53,7 +53,7 @@ def test_an_empty_body_is_the_default_run():
     had to prove they add no argument until one is chosen.
     """
     got = flags(build_argv({}, OFFERED))
-    assert got == {"--trials": "3", "--waves": "1", "--hypothesis-agents": "1",
+    assert got == {"--trials": "3", "--waves": "1", "--hypothesis-agents": "1", "--interpret-agents": "1",
                    "--y-column": "outcome", "--provider": "azure_foundry",
                    "--model": "claude-sonnet-4-6", "--skill": ""}
 
@@ -143,26 +143,24 @@ def test_three_hypothesis_agents_is_accepted():
     assert flags(build_argv({"hypothesis_agents": 3}, OFFERED))["--hypothesis-agents"] == "3"
 
 
-def test_a_fourth_hypothesis_agent_is_accepted():
-    """**This asserted a refusal until 2026-09-09**, and the refusal was the floor plan's:
-    a fixed 22px fan put the fourth figure on top of the next station. `ScenePanel.tsx` now
-    divides the envelope instead of stepping a fixed amount, so there is no such figure and
-    nothing left for a cap at three to protect."""
-    assert flags(build_argv({"hypothesis_agents": 4}, OFFERED))["--hypothesis-agents"] == "4"
+def test_refuses_a_fifth_hypothesis_agent():
+    """The user's V1 contract limits configuration to four distinct hypotheses."""
+    with pytest.raises(ValueError, match="between 1 and 4"):
+        build_argv({"hypothesis_agents": 5}, OFFERED)
 
 
 def test_a_ninth_hypothesis_agent_is_refused_with_the_ceiling_named():
     """Refused **here** and not in `board.py`, where the flag is uncapped on purpose. What
     is left at 8 is a guard on a slipped keypress in a number field, the same kind as
     `_MAX_TRIALS`, so the message has to name the ceiling rather than only say no."""
-    with pytest.raises(ValueError, match="hypothesis_agents must be between 1 and 8"):
+    with pytest.raises(ValueError, match="hypothesis_agents must be between 1 and 4"):
         build_argv({"hypothesis_agents": 9}, OFFERED)
 
 
 def test_zero_hypothesis_agents_is_refused():
     """`board.py` refuses it too (`ap.error`, `board.py:1948-1952`), twenty seconds and a
     provisioned run later. Same answer, sooner."""
-    with pytest.raises(ValueError, match="between 1 and 8"):
+    with pytest.raises(ValueError, match="between 1 and 4"):
         build_argv({"hypothesis_agents": 0}, OFFERED)
 
 

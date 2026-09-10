@@ -60,14 +60,16 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from memstara.control.request import build_argv
+from memstara.control.request import build_argv, _MAX_HYPOTHESIS_AGENTS
+from memstara.control.catalog import catalog, register, validate_selection
 from memstara.env import load_env
 from memstara.logging_setup import new_run_dir
 from memstara.mcp_servers.frontmatter import matches, values_for
 from memstara.mcp_servers.okf import OKFError, _bundle_root, _load
 from memstara.pipeline.board import PLAYBOOK_STAGES
-from memstara.pipeline.prompts import accepts_playbook, playbook_names
-from memstara.paths import REPO_ROOT
+from memstara.pipeline.prompts import accepts_playbook
+from memstara.paths import REPO_ROOT, RUNS_DIR
+from memstara.control.recovery import identity, recover, save_record
 
 #: The two front matter fields a skill is built from. `terminus_kind` is what the
 #: document is about at the end of the chain, `mechanism_family` is how it gets there;
@@ -113,19 +115,26 @@ class _Runs:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._live: dict[str, Any] | None = None
-        self._done: list[dict[str, Any]] = []
+        self._live, self._done = recover(RUNS_DIR)
 
     def _reap(self) -> None:
         """Move the child to the finished list if it has exited. Caller holds the lock."""
         if self._live is None:
-            return
+            recovered, finished = recover(RUNS_DIR)
+            known = {(r["run_tag"], r["run_dir"]) for r in self._done}
+            self._done.extend(r for r in finished if (r["run_tag"], r["run_dir"]) not in known)
+            self._done.sort(key=lambda r: r.get("started", ""), reverse=True)
+            del self._done[_KEEP:]
+            self._live = recovered
+            if self._live is None:
+                return
         code = self._live["popen"].poll()
         if code is None:
             return
         finished = {k: v for k, v in self._live.items() if k != "popen"}
         finished["exit_code"] = code
         finished["ended"] = datetime.now().isoformat(timespec="seconds")
+        save_record(finished)
         self._done.insert(0, finished)
         del self._done[_KEEP:]
         self._live = None
@@ -135,12 +144,26 @@ class _Runs:
             self._reap()
             if self._live is None:
                 return None
-            return {k: v for k, v in self._live.items() if k != "popen"}
+            record = {k: v for k, v in self._live.items() if k not in ("popen", "process_identity")}
+            try:
+                config = json.loads((Path(record["run_dir"]) / "config.json").read_text())
+                if record.get("report_only"):
+                    for candidate in RUNS_DIR.glob("*/config.json"):
+                        original = json.loads(candidate.read_text())
+                        if original.get("run_tag") == record["run_tag"] and original.get("mode") != "report_only":
+                            config = original
+                            break
+                record["configuration"] = {k: config.get(k) for k in
+                                           ("hypotheses", "interpreters", "books", "evaluation", "trials", "waves",
+                                            "question", "y_column", "provider", "model")}
+            except (OSError, ValueError):
+                pass
+            return record
 
     def finished(self) -> list[dict[str, Any]]:
         with self._lock:
             self._reap()
-            return list(self._done)
+            return [{k: v for k, v in record.items() if k != "process_identity"} for record in self._done]
 
     def locate(self, run_tag: str) -> tuple[str, Path] | None:
         """The tag and directory of a run this service started, or None.
@@ -159,12 +182,20 @@ class _Runs:
             self._reap()
             if run_tag == "latest":
                 found = self._live or (self._done[0] if self._done else None)
-                return (found["run_tag"], Path(found["run_dir"])) if found else None
+                if found:
+                    return found["run_tag"], Path(found["run_dir"])
             if self._live is not None and self._live["run_tag"] == run_tag:
                 return run_tag, Path(self._live["run_dir"])
             for record in self._done:
                 if record["run_tag"] == run_tag:
                     return run_tag, Path(record["run_dir"])
+        for directory in sorted(RUNS_DIR.glob("*"), reverse=True):
+            try:
+                config = json.loads((directory / "config.json").read_text())
+                if run_tag == "latest" or config.get("run_tag") == run_tag:
+                    return config["run_tag"], directory
+            except (OSError, ValueError, KeyError):
+                continue
         return None
 
     def start(self, argv: list[str], run_tag: str, run_dir: Path, skill: str) -> dict[str, Any]:
@@ -208,8 +239,10 @@ class _Runs:
                 "pid": popen.pid,
                 "started": datetime.now().isoformat(timespec="seconds"),
                 "popen": popen,
+                "process_identity": identity(popen.pid),
             }
-            return {k: v for k, v in self._live.items() if k != "popen"}
+            save_record(self._live)
+            return {k: v for k, v in self._live.items() if k not in ("popen", "process_identity")}
 
     def stop(self, run_tag: str) -> dict[str, Any]:
         """Ask the running child to wind up, or raise `RuntimeError` saying why not."""
@@ -275,7 +308,9 @@ def playbooks() -> dict[str, Any]:
     no such property, it is one file that is either attached or not.
     """
     return {
-        "playbooks": playbook_names(),
+        "playbooks": [x["id"] for x in catalog()],
+        "catalog": catalog(),
+        "max_hypotheses": _MAX_HYPOTHESIS_AGENTS,
         "stages": [s for s in PLAYBOOK_STAGES if accepts_playbook(f"board/{s}")],
     }
 
@@ -449,6 +484,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, {"error": str(e)})
             return
 
+        if path == "/control/playbooks":
+            try:
+                self._send(201, register(body))
+            except (ValueError, OSError) as e:
+                self._send(400, {"error": str(e)})
+            return
+
         if path == "/control/runs":
             self._start(body)
             return
@@ -476,6 +518,7 @@ class Handler(BaseHTTPRequestHandler):
         menu = playbooks()
         try:
             argv = build_argv(body, offered, menu["playbooks"], menu["stages"])
+            validate_selection(body)
         except ValueError as e:
             self._send(400, {"error": str(e)})
             return
@@ -502,7 +545,7 @@ class Handler(BaseHTTPRequestHandler):
 
 _ROUTES = [
     "GET /control/health", "GET /control/skills", "GET /control/playbooks",
-    "POST /control/runs",
+    "POST /control/playbooks", "POST /control/runs",
     "GET /control/runs", "GET /control/runs/{tag}/log", "POST /control/runs/{tag}/stop",
 ]
 

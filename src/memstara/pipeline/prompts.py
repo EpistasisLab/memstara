@@ -219,6 +219,10 @@ def load_prompt(name: str, playbook: str = "") -> dict[str, str]:
         ValueError: No `goal`, an empty body, malformed front matter, or a playbook
             given to a prompt with nowhere to put it.
     """
+    from memstara.evaluation import active_plan
+    snapshot = active_plan()
+    if snapshot and f"{name}:{playbook}" in snapshot.get("prompts", {}):
+        return dict(snapshot["prompts"][f"{name}:{playbook}"])
     path = (PROMPTS_DIR / name).with_suffix(".md")
     front, body = _read(path)
 
@@ -232,15 +236,23 @@ def load_prompt(name: str, playbook: str = "") -> dict[str, str]:
                 f"{{{{playbook}}}} line to put it on"
             )
         book = (PLAYBOOKS_DIR / playbook).with_suffix(".md")
-        if not book.is_file():
-            raise FileNotFoundError(
-                f"no playbook at {book}. This checkout has: "
-                f"{', '.join(playbook_names()) or '(none)'}"
-            )
-        _, text = _read(book)
-        if not text:
-            raise ValueError(f"{book}: the playbook is empty")
-        body = _PLAYBOOK.sub(lambda _: f"{text}\n\n", body, count=1)
+        from memstara.control.catalog import resolve
+        item = resolve(playbook)
+        if item and item.get("source", "").startswith("Shared document"):
+            text = item["content"]
+            body = _PLAYBOOK.sub(lambda _: f"{text}\n\n", body, count=1)
+        elif playbook.startswith("user-"):
+            if not item:
+                raise FileNotFoundError(f"Unknown user skill: {playbook}")
+            body = _PLAYBOOK.sub(lambda _: f"{item['content']}\n\n", body, count=1)
+        else:
+            if not book.is_file():
+                raise FileNotFoundError(f"Unknown skill: {playbook}; available: {playbook_names()}")
+            _, text = _read(book)
+            if not text:
+                raise ValueError(f"{book}: the playbook is empty")
+            body = _PLAYBOOK.sub(lambda _: f"{text}\n\n", body, count=1)
+        # Skill content has already been resolved above.
 
     # Whatever is left goes, playbook or not: a marker nobody filled is a line of syntax
     # for the model to puzzle over, and a second marker is a stage asking for two

@@ -67,7 +67,7 @@ _MAX_WAVES = 10
 #: guarded is a slipped keypress in a number field — the same reason as `_MAX_TRIALS` above,
 #: and the same kind of ceiling. Eight hypothesis agents is already a run nobody starts by
 #: accident, and the CLI is still there for a deliberate ninth.
-_MAX_HYPOTHESIS_AGENTS = 8
+_MAX_HYPOTHESIS_AGENTS = 4
 
 #: What the form sends when a field is left alone. The same values as `board.py`'s own
 #: argparse defaults, so a request that names nothing starts the run the CLI would.
@@ -99,13 +99,16 @@ PLAYBOOK_STAGES = ("hypothesis", "data", "ml", "interpreter", "report")
 #: A tuple of one rather than a bare string: `hypothesis` is the only such stage because
 #: it is the only one whose workers set out independently, and if a second ever qualifies
 #: the check below does not change shape.
-MULTI_PLAYBOOK_STAGES = ("hypothesis",)
+MULTI_PLAYBOOK_STAGES = ("hypothesis", "interpreter")
 
 DEFAULTS: dict[str, Any] = {
+    "question": "",
+    "evaluation": {},
     "skill": "",
     "trials": 3,
     "waves": 1,
     "hypothesis_agents": 1,
+    "interpret_agents": 1,
     "y_column": "outcome",
     "provider": "azure_foundry",
     "model": "claude-sonnet-4-6",
@@ -188,6 +191,14 @@ def build_argv(
             f"The fields are {', '.join(sorted(DEFAULTS))}"
         )
 
+    from memstara.evaluation import validate
+    evaluation = body.get("evaluation", {})
+    if not isinstance(evaluation, dict):
+        raise ValueError("evaluation must be an object")
+    validate(evaluation)
+    question = _text(body, "question")
+    if len(question) > 8000:
+        raise ValueError("Research question must be at most 8000 characters")
     skill = _text(body, "skill")
     if skill and skill not in set(offered):
         raise ValueError(
@@ -210,6 +221,7 @@ def build_argv(
     trials = _whole_number(body, "trials", _MAX_TRIALS)
     waves = _whole_number(body, "waves", _MAX_WAVES)
     hypothesis_agents = _whole_number(body, "hypothesis_agents", _MAX_HYPOTHESIS_AGENTS)
+    interpret_agents = _whole_number(body, "interpret_agents", 4)
 
     known = set(playbooks)
     markable = set(playbook_stages)
@@ -242,10 +254,11 @@ def build_argv(
                     f"standard; the others run one agent however many workers claim from "
                     f"the board, so a second name would never be read"
                 )
-            if len(books) != hypothesis_agents:
+            count = hypothesis_agents if stage == "hypothesis" else interpret_agents
+            if len(books) != count:
                 raise ValueError(
-                    f"the hypothesis stage was given {len(books)} standards "
-                    f"({', '.join(books)}) and {hypothesis_agents} agents. Give one "
+                    f"the {stage} stage was given {len(books)} standards "
+                    f"({', '.join(books)}) and {count} agents. Give one "
                     f"standard per agent, or one for all of them — they are paired by "
                     f"position, and there is no order in which {len(books)} standards fit "
                     f"{hypothesis_agents} agents that would not have to be guessed at"
@@ -268,6 +281,7 @@ def build_argv(
         "--trials", str(trials),
         "--waves", str(waves),
         "--hypothesis-agents", str(hypothesis_agents),
+        "--interpret-agents", str(interpret_agents),
         "--y-column", y_column,
         "--provider", provider,
         "--model", model,
@@ -275,4 +289,9 @@ def build_argv(
     ]
     for stage, book in chosen:
         argv += [f"--playbook-{stage}", book]
+    if "evaluation" in body:
+        import json
+        argv += ["--evaluation", json.dumps(evaluation)]
+    if question:
+        argv += ["--question", question]
     return argv
