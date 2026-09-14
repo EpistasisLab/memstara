@@ -29,7 +29,7 @@ export const POLL_MS = 2000;
 
 /** What the main area shows. Results is not here on purpose: ResultsPanel is always on
  *  screen at bottom-right, so a nav entry for it would be a second door to one room. */
-export type ViewId = "clinician" | "chain" | "scene" | "log" | "report" | "board" | "task" | "agents" | "access";
+export type ViewId = "discovery" | "clinician" | "chain" | "scene" | "log" | "report" | "board" | "task" | "agents" | "access";
 
 interface ViewerState {
   snapshot: Snapshot | null;
@@ -88,8 +88,8 @@ export const useViewer = create<ViewerState>((set, get) => ({
   knownRuns: [],
   newRunMode: initialSelection === null,
   view: (() => {
-    try { return localStorage.getItem("memstara-workspace-v1") === "clinician" ? "clinician" : "chain"; }
-    catch { return "chain"; }
+    try { return "scene" as ViewId; }
+    catch { return "scene" as ViewId; }
   })(),
   selectedTask: null,
   selectedAgent: null,

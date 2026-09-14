@@ -1,109 +1,14 @@
+import { usePipelines } from "../store/pipelines";
+import ControlAgentSettings from "../components/ControlAgentSettings";
+import KnowledgeSelect from "../components/KnowledgeSelect";
 import Help from "../components/Help";
 import { Play, Square } from "lucide-react";
 import { useEffect } from "react";
-import { asSlots, MAX_HYPOTHESIS_AGENTS } from "../lib/planned";
 import { useControl, type RunRequest } from "../store/control";
-import { POLL_MS } from "../store/viewer";
+import { POLL_MS, useViewer } from "../store/viewer";
 import { useRunForm } from "../lib/useRunForm";
 
-/**
- * The only control on this screen that starts something.
- *
- * It lives in its own file rather than inside `ControlPanel` for the reason the root
-
- * is being looked at, which view is showing). A form that launches a process is not a
- * navigation control and does not belong in the same component.
- *
- * Three things it is deliberately not:
- *
- *  - **Not a full command line.** Twelve fields, the same twelve the service accepts, and
- *    eight of them behind two disclosures because nobody changes the provider twice a day
- *    and most runs attach no playbook at all.
- *    Everything else `board.py` takes is still there for whoever runs it by hand.
- *  - **Not a validator.** The service refuses a bad request and says why in words; this
- *    shows that sentence. Two places deciding what a legal request is means one of them
- *    is eventually wrong, and it would be this one.
- *  - **Not a progress display.** Once a run starts, the run selector points at it and
- *    the existing 2-second poll fills the rest of the screen in. All this keeps is the
- *    tag and a Stop button.
- */
-
-/** The branch list is one read of the bundle; a run confined to nothing is not offered,
- *  so "whole bundle" is the only entry with no filter behind it. */
-function KnowledgeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const skills = useControl((s) => s.skills);
-  const documents = useControl((s) => s.bundle?.documents);
-
-  return (
-    <label className="block">
-      <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">Knowledge sources <Help topic="Skill" /></span>
-      <select
-        aria-label="Knowledge sources"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-md border border-paper-line bg-white px-2 py-1
-                   text-xs focus:border-ink focus:outline-none"
-      >
-        <option value="">All available knowledge{documents != null ? ` · ${documents} documents` : ""}</option>
-        {skills.map((s) => (
-          <option key={s.skill} value={s.skill}>
-            {s.label} · {s.documents} documents
-          </option>
-        ))}
-      </select>
-      <span className="mt-1 block text-[11px] font-normal leading-relaxed text-ink-faint">Choose the evidence available to this analysis. Agent instructions below control how it is used.</span>
-    </label>
-  );
-}
-
-/** A compact overview; editing uses the same panel as the pipeline cards. */
-function PlaybookSelects({ form }: { form: RunRequest }) {
-  const stages = useControl(s => s.playbookStages);
-  const catalog = useControl(s => s.catalog);
-  const open = useControl(s => s.openEditor);
-  const labels: Record<string, string> = { hypothesis: "Hypothesis", ml: "Machine learning", interpreter: "Interpretation", report: "Report" };
-  return <details className="rounded-lg border border-paper-line bg-white p-2 text-xs" open>
-    <summary className="cursor-pointer font-bold text-ink-soft">Agent settings summary <Help topic="Agent skills" /></summary>
-    <p className="my-2 text-[11px] leading-relaxed text-ink-faint">How each agent analyzes the evidence. Select an agent to change its instructions.</p>
-    <div className="space-y-2">{stages.filter(s => s !== "data").map(stage => {
-      const slots = stage === "hypothesis" ? asSlots(form.playbook_hypothesis, form.hypothesis_agents) : stage === "interpreter" ? asSlots(form.playbook_interpreter, form.interpret_agents) : [form[`playbook_${stage}`]];
-      return slots.map((book, i) => {
-        const skill = catalog.find(item => item.id === book);
-        const agent = `${labels[stage] || stage}${slots.length > 1 ? ` ${i + 1}` : ""}`;
-        return <button key={`${stage}-${i}`} type="button" onClick={() => open(stage, i)}
-          aria-label={`Change instructions for ${agent}`}
-          className="block w-full rounded-md border border-paper-line px-2 py-2 text-left hover:bg-paper focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink">
-          <span className="flex items-center justify-between gap-2"><span className="font-bold text-ink-soft">{agent}</span><span className="text-[10px] text-ink-faint">Edit</span></span>
-          <span className="mt-1 block break-words text-[11px] leading-relaxed text-ink-soft">{skill?.title || (book ? "Saved instructions · view details" : "Default agent instructions")}</span>
-        </button>;
-      });
-    })}</div>
-  </details>;
-}
-
-function Number_({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <label className="block min-w-0 flex-1">
-      <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">{label} <Help topic={label} /></span>
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange(e.target.valueAsNumber)}
-        className="mt-1 w-full rounded-md border border-paper-line bg-white px-2 py-1
-                   font-mono text-xs focus:border-ink focus:outline-none"
-      />
-    </label>
-  );
-}
-
+/** Knowledge selection, shared agent settings, and exploration controls. */
 function Text_({
   label,
   value,
@@ -115,8 +20,9 @@ function Text_({
 }) {
   return (
     <label className="block">
-      <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">{label} <Help topic={label} /></span>
+      <span className="text-[12px] font-bold uppercase tracking-wider text-ink-faint">{label} <Help topic={label} /></span>
       <input
+        aria-label={label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="mt-1 w-full rounded-md border border-paper-line bg-white px-2 py-1
@@ -131,8 +37,13 @@ export default function StartRun() {
   const running = useControl((s) => s.running);
   const busy = useControl((s) => s.busy);
   const error = useControl((s) => s.error);
-  const startRun = useControl((s) => s.startRun);
-  const stopRun = useControl((s) => s.stopRun);
+  const pipeline = usePipelines(s => s.items.find(p => p.id === s.selected));
+  const workspaceBusy = usePipelines(s => s.busy);
+  const stopRun = () => pipeline ? usePipelines.getState().stop(pipeline.id) : useControl.getState().stopRun();
+  const snapshot = useViewer(s => s.snapshot);
+  const skills = useControl(s => s.skills);
+  const currentSnapshot = running && snapshot?.run_tag === running.run_tag ? snapshot : null;
+  const completed = currentSnapshot ? new Set(currentSnapshot.results.map(r => r.trial)).size : null;
   // In the store rather than in this component since 2026-09-09. The two pipeline drawings
   // pad themselves to `form.hypothesis_agents`, so the form stopped being this panel's
   // private business the moment something else on the screen answered to it. Nothing about
@@ -155,14 +66,19 @@ export default function StartRun() {
     return () => clearInterval(timer);
   }, []);
 
+  if (!pipeline) return <div className="space-y-3 text-sm text-ink-soft">
+    <p>Add or select a pipeline in Floor Plan to configure its agents.</p>
+    <button className="rounded-lg border border-paper-line px-3 py-2 font-bold text-ink" onClick={()=>useViewer.getState().setView("scene")}>Open Floor Plan</button>
+  </div>;
+
   if (up === false) {
     return (
-      <div className="text-[11px] text-ink-faint">
-        <span className="font-bold uppercase tracking-wider">Start a run</span>
+      <div className="text-[12px] text-ink-faint">
+        <span className="font-bold uppercase tracking-wider">Hypothesis exploration</span>
         <p className="mt-1 leading-snug">
           The control service is not running. Start it on the host:
         </p>
-        <code className="mt-1 block break-all font-mono text-[10px]">
+        <code className="mt-1 block break-all font-mono text-[12px]">
           python -m memstara.control
         </code>
       </div>
@@ -171,16 +87,23 @@ export default function StartRun() {
 
   return (
     <div className="space-y-2">
-      <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">
-        Start a run <Help topic="Start a run" />
+      <span className="text-[12px] font-bold uppercase tracking-wider text-ink-faint">
+        {pipeline.name} · Iteration {pipeline.progress.iteration ?? "—"}
       </span>
 
       {running ? (
         <div className="space-y-2">
-          <div className="font-mono text-[11px] leading-snug">
-            <div className="font-bold">{running.run_tag}</div>
-            <div className="text-ink-faint">{running.skill || "All available knowledge"}</div>
+          <div className="rounded-lg border border-paper-line bg-paper p-3 text-sm">
+            <p className="font-bold text-ink">{running.pause_requested ? "Pause requested" : running.waiting_for_questions ? "Waiting to explore again" : "Exploration running"}</p>
+            <p className="mt-1 break-words leading-relaxed text-ink-soft">{skills.find(s => s.skill === running.skill)?.label || running.skill || "All available knowledge"}</p>
+            <p className="mt-2 text-ink-soft">Hypotheses with results: <strong>{completed ?? "—"}</strong></p>
+            {!currentSnapshot && <p className="mt-1 text-xs text-ink-faint">Open the active exploration to view its progress.</p>}
+            <button type="button" className="mt-2 underline text-ink-soft"
+              onClick={() => useViewer.getState().setRunTag(running.run_tag)}>View active exploration</button>
           </div>
+          {running.pause_requested && <button type="button" disabled={busy}
+            onClick={() => void useControl.getState().pauseRun(false)}
+            className="w-full rounded-md bg-accent px-3 py-2 font-bold text-accent-contrast">Play — Resume</button>}
           <Help topic="Stop"><button
             type="button"
             onClick={() => void stopRun()}
@@ -191,43 +114,18 @@ export default function StartRun() {
           >
             <Square className="h-3.5 w-3.5" /> Stop
           </button></Help>
+          <ControlAgentSettings form={form} />
         </div>
       ) : (
         <>
-          <label className="block text-[11px] font-bold">Research question <Help topic="Research question" />
-            <textarea value={form.question} onChange={e => set("question", e.target.value)} rows={3}
-              className="mt-1 w-full rounded border border-paper-line bg-white p-2 font-normal" />
-          </label>
           <KnowledgeSelect value={form.skill} onChange={(v) => set("skill", v)} />
-          <div className="grid grid-cols-2 gap-2">
-            <Number_ label="Trials" value={form.trials} onChange={(v) => set("trials", v)} />
-            <Number_ label="Waves" value={form.waves} onChange={(v) => set("waves", v)} />
-            {/* The one stage count on this form, and the reason it is here at all: until
-                this field existed, "expandable to three hypothesis agents" was true of the
-                drawing and false of the button — a browser could only ever start one, and
-                two meant going to the command line. The other three stages were fixed at
-                one each by the same meeting and are deliberately not offered. */}
-            {/* The standards move with the count, because they are paired by position and
-                a name past the last agent is one the service refuses and the form no
-                longer shows. Growing pads with "prompt as written"; shrinking drops the
-                tail, which is the one the disappearing select was showing. */}
-            <div className="col-span-2 flex items-center gap-1"><button type="button" className="flex-1 rounded border border-paper-line px-2 py-1 text-xs"
-              disabled={form.hypothesis_agents >= MAX_HYPOTHESIS_AGENTS}
-              onClick={() => useControl.getState().openEditor("hypothesis", form.hypothesis_agents, true)}>
-              + Hypothesis ({form.hypothesis_agents}/{MAX_HYPOTHESIS_AGENTS})
-            </button><Help topic="Add hypothesis" /></div>
-            <button type="button" className="col-span-2 rounded border border-paper-line px-2 py-1 text-xs"
-              disabled={form.interpret_agents >= 4}
-              onClick={() => useControl.getState().openEditor("interpreter", form.interpret_agents, true)}>
-              + Interpreter ({form.interpret_agents}/4)
-            </button>
-            <p className="col-span-2 text-[10px] text-ink-faint">Each hypothesis is interpreted once by an available interpreter. Different skills can produce different perspectives across hypotheses.</p>
-          </div>
+          <p className="text-sm leading-relaxed text-ink-soft">
+            Agents generate hypotheses from your knowledge sources, evaluate them through the pipeline, and identify promising findings.
+          </p>
+          <ControlAgentSettings form={form} />
 
-          <PlaybookSelects form={form} />
-
-          <details className="text-[11px]">
-            <summary className="cursor-pointer text-ink-faint">Model and target <Help topic="Model and target" /></summary>
+          <details className="text-[12px]">
+            <summary className="cursor-pointer text-ink-faint">Advanced settings <Help topic="Model and target" /></summary>
             <div className="mt-2 space-y-2">
               <Text_ label="Y column" value={form.y_column} onChange={(v) => set("y_column", v)} />
               <Text_ label="Provider" value={form.provider} onChange={(v) => set("provider", v)} />
@@ -235,21 +133,22 @@ export default function StartRun() {
             </div>
           </details>
 
-          <Help topic="Start run"><button
+          <button
             type="button"
-            onClick={() => void startRun(form)}
-            disabled={busy}
+            onClick={() => void usePipelines.getState().play(pipeline.id)}
+            disabled={busy || workspaceBusy || up !== true}
             className="flex w-full items-center justify-center gap-1.5 rounded-md bg-accent px-2
                        py-1.5 text-xs font-bold text-accent-contrast hover:bg-accent/90 disabled:opacity-50"
           >
-            <Play className="h-3.5 w-3.5" /> Start run
-          </button></Help>
+            <Play className="h-3.5 w-3.5" /> Play
+          </button>
+          <p className="text-xs leading-relaxed text-ink-faint">Play starts continuous exploration. Stop ends it; saved findings remain available. When no new hypotheses emerge, agents wait before trying again.</p>
         </>
       )}
 
       {/* The service's own sentence, not a status code. It is the only thing that says
           which field was wrong. */}
-      {error && <p className="text-[11px] leading-snug text-red-700">{error}</p>}
+      {error && <p className="text-[12px] leading-snug text-red-700">{error}</p>}
     </div>
   );
 }

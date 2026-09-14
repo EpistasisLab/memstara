@@ -39,11 +39,11 @@ export default function ReportPanel() {
 
   return (
     <div data-testid="report-page" className="flex h-full min-h-0 flex-col bg-white">
-      <header className="flex shrink-0 items-start justify-between gap-4 border-b border-paper-line px-5 py-4">
+      <header className="flex shrink-0 flex-wrap items-start justify-between gap-4 border-b border-paper-line px-5 py-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-ink-soft">
             <FileText className="h-4 w-4" />
-            <span className="text-[10px] font-bold uppercase tracking-[.16em]">Report agent output</span>
+            <span className="text-[12px] font-bold uppercase tracking-[.16em]">Report agent output</span>
             <Help topic="report" />
           </div>
           <h2 className="mt-1 truncate font-mono text-sm font-bold text-ink" title={tag}>{tag}</h2>
@@ -61,18 +61,18 @@ export default function ReportPanel() {
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-4xl px-5 py-5">
           <div className="mb-5 grid gap-2 rounded-lg border border-paper-line bg-paper-panel p-3 text-xs sm:grid-cols-4">
-            <div><span className="block text-[10px] uppercase tracking-wider text-ink-faint">Status</span><strong>{report?.status ?? "unavailable"}</strong></div>
-            <div><span className="block text-[10px] uppercase tracking-wider text-ink-faint">Target</span><strong className="font-mono">{configuration?.y_column ?? "—"}</strong></div>
-            <div><span className="block text-[10px] uppercase tracking-wider text-ink-faint">Hypotheses</span><strong>{configuration?.hypotheses ?? "—"}</strong></div>
-            <div><span className="block text-[10px] uppercase tracking-wider text-ink-faint">Trials</span><strong>{configuration?.trials ?? "—"}</strong></div>
+            <div><span className="block text-[12px] uppercase tracking-wider text-ink-faint">Status</span><strong>{report?.status ?? "unavailable"}</strong></div>
+            <div><span className="block text-[12px] uppercase tracking-wider text-ink-faint">Target</span><strong className="font-mono">{configuration?.y_column ?? "—"}</strong></div>
+            <div><span className="block text-[12px] uppercase tracking-wider text-ink-faint">Hypotheses</span><strong>{configuration?.hypotheses ?? "—"}</strong></div>
+            <div><span className="block text-[12px] uppercase tracking-wider text-ink-faint">Trials</span><strong>{configuration?.trials ?? "—"}</strong></div>
           </div>
 
-          <section className="mb-5 rounded-xl border border-[#b8d4c0] bg-[#f3f8f4] p-4" aria-label="Recommendation summary">
-            <div className="text-[10px] font-bold uppercase tracking-[.16em] text-[#477258]">Research recommendation</div>
+          <section className="mb-5 rounded-xl border border-[#b8d4c0] bg-stage-hypothesis/5 p-4" aria-label="Recommendation summary">
+            <div className="text-[12px] font-bold uppercase tracking-[.16em] text-stage-hypothesis">Research recommendation</div>
             <p className="mt-1 text-sm font-medium leading-relaxed text-ink">
               {lead ?? "The report agent will identify and rank the most promising hypotheses here after a completed report is available."}
             </p>
-            <p className="mt-2 text-[11px] text-ink-faint">Rankings weigh evidence, predictive support, reproducibility, actionability, novelty, and uncertainty together.</p>
+            <p className="mt-2 text-[12px] text-ink-faint">Rankings weigh evidence, predictive support, reproducibility, actionability, novelty, and uncertainty together.</p>
           </section>
 
           {report?.error && <p role="status" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{report.error}</p>}

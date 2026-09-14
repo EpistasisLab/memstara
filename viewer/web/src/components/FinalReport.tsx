@@ -23,7 +23,7 @@ export default function FinalReport() {
         onClick={() => setExpanded(v => !v)}>Final report <span className="ml-2 text-xs font-normal text-ink-soft">{report.status}</span></button>
       {report.text && <button aria-label="Download final report" onClick={download} className="rounded p-1.5 hover:bg-paper"><Download size={15} /></button>}
     </div>
-    <p className="px-3 pb-2 text-[10px] text-ink-faint">{tag}</p>
+    <p className="px-3 pb-2 text-[12px] text-ink-faint">{tag}</p>
     {report.error && <p role="status" className="px-3 pb-3 text-sm text-amber-800">{report.error}</p>}
     {expanded && <div className="border-t border-paper-line p-4">
       {report.text ? <Suspense fallback={<p>Loading report…</p>}><div data-final-report-content><ReportBody text={report.text} /></div></Suspense>

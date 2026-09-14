@@ -1,6 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowUpRight, BookOpen, Download, Search, Stethoscope } from "lucide-react";
+import { usePipelines } from "../store/pipelines";
+import { pipelineLabel } from "../lib/pipelineLabel";
+import LiveOutputDock from "../components/discovery/LiveOutputDock";
+import { useLiveOutputs, type OutputEvent } from "../store/liveOutputs";
 import { useViewer } from "../store/viewer";
+import ScientificProvenance from "../components/ScientificProvenance";
 import ExplanationEvidence from "../components/ExplanationEvidence";
 import type { Result } from "../types";
 
@@ -12,12 +17,13 @@ function Evidence({ result }: { result: Result }) {
     .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 8);
   const maximum = Math.max(...importance.map(([, value]) => Math.abs(value)), .000001);
   return <article className={`${section} min-w-0`} aria-label="Selected hypothesis evidence">
+    <ScientificProvenance result={result} />
     <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-soft">
       <span>Hypothesis · Trial {result.trial}</span><span>AI-generated interpretation · research evidence</span>
     </div>
     <h2 className="mt-3 text-xl font-semibold leading-snug text-ink">{result.hypothesis || result.perspective || "Hypothesis text not recorded"}</h2>
-    <div className="mt-5 rounded-xl bg-[#f3f8f4] p-4">
-      <h3 className="text-sm font-bold text-[#2f6b47]">What this may mean</h3>
+    <div className="mt-5 rounded-xl bg-stage-hypothesis/5 p-4">
+      <h3 className="text-sm font-bold text-stage-hypothesis">What this may mean</h3>
       {result.interpretation ? <Suspense fallback={<p>Loading interpretation…</p>}><ReportBody text={result.interpretation} /></Suspense>
         : <p className="mt-2 text-sm text-ink-soft">A clinical interpretation has not been recorded. Review the measured evidence before drawing conclusions.</p>}
     </div>
@@ -34,7 +40,7 @@ function Evidence({ result }: { result: Result }) {
       {importance.map(([feature, value]) => <div key={feature} className="mt-3"><div className="flex justify-between gap-3 text-xs"><span className="break-words">{feature}</span><span>{value.toPrecision(3)}</span></div><div className="mt-1 h-1.5 rounded-full bg-paper"><div className="h-full rounded-full" style={{width:`${Math.abs(value) / maximum * 100}%`,background:value < 0 ? '#8f2f4f' : '#2f6b47'}} /></div></div>)}
     </details>}
     <ExplanationEvidence result={result} />
-    <section className="mt-5 rounded-xl border border-[#e5dcc5] bg-[#fcfaf4] p-4" aria-label="Evidence limitations">
+    <section className="mt-5 rounded-xl border border-[#e5dcc5] bg-stage-ml/5 p-4" aria-label="Evidence limitations">
       <h3 className="text-sm font-bold">Before applying this finding</h3>
       <p className="mt-2 text-sm leading-relaxed">These are exploratory associations. This view does not establish causality, a validated treatment threshold or readiness for a clinical intervention.</p>
       {result.columns_missing?.length > 0 && <p className="mt-2 text-sm">Requested features not available: {result.columns_missing.join(', ')}.</p>}
@@ -51,55 +57,41 @@ function Evidence({ result }: { result: Result }) {
 }
 
 export default function ClinicianPanel() {
-  const { snapshot, knownRuns, runTag, newRunMode, loading, error, setRunTag, setView } = useViewer();
-  const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState<number | null>(null);
-  useEffect(() => { setQuery(''); setSelected(null); }, [runTag]);
-  const results = snapshot?.results ?? [];
-  const matches = useMemo(() => results.filter(result => `${result.hypothesis} ${result.perspective} ${result.columns_used?.join(' ')}`.toLowerCase().includes(query.toLowerCase()))
-    .sort((a, b) => a.trial - b.trial), [results, query]);
-  const active = matches.find(result => result.result_id === selected) ?? matches[0];
-  const report = snapshot?.report;
-  const recommendation = report?.text?.match(/^##\s+Executive recommendation\s*\n([\s\S]*?)(?=^##\s|$(?![\s\S]))/im)?.[1]?.trim();
-  const runs = snapshot?.runs ?? knownRuns;
-  const pendingreviewer = results.some(result => result.evaluation?.explanation?.review_status) || snapshot?.run_configuration?.books.interpreter?.includes('interpreter_review_pending');
-  const download = () => {
-    if (!report?.text) return;
-    const url = URL.createObjectURL(new Blob([report.text], {type:'text/markdown;charset=utf-8'}));
-    const anchor=document.createElement('a'); anchor.href=url; anchor.download=`${runTag}_report.md`; anchor.click();
-    setTimeout(() => URL.revokeObjectURL(url),1000);
+  const { snapshot, knownRuns, runTag, setRunTag, setView } = useViewer();
+  const live=useLiveOutputs();
+  const pipelines=usePipelines(s=>s.items);
+  const [mode,setMode]=useState<'live'|'archive'>('live');
+  const [query,setQuery]=useState('');
+  const [selected,setSelected]=useState<number|null>(null);
+  const [reportTag,setReportTag]=useState<string|null>(null);
+  const results=mode==='live'?live.results:snapshot?.results??[];
+  const matches=useMemo(()=>results.filter(r=>`${r.hypothesis} ${r.perspective} ${r.columns_used?.join(' ')} ${r.pipeline_name||''}`.toLowerCase().includes(query.toLowerCase())).sort((a,b)=>mode==='live'?b.result_id-a.result_id:a.trial-b.trial),[results,query,mode]);
+  // Pin the first finding after load. New arrivals must not replace the item being read.
+  useEffect(()=>{if(selected===null&&matches.length)setSelected(matches[0].result_id);},[matches,selected]);
+  const active=results.find(r=>r.result_id===selected);
+  const activeRun=mode==='live'?(reportTag||active?.run_tag||Object.keys(live.reports).at(-1)):runTag;
+  const report=mode==='live'?(activeRun?live.reports[activeRun]:null):snapshot?.report;
+  const recommendation=report?.text?.match(/^##\s+Executive recommendation\s*\n([\s\S]*?)(?=^##\s|$(?![\s\S]))/im)?.[1]?.trim();
+  const runs=snapshot?.runs??knownRuns;
+  const download=()=>{
+    if(!report?.text)return;
+    const url=URL.createObjectURL(new Blob([report.text],{type:'text/markdown;charset=utf-8'}));
+    const a=document.createElement('a');a.href=url;a.download=`${activeRun||'analysis'}_report.md`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
+  const openOutput=(event:OutputEvent)=>{setMode('live');if(event.result_id!==null){setSelected(event.result_id);setReportTag(null);}else if(event.stage==='report')setReportTag(event.run_tag);};
+  const switchMode=(next:'live'|'archive')=>{setMode(next);setSelected(null);setReportTag(null);setQuery('');};
   return <main className="h-full overflow-auto bg-paper text-ink" data-testid="clinician-view">
-    <header className="sticky top-0 z-20 border-b border-paper-line bg-white/95 backdrop-blur">
-      <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-8">
-        <div className="flex items-center gap-3"><span className="rounded-xl bg-[#edf4ee] p-2 text-[#2f6b47]"><Stethoscope size={23} /></span><div><p className="text-lg font-semibold">Memstara <span className="font-normal text-ink-soft">Clinical insights</span></p><p className="text-xs text-ink-faint">Hypothesis review workspace</p></div></div>
-        <button className="flex items-center gap-2 rounded-lg border border-paper-line px-3 py-2 text-sm hover:bg-paper" onClick={() => setView('chain')}><ArrowLeft size={15} />Research workspace</button>
-      </div>
-    </header>
+    <header className="sticky top-0 z-20 border-b border-paper-line bg-white/95 backdrop-blur"><div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-8"><div className="flex items-center gap-3"><span className="rounded-xl bg-stage-hypothesis/10 p-2 text-stage-hypothesis"><Stethoscope size={23}/></span><div><p className="text-lg font-semibold">Memstara <span className="font-normal text-ink-soft">Clinical insights</span></p><p className="text-xs text-ink-faint">Live findings across your research pipelines</p></div></div><button className="flex items-center gap-2 rounded-lg border border-paper-line px-3 py-2 text-sm" onClick={()=>setView('discovery')}><ArrowLeft size={15}/>Question observatory</button></div></header>
     <div className="mx-auto max-w-[1440px] space-y-5 px-5 py-6 sm:px-8">
-      <section className="flex flex-wrap items-end justify-between gap-4">
-        <div><p className="text-xs font-bold uppercase tracking-widest text-[#2f6b47]">Review the evidence</p><h1 className="mt-2 text-2xl font-semibold sm:text-3xl">Which hypotheses deserve closer attention?</h1><p className="mt-2 max-w-2xl text-sm text-ink-soft">Understand the finding, examine its support, and identify what still needs validation.</p></div>
-        <label className="block max-w-full text-xs font-medium">Analysis<select aria-label="Clinical analysis" className="mt-1 block w-80 max-w-full rounded-lg border border-paper-line bg-white p-2.5 text-sm" value={runTag ?? ''} onChange={event => setRunTag(event.target.value || null)}><option value="">Choose a saved analysis</option>{runTag && !runs.some(run => run.run_tag === runTag) && <option value={runTag}>{runTag} · Loading details…</option>}{runs.map(run => <option key={run.run_tag} value={run.run_tag}>{run.first_seen ? new Date(run.first_seen).toLocaleString() : run.run_tag} · {run.question || run.run_tag} · {run.status || `${run.done} completed`}</option>)}</select></label>
-      </section>
-      {(error || snapshot?.stale) && <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm">Updates interrupted. Any results below are the last available results, not a newly completed analysis.</p>}
-      {newRunMode || !snapshot ? <section className={`${section} py-14 text-center`}><BookOpen className="mx-auto mb-3 text-ink-faint" /><h2 className="font-semibold">{loading && !newRunMode ? 'Loading analysis…' : 'Choose an analysis to review'}</h2><p className="mt-2 text-sm text-ink-soft">Completed findings and their evidence will appear here. Use the research workspace to configure or start an analysis.</p></section> : <>
-        <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-ink-soft"><span>Outcome: <strong>{snapshot.run_configuration?.y_column || results[0]?.y_column || 'Not recorded'}</strong></span><span>{results.length} recorded findings</span><span>Analysis: {snapshot.pipeline?.status ?? 'Status not recorded'}</span><span>Updated: {new Date(snapshot.generated_at).toLocaleString()}</span></div>
-        {pendingreviewer && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">reviewer original required: the explainability specification is provisional and must be replaced with reviewer’s original material.</p>}
-        <section className={`${section} border-l-4 border-l-[#2f6b47]`} aria-label="Report recommendation">
-          <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-[#2f6b47]">From the report</p><h2 className="mt-1 text-lg font-semibold">Research recommendation</h2></div><button onClick={download} disabled={!report?.text} className="flex items-center gap-2 rounded-lg border border-paper-line px-3 py-2 text-xs disabled:opacity-40"><Download size={14} />Download report (.md)</button></div>
-          {recommendation ? <Suspense fallback={<p>Loading recommendation…</p>}><ReportBody text={recommendation} /></Suspense> : <p className="mt-3 text-sm text-ink-soft">{report?.text ? 'A separate executive recommendation was not recorded. Open the full report for the original assessment.' : 'No report recommendation is available yet. Available findings can still be reviewed below.'}</p>}
-          <p className="mt-3 text-xs text-ink-faint">AI-generated research recommendation. Findings below are in trial order, not ranked by AUC.</p>
-          {report?.error && <p className="mt-2 text-sm text-amber-800">{report.error}</p>}
-          {report?.text && <details className="mt-3 border-t border-paper-line pt-3"><summary className="cursor-pointer text-sm font-semibold">Read the complete report</summary><Suspense fallback={<p>Loading report…</p>}><ReportBody text={report.text} /></Suspense></details>}
-        </section>
-        <div className="grid items-start gap-5 lg:grid-cols-[minmax(260px,340px)_minmax(0,1fr)]">
-          <aside className={`${section} min-w-0`}><h2 className="text-lg font-semibold">Explore hypotheses</h2><label className="my-4 flex items-center gap-2 rounded-lg border border-paper-line px-3"><Search size={16} className="text-ink-faint" /><input aria-label="Search clinical findings" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search a finding or feature" className="min-w-0 flex-1 bg-transparent py-2.5 text-sm outline-none focus:ring-1 focus:ring-[#2f6b47]" /></label>
-            <div className="space-y-2">{matches.map(result => <button key={result.result_id} aria-pressed={active?.result_id === result.result_id} onClick={() => setSelected(result.result_id)} className={`w-full rounded-xl border p-3 text-left transition ${active?.result_id === result.result_id ? 'border-[#2f6b47] bg-[#f3f8f4]' : 'border-paper-line hover:bg-paper'}`}><span className="flex justify-between text-xs text-ink-faint">Trial {result.trial}<ArrowUpRight size={14} /></span><span className="mt-2 line-clamp-4 text-sm font-medium leading-relaxed">{result.hypothesis || result.perspective || 'Untitled finding'}</span><span className="mt-2 block text-xs text-ink-soft">{result.auc == null ? 'Performance not recorded' : `AUC ${result.auc.toFixed(3)}`} · {result.columns_used?.length ?? 0} features</span></button>)}{!matches.length && <p className="py-5 text-sm text-ink-soft">{query ? 'No findings match your search.' : 'No completed findings are available for this analysis yet.'}</p>}</div>
-          </aside>
-          {active ? <Evidence result={active} /> : <section className={`${section} text-sm text-ink-soft`}>Select an available hypothesis to inspect its interpretation and measured evidence.</section>}
-        </div>
-      </>}
-      <footer className="pb-5 text-xs text-ink-faint">Research decision support · No patient-specific treatment recommendation is made by this view.</footer>
+      <section className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-widest text-stage-hypothesis">Evidence as it emerges</p><h1 className="mt-2 text-2xl font-semibold sm:text-3xl">What are the pipelines finding?</h1><p className="mt-2 max-w-2xl text-sm text-ink-soft">Follow newly recorded findings, understand their clinical meaning, and inspect the evidence behind each one.</p></div><div className="flex gap-2 text-sm"><button aria-pressed={mode==='live'} className={`rounded-lg border px-3 py-2 ${mode==='live'?'border-stage-hypothesis bg-stage-hypothesis/5':'border-paper-line'}`} onClick={()=>switchMode('live')}>Live pipelines</button><button aria-pressed={mode==='archive'} className={`rounded-lg border px-3 py-2 ${mode==='archive'?'border-stage-hypothesis bg-stage-hypothesis/5':'border-paper-line'}`} onClick={()=>switchMode('archive')}>Saved analysis</button></div></section>
+      <LiveOutputDock clinical open={openOutput}/>
+      {mode==='archive'&&<label className="block max-w-full text-xs font-medium">Saved analysis<select aria-label="Clinical analysis" className="mt-1 block w-96 max-w-full rounded-lg border border-paper-line bg-white p-2.5 text-sm" value={runTag??''} onChange={e=>{setSelected(null);setRunTag(e.target.value||null);}}><option value="">Choose a saved analysis</option>{runs.map(run=><option key={run.run_tag} value={run.run_tag}>{run.first_seen?new Date(run.first_seen).toLocaleString():run.run_tag} · {run.run_tag}</option>)}</select></label>}
+      {mode==='archive'&&snapshot?.stale&&<p role="status" className="rounded-xl border border-amber-300 p-4 text-sm">Saved analysis updates are interrupted. Last available records are retained.</p>}
+      <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-ink-soft"><span><strong>{results.length}</strong> retained findings</span><span>{mode==='live'?'Latest findings first · not ranked by AUC':'Saved analysis · trial order'}</span><span>{live.updatedAt&&mode==='live'?`Synchronized ${new Date(live.updatedAt).toLocaleTimeString()}`:''}</span></div>
+      <div className="clinical-findings-layout"><aside className={`${section} min-w-0`}><h2 className="text-lg font-semibold">Incoming findings</h2><label className="my-4 flex items-center gap-2 rounded-lg border border-paper-line px-3"><Search size={16}/><input aria-label="Search clinical findings" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Find a hypothesis or feature" className="min-w-0 flex-1 bg-transparent py-2.5 text-sm outline-none"/></label><div className="max-h-[720px] space-y-2 overflow-auto">{matches.map(result=><button key={result.result_id} aria-pressed={active?.result_id===result.result_id} onClick={()=>{setSelected(result.result_id);setReportTag(null);}} className={`w-full rounded-xl border p-3 text-left transition ${active?.result_id===result.result_id?'border-[#71ae9e] bg-stage-hypothesis/5':'border-paper-line hover:bg-paper'}`}><span className="flex justify-between gap-2 text-xs text-ink-faint">{pipelineLabel(result,pipelines)} · {result.iteration!=null?`Iteration ${result.iteration}`:`Trial ${result.trial}`}<ArrowUpRight size={14}/></span><span className="mt-2 line-clamp-4 text-sm font-medium leading-relaxed">{result.hypothesis||result.perspective||'Untitled finding'}</span><span className="mt-2 block text-xs text-ink-soft">{result.interpretation?'Interpretation available':'Awaiting interpretation'} · {result.columns_used?.length??0} features</span></button>)}{!matches.length&&<p className="py-5 text-sm text-ink-soft">{query?'No matching findings.':'As analyses produce findings, they will appear here automatically.'}</p>}</div></aside>
+      {active?<div className="min-w-0"><p className="mb-3 text-xs text-ink-faint">Reading: {pipelineLabel(active,pipelines)} · {active.iteration!=null?`Iteration ${active.iteration}`:`Trial ${active.trial}`} · selection stays pinned as new findings arrive</p><Evidence result={active}/></div>:<section className={`${section} py-16 text-center`}><BookOpen className="mx-auto mb-4 text-ink-faint"/><h2 className="font-semibold">The next finding will appear here.</h2><p className="mt-3 text-sm text-ink-soft">Questions and hypotheses may already be in progress. Clinical evidence appears when the pipeline records analysis results.</p></section>}</div>
+      <section className={`${section} border-l-4 border-l-[#71ae9e]`} aria-label="Report recommendation"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-stage-hypothesis">The latest recorded synthesis</p><h2 className="mt-1 text-lg font-semibold">Research recommendation</h2></div><button onClick={download} disabled={!report?.text} className="flex items-center gap-2 rounded-lg border border-paper-line px-3 py-2 text-xs disabled:opacity-40"><Download size={14}/>Download report (.md)</button></div><p className="mt-2 break-words text-xs text-ink-faint">{activeRun||'No linked report yet'} · {report?.status||'Awaiting report'}</p>{recommendation?<Suspense fallback={<p>Loading recommendation…</p>}><ReportBody text={recommendation}/></Suspense>:<p className="mt-3 text-sm text-ink-soft">{report?.text?'Read the original report below; no separate executive recommendation was recorded.':'The run report will appear here when it is recorded.'}</p>}{report?.error&&<p className="mt-2 text-sm">{report.error}</p>}{report?.text&&<details className="mt-4 border-t border-paper-line pt-3"><summary className="cursor-pointer text-sm font-semibold">Read the complete report</summary><Suspense fallback={<p>Loading report…</p>}><ReportBody text={report.text}/></Suspense></details>}</section>
+      <footer className="pb-5 text-xs text-ink-faint">Exploratory research evidence · clinical relevance requires review. Live mode retains up to 600 findings in this browser session; use saved analyses to inspect archives.</footer>
     </div>
   </main>;
 }

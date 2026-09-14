@@ -1,3 +1,4 @@
+import { usePipelines } from "./pipelines";
 import { create } from "zustand";
 import { useViewer } from "./viewer";
 import type { RunConfiguration } from "../types";
@@ -25,6 +26,8 @@ export interface Skill {
 }
 
 export interface RunningRun {
+  waiting_for_questions?: boolean;
+  pause_requested?: boolean;
   configuration?: RunConfiguration;
   run_tag: string;
   run_dir: string;
@@ -59,6 +62,7 @@ export type RunRequest = {
   skill: string;
   trials: number;
   waves: number;
+  continuous?: boolean;
   /** How many hypothesis workers seed the board at once, and **the only stage count on
    *  this form**. The meeting of 2026-08-26 fixed one data, one ml and one interpreter
    *  for V1, so those three are not offered here; they are still free on the command
@@ -113,6 +117,7 @@ export const DEFAULT_REQUEST: RunRequest = {
   skill: "",
   trials: 3,
   waves: 1,
+  continuous: false,
   hypothesis_agents: 1,
   interpret_agents: 1,
   y_column: "HIV_DETECTABLE",
@@ -170,6 +175,7 @@ interface ControlState {
   /** Which run the transcript below belongs to. Null when this service has started
    *  nothing — which is not the same as a run that has printed nothing yet. */
   logTag: string | null;
+  logError: string | null;
   /** Complete lines only, oldest first, capped at `LOG_LINES`. */
   logLines: string[];
   /** The unterminated remainder of the last slice. A response ends on a byte boundary,
@@ -187,6 +193,7 @@ interface ControlState {
   loadPlaybooks: () => Promise<void>;
   startRun: (body: RunRequest) => Promise<void>;
   stopRun: () => Promise<void>;
+  pauseRun: (paused: boolean) => Promise<void>;
   pollLog: () => Promise<void>;
 }
 
@@ -194,6 +201,7 @@ interface ControlState {
  *  browser holding every one of them in a scroll region is what makes a viewer that was
  *  fine for ten minutes unusable after an hour. */
 const LOG_LINES = 2000;
+let logPolling = false;
 let controlPollInFlight = false;
 
 /** The service answers every refusal as `{"error": "..."}`, so the message a person
@@ -235,9 +243,9 @@ async function readError(res: Response): Promise<string> {
 }
 
 export function applyRunConfiguration(form: RunRequest, config: RunConfiguration): RunRequest {
-  return { ...form, ...Object.fromEntries(["question", "y_column", "provider", "model"].flatMap(k => {
+  return { ...form, question: "", ...Object.fromEntries(["skill", "y_column", "provider", "model"].flatMap(k => {
     const value = config[k as keyof RunConfiguration]; return typeof value === "string" ? [[k, value]] : [];
-  })), hypothesis_agents: config.hypotheses, interpret_agents: config.interpreters ?? 1, trials: config.trials, waves: config.waves,
+  })), hypothesis_agents: config.hypotheses, interpret_agents: config.interpreters ?? 1, trials: config.trials, waves: config.waves, continuous: config.continuous ?? false,
     evaluation: { ...form.evaluation, ...config.evaluation } as EvaluationPlan,
     ...Object.fromEntries(PLAYBOOK_STAGES.map(stage => [`playbook_${stage}`, (config.books[stage] ?? []).join(",")])) };
 }
@@ -250,7 +258,7 @@ export const useControl = create<ControlState>((set, get) => ({
   preview: false,
   catalog: [],
   editor: null,
-  openEditor: (stage, slot = 0, add = false) => { if (!get().running && !get().busy && !liveAgents()) set({ editor: { stage, slot, add } }); },
+  openEditor: (stage, slot = 0, add = false) => { if (!get().running && !get().busy && (!liveAgents() || usePipelines.getState().selected)) set({ editor: { stage, slot, add } }); },
   closeEditor: () => set({ editor: null }),
   up: null,
   bundle: null,
@@ -263,7 +271,7 @@ export const useControl = create<ControlState>((set, get) => ({
 
   form: (() => {
     try { const saved = JSON.parse(localStorage.getItem("memstara-draft-v1") ?? "null");
-      return saved ? { ...DEFAULT_REQUEST, ...saved, evaluation: { ...DEFAULT_REQUEST.evaluation, ...saved.evaluation } } : DEFAULT_REQUEST;
+      return saved ? { ...DEFAULT_REQUEST, ...saved, question: "", evaluation: { ...DEFAULT_REQUEST.evaluation, ...saved.evaluation } } : DEFAULT_REQUEST;
     } catch { return DEFAULT_REQUEST; }
   })(),
   // An updater rather than a whole-object setter, because the two callers that already
@@ -274,15 +282,18 @@ export const useControl = create<ControlState>((set, get) => ({
   setForm: (update) => {
     const state = get();
     const viewer = useViewer.getState();
-    if (state.running || state.busy || liveAgents()) return;
-    const config = !viewer.newRunMode ? viewer.snapshot?.run_configuration : null;
-    const form = update(config ? applyRunConfiguration(state.form, config) : state.form);
+    if (state.running || state.busy || (liveAgents() && !usePipelines.getState().selected)) return;
+    const pipeline = usePipelines.getState().items.find(p => p.id === usePipelines.getState().selected);
+    const config = !pipeline && !viewer.newRunMode ? viewer.snapshot?.run_configuration : null;
+    const form = update(pipeline?.configuration ?? (config ? applyRunConfiguration(state.form, config) : state.form));
+    if (pipeline) usePipelines.getState().save(pipeline.id, form);
     try { localStorage.setItem("memstara-draft-v1", JSON.stringify(form)); } catch { /* Session still works. */ }
     set({ form, preview: true });
     if (!viewer.newRunMode) viewer.setRunTag(null);
   },
 
   logTag: null,
+  logError: null,
   logLines: [],
   logTail: "",
   logSkipped: 0,
@@ -297,7 +308,8 @@ export const useControl = create<ControlState>((set, get) => ({
       const body = await res.json();
       const wasDown = get().up !== true;
       // Live run metadata must never overwrite the user's independently saved draft.
-      set({ up: true, bundle: body.bundle ?? null, running: body.running ?? null });
+      const selectedPipeline = usePipelines.getState().items.find(p => p.id === usePipelines.getState().selected);
+      set({ up: true, bundle: body.bundle ?? null, running: selectedPipeline ? selectedPipeline.running : body.running ?? null });
       // Only when it comes back, not on every tick: the branch list is one read of a
       // 312-document bundle and it does not change while a service is up.
       if (wasDown || get().skills.length === 0) void get().loadSkills();
@@ -349,7 +361,9 @@ export const useControl = create<ControlState>((set, get) => ({
       const res = await fetch("/control/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        // The UI no longer exposes a research question. Do not send a hidden value
+        // restored from an older draft or a previously selected run.
+        body: JSON.stringify({ ...body, question: "" }),
       });
       if (!res.ok) throw new Error(await readError(res));
       const run: RunningRun = await res.json();
@@ -378,44 +392,54 @@ export const useControl = create<ControlState>((set, get) => ({
    * way to find, and `LogPanel` says so rather than showing an empty box.
    */
   pollLog: async () => {
+    if (logPolling) return;
+    const selected = useViewer.getState().runTag;
+    if (!selected) {
+      set({ logTag: null, logError: null, logLines: [], logTail: "", logSkipped: 0, logOffset: 0 });
+      return;
+    }
+    logPolling = true;
     try {
-      const selected = useViewer.getState().runTag || "latest";
-      const offset = selected === get().logTag || selected === "latest" ? get().logOffset : 0;
-      const res = await fetch(`/control/runs/${encodeURIComponent(selected)}/log?offset=${offset}`);
-      if (res.status === 404) {
-        // No run at all. Not an error: this is the state of the screen before anyone has
-        // pressed Start, and it must not read as a fault.
-        set({ logTag: null, logLines: [], logTail: "", logSkipped: 0, logOffset: 0 });
-        return;
-      }
-      if (!res.ok) throw new Error(await readError(res));
+      const offset = selected === get().logTag ? get().logOffset : 0;
+      const res = await fetch(`/control/runs/${encodeURIComponent(selected)}/log?offset=${offset}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (selected !== useViewer.getState().runTag) return;
+      if (!res.ok) throw new Error(res.status === 404 ? "No console log is available for this run." : await readError(res));
       const body = await res.json();
-
-      if (body.run_tag !== get().logTag) {
-        // A different run than the transcript on screen. The offset we just sent was
-        // measured against the previous run's file, so this slice may start anywhere in
-        // the new one — it is dropped, and the next poll asks from the beginning. One
-        // tick of delay, against the alternative of splicing two runs into one column.
-        set({ logTag: body.run_tag, logLines: [], logTail: "", logSkipped: 0, logOffset: 0 });
-        return;
-      }
-
+      if (selected !== useViewer.getState().runTag || body.run_tag !== selected) return;
       set((s) => {
-        const parts = (s.logTail + body.text).split("\n");
+        const same = s.logTag === selected;
+        const parts = ((same ? s.logTail : "") + body.text).split("\n");
         const tail = parts.pop() ?? "";
-        const lines = parts.length ? [...s.logLines, ...parts] : s.logLines;
+        const lines = [...(same ? s.logLines : []), ...parts];
         return {
-          logLines: lines.length > LOG_LINES ? lines.slice(lines.length - LOG_LINES) : lines,
-          logTail: tail,
-          logSkipped: s.logSkipped + (body.skipped ?? 0),
-          logOffset: body.offset ?? s.logOffset,
+          logTag: selected, logError: null,
+          logLines: lines.slice(-LOG_LINES), logTail: tail,
+          logSkipped: (same ? s.logSkipped : 0) + (body.skipped ?? 0),
+          logOffset: body.offset ?? offset,
         };
       });
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : String(e) });
-    }
+      if (selected === useViewer.getState().runTag)
+        set({ logError: e instanceof Error ? e.message : String(e) });
+    } finally { logPolling = false; }
   },
 
+  pauseRun: async (paused) => {
+    const tag = get().running?.run_tag;
+    if (!tag) return;
+    set({ busy: true, error: null });
+    try {
+      const res = await fetch(`/control/runs/${encodeURIComponent(tag)}/${paused ? "pause" : "resume"}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      await get().poll();
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) });
+    } finally { set({ busy: false }); }
+  },
   stopRun: async () => {
     const tag = get().running?.run_tag;
     if (!tag) return;

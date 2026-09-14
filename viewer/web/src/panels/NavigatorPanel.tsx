@@ -96,7 +96,7 @@ function TaskRow({
             <span className="font-bold">{task.task_type}</span>
             <span
               className={cn(
-                "truncate font-mono text-[10px]",
+                "truncate font-mono text-[12px]",
                 selected ? "text-white/60" : "text-ink-faint",
               )}
             >
@@ -107,7 +107,7 @@ function TaskRow({
             {task.retried > 0 && (
               <span
                 className={cn(
-                  "shrink-0 rounded px-1 text-[10px] font-bold",
+                  "shrink-0 rounded px-1 text-[12px] font-bold",
                   selected ? "bg-white/20" : "bg-amber-100 text-amber-800",
                 )}
                 title={`${task.attempts} claims, ${task.retried} beyond the stages it passed`}
@@ -216,7 +216,7 @@ export default function NavigatorPanel() {
         </div>
       ) : (
         <div className="px-2 py-2">
-          <div className="truncate px-2 pb-2 font-mono text-[11px] text-ink-faint" title={runTag ?? ""}>
+          <div className="truncate px-2 pb-2 font-mono text-[12px] text-ink-faint" title={runTag ?? ""}>
             {runTag}
           </div>
 
@@ -243,7 +243,7 @@ export default function NavigatorPanel() {
                     <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-faint" />
                   )}
                   <span className="truncate">Trial {trial}</span>
-                  <span className="ml-auto shrink-0 font-mono text-[10px] font-normal text-ink-faint">
+                  <span className="ml-auto shrink-0 font-mono text-[12px] font-normal text-ink-faint">
                     {done}/{rows.length}
                   </span>
                 </button>

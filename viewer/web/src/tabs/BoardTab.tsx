@@ -43,20 +43,20 @@ function Card({ task }: { task: Task }) {
       <div className="mt-1 flex items-center gap-2 text-xs text-ink-soft">
         <span>Next: {NEXT_STAGE[task.task_type]}</span>
         {task.y_column && (
-          <span className="font-mono text-[10px] text-ink-faint">→ {task.y_column}</span>
+          <span className="font-mono text-[12px] text-ink-faint">→ {task.y_column}</span>
         )}
       </div>
 
       <div className="mt-2 flex flex-wrap gap-1">
         {task.columns.slice(0, 4).map((c) => (
-          <span key={c} className="rounded bg-paper px-1.5 py-0.5 font-mono text-[10px] text-ink-soft">{c}</span>
+          <span key={c} className="rounded bg-paper px-1.5 py-0.5 font-mono text-[12px] text-ink-soft">{c}</span>
         ))}
         {task.columns.length > 4 && (
-          <span className="self-center text-[10px] text-ink-faint">+{task.columns.length - 4}</span>
+          <span className="self-center text-[12px] text-ink-faint">+{task.columns.length - 4}</span>
         )}
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
         {task.auc !== null && <span className="font-bold">AUC {task.auc.toFixed(4)}</span>}
         <span className="text-ink-faint">claimed {task.attempts}×</span>
         {/* attempts counts claims, so only extra claims are called a retry. */}

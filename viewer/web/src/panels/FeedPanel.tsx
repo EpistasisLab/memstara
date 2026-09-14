@@ -35,7 +35,7 @@ function clock(at: string): string {
 
 function Row({ event }: { event: FeedEvent }) {
   return (
-    <li className="flex items-baseline gap-2 border-b border-paper-line px-4 py-1.5 text-xs last:border-0">
+    <li className="activity-feed-row flex items-baseline gap-2 border-b border-paper-line px-4 py-1.5 text-xs last:border-0">
       <span className="shrink-0 font-mono tabular-nums text-ink-faint">{clock(event.at)}</span>
 
       <span
@@ -47,11 +47,11 @@ function Row({ event }: { event: FeedEvent }) {
         {event.label}
       </span>
 
-      <span className="min-w-0 flex-1 truncate font-mono font-bold" title={event.tool}>
+      <span className="activity-feed-tool min-w-0 flex-1 truncate font-mono font-bold" title={event.tool}>
         {event.tool}
       </span>
 
-      <span className="shrink-0 truncate text-ink-faint" title={event.server}>
+      <span className="max-w-full shrink-0 truncate text-ink-faint" title={event.server}>
         {event.server}
       </span>
 
@@ -61,7 +61,7 @@ function Row({ event }: { event: FeedEvent }) {
 
       {/* Marked, not hidden: these calls are real work the scene does not draw. */}
       {event.path === "supervisor" && (
-        <span className="shrink-0 rounded bg-paper px-1.5 py-0.5 text-[10px] text-ink-faint">
+        <span className="shrink-0 rounded bg-paper px-1.5 py-0.5 text-[12px] text-ink-faint">
           supervisor
         </span>
       )}

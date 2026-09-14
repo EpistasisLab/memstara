@@ -17,7 +17,7 @@ const COLUMNS = [
               style={{ backgroundColor: STAGE_COLOR[c.row.original.id as StageId] ?? "#c9c7c1" }} />
         <div>
           <div className="font-bold">{c.getValue()}</div>
-          <div className="font-mono text-[11px] text-ink-faint">{c.row.original.name}</div>
+          <div className="font-mono text-[12px] text-ink-faint">{c.row.original.name}</div>
         </div>
       </div>
     ),
@@ -25,7 +25,7 @@ const COLUMNS = [
   col.accessor("path", {
     header: "Path",
     cell: (c) => (
-      <span className={`rounded px-1.5 py-0.5 text-[11px] font-bold ${
+      <span className={`rounded px-1.5 py-0.5 text-[12px] font-bold ${
         c.getValue() === "board" ? "bg-emerald-100 text-emerald-800" : "bg-paper text-ink-soft"}`}>
         {c.getValue() === "board" ? "Board" : "Supervisor"}
       </span>
@@ -116,7 +116,7 @@ export default function AgentsTab() {
               </div>
               <ul className="mt-2 space-y-1">
                 {a.windows.map((w) => (
-                  <li key={w} className="font-mono text-[10px] text-ink-soft">{w}</li>
+                  <li key={w} className="font-mono text-[12px] text-ink-soft">{w}</li>
                 ))}
               </ul>
             </div>

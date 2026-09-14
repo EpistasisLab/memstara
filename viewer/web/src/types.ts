@@ -180,8 +180,12 @@ export interface Window {
 }
 
 export interface Result {
+  run_tag?: string; pipeline_id?: string; pipeline_name?: string; iteration?: number | null;
   hypothesis_id?: string;
   evaluation?: {
+    hypothesis_policy?: { version?: string; kind?: string; validation_status?: string };
+    interpretations_complete?: boolean;
+    interpretations?: { slot: number; worker: string; skill: string; status: string; text: string; error: string }[];
     interpreter?: { worker: string; skill: string };
     seed?: number; test_size?: number; auc_std?: number;
     config_hash?: string;
@@ -296,10 +300,13 @@ export interface Health {
 }
 
 export interface RunConfiguration {
+  pipeline_id?: string; pipeline_name?: string;
+  skill?: string | null;
+  interpretation_mode?: string;
   interpreters?: number;
   question?: string; y_column?: string; provider?: string; model?: string;
   hypotheses: number; books: Record<string, string[]>; evaluation: Record<string, number | string>;
-  trials: number; waves: number;
+  trials: number; waves: number; continuous?: boolean;
 }
 
 export interface Snapshot {

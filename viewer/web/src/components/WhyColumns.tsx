@@ -84,7 +84,7 @@ function Group({ group }: { group: TraceGroup }) {
     <section className="rounded-lg border border-paper-line p-3">
       <header className="flex items-baseline justify-between gap-3">
         <h5 className="text-sm font-bold">{group.concept}</h5>
-        <span className="font-mono text-[11px] text-ink-faint">
+        <span className="font-mono text-[12px] text-ink-faint">
           {group.candidates.length} offered · {chosen} taken
         </span>
       </header>
@@ -95,8 +95,8 @@ function Group({ group }: { group: TraceGroup }) {
         {group.candidates.map((c) => (
           <li
             key={c.column}
-            className={`flex items-baseline justify-between gap-3 font-mono text-[11px] ${
-              c.chosen ? "font-bold text-[#2a5f8f]" : "text-ink-faint"
+            className={`flex items-baseline justify-between gap-3 font-mono text-[12px] ${
+              c.chosen ? "font-bold text-stage-data" : "text-ink-faint"
             }`}
           >
             <span className="truncate">

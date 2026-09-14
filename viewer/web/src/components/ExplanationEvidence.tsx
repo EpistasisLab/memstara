@@ -15,7 +15,7 @@ export default function ExplanationEvidence({ result }: { result: Result }) {
       <p className="mt-2 text-xs font-bold">Prediction cutoff: {point.probability_cutoff} · held-out cohort</p>
       <div className="my-2 grid grid-cols-3 gap-2">
         {[["Sensitivity", percent(point.sensitivity)], ["Specificity", percent(point.specificity)], ["Precision", percent(point.precision)]].map(([label, value]) =>
-          <div key={label} className="rounded bg-white p-2"><span className="block text-[10px] text-ink-faint">{label}</span><strong>{value}</strong></div>)}
+          <div key={label} className="rounded bg-white p-2"><span className="block text-[12px] text-ink-faint">{label}</span><strong>{value}</strong></div>)}
       </div>
       <p className="text-xs">False alerts: {point.false_positive} · Missed positive outcomes: {point.false_negative}</p>
       <p className="mt-1 text-xs text-ink-faint">{point.selection}. {point.status}.</p>

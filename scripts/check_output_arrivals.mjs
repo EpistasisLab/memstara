@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import { outputArrivals } from '../viewer/web/src/lib/outputArrival.ts';
+const a={id:'question:1',revision:'v1',run_tag:'pipeline-a'};
+const b={id:'question:2',revision:'v1',run_tag:'pipeline-b'};
+const first=outputArrivals(new Map(),[a,b],100,false);
+assert.equal(first.arrivals.length,2);
+assert.equal(first.arrivals.some(e=>e.fresh),false);
+const repeated=outputArrivals(first.versions,[a,b],200,true);
+assert.equal(repeated.arrivals.length,0);
+const next=outputArrivals(repeated.versions,[a,{...b,revision:'v2'},{id:'result:3',revision:'v1',run_tag:'pipeline-a'}],300,true);
+assert.equal(next.arrivals.length,2);
+assert.deepEqual(next.arrivals.map(e=>e.run_tag),['pipeline-b','pipeline-a']);
+assert.ok(next.arrivals.every(e=>e.fresh&&e.receivedAt===300));
+assert.equal(outputArrivals(next.versions,[],400,true).versions.size,3);
+assert.equal(outputArrivals(next.versions,[{...b,revision:'v2'}],500,true).arrivals.length,0);
+console.log('Passed: interleaved pipelines, duplicate polls, revised outputs, initial backfill, missing-response retention.');

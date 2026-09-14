@@ -1,6 +1,6 @@
 import {
   BookOpen,
-  ChartLine,
+  BrainCircuit,
   CircleDashed,
   CircleDot,
   ClipboardList,
@@ -11,7 +11,7 @@ import {
   Library,
   Lightbulb,
   LoaderCircle,
-  NotebookPen,
+  FileChartColumn,
   PackageOpen,
   ScanSearch,
   TriangleAlert,
@@ -45,9 +45,9 @@ export const STAGE_ICON: Record<StageId, LucideIcon> = {
   curator: Library,
   hypothesis: Lightbulb,
   data: Columns3,
-  ml: ChartLine,
+  ml: BrainCircuit,
   interpreter: ScanSearch,
-  report: NotebookPen,
+  report: FileChartColumn,
 };
 
 /** Where: one per store. `unknown` is a real value from `stores.store_of()` — a tool the

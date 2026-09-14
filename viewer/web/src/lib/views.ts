@@ -1,5 +1,6 @@
 import {
   Stethoscope,
+  Orbit,
   Boxes,
   Database,
   FileText,
@@ -33,8 +34,9 @@ export interface ViewMeta {
 }
 
 export const VIEWS: Record<ViewId, ViewMeta> = {
+  discovery: { label: "Question universe", icon: Orbit },
   clinician: { label: "Clinician view", icon: Stethoscope },
-  chain: { label: "Pipeline", icon: Workflow, count: (s) => s.scene.agents.length },
+  chain: { label: "Status", icon: Workflow, count: (s) => s.scene.agents.length },
   scene: { label: "Floor plan", icon: Map, count: (s) => s.scene.agents.length },
   // No count. The line total lives in the control store, not the snapshot, and a zero
   // here would say "this run printed nothing" when it means "not asked yet".
@@ -42,7 +44,7 @@ export const VIEWS: Record<ViewId, ViewMeta> = {
   report: { label: "Final report", icon: FileText },
   board: { label: "Board", icon: Layers, count: (s) => s.board.tasks.length },
   task: { label: "Task life", icon: ListTree },
-  agents: { label: "Agents", icon: Boxes, count: (s) => s.agents.length },
+  agents: { label: "Telemetry", icon: Boxes, count: (s) => s.agents.length },
   access: { label: "Access map", icon: Database, count: (s) => s.access.rows.length },
 };
 
@@ -53,4 +55,4 @@ export const VIEWS: Record<ViewId, ViewMeta> = {
  *  how far along is the run, and then who is touching what. `scene` is called "Floor plan"
  *  here rather than "Agent state" because both views are the agent state — one as a
  *  sequence, one as a place. */
-export const VIEW_ORDER: ViewId[] = ["clinician", "chain", "scene", "log", "report", "board", "task", "agents", "access"];
+export const VIEW_ORDER: ViewId[] = ["scene", "chain", "clinician", "board", "agents", "report", "discovery"];

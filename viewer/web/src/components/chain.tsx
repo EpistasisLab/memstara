@@ -1,3 +1,4 @@
+import KnowledgeNode from "./KnowledgeNode";
 import PipelineStage from "./PipelineStage";
 import Help from "./Help";
 import {
@@ -98,7 +99,7 @@ export function ChainNode({ data }: NodeProps) {
     <div
       role="group" tabIndex={0} aria-label={`${agent.label}: ${STATE_LABEL[agent.state]}`}
       onKeyDown={event => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onInspect?.(); } }}
-      className={`relative w-56 rounded-xl border-2 border-t-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 bg-white px-4 py-3.5 shadow-sm transition
+      className={`relative w-[280px] rounded-xl border-2 border-t-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 bg-white px-4 py-3.5 shadow-sm transition
                   hover:shadow-md ${tone.ring}`}
       style={{ borderTopColor: color, ...(busy ? { borderColor: color } : {}), ...(inspected ? { boxShadow: `0 0 0 3px color-mix(in srgb, ${color} 19%, transparent), 0 8px 24px #00000010` } : {}) }}
     >
@@ -107,7 +108,7 @@ export function ChainNode({ data }: NodeProps) {
 
       {/* Takes back a slot the form asked for and nothing has started. The counterpart of
           the `+` below the column: between them the stack is grown and shrunk where it is
-          drawn, which is what the `확장 슬롯` in the meeting's figure is
+          drawn, which is what the `expansion slot` in the meeting's figure is
 
           the left rail still does both and is still the only way to shrink past the
           observed figures. */}
@@ -151,13 +152,13 @@ export function ChainNode({ data }: NodeProps) {
 
         <div className="min-w-0">
           <div className="font-mono text-xs leading-none text-ink-faint">{step}</div>
-          {/* The label gets about 108px here (w-56, less the padding, the border, the
+          {/* The label gets about 108px here (w-[280px], less the padding, the border, the
               32px glyph and the gap), which is roughly 15 characters at this size. A
               longer one is cut with an ellipsis and nothing is raised anywhere, so the
               `title` is what keeps that from being silent. "Report · Insight" is the
               longest label there is and sits near that limit; whether it actually clips
               has not been measured. */}
-          <div className="truncate text-[13px] font-bold leading-tight" title={agent.label}>
+          <div className="break-words text-base font-bold leading-snug" title={agent.label}>
             {agent.label}
           </div>
           {/* The worker's own name, and only when it has one. Every card of a stacked
@@ -229,7 +230,7 @@ export function ChainNode({ data }: NodeProps) {
             // navigates to the agents view: without both, opening this select leaves the
             // page instead.
             <button type="button" onClick={e => { e.stopPropagation(); onConfigure(); }}
-              className="nodrag nopan min-w-0 flex-1 truncate rounded border border-dashed border-paper-line px-1 py-0.5 text-left text-xs font-bold"
+              className="nodrag nopan min-w-0 flex-1 break-words rounded border border-dashed border-paper-line px-2 py-1.5 text-left text-xs font-bold"
               style={{ color }} title="Read or change this agent's skill">
               {choice || "Choose skill"}
             </button>
@@ -304,7 +305,7 @@ export function ChainAddNode({ data }: NodeProps) {
         e.stopPropagation();
         onAdd();
       }}
-      className="nodrag nopan flex w-56 items-center justify-center gap-1.5 rounded-xl
+      className="nodrag nopan flex w-[280px] items-center justify-center gap-1.5 rounded-xl
                  border-2 border-dashed border-paper-line bg-white/60 px-3 py-2.5
                  text-xs font-bold text-ink-faint transition hover:border-ink-faint
                  hover:text-ink disabled:cursor-not-allowed disabled:opacity-60
@@ -373,5 +374,5 @@ export function ChainEdge({
   );
 }
 
-export const chainNodeTypes = { pipelineStage: PipelineStage, chain: ChainNode, chainAdd: ChainAddNode };
+export const chainNodeTypes = { knowledge: KnowledgeNode, pipelineStage: PipelineStage, chain: ChainNode, chainAdd: ChainAddNode };
 export const chainEdgeTypes = { chain: ChainEdge };

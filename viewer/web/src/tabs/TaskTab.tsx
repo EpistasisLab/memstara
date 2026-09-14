@@ -38,10 +38,15 @@ export default function TaskTab() {
     if (taskId === null) return;
     setData(null);
     setError(null);
-    fetch(`/api/task/${taskId}`)
+    const controller = new AbortController();
+    let active = true;
+    const timer = setTimeout(() => controller.abort(), 5000);
+    fetch(`/api/task/${taskId}`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status}`))))
-      .then(setData)
-      .catch((e) => setError(String(e)));
+      .then((value) => { if (active) setData(value); })
+      .catch((e) => { if (active) setError(String(e)); })
+      .finally(() => clearTimeout(timer));
+    return () => { active = false; clearTimeout(timer); controller.abort(); };
   }, [taskId]);
 
   if (taskId === null)
@@ -53,7 +58,7 @@ export default function TaskTab() {
   const importance = Object.entries(task.importance).sort((a, b) => b[1] - a[1]);
 
   return (
-    <div className="grid grid-cols-2 gap-6 p-4">
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 p-4">
       <section>
         <h2 className="text-sm font-bold">Task #{task.task_id} — trial {task.trial}</h2>
         <p className="mt-1 text-xs text-ink-soft">{task.perspective}</p>
@@ -77,8 +82,8 @@ export default function TaskTab() {
             <ResponsiveContainer width="100%" height={Math.max(140, importance.length * 26)}>
               <BarChart data={importance.map(([col, v]) => ({ col, v }))} layout="vertical"
                         margin={{ left: 12, right: 24 }}>
-                <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="col" width={96} tick={{ fontSize: 11 }}
+                <XAxis type="number" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="col" width={96} tick={{ fontSize: 12 }}
                        axisLine={false} tickLine={false} />
                 <Tooltip formatter={(v) => [Number(v).toFixed(5), "importance"]} />
                 <Bar dataKey="v" radius={[0, 3, 3, 0]} isAnimationActive={false}>
@@ -109,7 +114,7 @@ export default function TaskTab() {
                     {t.agent_label}
                     <span className="ml-2 font-normal text-ink-soft">{TOOL_LABEL[t.tool] ?? t.tool}</span>
                   </div>
-                  <div className="font-mono text-[11px] text-ink-faint">
+                  <div className="font-mono text-[12px] text-ink-faint">
                     {t.at?.slice(11, 19)} · run {t.run_id.slice(0, 8)}
                   </div>
                 </div>

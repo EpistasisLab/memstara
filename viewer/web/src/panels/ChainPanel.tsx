@@ -58,11 +58,11 @@ import { useScene, useViewer } from "../store/viewer";
  * or fit the entire graph without telemetry updates resetting their position.
  */
 
-/** A 224px card with 72px of routing space between stages. */
-const STEP_X = 296;
+/** A 280px card with 80px of routing space between stages. */
+const STEP_X = 360;
 
 /** Reserve room for skill, state and tool details without overlapping stacked cards. */
-const ROW_Y = 248;
+const ROW_Y = 340;
 
 /** Whether `stage` is one the form has a `playbook_<stage>` field for.
  *
@@ -95,6 +95,8 @@ export default function ChainPanel() {
   // drawn pipeline and put a sentence in its place for a tick.
   const error = useViewer((s) => s.error);
   const newRunMode = useViewer((s) => s.newRunMode);
+  const savedKnowledge = useViewer(s => s.snapshot?.run_configuration?.skill);
+  const interpretationMode = useViewer((s) => s.snapshot?.run_configuration?.interpretation_mode);
   // A 200 the API filled from its own previous answer because it gave up waiting for a
   // fresh one. It is not an error — nothing failed — but the picture is older than the
   // response, so it earns the same badge for the same reason.
@@ -333,12 +335,28 @@ export default function ChainPanel() {
       ) : (
         <div className="flex h-full w-full min-h-0 flex-col">
           <PipelineSummary />
+          <p className="px-4 py-2 text-xs text-ink-soft" role="note">
+            {newRunMode || interpretationMode === "all_per_hypothesis"
+              ? "Each ML result goes to every configured interpreter. Their perspectives are combined into one result per hypothesis, then synthesized in the report."
+              : "This saved run uses shared interpretation workers: each ML result is handled by one available interpreter."}
+          </p>
           <div className="min-h-0 flex-1">
             <ReactFlow
-            nodes={[...lanes, ...nodes, ...addNodes]}
-            edges={edges}
+            nodes={[...lanes, ...nodes, ...addNodes, {
+              id: "stage-knowledge", type: "knowledge", position: { x: -STEP_X, y: 0 },
+              selectable: false, draggable: false,
+              data: { value: newRunMode ? form.skill : savedKnowledge ?? null,
+                locked: live, saved: !newRunMode,
+                onChange: (skill: string) => setForm(f => ({ ...f, skill })) },
+            }]}
+            edges={[...edges, ...(steps[0]?.agents ?? []).map(agent => ({
+              id: `knowledge-${agent.id}`, source: "stage-knowledge", target: `chain-${agent.id}`,
+              type: "smoothstep", style: { stroke: "var(--color-ink-faint, #96958e)" },
+              markerEnd: { type: MarkerType.ArrowClosed },
+            }))]}
             nodeTypes={chainNodeTypes}
             edgeTypes={chainEdgeTypes}
+            defaultViewport={{ x: STEP_X + 16, y: 116, zoom: 1 }}
             minZoom={0.25}
             maxZoom={1.75}
             proOptions={{ hideAttribution: true }}
@@ -376,7 +394,7 @@ export default function ChainPanel() {
           </details>
           <div className="border-t border-paper-line bg-paper-panel px-3 py-2" aria-live="polite">
             {inspected ? (
-              <div className="flex items-center gap-3 text-[11px]">
+              <div className="flex items-center gap-3 text-[12px]">
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-paper text-ink-soft">
                   <Sparkles className="h-3.5 w-3.5" />
                 </div>
@@ -401,7 +419,7 @@ export default function ChainPanel() {
                   onClick={() => setInspectedId(null)}><X className="h-3.5 w-3.5" /></button>
               </div>
             ) : (
-              <div className="flex items-center gap-2 text-[10px] text-ink-faint">
+              <div className="flex items-center gap-2 text-[12px] text-ink-faint">
                 <Activity className="h-3.5 w-3.5" /> Select an agent card to see its skill, task, and most recent tool activity.
               </div>
             )}

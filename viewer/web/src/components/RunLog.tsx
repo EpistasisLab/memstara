@@ -83,16 +83,16 @@ export default function RunLog({ lines, skipped, tail }: RunLogProps) {
       <div ref={box} className="h-full overflow-auto bg-ink/[0.02] px-3 py-2">
         {skipped > 0 && (
           <div className="mb-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1
-                          text-[11px] font-bold text-amber-800">
+                          text-[12px] font-bold text-amber-800">
             {skipped.toLocaleString()} bytes further back are not shown — the log outran
             what one response carries
           </div>
         )}
 
         {lines.length === 0 && !tail ? (
-          <div className="py-6 text-[11px] text-ink-faint">Nothing has been printed yet.</div>
+          <div className="py-6 text-[12px] text-ink-faint">Nothing has been printed yet.</div>
         ) : (
-          <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-[1.45]">
+          <pre className="whitespace-pre-wrap break-words font-mono text-[12px] leading-[1.45]">
             {lines.map((line, i) => {
               const kind = kindOf(line);
               if (kind === null) return null;
@@ -114,7 +114,7 @@ export default function RunLog({ lines, skipped, tail }: RunLogProps) {
           type="button"
           onClick={() => setFollowing(true)}
           className={cn(
-            "absolute bottom-3 right-4 rounded-full bg-ink px-3 py-1.5 text-[11px]",
+            "absolute bottom-3 right-4 rounded-full bg-ink px-3 py-1.5 text-[12px]",
             "font-bold text-white shadow-lg hover:bg-ink/90",
           )}
         >

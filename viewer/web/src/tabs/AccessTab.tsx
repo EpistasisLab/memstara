@@ -75,11 +75,11 @@ export default function AccessTab() {
                     <CircleSlash className="h-4 w-4 text-ink-faint" />
                   )}
                 </div>
-                <div className="mt-1 flex items-center gap-1 text-[11px] text-ink-soft">
+                <div className="mt-1 flex items-center gap-1 text-[12px] text-ink-soft">
                   {w.holder} <ArrowRight className="h-3 w-3" /> {STORE_LABEL[w.store]}
                 </div>
                 {!w.called_by_agent && (
-                  <div className="mt-1 text-[11px] text-ink-faint">no agent calls this — correct</div>
+                  <div className="mt-1 text-[12px] text-ink-faint">no agent calls this — correct</div>
                 )}
               </div>
             ))}

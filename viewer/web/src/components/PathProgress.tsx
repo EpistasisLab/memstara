@@ -12,13 +12,13 @@ export default function PathProgress() {
   const form = useRunForm();
   if (!tasks.length) return null;
   return <section aria-label="Hypothesis progress" className="max-h-40 shrink-0 overflow-auto border-t border-paper-line bg-paper-panel px-3 py-2">
-    <div className="mb-2 flex justify-between text-[10px] text-ink-faint">
+    <div className="mb-2 flex justify-between text-[12px] text-ink-faint">
       <strong>Hypothesis progress</strong><span>Shared report: {report?.status ?? "waiting for analyses"}</span>
     </div>
     {tasks.map(task => {
       const at = stages.indexOf(task.task_type);
       return <button key={task.task_id} onClick={() => select(task.task_id)}
-        className="mb-1 flex w-full items-center gap-2 rounded px-1 py-1 text-left text-[10px] hover:bg-paper"
+        className="mb-1 flex w-full items-center gap-2 rounded px-1 py-1 text-left text-[12px] hover:bg-paper"
         title={task.error || task.hypothesis || task.perspective}>
         <span className="w-40 shrink-0 truncate">Wave {Math.floor(task.trial / Math.max(1, form.trials)) + 1} · Trial {task.trial} · {task.hypothesis || task.perspective}</span>
         <span className="flex flex-wrap gap-1">{stages.map((stage, index) => {
@@ -28,6 +28,6 @@ export default function PathProgress() {
         })}</span>
       </button>;
     })}
-    <p className="mt-1 text-[10px] text-ink-faint">Each trial advances independently. One interpreter handles each hypothesis; the report combines completed analyses.</p>
+    <p className="mt-1 text-[12px] text-ink-faint">Each trial advances independently. One interpreter handles each hypothesis; the report combines completed analyses.</p>
   </section>;
 }

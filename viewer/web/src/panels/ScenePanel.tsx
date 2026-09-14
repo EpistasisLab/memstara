@@ -150,7 +150,7 @@ export default function ScenePanel() {
         label: f.tool,
         animated: true,
         style: { stroke: color, strokeWidth: 2.5 },
-        labelStyle: { fill: color, fontSize: 11, fontWeight: 700 },
+        labelStyle: { fill: color, fontSize: 12, fontWeight: 700 },
         labelBgStyle: { fill: "#fff" },
         labelBgPadding: [4, 2] as [number, number],
       });

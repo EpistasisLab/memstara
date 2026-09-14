@@ -3,6 +3,11 @@ export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      fontSize: {
+        xs: ["0.875rem", { lineHeight: "1.45" }],
+        sm: ["1rem", { lineHeight: "1.5" }],
+        base: ["1rem", { lineHeight: "1.6" }],
+      },
       colors: {
         // One colour per stage, used for the character, its card and its lines, so a
         // task keeps the same identity as it moves between places.
@@ -19,7 +24,7 @@ export default {
         paper: { DEFAULT: "rgb(var(--paper) / <alpha-value>)", panel: "rgb(var(--panel) / <alpha-value>)", line: "rgb(var(--line) / <alpha-value>)" },
       },
       fontFamily: {
-        sans: ['"Apple SD Gothic Neo"', '"Noto Sans KR"', "system-ui", "sans-serif"],
+        sans: ["system-ui", "-apple-system", "BlinkMacSystemFont", '"Segoe UI"', '"Apple SD Gothic Neo"', "sans-serif"],
         mono: ['"SF Mono"', "Menlo", "monospace"],
       },
       keyframes: {

@@ -1,0 +1,32 @@
+/* Legible text across navigation, settings, evidence and live monitoring. */
+:root { --ink:25 33 42; --ink-soft:65 76 89; --ink-faint:79 91 105; }
+:root[data-theme="dark"] { --ink:240 244 249; --ink-soft:205 216 230; --ink-faint:183 199 219; }
+body { font-size:16px; line-height:1.6; }
+/* Compact metadata must remain readable; canvas positioning is left intact. */
+[class~="text-[8px]"], [class~="text-[9px]"], [class~="text-[10px]"], [class~="text-[11px]"], [class~="text-[12px]"] { font-size:13px; line-height:1.5; }
+.window-titlebar { min-height:44px; height:auto; padding:9px 12px; color:rgb(var(--ink)); font-size:15px; gap:12px; }
+.window-titlebar > span { min-width:0; overflow-wrap:anywhere; }
+.window-titlebar > div { flex-shrink:0; }
+.panel-header h2 { font-size:18px; font-weight:650; color:rgb(var(--ink)); }
+[aria-label="View navigation"] button { min-height:46px; font-weight:550; }
+[aria-label="View navigation"] button svg { width:19px; height:19px; }
+.workspace-dialog p, .workspace-dialog label { font-size:15px; line-height:1.65; }
+.workspace-dialog h2 { font-size:21px; }
+input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size:16px; line-height:1.5; }
+.floor-agent { color:rgb(var(--ink)); }
+.floor-agent > div > .truncate { font-size:13px; }
+.floor-zone > div > span:first-child { font-size:13px; letter-spacing:.06em; }
+.floor-eyebrow, .floor-map-key, .floor-inspector-copy p { color:rgb(var(--ink-soft)); }
+.floor-title h3 { font-size:20px; }
+.floor-toolbar, .floor-actions { flex-wrap:wrap; }
+.floor-progress-caption { font-size:13px; }
+.floor-stage-caption { font-size:13px; }
+.floor-agent [class*="text-slate-"], .floor-resource [class*="text-slate-"] { color:rgb(var(--ink-soft)); }
+.floor-agent button { color:rgb(var(--ink)); }
+.recharts-text { font-size:13px; }
+@media(max-width:520px) {
+  .exploration-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .exploration-summary-grid button:nth-child(4)::before { display:block; }
+  .exploration-summary-grid button:nth-child(odd)::before { display:none; }
+  .exploration-summary-heading { flex-wrap:wrap; }
+}

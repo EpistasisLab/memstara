@@ -13,7 +13,7 @@ export default function Help({ topic, children }: { topic: string; children?: Re
       <Tooltip.Trigger asChild>{children ?? <button type="button"
         aria-label={`Help: ${topic}`} onClick={e => { e.preventDefault(); e.stopPropagation(); setOpen(true); }}
         className="nodrag nopan inline-flex shrink-0 align-middle rounded p-0.5 text-ink-faint hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink">
-        <CircleHelp size={13} aria-hidden="true" />
+        <CircleHelp size={16} aria-hidden="true" />
       </button>}</Tooltip.Trigger>
       <Tooltip.Portal container={host?.closest('dialog') ?? undefined}>
         <Tooltip.Content side="right" sideOffset={8} collisionPadding={12}

@@ -3,7 +3,7 @@ import { Terminal } from "lucide-react";
 import Panel from "../components/Panel";
 import RunLog from "../components/RunLog";
 import { useControl } from "../store/control";
-import { POLL_MS } from "../store/viewer";
+import { POLL_MS, useViewer } from "../store/viewer";
 
 /**
  * The driver's own console, live.
@@ -28,6 +28,8 @@ import { POLL_MS } from "../store/viewer";
  */
 
 export default function LogPanel() {
+  const selected = useViewer((s) => s.runTag);
+  const logError = useControl((s) => s.logError);
   const up = useControl((s) => s.up);
   const logTag = useControl((s) => s.logTag);
   const lines = useControl((s) => s.logLines);
@@ -45,7 +47,7 @@ export default function LogPanel() {
     tick();
     const timer = setInterval(tick, POLL_MS);
     return () => clearInterval(timer);
-  }, []);
+  }, [selected]);
 
   const live = running !== null && running.run_tag === logTag;
 
@@ -66,23 +68,18 @@ export default function LogPanel() {
       }
       bodyClassName="overflow-hidden p-0"
     >
-      {up === false ? (
+      {logError && <p role="alert" className="p-3 text-sm text-ink-soft">{logError}</p>}
+      {!selected ? <p className="p-4 text-ink-soft">Select a saved run or start a pipeline to see its log.</p> : up === false ? (
         <div className="p-8 text-[13px] text-ink-faint">
           <p>The control service is not running, and it is the only thing that holds the
              driver's console. Start it on the host:</p>
-          <code className="mt-2 block font-mono text-[11px] text-ink">
+          <code className="mt-2 block font-mono text-[12px] text-ink">
             python -m memstara.control
           </code>
         </div>
-      ) : logTag === null ? (
+      ) : logTag !== selected ? (
         <div className="p-8 text-[13px] text-ink-faint">
-          <p className="font-bold text-ink">No run has been started from this screen.</p>
-          <p className="mt-1 leading-snug">
-            Press Start on the left and the driver's steps appear here as it prints them.
-            A pipeline started by hand keeps its console in its own{" "}
-            <code className="font-mono text-[11px]">outputs/runs/…/console.log</code>, which
-            this service cannot find.
-          </p>
+          <p>Waiting for the selected run’s console log.</p>
         </div>
       ) : (
         <RunLog lines={lines} skipped={skipped} tail={tail} />
