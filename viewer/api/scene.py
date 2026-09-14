@@ -201,13 +201,15 @@ async def list_runs() -> list[dict[str, Any]]:
         return []
 
 
-async def _board(run_tag: str) -> list[dict[str, Any]]:
+async def _board(run_tag: str, task_id: int | None = None) -> list[dict[str, Any]]:
     # Every task of one board. Each card on screen is one dictionary here.
     # Why the DB rows are not passed straight through but **translated once here:** to
     # keep the screen from being tied directly to the DB's column names and types, and
     # to gather the interpretation in one place.
     async def q(conn: asyncpg.Connection) -> list[dict[str, Any]]:
-        rows = await conn.fetch(queries.BOARD, run_tag)
+        rows = await conn.fetch(queries.BOARD, run_tag) if task_id is None else await conn.fetch(
+            queries.BOARD.replace("WHERE ($1 = '' OR run_tag = $1)", "WHERE task_id = $1"), task_id
+        )
         out = []
         for r in rows:
             t = {
@@ -370,7 +372,7 @@ async def result_detail(result_id: int) -> dict[str, Any] | None:
     return await pools.guarded("memstara", q, None)
 
 
-async def _core_facts(run_ids: list[str] | None = None) -> dict[str, Any]:
+async def _core_facts(run_ids: list[str] | None = None, *, task_history: bool = False) -> dict[str, Any]:
     """Everything from core's database, in one connection acquisition.
 
     Why seven queries but not seven calls to `guarded`:
@@ -395,6 +397,8 @@ async def _core_facts(run_ids: list[str] | None = None) -> dict[str, Any]:
         def scoped(sql):
             if run_ids is None:
                 return sql
+            if sql == queries.AGENT_TOTALS:
+                sql = sql.replace("GROUP BY a.name", "GROUP BY a.name HAVING count(r.id) > 0")
             return sql.replace("agent_runs r", "(SELECT source.* FROM agent_runs source "
                                "JOIN selected_run_ids scope ON scope.id=source.id) r")
 
@@ -406,16 +410,17 @@ async def _core_facts(run_ids: list[str] | None = None) -> dict[str, Any]:
             if ids:
                 await conn.executemany("INSERT INTO selected_run_ids VALUES ($1) ON CONFLICT DO NOTHING",
                                        [(value,) for value in ids])
-        await conn.execute(queries.FLAT_TEMP_TABLE)
-        if run_ids is not None:
-            await conn.execute("DELETE FROM flat WHERE run_id NOT IN (SELECT id FROM selected_run_ids)")
+            await conn.execute("ANALYZE selected_run_ids")
+        await conn.execute(queries.FLAT_TEMP_TABLE if run_ids is None
+                           else queries.SCOPED_FLAT_TEMP_TABLE)
         return {
             "totals": [dict(r) for r in await conn.fetch(scoped(queries.AGENT_TOTALS))],
             "open": [dict(r) for r in await conn.fetch(scoped(queries.OPEN_RUNS),
                                                        str(RUN_ALIVE_SECONDS))],
             "access": [dict(r) for r in await conn.fetch(scoped(queries.ACCESS))],
-            "touches": [dict(r) for r in await conn.fetch(scoped(queries.TASK_TOUCHES),
-                                                          str(RUN_ALIVE_SECONDS))],
+            "touches": [dict(r) for r in await conn.fetch(
+                scoped(queries.TASK_HISTORY if task_history else queries.TASK_TOUCHES),
+                *([] if task_history else [str(RUN_ALIVE_SECONDS)]))],
             "last_call": [dict(r) for r in await conn.fetch(scoped(queries.LAST_CALL))],
             "roster": [dict(r) for r in await conn.fetch(scoped(queries.LAST_ROSTER),
                                                          str(RUN_ALIVE_SECONDS))],

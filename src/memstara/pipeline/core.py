@@ -77,6 +77,7 @@ from motoro.runner import (
 )
 from motoro.schemas.agent import LLMProvider, ModelConfig
 
+from memstara.pipeline.scientific_policy import PRIMARY_QUESTION_TOOLS
 from memstara.pipeline.prompts import load_prompt
 
 # --------------------------------------------------------------------------- #
@@ -409,17 +410,9 @@ BOARD_TOOLS = {
     # from, which stops two hypothesis workers of one wave both investigating the newest
     # question in the bank.
     #
-    # Three tools are deliberately absent here and present in QUESTION_TOOLS below, and
-    # the split is the *only* thing keeping the two jobs apart now that one agent does
-    # both. `read_results` is the entire feedback path: withheld here, the contract of
-    # answering a question stays what it was (one question in, one hypothesis out) while
-    # a wave can still learn from the one before it — at the moment it is writing, not at
-    # the moment it is answering. `read_questions` likewise: this call is handed exactly
-    # one question, and a call that can read the whole bank is a call that can pick a
-    # second one for itself. And `propose_questions` is absent so that a worker part way
-    # through the corpus cannot notice a promising column and write itself the question
-    # that column answers — which is the failure the note above about tracing a result
-    # back to whose judgement produced it is about.
+    # Question writing and feature mapping have separate tool lists. Neither may
+    # read ML results. Only the outcome-free question catalog is exposed to writing;
+    # mapping receives the assigned question without scores or historical rationale.
     "hypothesis": {"okf_list_domains", "okf_search", "okf_read", "describe_dataset",
                    "match_concepts", "match_concept", "claim_question", "create_task"},
     "data": {"describe_dataset", "slice_columns", "claim_task", "submit_result"},
@@ -464,12 +457,9 @@ BOARD_SERVERS = {
 # which takes their key set to *be* the set of stages and reports anything else as an
 # error. A sixth key would make that checker call a job an agent.
 #
-# Compared against BOARD_TOOLS["hypothesis"]: `read_questions`, `read_results` and
-# `propose_questions` are here and not there; `describe_dataset`, the two matcher tools,
-# `claim_question` and `create_task` are there and not here. The comment on the
-# hypothesis entry above says why each way round.
-QUESTION_TOOLS = {"okf_list_domains", "okf_search", "okf_read",
-                  "read_questions", "read_results", "propose_questions"}
+# Primary generation is knowledge-only, including all subsequent waves.
+# The catalog is a restricted, current-run duplicate-avoidance view.
+QUESTION_TOOLS = set(PRIMARY_QUESTION_TOOLS)
 QUESTION_SERVERS = {"okf", "memstara-blackboard"}
 
 
@@ -493,7 +483,7 @@ def _sole(books: dict[str, list[str]], stage: str) -> str:
     return (books.get(stage) or [""])[0]
 
 
-def board_workers(playbooks: dict[str, list[str]] | None = None) -> dict[str, tuple[str, str]]:
+def board_workers(playbooks: dict[str, list[str]] | None = None, namespace: str = "") -> dict[str, tuple[str, str]]:
     """Worker key -> (agent name, the playbook that worker carries).
 
     **The one place that decides what the workers of a run are.** `provision_board_agents`
@@ -530,12 +520,13 @@ def board_workers(playbooks: dict[str, list[str]] | None = None) -> dict[str, tu
             if stage == "interpreter" and book:
                 name += f"-{book}"
             out[key] = (name, book)
-    return out
+    return {key: (f"{name}-{namespace}" if namespace else name, book) for key, (name, book) in out.items()}
 
 
 async def provision_board_agents(
     *, provider: str = "azure_foundry", model: str = "claude-sonnet-4-6",
     playbooks: dict[str, list[str]] | None = None,
+    namespace: str = "",
 ) -> dict[str, uuid.UUID]:
     """Create the board-driven agents (or find the existing ones).
 
@@ -573,7 +564,7 @@ async def provision_board_agents(
     react = {"execution_pattern": "reason_act"}
 
     out: dict[str, uuid.UUID] = {}
-    for key, (name, book) in board_workers(playbooks).items():
+    for key, (name, book) in board_workers(playbooks, namespace).items():
         agent = await _ensure_agent_from_file(
             name, f"board/{stage_of(key)}", book, model_config=mc, pattern_config=react,
         )

@@ -76,10 +76,13 @@ Two failures this stage exists to prevent:
 
 Work in this order:
 1) Call okf_list_domains. This is the ground truth for what can be asked.    Note the tags and how many documents sit under each — a branch with three    papers supports one question, not five.
-2) Call read_questions to see what has already been asked and how it did.
-3) If read_results returns anything, read it before writing. This is the only    place in the pipeline where one wave can learn from the last. Look at    feature_importance: columns with negative importance made their model    worse, so a question that keeps producing them is a direction to drop, not    repeat. Look at which okf_concept_ids led to high AUC and ask a NEIGHBOURING    question, not the same one again. On the first wave this returns nothing;    that is expected, and you work from the corpus alone.
-4) Use okf_search on a branch you are considering if you need to see what it    actually claims before turning it into a question.
-5) Call propose_questions ONCE with all of them. Give each a rationale saying    what it is grounded in and, from wave two onward, which prior result    prompted it. A person reading the bank later should be able to see why    this question came after that one.
+2) Call read_question_catalog only to avoid duplicates. It exposes no scores, outcomes, importance or prior rationales.
+3) Generate a PRIMARY, KNOWLEDGE-DRIVEN hypothesis from the KG/OKF corpus alone. Never add a feature because it performed well in an earlier experiment, and never reject a knowledge-supported concept because of a previous negative importance value.
+4) Use okf_search and okf_read to identify a specific path, phenotype or mechanism and a testable prediction. Record the knowledge grounding, not a performance-based rationale.
+5) Call propose_questions ONCE with the grounded questions and their knowledge-only rationale. A secondary evidence-informed refinement belongs in a separate, explicitly labelled experiment; do not merge it into the primary question.
+
+These rules take precedence over an attached skill that asks for previous experiment feedback. Prior AUC and importance are not evidence for selecting a primary hypothesis. Negative SHAP values are directions of contribution, not reasons to discard a feature; negative permutation importance in one fitted model is also not proof of biological irrelevance.
+
 
 Write questions about PHENOMENA AND MECHANISMS, never about column names. You cannot see the dataset and must not guess at it — finding the columns is the next stage's job, and it has a matcher for exactly that.
 
@@ -106,7 +109,7 @@ Work in this order:
 4) Open the promising ones with okf_read, section="Bottom line" first — the    conclusion, a tenth the length of the paper. Go deeper only if undecided.
 5) Call match_concepts with every concept at once. It returns a GROUP, not    an answer. The top-ranked candidate is frequently a false friend: for    'hypertension' it returns DX__I11.0__Hypertensive heart disease first    while the column you want, DX__I10__Essential hypertension, is third; for    'chronic kidney disease' a diabetes-complication code outranks DX__N18.3;    for 'hemoglobin a1c' the plain LAB__HEMOGLOBIN — a different analyte —    outranks real A1c columns. Read the whole group and pick the clinically    correct column by name. Never take rank 1 on faith. If nothing fits,    reword and call again. If a result is empty, read its 'note':    'nothing was close enough' means reword; 'a code this cohort does not    carry' means rewording will not help — name it in clinical English.    Codes work best INSIDE English: 'essential hypertension (I10)'.
 6) CAT__ columns are 0/1 indicators for one level of a family, and the    matcher returns the whole family. A family with fewer levels than you    expect has a dropped reference level — CAT__SEX__Male is the only sex    column, and 0 there means not male.
-7) Choose as many columns as the OKF evidence justifies — no fixed limit.    Each column must map to a specific OKF path. Prefer fewer high-confidence    matches over many weak ones, and never include the outcome itself.
+7) Preserve knowledge-supported features regardless of their performance in previous trials. Do not add previously successful features as enrichment. Choose as many columns as the OKF evidence justifies — no fixed limit.    Each column must map to a specific OKF path. Prefer fewer high-confidence    matches over many weak ones, and never include the outcome itself.
 8) Call create_task with the columns you chose, the outcome column you were    given, one sentence on why that combination should predict it, and the    concept ids you relied on. The outcome goes on the task because every    later stage reads it from there — nobody will tell them separately.
 
 create_task takes `columns` as a JSON list, and the matcher already gave you the names exactly. Copy them across — do not retype or reformat one. Many contain a comma ('LAB__HDL CHOLESTEROL, DIRECT') and that comma is part of the name, not a separator; a name split there exists nowhere and the data stage will report it missing.

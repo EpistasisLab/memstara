@@ -3,7 +3,7 @@
 
 The 2026-08-12 alignment settled that this is a **table**, living in **Memstara's own
 database** — its own Postgres server, its own volume, its own account. See
-``docker-compose.yml`` next to this file; nothing here touches core's database.
+``compose.yml`` next to this file; nothing here touches core's database.
 
 That independence is the point, and it is worth being blunt about why. These tables
 first lived inside core's `motoro` database, separated only by an `memstara_` name
@@ -60,7 +60,7 @@ Usage::
 
  The main names
  --------------
- STATUSES / TASK_TYPES  the four states a task can be in and the four stages.
+ STATUSES / TASK_TYPES  the four task states and three queued processing stages.
  SCHEMA                 the full definition (SQL) of the tables. Written to be safe
                         to run more than once.
  dsn()                  the address of Memstara's own database. Not core's.
@@ -99,13 +99,10 @@ import asyncpg        # the async PostgreSQL driver
 
 # Every state a task can be in.
 #
-# `failed` and the `attempts` column below are present but **not yet used by any
-# policy**. What happens to a task whose agent claimed it and then died is still open
-# (see the 2026-08-17 blackboard design document, §2 "the five to decide") — it might be
-# returned to `ready` for another attempt, or closed as `failed`. Carrying both now
-# means whichever way that
-# lands, the table does not have to be rebuilt. **This is not a decision; it is leaving
-# both doors open.**
+# Claims increment `attempts`; the pipeline retries recoverable stage failures.
+# `--max-attempts` (default 5) bounds retries and closes exhausted tasks as failed.
+# `--max-attempts 0` permits unlimited retries. Claim count also includes successful
+# stage transitions, so it is not itself a count of failures.
 #
 #   ready        nobody has taken it yet — anyone may
 #   in_progress  somebody took it and is working on it now
@@ -113,10 +110,9 @@ import asyncpg        # the async PostgreSQL driver
 #   failed       closed as a failure
 STATUSES = ("ready", "in_progress", "done", "failed")
 
-# The four stages: form a hypothesis -> cut the data -> train -> interpret. A task
-# carries the stage that should pick it up next, which is how an agent answers "is this
-# mine?" without anyone telling it — it decides from the board alone.
-TASK_TYPES = ("hypothesis", "data", "ml", "interpret")
+# Hypothesis generation creates a data task; it is not a queued task state.
+# Only the three consumers below claim and advance blackboard tasks.
+TASK_TYPES = ("data", "ml", "interpret")
 
 # What follows is an f-string. The tuples settled above go straight into the {STATUSES}
 # and {TASK_TYPES} slots and become SQL IN lists. Writing the state names out separately
@@ -457,7 +453,7 @@ TABLES = ("memstara_blackboard", "memstara_results")
 
 
 #: The address used when nothing has been configured. It points at the container the
-#: docker-compose.yml beside this file brings up. Port 5463 was chosen so as not to
+#: compose.yml beside this file brings up. Port 5463 was chosen so as not to
 #: collide with core's Postgres (5432 and the like).
 MEMSTARA_DATABASE_URL_DEFAULT = "postgresql://memstara:memstara@localhost:5463/memstara"
 
@@ -469,7 +465,7 @@ def dsn() -> str:
     board ended up inside core's database in the first place: the address was there, it
     worked, and nothing ever forced the question of whose store this is.
 
-    The default points at the container in ``docker-compose.yml``, so a fresh checkout
+    The default points at the container in ``compose.yml``, so a fresh checkout
     runs after ``docker compose up -d`` with nothing else set. Override with
     ``MEMSTARA_DATABASE_URL`` to point somewhere else.
 

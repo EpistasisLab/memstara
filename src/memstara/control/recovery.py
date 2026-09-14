@@ -44,11 +44,13 @@ def save_record(record: dict):
     temporary.replace(path)
 
 
-def recover(root: Path):
+def recover(root: Path, pipeline_id=None):
     live, finished = [], []
     for path in sorted(root.glob('**/control_record.json'), reverse=True):
         try:
             record = json.loads(path.read_text())
+            if record.get('pipeline_id') != pipeline_id:
+                continue
             record['run_dir'] = str(path.parent.resolve())
             if record.get('exit_code') is not None:
                 finished.append(record)

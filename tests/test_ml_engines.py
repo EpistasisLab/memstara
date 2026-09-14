@@ -90,6 +90,18 @@ def test_supported_models_receive_the_same_seed(engine):
     assert tools_ml._make_model(engine, 7).get_params()["random_state"] == 7
 
 
+def test_standalone_async_mcp_accepts_explicit_governance(subset, monkeypatch):
+    import asyncio
+    monkeypatch.delenv("MEMSTARA_RUN_CONFIG", raising=False)
+    result = json.loads(asyncio.run(tools_ml.train_and_score_async(
+        str(subset), "outcome", seed=7, engine="logistic_regression", folds=2,
+    )))
+    assert "error" not in result, result
+    assert result["model"] == "logistic_regression"
+    assert result["evaluation"]["plan"]["folds"] == 2
+    assert result["evaluation"]["replicates"][0]["cv_auc"] is not None
+
+
 def test_the_default_seed_is_42() -> None:
     """42 is the documented value and the default must stay it.
 

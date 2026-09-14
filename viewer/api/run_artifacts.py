@@ -93,11 +93,25 @@ def lookup(tag):
         elif latest.get("status") in ("failed", "cancelled"):
             report_status = {"status": latest["status"], "error": latest.get("error", "Report call failed")}
         result = {
-            "config": {k: config.get(k) for k in ("hypotheses", "interpreters", "books", "evaluation", "trials", "waves", "question", "y_column", "provider", "model")},
+            "config": {k: config.get(k) for k in (
+                "hypotheses", "interpreters", "interpretation_mode", "books", "evaluation",
+                "pipeline_id", "pipeline_name",
+                "trials", "waves", "continuous", "skill", "question", "y_column", "provider", "model",
+            )},
             "calls": calls,
-            "report": {"status": (report_status or {}).get("status", "available" if report.strip() else "not_available"),
+            "report": {"status": (report_status or {}).get(
+                           "status", "available" if report.strip() else "not_available"),
                        "text": report, "error": (report_status or {}).get("error")},
             "pipeline": read_json(directory / "pipeline_status.json"),
         }
         return result
     return None
+
+
+def result_identity(config, tag, trial):
+    """Trial indices are zero based: board.py allocates wave * trials + index."""
+    trials = config.get("trials")
+    iteration = (trial // trials + 1 if config.get("pipeline_id")
+                 and isinstance(trials, int) and trials > 0 and trial >= 0 else None)
+    return {"run_tag": tag, "pipeline_id": config.get("pipeline_id"),
+            "pipeline_name": config.get("pipeline_name"), "iteration": iteration}

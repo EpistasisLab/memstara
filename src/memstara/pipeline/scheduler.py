@@ -7,7 +7,7 @@ class StageWorkers:
         self.active = {}
         self.last_slot = {}
 
-    def available(self, stage, capacity, waiting):
+    def available(self, stage, capacity, waiting, eligible=None):
         occupied = {slot for (kind, slot) in self.active if kind == stage}
         if capacity < 1 or waiting < 1:
             return []
@@ -15,7 +15,8 @@ class StageWorkers:
         # skills do not starve behind the first slot. Busy slots are skipped.
         start = self.last_slot.get(stage, 0)
         order = [(start + offset) % capacity + 1 for offset in range(capacity)]
-        return [slot for slot in order if slot not in occupied][:waiting]
+        return [slot for slot in order if slot not in occupied
+                and (eligible is None or slot in eligible)][:waiting]
 
     def launch(self, stage, slot, coroutine):
         key = stage, slot

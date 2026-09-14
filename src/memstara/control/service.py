@@ -50,6 +50,7 @@
 from __future__ import annotations
 
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -60,6 +61,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
+from memstara.control.workspace import PipelineWorkspace
 from memstara.control.request import build_argv, _MAX_HYPOTHESIS_AGENTS
 from memstara.control.catalog import catalog, register, validate_selection
 from memstara.env import load_env
@@ -113,14 +115,15 @@ class _Runs:
     them at the same time.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, pipeline_id=None) -> None:
+        self.pipeline_id = pipeline_id
         self._lock = threading.Lock()
-        self._live, self._done = recover(RUNS_DIR)
+        self._live, self._done = recover(RUNS_DIR, self.pipeline_id)
 
     def _reap(self) -> None:
         """Move the child to the finished list if it has exited. Caller holds the lock."""
         if self._live is None:
-            recovered, finished = recover(RUNS_DIR)
+            recovered, finished = recover(RUNS_DIR, self.pipeline_id)
             known = {(r["run_tag"], r["run_dir"]) for r in self._done}
             self._done.extend(r for r in finished if (r["run_tag"], r["run_dir"]) not in known)
             self._done.sort(key=lambda r: r.get("started", ""), reverse=True)
@@ -154,10 +157,13 @@ class _Runs:
                             config = original
                             break
                 record["configuration"] = {k: config.get(k) for k in
-                                           ("hypotheses", "interpreters", "books", "evaluation", "trials", "waves",
+                                           ("hypotheses", "interpreters", "interpretation_mode",
+                                            "books", "evaluation", "trials", "waves", "continuous",
                                             "question", "y_column", "provider", "model")}
             except (OSError, ValueError):
                 pass
+            record["waiting_for_questions"] = (Path(record["run_dir"]) / "questions.waiting").exists()
+            record["pause_requested"] = (Path(record["run_dir"]) / "pause.request").exists()
             return record
 
     def finished(self) -> list[dict[str, Any]]:
@@ -222,6 +228,8 @@ class _Runs:
                     f"'{self._live['run_tag']}' is already running. "
                     f"One run at a time — stop it first"
                 )
+            if self.pipeline_id:
+                argv = [*argv, "--pipeline-id", self.pipeline_id]
             log = (run_dir / "control.log").open("wb")
             popen = subprocess.Popen(
                 [sys.executable, "-u", "-m", "memstara.pipeline.board",
@@ -232,8 +240,10 @@ class _Runs:
                 stdin=subprocess.DEVNULL,
                 start_new_session=True,   # see note 3 in the header
             )
+            log.close()
             self._live = {
                 "run_tag": run_tag,
+                "pipeline_id": self.pipeline_id,
                 "run_dir": str(run_dir),
                 "skill": skill,
                 "pid": popen.pid,
@@ -243,6 +253,19 @@ class _Runs:
             }
             save_record(self._live)
             return {k: v for k, v in self._live.items() if k not in ("popen", "process_identity")}
+
+    def pause(self, run_tag: str, paused: bool) -> dict[str, Any]:
+        """Pause at a round boundary without freezing database transactions."""
+        with self._lock:
+            self._reap()
+            if self._live is None or self._live["run_tag"] != run_tag:
+                raise RuntimeError("this run is not running")
+            marker = Path(self._live["run_dir"]) / "pause.request"
+            if paused:
+                marker.touch()
+            else:
+                marker.unlink(missing_ok=True)
+            return {"pause_requested": paused}
 
     def stop(self, run_tag: str) -> dict[str, Any]:
         """Ask the running child to wind up, or raise `RuntimeError` saying why not."""
@@ -259,6 +282,7 @@ class _Runs:
 
 
 RUNS = _Runs()
+WORKSPACE = PipelineWorkspace(RUNS_DIR / "pipeline_workspace.json", _Runs)
 
 
 def skills() -> list[dict[str, Any]]:
@@ -435,6 +459,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"ok": True, "bundle": bundle, "running": RUNS.running()})
             return
 
+        if path == "/control/pipelines":
+            self._send(200, {"pipelines": WORKSPACE.list()})
+            return
+
         if path == "/control/skills":
             try:
                 self._send(200, {"skills": skills()})
@@ -491,14 +519,30 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(400, {"error": str(e)})
             return
 
+        if path == "/control/pipelines":
+            try:
+                self._send(200, WORKSPACE.mutate(body))
+            except (ValueError, OSError) as e:
+                self._send(409, {"error": str(e)})
+            return
+
         if path == "/control/runs":
             self._start(body)
+            return
+
+        if path.startswith("/control/runs/") and path.rsplit("/", 1)[-1] in ("pause", "resume"):
+            prefix, action = path.rsplit("/", 1)
+            tag = prefix[len("/control/runs/"):]
+            try:
+                self._send(200, (WORKSPACE.locate_manager(tag) or RUNS).pause(tag, action == "pause"))
+            except RuntimeError as e:
+                self._send(409, {"error": str(e)})
             return
 
         if path.startswith("/control/runs/") and path.endswith("/stop"):
             tag = path[len("/control/runs/"):-len("/stop")]
             try:
-                self._send(200, RUNS.stop(tag))
+                self._send(200, (WORKSPACE.locate_manager(tag) or RUNS).stop(tag))
             except RuntimeError as e:
                 self._send(409, {"error": str(e)})
             return
@@ -506,6 +550,18 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, {"error": f"no route {path}", "routes": _ROUTES})
 
     def _start(self, body: dict[str, Any]) -> None:
+        pipeline_id = body.pop("pipeline_id", None)
+        if pipeline_id is not None:
+            try:
+                # Freeze the saved definition while validating and launching it.
+                return WORKSPACE.start(pipeline_id, lambda manager, item:
+                    self._launch(item["configuration"], manager, item["name"]))
+            except (ValueError, RuntimeError) as e:
+                self._send(409, {"error": str(e)})
+                return
+        return self._launch(body, RUNS)
+
+    def _launch(self, body, manager, pipeline_name=""):
         try:
             offered = [s["skill"] for s in skills()]
         except OKFError as e:
@@ -523,17 +579,33 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, {"error": str(e)})
             return
 
+        # Reject unusable input before creating a run, log or child process. Return
+        # only aggregate diagnostics, never dataset values, headers or file paths.
+        from memstara.evaluation import DataQualityError, preflight, validate
+        from memstara.control.catalog import resolve
+        try:
+            dataset = os.environ.get("MEMSTARA_DATASET_PATH", "")
+            if not dataset:
+                raise DataQualityError('No dataset is configured. Configure a curated CSV before starting.')
+            book = body.get("playbook_ml", "")
+            policy = resolve(book).get("evaluation", {}) if book else {}
+            plan = validate({**policy, **body.get("evaluation", {})})
+            preflight(Path(dataset), argv[argv.index("--y-column") + 1], plan)
+        except ValueError as e:
+            self._send(422, {"error": f"Run not started. {e}", "code": "input_validation_failed"})
+            return
+
         started = datetime.now()
         # The same two names `board.py:1912-1915` would have chosen for itself. They are
         # passed explicitly so that this service can answer with the tag in the same
         # response, instead of the screen having to guess which new run is the one it
         # just asked for.
-        run_tag = started.strftime("board_%Y%m%dT%H%M%S")
+        run_tag = started.strftime("board_%Y%m%dT%H%M%S_%f")
         trials = argv[argv.index("--trials") + 1]
-        run_dir = new_run_dir(f"board_{trials}trials", started.strftime("%Y-%m-%dT%H%M%S"))
+        run_dir = new_run_dir(f"board_{trials}trials", started.strftime("%Y-%m-%dT%H%M%S_%f"))
         skill = argv[argv.index("--skill") + 1]
         try:
-            self._send(201, RUNS.start(argv, run_tag, run_dir, skill))
+            self._send(201, manager.start([*argv, "--pipeline-name", pipeline_name], run_tag, run_dir, skill))
         except RuntimeError as e:
             self._send(409, {"error": str(e)})
 

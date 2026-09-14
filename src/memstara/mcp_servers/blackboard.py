@@ -24,7 +24,7 @@ report is written from finished results.
 
 Core launches this file as a stdio subprocess, same shape as src/memstara/mcp_servers/data.py.
 
-The board lives in **Memstara's own database**, not core's — see ``docker-compose.yml``.
+The board lives in **Memstara's own database**, not core's — see ``compose.yml``.
 
 Environment::
 
@@ -93,7 +93,7 @@ NEXT_STAGE = {"hypothesis": "data", "data": "ml", "ml": "interpret"}
 
 
 # The address used when the environment variable is unset. It points at the container
-# docker-compose.yml starts. Port 5463 — a **different database** from core's 5453.
+# compose.yml starts. Port 5463 — a **different database** from core's 5453.
 DEFAULT_DSN = "postgresql://memstara:memstara@localhost:5463/memstara"
 
 
@@ -117,6 +117,13 @@ def _err(e: Exception) -> str:
     """
     return json.dumps({"error": f"{type(e).__name__}: {e}"})
 
+
+
+def _pipeline_run() -> str:
+    from memstara.evaluation import active_plan
+    config = active_plan() or {}
+    primary = config.get("hypothesis_policy", {}).get("version") == "knowledge_only_v1"
+    return str(config.get("run_tag", "")) if config.get("pipeline_id") or primary else ""
 
 @mcp.tool()
 async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: str,
@@ -146,6 +153,11 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
     Returns:
         JSON with the new task_id. The row starts as ready for the data stage.
     """
+    scope = _pipeline_run()
+    if scope:
+        if run_tag and run_tag != scope:
+            return json.dumps({"error": "This tool is scoped to its pipeline run"})
+        run_tag = scope
     # A bare string is refused rather than iterated. Python would iterate it
     # character by character and store a JSON array of single letters — a task the
     # data stage then reports as 30-odd missing columns, which reads like a naming
@@ -190,7 +202,8 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
                 run_tag, trial, perspective, hypothesis, json.dumps(cols), y_column,
                 json.dumps(ids), (int(question_id) or None),
                 json.dumps({"config_hash": snapshot.get("config_hash"), "plan": snapshot["evaluation"],
-                            "skills": snapshot.get("books", {})} if snapshot else {}),
+                            "skills": snapshot.get("books", {}),
+                            "hypothesis_policy": snapshot.get("hypothesis_policy", {})} if snapshot else {}),
             )
         finally:
             await conn.close()
@@ -226,6 +239,11 @@ async def claim_task(task_type: str, run_tag: str = "", worker: str = "") -> str
         there is no work for you right now, so stop. Do not invent a task and do not
         take one of another type.
     """
+    scope = _pipeline_run()
+    if scope:
+        if run_tag and run_tag != scope:
+            return json.dumps({"error": "This tool is scoped to its pipeline run"})
+        run_tag = scope
     try:
         conn = await asyncpg.connect(_dsn())
         try:
@@ -263,6 +281,8 @@ async def claim_task(task_type: str, run_tag: str = "", worker: str = "") -> str
                           -- An empty string reads the whole board, as before
                           -- (backward compatible).
                           AND ($2 = '' OR run_tag = $2)
+                          AND (NOT (evaluation ? 'interpretation_branch')
+                               OR evaluation->'interpretation_branch'->>'worker' = $3)
                         ORDER BY task_id
                         FOR UPDATE SKIP LOCKED
                         LIMIT 1
@@ -358,6 +378,16 @@ async def submit_result(task_id: int, subset_path: str = "",
         conn = await asyncpg.connect(_dsn())
         try:
             async with conn.transaction():
+                from memstara.interpretation_fanout import metadata, aggregate, expand
+                scope = _pipeline_run()
+                if scope and await conn.fetchval(
+                    'SELECT run_tag FROM memstara_blackboard WHERE task_id=$1', task_id
+                ) != scope:
+                    return json.dumps({"error": "Task belongs to another pipeline run"})
+                before = await conn.fetchval('SELECT evaluation FROM memstara_blackboard WHERE task_id=$1', task_id)
+                branch = metadata(before).get('interpretation_branch')
+                if branch:
+                    await conn.execute('SELECT pg_advisory_xact_lock(72331, $1::integer)', branch['source_task_id'])
                 cur = await conn.fetchrow(
                     "SELECT task_type, status, claimed_by, subset_path, evaluation, y_column FROM memstara_blackboard "
                     "WHERE task_id = $1 FOR UPDATE",
@@ -365,6 +395,8 @@ async def submit_result(task_id: int, subset_path: str = "",
                 )
                 if cur is None:
                     return json.dumps({"error": f"no task {task_id}"})
+                if branch and (worker != branch['worker'] or worker != cur['claimed_by']):
+                    return json.dumps({"error": "Only the assigned interpreter may submit this branch."})
                 # Blocks writing a result to a task that was never claimed.
                 if cur["status"] != "in_progress":
                     return json.dumps(
@@ -393,6 +425,8 @@ async def submit_result(task_id: int, subset_path: str = "",
                     await conn.execute(
                         "UPDATE memstara_blackboard SET status='failed', error=$2, claimed_by='', "
                         "claimed_at=NULL, updated_at=now() WHERE task_id=$1", task_id, error[:2000])
+                    if branch:
+                        await aggregate(conn, branch['source_task_id'])
                     return json.dumps({"ok": True, "task_id": task_id, "status": "failed",
                                        "task_type": cur["task_type"], "reason": error[:2000]})
 
@@ -511,7 +545,13 @@ async def submit_result(task_id: int, subset_path: str = "",
                 #   *whether they earned their place* (feature_importance) stayed
                 #   behind on a table designed to be cleared, so the record that
                 #   outlived the run was exactly the part that could not be verified.
-                if new_status == "done":
+                if stage == "ml":
+                    config_path = os.environ.get("MEMSTARA_RUN_CONFIG")
+                    config = json.loads(Path(config_path).read_text()) if config_path else {}
+                    await expand(conn, task_id, config)
+                if new_status == "done" and branch:
+                    await aggregate(conn, branch['source_task_id'])
+                elif new_status == "done":
                     await conn.execute(
                         """
                         INSERT INTO memstara_results
@@ -546,6 +586,11 @@ async def count_waiting(task_type: str = "", run_tag: str = "") -> str:
     Returns:
         JSON with counts per stage.
     """
+    scope = _pipeline_run()
+    if scope:
+        if run_tag and run_tag != scope:
+            return json.dumps({"error": "This tool is scoped to its pipeline run"})
+        run_tag = scope
     try:
         conn = await asyncpg.connect(_dsn())
         try:
@@ -643,6 +688,11 @@ async def read_board(run_tag: str = "") -> str:
         JSON list of tasks with what each stage left on them, including the ones that
         did not finish and why.
     """
+    scope = _pipeline_run()
+    if scope:
+        if run_tag and run_tag != scope:
+            return json.dumps({"error": "This tool is scoped to its pipeline run"})
+        run_tag = scope
     try:
         conn = await asyncpg.connect(_dsn())
         try:
@@ -663,7 +713,7 @@ async def read_board(run_tag: str = "") -> str:
                        -- recorded, which is a different claim from any engine name and
                        -- is what every row written before 2026-09-08 says.
                        model,
-                       interpretation, attempts, error
+                       interpretation, attempts, error, evaluation
                 FROM memstara_blackboard
                 WHERE ($1 = '' OR run_tag = $1)
                 ORDER BY trial, task_id
@@ -682,7 +732,7 @@ async def read_board(run_tag: str = "") -> str:
         # to the SELECT and forgotten here comes back as a string holding JSON, and the
         # caller has to parse it a second time to notice.
         for k in ("columns", "okf_concept_ids", "match_trace", "columns_used",
-                  "columns_missing", "feature_importance"):
+                  "columns_missing", "feature_importance", "evaluation"):
             d[k] = json.loads(d[k]) if d[k] else ([] if k != "feature_importance" else {})
         tasks.append(d)
     return json.dumps({"count": len(tasks), "tasks": tasks}, ensure_ascii=False, default=str)
@@ -730,6 +780,11 @@ async def read_results(run_tag: str = "", include_match_trace: bool = False) -> 
         alone and reachable only through the data, which is precisely when a reader
         stops checking.
     """
+    scope = _pipeline_run()
+    if scope:
+        if run_tag and run_tag != scope:
+            return json.dumps({"error": "This tool is scoped to its pipeline run"})
+        run_tag = scope
     try:
         conn = await asyncpg.connect(_dsn())
         try:
@@ -814,6 +869,35 @@ def _near_duplicate(
 
 
 @mcp.tool()
+async def read_question_catalog(limit: int = 200) -> str:
+    """Duplicate avoidance for primary generation: current-run knowledge text only.
+
+    No performance, importance, prior rationale or historical mixed-policy questions
+    are exposed. Missing policy fails closed rather than reading the legacy bank.
+    """
+    from memstara.evaluation import active_plan
+    plan = active_plan() or {}
+    if plan.get("hypothesis_policy", {}).get("version") != "knowledge_only_v1":
+        return json.dumps({"error": "A new knowledge-only run is required", "questions": []})
+    try:
+        conn = await asyncpg.connect(_dsn())
+        try:
+            rows = await conn.fetch(
+                "SELECT question_id, text, okf_tags FROM memstara_questions "
+                "WHERE origin_run=$1 ORDER BY question_id DESC LIMIT $2",
+                plan["run_tag"], max(1, min(200, int(limit))),
+            )
+        finally:
+            await conn.close()
+        return json.dumps({"questions": [
+            {"question_id": row["question_id"], "text": row["text"],
+             "okf_tags": json.loads(row["okf_tags"]) if isinstance(row["okf_tags"], str) else row["okf_tags"]}
+            for row in rows]}, ensure_ascii=False)
+    except Exception as exc:
+        return _err(exc)
+
+
+@mcp.tool()
 async def read_questions(status: str = "open", limit: int = 200) -> str:
     """What this project has already thought to ask. Read this before proposing more.
 
@@ -856,12 +940,12 @@ async def read_questions(status: str = "open", limit: int = 200) -> str:
                        -- two hypothesis workers. Plain TEXT, so no unpacking below.
                        claimed_run, claimed_by
                 FROM memstara_questions
-                WHERE ($1 = '' OR status = $1)
+                WHERE ($1 = '' OR status = $1) AND ($3 = '' OR origin_run = $3)
                 ORDER BY question_id DESC
                 LIMIT $2
                 """,
                 status,
-                max(1, int(limit)),
+                max(1, int(limit)), _pipeline_run(),
             )
         finally:
             await conn.close()
@@ -903,6 +987,14 @@ async def claim_question(run_tag: str = "", worker: str = "", stale_after: int =
         nothing open left it returns ``{"question_id": null}``: there is nothing to ask,
         so stop. Do not invent a question, and do not re-use one you were not handed.
     """
+    from memstara.evaluation import active_plan
+    plan = active_plan() or {}
+    primary = plan.get("hypothesis_policy", {}).get("version") == "knowledge_only_v1"
+    scope = plan.get("run_tag", "") if primary else _pipeline_run()
+    if scope:
+        if run_tag and run_tag != scope:
+            return json.dumps({"error": "This tool is scoped to its pipeline run"})
+        run_tag = scope
     try:
         conn = await asyncpg.connect(_dsn())
         try:
@@ -931,16 +1023,16 @@ async def claim_question(run_tag: str = "", worker: str = "", stale_after: int =
                     WHERE question_id = (
                         SELECT question_id FROM memstara_questions
                         WHERE status = 'open' AND ($4 = 0 OR question_id = $4)
+                          AND ($5 = '' OR origin_run = $5)
                           AND (claimed_at IS NULL
                                OR claimed_at < now() - make_interval(secs => $3))
                         ORDER BY question_id DESC
                         FOR UPDATE SKIP LOCKED
                         LIMIT 1
                     )
-                    RETURNING question_id, text, okf_tags, rationale,
-                              times_used, best_auc, claimed_run, claimed_by
+                    RETURNING question_id, text, okf_tags, claimed_run, claimed_by
                     """,
-                    run_tag, worker, max(0, int(stale_after)), question_id,
+                    run_tag, worker, max(0, int(stale_after)), question_id, scope,
                 )
         finally:
             await conn.close()
@@ -985,6 +1077,11 @@ async def propose_questions(questions: str, origin_run: str = "", origin_wave: i
         both mean the generator converged on something already known, which is worth
         seeing. ``rejected`` is questions dropped for having no tags, with the reason.
     """
+    scope = _pipeline_run()
+    if scope:
+        if origin_run and origin_run != scope:
+            return json.dumps({"error": "This tool is scoped to its pipeline run"})
+        origin_run = scope
     try:
         parsed = json.loads(questions or "[]")
     except json.JSONDecodeError as e:
@@ -999,77 +1096,84 @@ async def propose_questions(questions: str, origin_run: str = "", origin_wave: i
     try:
         conn = await asyncpg.connect(_dsn())
         try:
-            # Retired questions are included on purpose. A reword of a question this
-            # project has already worked through and set aside is the same wasted trial
-            # as a reword of an open one.
-            banked: list[tuple[int, str, list[str]]] = [
-                (r["question_id"], r["text"],
-                 json.loads(r["okf_tags"]) if r["okf_tags"] else [])
-                for r in await conn.fetch(
-                    "SELECT question_id, text, okf_tags FROM memstara_questions")
-            ]
-            for item in parsed:
-                if not isinstance(item, dict):
-                    rejected.append({"item": str(item), "why": "not an object"})
-                    continue
-                text = str(item.get("text", "")).strip()
-                tags = [str(t).strip() for t in (item.get("okf_tags") or []) if str(t).strip()]
-                if not text:
-                    rejected.append({"text": text, "why": "empty text"})
-                    continue
-                if not tags:
-                    rejected.append({
-                        "text": text,
-                        "why": "no okf_tags — a question the corpus cannot answer forces "
-                               "the hypothesis stage to invent its citations",
-                    })
-                    continue
-                # The literal check runs first so that "duplicates" keeps meaning what
-                # it always meant — word-for-word repeat — and does not quietly turn
-                # into a subset of the reword check below. The unique index is still the
-                # backstop; this is only what decides which bucket the caller is told.
-                key = _question_key(text)
-                if any(_question_key(t) == key for _, t, _ in banked):
-                    duplicates.append(text)
-                    continue
-                # Checked before the insert, not after: the unique index below is a
-                # string comparison and would let this one through.
-                near = _near_duplicate(text, tags, banked)
-                if near is not None:
-                    near_qid, ratio = near
-                    skipped.append({
-                        "text": text,
-                        "duplicate_of": near_qid,
-                        "similarity": round(ratio, 3),
-                        "why": "same okf_tags and near-identical wording — this is a "
-                               "reword of a banked question, not a new one. Ask about "
-                               "a neighbouring mechanism instead.",
-                    })
-                    continue
-                # ON CONFLICT DO NOTHING returns no row, which is how a duplicate is
-                # told apart from an insert without a second query.
-                qid = await conn.fetchval(
-                    """
-                    INSERT INTO memstara_questions
-                        (text, text_key, okf_tags, rationale, origin_run, origin_wave, writer)
-                    VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)
-                    ON CONFLICT (text_key) DO NOTHING
-                    RETURNING question_id
-                    """,
-                    text,
-                    _question_key(text),
-                    json.dumps(tags, ensure_ascii=False),
-                    str(item.get("rationale", "")).strip(),
-                    origin_run,
-                    int(origin_wave), writer,
-                )
-                if qid is None:
-                    duplicates.append(text)
-                else:
-                    added.append({"question_id": qid, "text": text, "okf_tags": tags})
-                    # So that two rewords of each other inside one batch cannot both
-                    # land — neither is in the table yet when the other is checked.
-                    banked.append((qid, text, tags))
+            async with conn.transaction(isolation="read_committed"):
+                # Serialise the read/compare/insert decision across every writer and
+                # run. The transaction lock releases on failure or disconnect.
+                # A finite wait must not recreate an unbounded DB queue.
+                await conn.execute("SET LOCAL lock_timeout = '3s'")
+                await conn.execute("SELECT pg_advisory_xact_lock(180947, 53)")
+                # Retired questions are included on purpose. A reword of a question this
+                # project has already worked through and set aside is the same wasted trial
+                # as a reword of an open one.
+                banked: list[tuple[int, str, list[str]]] = [
+                    (r["question_id"], r["text"],
+                     json.loads(r["okf_tags"]) if r["okf_tags"] else [])
+                    for r in await conn.fetch(
+                        "SELECT question_id, text, okf_tags FROM memstara_questions "
+                        "WHERE ($1 = '' OR origin_run = $1)", _pipeline_run())
+                ]
+                for item in parsed:
+                    if not isinstance(item, dict):
+                        rejected.append({"item": str(item), "why": "not an object"})
+                        continue
+                    text = str(item.get("text", "")).strip()
+                    tags = [str(t).strip() for t in (item.get("okf_tags") or []) if str(t).strip()]
+                    if not text:
+                        rejected.append({"text": text, "why": "empty text"})
+                        continue
+                    if not tags:
+                        rejected.append({
+                            "text": text,
+                            "why": "no okf_tags — a question the corpus cannot answer forces "
+                                   "the hypothesis stage to invent its citations",
+                        })
+                        continue
+                    # The literal check runs first so that "duplicates" keeps meaning what
+                    # it always meant — word-for-word repeat — and does not quietly turn
+                    # into a subset of the reword check below. The unique index is still the
+                    # backstop; this is only what decides which bucket the caller is told.
+                    key = _question_key(text)
+                    if any(_question_key(t) == key for _, t, _ in banked):
+                        duplicates.append(text)
+                        continue
+                    # Checked before the insert, not after: the unique index below is a
+                    # string comparison and would let this one through.
+                    near = _near_duplicate(text, tags, banked)
+                    if near is not None:
+                        near_qid, ratio = near
+                        skipped.append({
+                            "text": text,
+                            "duplicate_of": near_qid,
+                            "similarity": round(ratio, 3),
+                            "why": "same okf_tags and near-identical wording — this is a "
+                                   "reword of a banked question, not a new one. Ask about "
+                                   "a neighbouring mechanism instead.",
+                        })
+                        continue
+                    # ON CONFLICT DO NOTHING returns no row, which is how a duplicate is
+                    # told apart from an insert without a second query.
+                    qid = await conn.fetchval(
+                        """
+                        INSERT INTO memstara_questions
+                            (text, text_key, okf_tags, rationale, origin_run, origin_wave, writer)
+                        VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)
+                        ON CONFLICT (text_key) DO NOTHING
+                        RETURNING question_id
+                        """,
+                        text,
+                        (f"{scope}::" if scope else "") + _question_key(text),
+                        json.dumps(tags, ensure_ascii=False),
+                        str(item.get("rationale", "")).strip(),
+                        origin_run,
+                        int(origin_wave), writer,
+                    )
+                    if qid is None:
+                        duplicates.append(text)
+                    else:
+                        added.append({"question_id": qid, "text": text, "okf_tags": tags})
+                        # So that two rewords of each other inside one batch cannot both
+                        # land — neither is in the table yet when the other is checked.
+                        banked.append((qid, text, tags))
         finally:
             await conn.close()
     except Exception as e:  # noqa: BLE001
@@ -1110,6 +1214,11 @@ async def record_question_outcomes(run_tag: str, retire_after: int = 3) -> str:
     Returns:
         ``{"ok": true, "questions_updated": N, "questions_retired": M}``.
     """
+    scope = _pipeline_run()
+    if scope:
+        if run_tag and run_tag != scope:
+            return json.dumps({"error": "This tool is scoped to its pipeline run"})
+        run_tag = scope
     try:
         conn = await asyncpg.connect(_dsn())
         try:

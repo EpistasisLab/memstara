@@ -18,7 +18,9 @@ from memstara.pipeline.snapshot import freeze
 
 @pytest.fixture
 def clean_data(tmp_path, monkeypatch):
-    monkeypatch.delenv("MEMSTARA_RUN_CONFIG", raising=False)
+    # Register restoration even when the variable was initially absent: freeze()
+    # writes it directly and must not leak a plan into subsequent ML tests.
+    monkeypatch.setenv("MEMSTARA_RUN_CONFIG", "")
     monkeypatch.setenv("MEMSTARA_OUTPUT_DIR", str(tmp_path))
     rng = np.random.default_rng(12)
     x = rng.normal(size=100)
@@ -248,7 +250,7 @@ def test_dirty_input_is_rejected_before_run_configuration_is_frozen(clean_data, 
     data.loc[0, 'x'] = np.nan
     data.to_csv(clean_data, index=False)
     args = SimpleNamespace(run_tag='preflight', question='', hypothesis_agents=1,
-                           y_column='outcome', evaluation='{}', trials=1, waves=1)
+                           y_column='outcome', evaluation='{"engine": "logistic_regression"}', trials=1, waves=1)
     with pytest.raises(DataQualityError, match='AI-ready'):
         freeze(args, tmp_path, {})
     assert not (tmp_path / 'config.json').exists()
@@ -265,3 +267,10 @@ def test_skill_optimization_defaults_reach_frozen_runtime(clean_data, tmp_path):
     assert config['evaluation']['replicates'] == 10
     assert config['evaluation']['folds'] == 2
     assert config['evaluation']['engine'] == 'logistic_regression'
+
+
+def test_report_only_snapshot_does_not_relabel_legacy_generation(clean_data, tmp_path):
+    args = SimpleNamespace(run_tag='legacy-report', question='', hypothesis_agents=1,
+        y_column='outcome', evaluation='{}', trials=1, waves=1, report_only=True)
+    snapshot = freeze(args, tmp_path, {})
+    assert snapshot['hypothesis_policy'] == {}

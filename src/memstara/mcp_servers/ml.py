@@ -40,8 +40,15 @@ def _make_model(engine: str, seed: int):
     return model_for(engine, seed)
 
 
-def train_and_score(path: str, y_column: str, test_size: float = 0.25, seed: int = 42) -> str:
-    """Evaluate a subset with the immutable run policy, saving the measured artifact."""
+def train_and_score(
+    path: str, y_column: str, test_size: float = 0.25, seed: int = 42,
+    engine: str = "", folds: int = 0, replicates: int = 1, search_trials: int = 1,
+) -> str:
+    """Evaluate with the frozen run policy, or explicit options for standalone calls.
+
+    Frozen UI/CLI run settings take precedence over agent-provided options. CV and
+    candidate selection use training folds; the hold-out is reserved for evaluation.
+    """
     from memstara.evaluation import DataQualityError, active_plan, score, validate
     import hashlib
     import tempfile
@@ -55,8 +62,9 @@ def train_and_score(path: str, y_column: str, test_size: float = 0.25, seed: int
         if snapshot and y_column != snapshot["y_column"]:
             raise ValueError("Target differs from the run's fixed target")
         plan = snapshot["evaluation"] if snapshot else {
-            "engine": os.environ.get("MEMSTARA_ML_ENGINE", "").strip() or _DEFAULT_ENGINE,
+            "engine": engine or os.environ.get("MEMSTARA_ML_ENGINE", "").strip() or _DEFAULT_ENGINE,
             "seed": seed, "test_size": test_size,
+            "folds": folds, "replicates": replicates, "search_trials": search_trials,
         }
         plan = validate(plan)
         try:
@@ -80,10 +88,21 @@ def train_and_score(path: str, y_column: str, test_size: float = 0.25, seed: int
 
 
 @mcp.tool(name="train_and_score")
-async def train_and_score_async(path: str, y_column: str, test_size: float = 0.25, seed: int = 42) -> str:
-    """Train the chosen model under the saved run plan; concurrent jobs do not block MCP."""
+async def train_and_score_async(
+    path: str, y_column: str, test_size: float = 0.25, seed: int = 42,
+    engine: str = "", folds: int = 0, replicates: int = 1, search_trials: int = 1,
+) -> str:
+    """Evaluate a model without blocking MCP. Frozen run settings override these options.
+
+    engine: xgboost, random_forest or logistic_regression; empty uses the default.
+    folds: training-only stratified CV (0 off, 2-10 enabled).
+    replicates: 1-10 seeded splits. search_trials: 1-10 training-CV candidates.
+    test_size: reserved hold-out fraction. No cleaning or imputation is performed.
+    """
     import asyncio
-    return await asyncio.to_thread(train_and_score, path, y_column, test_size, seed)
+    return await asyncio.to_thread(
+        train_and_score, path, y_column, test_size, seed, engine, folds, replicates, search_trials,
+    )
 
 
 if __name__ == "__main__":

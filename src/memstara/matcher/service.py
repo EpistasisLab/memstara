@@ -15,6 +15,7 @@ from __future__ import annotations
 import csv
 import logging
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -22,7 +23,7 @@ from memstara.matcher import config as cfg_mod
 from memstara.matcher.catalog import catalog_fingerprint
 from memstara.matcher.config import RunConfig
 from memstara.matcher.embedder import sentence_transformer_encoder
-from memstara.matcher.matcher import Matcher
+from memstara.matcher.matcher import Match, Matcher, MatchResult
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +31,51 @@ log = logging.getLogger(__name__)
 #: this set makes the matcher return an empty result whose note says "reword" —
 #: which is the wrong advice. The tool wrapper screens against this list first.
 FEATURE_TYPES = ("diagnosis", "medication", "lab", "demographic")
+
+
+def medication_name(value: str) -> str:
+    """Normalise spelling separators only; never infer brands, salts or synonyms."""
+    value = value.strip().casefold()
+    if value.startswith("med__"):
+        value = value[5:]
+    return re.sub(r"[\s_-]+", " ", value).strip()
+
+
+class VerifiedMatcher(Matcher):
+    """Keep the ported ranking intact, then require medication name identity.
+
+    A semantic score cannot establish that two drugs are the same. Medication
+    classes and unregistered synonyms require an explicit mapping, not a guess.
+    Diagnosis/lab/demographic candidate ranking is unchanged.
+    """
+
+    def match_many(self, concepts, *, feature_type=None, top_k=None, threshold=None):
+        results = super().match_many(
+            concepts, feature_type=feature_type, top_k=top_k, threshold=threshold,
+        )
+        medications = {}
+        for entry in self.entries:
+            if entry.feature_type == "medication":
+                medications.setdefault(medication_name(entry.feature_name), []).append(entry)
+        verified = []
+        for result in results:
+            exact = medications.get(medication_name(result.concept), [])
+            if exact and feature_type in (None, "medication"):
+                # Name identity must not be lost to top-k or embedding thresholds.
+                matches = tuple(Match(e.feature_name, "medication", 1.0) for e in exact)
+                verified.append(MatchResult(result.concept, matches))
+                continue
+            matches = tuple(m for m in result.matches if m.feature_type != "medication")
+            rejected = len(matches) != len(result.matches) or feature_type == "medication"
+            note = result.note
+            if rejected:
+                note = (
+                    "No exact medication name is present in this cohort catalog. "
+                    "Semantically similar drugs were not substituted. This does not establish "
+                    "absence of a brand, synonym or drug class; those require a verified mapping."
+                )
+            verified.append(MatchResult(result.concept, matches, note))
+        return verified
 
 
 def valid_feature_types() -> tuple[str, ...]:
@@ -105,7 +151,7 @@ def get_matcher() -> Matcher:
     """Loaded once per process — the model (~420MB) and matrix cannot be re-read
     on every call."""
     run_config = build_run_config()
-    matcher = Matcher.from_catalog(
+    matcher = VerifiedMatcher.from_catalog(
         cfg_mod.CATALOG_JSON,
         encoder=sentence_transformer_encoder(run_config.embedding),
         config=run_config,

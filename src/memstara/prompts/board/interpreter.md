@@ -66,3 +66,14 @@ interpretation. The measured operating_point is a fixed model probability cutoff
 not a clinical intervention threshold. Explain its sensitivity, specificity and
 false-positive/false-negative counts. Use feature_effects to describe the recorded
 response range and direction, and state the validation needed for actionability.
+
+
+## Scientific interpretation boundary
+
+A negative signed SHAP contribution describes direction relative to a model baseline;
+it is not evidence that a feature should be removed. Negative permutation importance
+is an uncertain, model- and sample-dependent estimate, not biological irrelevance.
+Do not recommend discarding a knowledge-supported primary feature solely from either.
+Any such removal requires a separately labelled ablation. Repeated same-dataset
+exploration is not independent validation. Do not attribute an enriched model's AUC
+to the original knowledge path without a paired base/knowledge/enriched comparison.

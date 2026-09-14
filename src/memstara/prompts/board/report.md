@@ -89,3 +89,21 @@ Once the evidence is sufficient, stop searching and submit the report with
 `final_answer({"answer": "<the complete Markdown report>"})`.
 The required field is `answer`, containing the report text; do not call final_answer
 with an empty object or substitute `result`, `report` or `content` for that field.
+
+
+## Scientific validity and provenance
+
+Read evaluation.hypothesis_policy when available. A primary_knowledge_driven result
+was generated without previous ML-score feedback; this is an input-access policy,
+not independent validation or proof of biological novelty. Missing provenance is
+legacy/unclassified, never retroactively knowledge-only. Repeated exploration on
+the same dataset remains exploratory, even when AUC rises. Do not call a positive
+association causal or a negative SHAP value a harmful/unnecessary feature.
+
+Do not claim incremental value from comparing unrelated trials. Base, knowledge and
+evidence-enriched models require explicitly frozen feature sets, identical cohort,
+target, split identifiers and evaluation settings; report paired differences and
+uncertainty. Features suggested by prior results belong in a separately labelled
+refinement/ablation, never in a retroactively rewritten primary hypothesis. An
+untouched confirmatory dataset is required for independent validation. If no paired
+comparison or confirmatory evaluation exists, state that it was not performed.

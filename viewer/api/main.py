@@ -48,6 +48,7 @@ careful — verified: UPDATE and DELETE are refused.
 from __future__ import annotations
 
 import os
+import asyncio
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -62,7 +63,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 # this line are known about and intended" (this sys.path manipulation has to come
 # first).
 
-import queries  # noqa: E402
+import run_artifacts  # noqa: E402
 import scene  # noqa: E402
 import stores  # noqa: E402
 from db import pools  # noqa: E402
@@ -105,8 +106,13 @@ async def health() -> dict[str, Any]:
     # That is what stops "up, but cannot read the DB" from passing for healthy.
     # `definitions_from_pipeline` says whether stores.py imported the real pipeline
     # definitions (True) or is using the copied stand-in table (False).
-    await scene.list_runs()  # touches memstara
-    await scene._core_facts()  # touches core
+    async def probe(which: str, table: str):
+        async def read(conn):
+            await conn.fetchval(f"SELECT 1 FROM {table} LIMIT 1")
+        await pools.guarded(which, read, None)
+
+    await asyncio.gather(probe("memstara", "memstara_blackboard"),
+                         probe("core", "run_steps"))
     return {
         "health": pools.health.as_dict(),
         "definitions_from_pipeline": stores.IMPORTED_FROM_PIPELINE,
@@ -119,6 +125,35 @@ async def runs() -> dict[str, Any]:
     # this. The same list is inside snapshot too, but this is opened separately for
     # when only the selector needs refreshing.
     return {"runs": await scene.list_runs()}
+
+
+@app.get("/api/pipeline-results")
+async def pipeline_results(run_tags: str = Query(min_length=1, max_length=600)):
+    """Return every result for up to three explicitly selected executions."""
+    tags = list(dict.fromkeys(run_tags.split(",")))
+    if len(tags) > 3 or any(not tag for tag in tags):
+        raise HTTPException(400, "Choose one to three execution IDs")
+    try:
+        async with asyncio.timeout(4):
+            groups = await asyncio.gather(*(scene._results(tag) for tag in tags))
+            boards = await asyncio.gather(*(scene._board(tag) for tag in tags))
+            configs = await asyncio.to_thread(run_artifacts.configs)
+    except TimeoutError:
+        raise HTTPException(503, "Results temporarily unavailable; retain previous results") from None
+    if not pools.health.as_dict()["memstara"]["up"]:
+        raise HTTPException(503, "Results database is unavailable")
+    output = []
+    for tag, results in zip(tags, groups, strict=True):
+        config = configs.get(tag) or {}
+        for result in results:
+            output.append({**result, **run_artifacts.result_identity(config, tag, result["trial"])})
+    failures = []
+    for tag, tasks in zip(tags, boards, strict=True):
+        for task in tasks:
+            if task["status"] == "failed":
+                failures.append({key: task[key] for key in ("task_id", "trial", "task_type", "error")} |
+                                run_artifacts.result_identity(configs.get(tag) or {}, tag, task["trial"]))
+    return {"results": output, "failures": failures}
 
 
 @app.get("/api/snapshot")
@@ -139,18 +174,25 @@ async def task(task_id: int) -> dict[str, Any]:
     create_task / claim_task / submit_result carry the task id in their payloads, which
     is what lets them be strung back together.
     """
-    board = await scene._board("")
+    board = await scene._board("", task_id=task_id)
     # The empty string means "every run" (the `$1 = '' OR ...` in queries.BOARD). Why it
     # is not narrowed to one run: a task detail has to open straight from a link
     # whichever run it belongs to.
     found = next((t for t in board if t["task_id"] == task_id), None)
     if found is None:
+        if not pools.health.memstara:
+            raise HTTPException(
+                status_code=503,
+                detail="The Memstara database is unavailable; task existence could not be checked.",
+            )
         raise HTTPException(status_code=404, detail=f"task {task_id} is not on the board")
     # A task that does not exist is reported plainly as a **404**, not as an empty
     # shell. Show a blank screen and it cannot be told apart from "has the data not
     # arrived yet?".
 
-    core = await scene._core_facts()
+    artifacts = await asyncio.to_thread(run_artifacts.lookup, found["run_tag"])
+    run_ids = [call["run_id"] for call in (artifacts or {}).get("calls", []) if call.get("run_id")]
+    core = await scene._core_facts(run_ids, task_history=True)
     trail = [{
         # Through `stage_of_agent` / `label_of` rather than the dicts, so a hypothesis
         # agent carrying a playbook resolves to its stage and keeps its standard on the
@@ -190,7 +232,7 @@ async def result(result_id: int) -> dict[str, Any]:
         # also for "the query could not run" — `guarded` hands back the fallback either
         # way — so a database that is down would otherwise be reported to a person as a
         # result that does not exist. That is not a degraded answer, it is a wrong one.
-        # `/api/task` above does not draw this distinction yet.
+        # `/api/task` follows the same unavailable-versus-absent distinction.
         if not pools.health.memstara:
             raise HTTPException(
                 status_code=503,
@@ -199,3 +241,30 @@ async def result(result_id: int) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"no result {result_id}")
 
     return {"result": found, "health": pools.health.as_dict()}
+
+
+@app.get("/api/discovery/questions")
+async def discovery_questions(before: int = Query(default=0, ge=0)):
+    from discovery import question_list
+    return await question_list(before)
+
+
+@app.get("/api/discovery/questions/{question_id}")
+async def discovery_question(question_id: int):
+    from discovery import question_detail
+    return await question_detail(question_id)
+
+
+@app.get("/api/discovery/report")
+async def discovery_report(run_tag: str = Query(min_length=1, max_length=200)):
+    from discovery import run_report
+    return await run_report(run_tag)
+
+
+@app.get("/api/discovery/live")
+async def discovery_live(run_tags: str = Query(min_length=1, max_length=600)):
+    from discovery import live_outputs
+    tags = list(dict.fromkeys(run_tags.split(',')))
+    if len(tags) > 3 or any(not tag for tag in tags):
+        raise HTTPException(400, 'Choose one to three pipeline executions.')
+    return await live_outputs(tags)

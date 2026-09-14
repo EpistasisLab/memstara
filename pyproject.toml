@@ -96,6 +96,8 @@ dev = [
     # to be a faithful port of afc-forge rests on 31 upstream tests running unmodified —
     # an environment that cannot run them does not preserve that evidence.
     "pytest",
+    # Offline viewer API tests import FastAPI; match viewer/requirements.txt.
+    "fastapi==0.115.6",
     # The tool servers are child processes, so attaching a debugger to one needs this.
 
     "debugpy",

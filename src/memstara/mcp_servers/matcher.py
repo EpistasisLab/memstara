@@ -126,7 +126,9 @@ def match_concepts(
     Prefer this over `match_concept`: all the concepts are encoded in a single
     pass, so asking for ten costs about what asking for one costs.
 
-    Each result is a GROUP of candidates ranked by similarity. The top-ranked one
+    Medication names require an exact catalog name; similar drugs are not substitutes.
+    Classes, brands and synonyms need an explicit verified mapping. Other concepts
+    return a GROUP of candidates ranked by similarity. The top-ranked one
     is frequently NOT the column you want — read the whole group and pick by the
     column's name and clinical meaning.
 

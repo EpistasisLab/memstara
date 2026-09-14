@@ -156,6 +156,11 @@ FLAT_TEMP_TABLE = "DROP TABLE IF EXISTS flat; CREATE TEMP TABLE flat AS " + _FLA
 #: Kept as a name so the five queries still read `FLAT_CALLS + \"\"\"SELECT ...\"\"\"`, which
 #: is what says at each site that it depends on `flat` existing. It is empty because the
 #: table is now real rather than a CTE the query has to define for itself.
+SCOPED_FLAT_TEMP_TABLE = FLAT_TEMP_TABLE.replace(
+    "FROM run_steps s",
+    "FROM run_steps s JOIN selected_run_ids selected ON selected.id = s.run_id",
+)
+
 FLAT_CALLS = ""
 
 # --- Memstara's database ---------------------------------------------------- #
@@ -392,6 +397,11 @@ WHERE f.tool IN {_TOOLS_SQL}
   AND f.started_at > now() - ($1::text || ' seconds')::interval
 ORDER BY f.started_at
 """
+# Historical task details must retain completed calls outside the live-agent window.
+TASK_HISTORY = TASK_TOUCHES.replace(
+    "  AND f.started_at > now() - ($1::text || ' seconds')::interval", ""
+)
+
 
 # The most recent tool call per agent **run**, for "where is this character standing".
 #

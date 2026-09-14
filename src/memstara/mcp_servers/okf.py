@@ -613,7 +613,10 @@ def okf_list_domains() -> str:
     try:
         root = _bundle_root()          # the bundle location the env var points at
         docs, skipped = _load(root)
-    except OKFError as e:
+        locked = _locked_filter()
+        if locked:
+            docs = [doc for doc in docs if matches(doc.fields, locked)]
+    except (OKFError, ValueError) as e:
         # The bundle is not configured, and the like. Reported as JSON rather than
         # dying on an exception.
         return json.dumps({"error": str(e)})
@@ -657,9 +660,8 @@ def okf_list_domains() -> str:
 #: never forwards it to this child and the lock silently does not exist. That is how
 #: `MEMSTARA_DEBUGPY` failed once already (`src/memstara/env.py:116-118`).
 #:
-#: `okf_list_domains` is deliberately NOT confined: it returns counts and folder names,
-#: never a document's content, and a narrowed total there would misreport the bundle
-#: rather than protect anything.
+#: Listing, search and read describe the same confined corpus. Domain counts
+#: include only accessible documents; empty domains disappear under a lock.
 _LOCK_VAR = "MEMSTARA_OKF_FIELDS"
 
 
@@ -826,8 +828,7 @@ def okf_search(
     return json.dumps(out)
 
 
-@mcp.tool()
-def okf_read(refs: str, section: str = "", max_chars: int = 0) -> str:
+def _read_documents(refs: str, section: str = "", max_chars: int = 0) -> str:
     """Open one or several documents — whole, or one section of each.
 
     Every document in a Loremaster bundle is written in the same sections. Ask for the
@@ -934,6 +935,42 @@ def okf_read(refs: str, section: str = "", max_chars: int = 0) -> str:
     # default=str is the last safety net. Even with a value in the frontmatter that
     # JSON does not know, this turns it into text rather than blowing up wholesale.
     return json.dumps({"documents": out}, default=str)
+
+
+@mcp.tool()
+def okf_read(refs: str, section: str = "", max_chars: int = 0) -> str:
+    """Read OKF documents and persist failed references in this run's source audit.
+
+    Arguments and document response are identical to the reader. A configured run
+    records reference/status metadata only, never document bodies or patient data.
+    """
+    result = _read_documents(refs, section, max_chars)
+    config = os.environ.get("MEMSTARA_RUN_CONFIG", "")
+    if not config:
+        return result
+    payload = json.loads(result)
+    records = payload.get("documents", [payload])
+    audit = {
+        "tool": "okf_read", "refs": refs, "section": section,
+        "results": [{"ref": row.get("ref", refs), "id": row.get("id"),
+                     "status": "failed" if "error" in row else "read",
+                     "error": row.get("error")} for row in records],
+    }
+    try:
+        # One append syscall per event avoids interleaving between MCP processes.
+        # No retry loop: an audit failure is visible in the tool response.
+        path = pathlib.Path(config).resolve().parent / "knowledge_reads.jsonl"
+        event = (json.dumps(audit, ensure_ascii=True) + "\n").encode()
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            if os.write(fd, event) != len(event):
+                raise OSError("incomplete audit write")
+        finally:
+            os.close(fd)
+    except OSError:
+        payload["audit_error"] = "Knowledge read audit could not be saved; source verification is incomplete."
+        return json.dumps(payload)
+    return result
 
 
 if __name__ == "__main__":

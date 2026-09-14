@@ -107,6 +107,7 @@ DEFAULTS: dict[str, Any] = {
     "skill": "",
     "trials": 3,
     "waves": 1,
+    "continuous": False,
     "hypothesis_agents": 1,
     "interpret_agents": 1,
     "y_column": "outcome",
@@ -218,6 +219,10 @@ def build_argv(
     if not _MODEL.match(model):
         raise ValueError(f"model {model!r} is not a model identifier")
 
+    continuous = body.get("continuous", False)
+    if not isinstance(continuous, bool):
+        raise ValueError("continuous must be a boolean")
+
     trials = _whole_number(body, "trials", _MAX_TRIALS)
     waves = _whole_number(body, "waves", _MAX_WAVES)
     hypothesis_agents = _whole_number(body, "hypothesis_agents", _MAX_HYPOTHESIS_AGENTS)
@@ -287,6 +292,8 @@ def build_argv(
         "--model", model,
         "--skill", skill,
     ]
+    if continuous:
+        argv += ["--continuous"]
     for stage, book in chosen:
         argv += [f"--playbook-{stage}", book]
     if "evaluation" in body:

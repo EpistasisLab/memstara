@@ -53,25 +53,66 @@ def model_for(engine: str, seed: int, trial: int = 0):
     raise ValueError(f'Unsupported model: {engine}')
 
 
-def validate_clean_dataset(path: Path, target: str):
+def validate_clean_dataset(path: Path, target: str, *, allow_missing: bool = False):
     """Validate the MVP input contract without repairing or dropping any values."""
     import numpy as np
     import pandas as pd
-    df = pd.read_csv(path)
-    if target not in df or set(df[target].dropna().unique()) != {0, 1}:
-        raise DataQualityError('The target must contain both binary classes 0 and 1')
+    import csv
+    try:
+        with path.open(newline='', encoding='utf-8-sig') as stream:
+            headers = next(csv.reader(stream), [])
+        if not headers or any(not c.strip() for c in headers) or len(set(headers)) != len(headers):
+            raise DataQualityError('Dataset columns must have non-empty, unique names.')
+        df = pd.read_csv(path)
+    except (OSError, UnicodeError, pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
+        raise DataQualityError('Cannot read the configured dataset as CSV. Check the file and its format.') from exc
+    if target not in df:
+        raise DataQualityError('The selected target is not a column in the configured dataset.')
     if df[target].isna().any():
         raise DataQualityError('Target labels are missing; labels cannot be imputed')
+    if set(df[target].unique()) != {0, 1}:
+        raise DataQualityError('The target must contain both binary classes 0 and 1')
     if len(df.columns) < 2:
         raise DataQualityError('No predictor features are available')
-    if df.drop(columns=[target]).isna().any().any():
-        raise DataQualityError('AI-ready input required: missing predictor values must be resolved before upload. '
-                               'The MVP does not clean or impute data.')
+    missing = df.drop(columns=[target]).isna()
+    if missing.any().any() and not allow_missing:
+        raise DataQualityError(
+            f'AI-ready input required: {int(missing.sum().sum()):,} missing predictor values '
+            f'across {int(missing.any().sum()):,} columns. '
+            'The current policy rejects missing values and does not clean or impute data. '
+            'Choose XGBoost for native missing-value handling or provide a complete dataset; '
+            'no values or rows were changed.')
     numeric = df.select_dtypes(include='number')
-    if not np.isfinite(numeric.to_numpy(dtype=float)).all():
+    if np.isinf(numeric.to_numpy(dtype=float)).any():
         raise DataQualityError('AI-ready input required: non-finite values must be resolved before upload. '
                                'The MVP does not clean or impute data.')
     return df
+
+
+def evaluation_splits(y, plan: dict):
+    """Check every requested hold-out before fitting or provisioning paid agents."""
+    import numpy as np
+    from sklearn.model_selection import train_test_split
+    if y.value_counts().min() < 2:
+        raise DataQualityError('Each target class needs at least two samples for a stratified hold-out')
+    n_test = max(2, min(len(y) - 2, int(np.ceil(len(y) * plan['test_size']))))
+    splits = []
+    for rep in range(plan['replicates']):
+        seed = plan['seed'] + rep
+        if seed > 2147483647:
+            raise DataQualityError('Seed plus replicate index exceeds the supported random-state range.')
+        train, test = train_test_split(np.arange(len(y)), test_size=n_test, random_state=seed, stratify=y)
+        if y.iloc[train].nunique() < 2 or y.iloc[test].nunique() < 2:
+            raise DataQualityError('Stratified hold-out cannot represent both classes; '
+                                   'more minority samples or a different hold-out fraction are required')
+        splits.append((seed, train, test))
+    return splits
+
+
+def preflight(path: Path, target: str, plan: dict) -> None:
+    plan = validate(plan)
+    frame = validate_clean_dataset(path, target, allow_missing=plan['engine'] == 'xgboost')
+    evaluation_splits(frame[target], plan)
 
 
 def score(path: Path, target: str, plan: dict) -> dict:
@@ -79,14 +120,14 @@ def score(path: Path, target: str, plan: dict) -> dict:
     import sklearn
     from sklearn.inspection import permutation_importance
     from sklearn.metrics import roc_auc_score, average_precision_score, balanced_accuracy_score, confusion_matrix
-    from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
+    from sklearn.model_selection import StratifiedKFold, cross_val_score
     from sklearn.compose import ColumnTransformer
     from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
     began = time.time()
     plan = validate(plan)
-    df = validate_clean_dataset(path, target)
+    df = validate_clean_dataset(path, target, allow_missing=plan['engine'] == 'xgboost')
     X, y = df.drop(columns=[target]), df[target]
     if X.empty:
         raise DataQualityError('No predictor features are available')
@@ -101,21 +142,19 @@ def score(path: Path, target: str, plan: dict) -> dict:
                         'AUC alone is insufficient.')
     numeric = X.select_dtypes(include='number').columns.tolist()
     categorical = [c for c in X if c not in numeric]
-    missing_cells = 0
+    missing_cells = int(X.isna().sum().sum())
+    if missing_cells:
+        warnings.append('Missing numeric predictors are retained as NaN for XGBoost tree routing; '
+                        'categorical missingness is encoded as a category when observed in training. '
+                        'Missingness may reflect measurement practices; review before clinical interpretation.')
     if (X.nunique(dropna=True) <= 1).any():
         warnings.append('Some predictors are constant or entirely missing and provide little or no information.')
-    n_test = max(2, min(len(y) - 2, int(np.ceil(len(y) * plan['test_size']))))
     runs = []
     last = None
     # Replicates share their split across hypotheses; only feature sets change.
-    for rep in range(plan['replicates']):
-        seed = plan['seed'] + rep
-        train, test = train_test_split(np.arange(len(df)), test_size=n_test, random_state=seed, stratify=y)
-        if y.iloc[train].nunique() < 2 or y.iloc[test].nunique() < 2:
-            raise DataQualityError('Stratified hold-out cannot represent both classes; '
-                                   'more minority samples are required')
+    for seed, train, test in evaluation_splits(y, plan):
         pre = ColumnTransformer([
-            ('numeric', StandardScaler(), numeric),
+            ('numeric', 'passthrough' if plan['engine'] == 'xgboost' else StandardScaler(), numeric),
             ('categorical', OneHotEncoder(handle_unknown='ignore', sparse_output=False), categorical),
         ], verbose_feature_names_out=False)
         best, best_cv, best_params = None, None, None
@@ -228,9 +267,11 @@ def score(path: Path, target: str, plan: dict) -> dict:
               'feature_importance': importance, 'model': plan['engine'], 'seed': plan['seed'],
               'test_size': plan['test_size'], 'n_train': len(train), 'n_test': len(test),
               'data_quality': {'missing_predictor_cells': missing_cells,
+                               'missing_value_policy': 'native_xgboost' if plan['engine'] == 'xgboost' else 'reject',
                                'warnings': list(dict.fromkeys(warnings)),
                                'preprocessing': 'No cleaning or imputation. '
-                                                'Training-fold one-hot encoding and scaling only.',
+                                                'Training-fold one-hot encoding; numeric passthrough for XGBoost, '
+                                                'training-fold scaling for other models.',
                                'source_preserved': True, 'target_imputed': False},
               'evaluation': {'plan': plan, 'replicates': runs, 'sklearn_version': sklearn.__version__,
                              'dataset_sha256': hashlib.sha256(path.read_bytes()).hexdigest(),

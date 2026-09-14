@@ -130,7 +130,7 @@ def _pipeline_definitions() -> tuple[
                 "report": "memstara-board-report",
             },
             {"okf_list_domains", "okf_search", "okf_read",
-             "read_questions", "read_results", "propose_questions"},
+             "read_question_catalog", "propose_questions"},
         )
 
 
@@ -510,7 +510,8 @@ TOOL_STORE: dict[str, str] = {
     # same server, not the task board. Folded in on purpose for now; if the question
     # bank is ever worth its own place on screen, it needs PLACES here plus StoreId and
     # STORE_LABEL on the web side.
-    "read_questions": "board",
+    "read_questions": "board",  # Legacy trace lookup only.
+    "read_question_catalog": "board",
     "propose_questions": "board",
     # The hypothesis stage's one claim against the bank — the same third store as the
     # two above, drawn as the board for the same reason.
@@ -556,6 +557,6 @@ BOARD_WINDOWS: list[dict[str, str]] = [
     # questions instead of answering one. They are deliberately not in
     # `BOARD_TOOLS["hypothesis"]`, so `check_definitions.py` does not see them there —
     # the permission is per call, and this table is per tool.
-    {"tool": "read_questions",    "holder": "Hypothesis",      "store": "board"},
+    {"tool": "read_question_catalog", "holder": "Hypothesis",      "store": "board"},
     {"tool": "propose_questions", "holder": "Hypothesis",      "store": "board"},
 ]

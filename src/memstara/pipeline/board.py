@@ -42,7 +42,8 @@ Run::
 
  - Think of it as one laboratory
 
- There are five people, and one board on the wall.
+ There are five processing roles and one shared board; roles can have multiple workers.
+ Question writing is another call made by the hypothesis workers, not a curator agent.
 
    hypothesis    reads the papers and proposes "these variables look like the answer"
    data          cuts just those variables out of the original
@@ -62,7 +63,7 @@ Run::
 
  - What happens when this file is started
 
-   (1) call the five people          provision_board_agents()
+   (1) provision the configured agents          provision_board_agents()
        fetch the role description that says what kind of work each of them does.
        If it is the first time, write it fresh.
 
@@ -210,7 +211,8 @@ OUT_DIR = DEFAULT_OUTPUT_DIR
 # The stages that take work off the board, in the order a task passes through them.
 #
 #
-# There are five people but only three here. The two that are missing are missing for
+# There are five processing roles but only three queue consumers here.
+# Hypothesis and report are outside this queue for
 # **different reasons.**
 #
 #   ┌ why the hypothesis person is missing
@@ -255,9 +257,8 @@ POLL_SECONDS = 15
 #   hypothesis person and the reporter do not take sheets off the board, so there is
 #   never anything to look up for them.
 #
-#   For reference, four names can appear on a sheet on the board (TASK_TYPES in
-#   blackboard.py: hypothesis · data · ml · interpret). `hypothesis` is used only as a
-#   sheet's **first state** and moves straight on to `data`.
+#   TASK_TYPES contains data, ml and interpret. Hypothesis generation creates a
+#   data task directly; it never claims a hypothetical queue state.
 STAGE_TASK_TYPE = {"data": "data", "ml": "ml", "interpreter": "interpret"}
 
 
@@ -344,7 +345,7 @@ async def check_environment(provider: str = "", y_column: str = "") -> list[str]
 
     # Two databases, and they are not interchangeable. core keeps its agents and run
     # history in MOTORO_DATABASE_URL; the board and the results table live in Memstara's
-    # own server (MEMSTARA_DATABASE_URL, docker-compose.yml). Only the first is required
+    # own server (MEMSTARA_DATABASE_URL, compose.yml). Only the first is required
     # here — the second has a working default pointing at the compose container.
     #
     #   MOTORO_DATABASE_URL  : core's  — the people's role descriptions and run history (5453)
@@ -512,6 +513,9 @@ async def call_agent(
         flight — with two, the other one's append moves it. Returning it removes the
         assumption instead of documenting it.
     """
+    from memstara.pipeline.scientific_policy import check_primary_tools
+    check_primary_tools(stage, tools)
+
     # Overridden only if a temperature was given. None uses the agent's own default.
     overrides = {"temperature": temperature} if temperature is not None else None
 
@@ -1088,8 +1092,8 @@ async def questions_for_wave(
     Returns:
         ``(rows, recycled)``. `rows` is bank entries, newest first, at most `want`; an
         empty list means the caller should fall back to the built-in perspective list.
-        `recycled` is True when the call produced nothing new and this wave is about
-        to re-run questions the bank already had — the caller decides what that means.
+        `recycled` is True when the call produced nothing new. Previously banked
+        questions are never returned for execution.
         It is returned rather than only printed because the run is otherwise unable to
         tell "investigated something new" from "investigated the same thing again".
     """
@@ -1107,10 +1111,10 @@ async def questions_for_wave(
         f"Call propose_questions once, with origin_run='{run_tag}' and origin_wave={wave}. "
     )
     ask += (
-        "This is the first wave, so read_results has nothing yet — work from the corpus."
-        if wave == 0
-        else f"Call read_results with run_tag='{run_tag}' first and let those results "
-             "decide what is worth asking next."
+        "Generate a primary, knowledge-driven hypothesis using only KG/OKF evidence. "
+        "Use read_question_catalog only to avoid duplicate questions. Do not use previous "
+        "AUC, feature importance, successful features or failed features to choose the question. "
+        "Keep any evidence-informed refinement separate from this primary hypothesis."
     )
     # This is the first call of the wave to touch the corpus, and under a skill it is
     # reading one branch of it. Left unsaid, "work from the corpus" asks it to ground
@@ -1135,16 +1139,9 @@ async def questions_for_wave(
         # label's job is to say which of the two jobs a line is about, and the Log panel
         # is the one place a reader sees these strings.
         #
-        # **`agents["hypothesis"]` is the first hypothesis worker, deliberately, and a
-        # run with several standards writes its questions under the first one.** The
-        # answering half deals a standard per worker (`seed_one`), but the question bank
-        # is one bank: every worker claims out of it, so a question written under one
-        # standard is answered under all of them. Writing the wave's questions once,
-        # under a named standard, is at least a fact the run directory records. The
-        # alternatives are worse — asking every agent multiplies the cost of a step
-        # whose output is pooled anyway, and asking an agent with no standard means the
-        # only call that chooses what gets asked is the one call nobody set a standard
-        # for.
+        # Each configured hypothesis standard writes a share of the total budget.
+        # Writers execute concurrently; a budget smaller than the roster activates
+        # only the first `want` workers. This avoids multiplying question volume.
         writers = [(k, agent) for k, agent in agents.items() if k.startswith("hypothesis")]
         async def write_one(slot, key, agent):
             allocation = want // len(writers) + (slot < want % len(writers))
@@ -1173,16 +1170,11 @@ async def questions_for_wave(
     fresh = [q for q in rows if q["question_id"] not in known and q.get("origin_run") == run_tag
              and q.get("origin_wave") == wave]
 
-    # Falling back to already-banked questions when the call only produced duplicates
-    # keeps the wave running, and a repeat of a known question is still grounded in the
-    # corpus — which the built-in list is not.
-    #
-    # But it is reported upward as well as printed. Silently recycling is how a run that
-    # has nothing left to ask keeps spending money looking exactly like a run that is
-    # still making progress.
+    # Only questions created for this run and wave may be executed. An empty
+    # generation must not silently select questions saved by an earlier execution.
     if not fresh:
-        note("(no new questions — reusing what was already in the bank)")
-        return rows[:want], True
+        note("(no new questions — previously saved questions will not be reused)")
+        return [], True
     return fresh[:want], False
 
 
@@ -1327,19 +1319,20 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     print(f"   record dir  {run_dir}")
     print(f"   trace files {_TRACE_DIR.name}/  (one more each time a person is called)")
 
-    # -- (1) call the five people ----------------------------------------
+    # -- (1) provision the configured agents ----------------------------------------
     #
     # Fetch the role description that says what each of them does. If this is the first
     # time, write it. Running it again and again only finds the same people back; it
     # does not multiply them.
-    step("(1)", "call the five people", "fetch the role descriptions")
+    step("(1)", "provision the configured agents", "fetch the role descriptions")
     playbooks = chosen_playbooks(args)
-    # There are five people unless the hypothesis stage was given several standards, and
-    # then there is one hypothesis agent per standard. `workers` is the roster —
+    # The worker roster reflects the selected hypothesis and interpretation standards.
+    # `workers` is the roster —
     # provisioning builds the agents from it and `prompts.json` below is written from it.
-    workers = board_workers(playbooks)
+    workers = board_workers(playbooks, args.run_tag if args.pipeline_id else "")
     agents = await provision_board_agents(
-        provider=args.provider, model=args.model, playbooks=playbooks
+        provider=args.provider, model=args.model, playbooks=playbooks,
+        namespace=args.run_tag if args.pipeline_id else ""
     )
     done("(1)", f"{len(agents)} ready — {' · '.join(agents)}")
 
@@ -1498,18 +1491,20 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         dry_streak = 0
         waves_run = 0        # waves actually seeded. If it stops early this differs from args.waves
         seeded_total = 0     # hypothesis agents actually called. This number goes to the report agent
-        for wave in range(args.waves):
+        from memstara.pipeline.exploration import rounds, wait_for_new_questions, write_progress
+        async for wave in rounds(args.waves, args.continuous, run_dir):
+            write_progress(run_dir, wave + 1, "hypothesis")
             base = wave * args.trials          # trial numbers carry on across waves
-            if args.waves > 1:
-                print(f"\n{'─' * 68}\n wave {wave + 1}/{args.waves}\n{'─' * 68}")
+            if args.continuous or args.waves > 1:
+                print(f"\n{'─' * 68}\n round {wave + 1}/"
+                      f"{'continuous' if args.continuous else args.waves}\n{'─' * 68}")
 
             # -- (3') decide what to ask --------------------------------
             questions: list[dict] = []
             recycled = False
             if not args.no_curator:
                 step("(3')", "decide what to ask",
-                     "the question step reads the corpus"
-                     + ("" if wave == 0 else " and the previous wave's results")
+                     "the question step reads only knowledge evidence"
                      + f" and makes {args.trials} questions")
                 questions, recycled = await questions_for_wave(
                     registry, agents, by_stage,
@@ -1529,14 +1524,23 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             # has run dry pays for one more question call and not for a whole wave of
             # trials it has already done.
             dry_streak = dry_streak + 1 if recycled else 0
-            if args.stop_after_dry and dry_streak >= args.stop_after_dry:
+            dry_limit = 0 if args.continuous else args.stop_after_dry
+            if dry_limit and dry_streak >= dry_limit:
                 note(f"the questions have run dry — {dry_streak} waves in a row produced "
                      f"no new question. Stopping without starting wave "
                      f"{wave + 1}/{args.waves}")
                 break
+            if args.continuous and not questions and not args.no_curator:
+                note("No new grounded questions; waiting before exploring again. Stop remains available.")
+                await wait_for_new_questions(run_dir, dry_streak)
+                continue
             waves_run += 1
 
-            # If question generation was switched off or failed, fall back to the
+            if not questions and not args.no_curator:
+                note("No grounded primary question was produced; skipping this wave without a fallback hypothesis.")
+                continue
+
+            # If question generation was explicitly switched off, fall back to the
             # perspective list hard-coded here. It is a list that does not line up with the corpus, but that
             # is better than the run stopping.
             if not questions:
@@ -1735,7 +1739,16 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                  "stop it with Ctrl-C and the board is still there")
             rounds = 0
             while True:
-                state = await board_state(registry, args.run_tag)      # look at the board
+                state = await board_state(registry, args.run_tag)
+                current_tasks = [t for t in state["tasks"] if base <= t["trial"] < base + args.trials]
+                active = [t for t in current_tasks if t.get("status") == "in_progress"]
+                ready = [t for t in current_tasks if t.get("status") == "ready"]
+                observed = (active or ready)
+                current_stage = (observed[0]["task_type"] if observed else
+                                 "hypothesis" if not seed_task.done() else "report")
+                write_progress(run_dir, wave + 1,
+                               "interpreter" if current_stage == "interpret" else current_stage, current_tasks)
+                # Observe this run only.
                 counts, retried = summarise(state["tasks"])            # status · what came back
 
                 outcomes = await live_workers.completed()
@@ -1812,7 +1825,9 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                     # `interpreter` is the stage's name and `interpret` is the name on the
                     # sheet; the flag is spelled --interpret-agents, after the sheet, which
                     # is what STAGE_TASK_TYPE is for.
-                    for k in live_workers.available(stage, getattr(args, f"{ttype}_agents"), waiting):
+                    from memstara.interpretation_fanout import pending_slots
+                    eligible = pending_slots(state["tasks"]) if stage == "interpreter" else None
+                    for k in live_workers.available(stage, getattr(args, f"{ttype}_agents"), waiting, eligible):
                         # The worker's name. It goes in the prompt because the guard on the
                         # board compares names, and a name the agent was never given is a
                         # comparison that cannot fire — submit_result treats an empty
@@ -1867,6 +1882,25 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 note(f"(could not write the score into the question bank: {type(e).__name__})")
 
 
+            if args.continuous:
+                write_progress(run_dir, wave + 1, "report")
+                text, report_entry = await call_report(
+                    agents["report"],
+                    f"Write an interim report for run '{args.run_tag}'. Call read_results "
+                    f"with that run_tag. {seeded_total} trials were requested across "
+                    f"{waves_run} rounds. Exploration is ongoing. Identify missing and "
+                    "failed results explicitly. Rank useful hypotheses by evidence and "
+                    "limitations; interpretations are not independent experiments.",
+                    tools=by_stage["report"], registry=registry, stage="report",
+                )
+                report_saved = save_report(run_dir, text, report_entry)
+                wave_state = await board_state(registry, args.run_tag)
+                wave_tasks = [t for t in wave_state["tasks"] if base <= t["trial"] < base + args.trials]
+                successful = (report_saved and len(wave_tasks) >= len(questions) and bool(questions)
+                              and all(t["status"] == "done" for t in wave_tasks))
+                write_progress(run_dir, wave + 1, "report", wave_tasks, completed=successful)
+
+
         # -- report -----------------------------------------------------
         # -- (6) wrap up at the end -------------------------------------
         #
@@ -1892,8 +1926,11 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             f"Write the report for run '{args.run_tag}'. Call read_results with that run_tag. "
             f"{seeded_total} trials were seeded across {waves_run} wave(s)"
             + (f" (of {args.waves} requested; the run stopped early because the question "
-               f"bank ran dry)" if waves_run < args.waves else "")
+               f"bank ran dry)" if not args.continuous and waves_run < args.waves else "")
             + f". State how many of those {seeded_total} produced a result.{lost_note}"
+            + " Each result may contain several interpretations of ONE ML evaluation. "
+              "Compare all interpreter perspectives, including disagreement and unavailable interpretations. "
+              "Do not count interpretations as independent hypotheses or repeated ML experiments. "
             + report_skill_note(args.skill) + " Unfinished trials (report these explicitly): " + json.dumps(incomplete),
             tools=by_stage["report"], registry=registry, stage="report",
         )
@@ -2040,19 +2077,28 @@ async def give_up_on(task_ids: list[int]) -> list[int]:
     # the caretaker's job, not a button to hand to an agent.
     conn = await asyncpg.connect(dsn())
     try:
-        rows = await conn.fetch(
-            """
-            UPDATE memstara_blackboard
-               SET status = 'failed',
-                   error  = CASE WHEN error = '' THEN 'gave up: too many retries'
-                                 ELSE error END,
-                   updated_at = now()
-             WHERE task_id = ANY($1::bigint[])
-               AND status IN ('ready', 'in_progress')
-         RETURNING trial
-            """,
-            task_ids,
-        )
+        async with conn.transaction():
+            from memstara.interpretation_fanout import aggregate
+            parents = await conn.fetch("SELECT DISTINCT evaluation->'interpretation_branch'->>'source_task_id' AS id "
+                                       "FROM memstara_blackboard WHERE task_id=ANY($1::bigint[]) "
+                                       "AND evaluation ? 'interpretation_branch'", task_ids)
+            for parent in sorted(int(p['id']) for p in parents):
+                await conn.execute('SELECT pg_advisory_xact_lock(72331, $1::integer)', parent)
+            rows = await conn.fetch(
+                """
+                UPDATE memstara_blackboard
+                   SET status = 'failed',
+                       error  = CASE WHEN error = '' THEN 'gave up: too many retries'
+                                     ELSE error END,
+                       updated_at = now()
+                 WHERE task_id = ANY($1::bigint[])
+                   AND status IN ('ready', 'in_progress')
+             RETURNING trial
+                """,
+                task_ids,
+            )
+            for parent in parents:
+                await aggregate(conn, int(parent['id']))
     finally:
         await conn.close()
     return [r["trial"] for r in rows]
@@ -2088,9 +2134,13 @@ async def main() -> int:
     load_env()
 
     ap = argparse.ArgumentParser()
+    ap.add_argument("--pipeline-id", default="")
+    ap.add_argument("--pipeline-name", default="")
     ap.add_argument("--evaluation", default="{}")
     ap.add_argument("--question", default="")
     ap.add_argument("--trials", type=int, default=3, help="how many hypotheses to seed per wave")
+    ap.add_argument("--continuous", action="store_true",
+                    help="repeat rounds until stopped or the question bank runs dry")
     ap.add_argument("--waves", type=int, default=1,
                     help="how many question-then-investigate rounds; wave 2 onward reads "
                          "the results of the one before it. This is a ceiling, not a "
@@ -2292,7 +2342,8 @@ async def main() -> int:
     if not (run_dir / "control_record.json").exists():
         save_record({"run_tag": args.run_tag, "run_dir": str(run_dir.resolve()), "skill": args.skill,
                      "pid": os.getpid(), "started": started.isoformat(timespec="seconds"),
-                     "process_identity": identity(os.getpid()), "report_only": args.report_only})
+                     "process_identity": identity(os.getpid()), "report_only": args.report_only,
+                     "pipeline_id": args.pipeline_id or None})
 
     # Whatever is printed to the screen is left in console.log as well.
     with tee_console(run_dir / "console.log"):
