@@ -82,7 +82,7 @@ class Settings(CoreSettings):
     # Only this one server needs it; the other three never read it.
     #
     # Note what is NOT here: `MOTORO_DATABASE_URL`. The board has its own database now
-    # (docker-compose.yml), and core's credentials have no business reaching a server
+    # (compose.yml), and core's credentials have no business reaching a server
     # of ours. Passing them once is how the board ended up inside core's database.
     #
     # The last two are for debugging and carry no secret. A tool server runs as a child

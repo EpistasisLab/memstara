@@ -87,36 +87,36 @@ __pycache__/
 *_KR*
 
 # ---------------------------------------------------------------------------
-# The three Korean files that could not be renamed. Local only, as of 2026-09-02.
+# Three historical local-only paths, retained after English translation.
 #
-# The `*_KR*` rule above works by filename, and these three cannot take that
-# name. They are listed by path instead, one line each, because the reason is
-# different for every one of them and a pattern would hide that.
+# On 2026-09-10 the user requested English content in every non-KR project
+# file, including ignored scripts. build_deck.py and memo.md were translated;
+# backlog_to_issues.py was already English. Language is no longer an exception.
 #
-
-#       Builds the Korean slide deck. Its Korean is slide copy inside string
-#       literals — being Korean is what the file is *for*. Renaming a `.py` to
-#       `*_KR*` would gitignore an executable under a rule meant for prose.
-#
-
-#       Opens with the original memo, transcribed exactly as it was written.
-#       Translating it would make it stop being the original.
-#
-#   scripts/backlog_to_issues.py
-#       Two comment lines quote that memo verbatim (`FOLD_IDS`). **This is the
-#       expensive one**: the repository now does not contain the script that
-
-#       reproduce the board. It was excluded on instruction, and the cheap way
-#       back is to rewrite those two lines as a citation rather than a quotation
-#       and track the file again.
+# Original Korean copies are build_deck_KR.py and memo_original_KR.md and
+# remain excluded by the *_KR* rule. The English builder emits an EN deck.
+# These explicit ignore entries remain unchanged because publication was
+# not requested. scripts/check_citations.py retains the matching LOCAL_ONLY
+# paths, whose descriptions now reflect the current language.
 #
 
-
-# tree, not the index. What is lost is that neither is checked any more —
-# `scripts/check_citations.py` indexes `git ls-files`, so citations *inside*
-# these three stop being verified, and citations *into* them are reported as
-# not verifiable here, by name (`LOCAL_ONLY`).
+# memo, not an executable task list or an active manifest source.
 # ---------------------------------------------------------------------------
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
 
 
 scripts/backlog_to_issues.py

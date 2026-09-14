@@ -8,21 +8,21 @@ Before it, fourteen modules each worked out where they were with
 .. repair-citations: off
 
 **The paths below are the pre-restructure ones** — they are the record of what was
-consolidated, not somewhere to go and look now. Read them at `2ff414d`, the commit
-before the move; every one of these files lives under `src/memstara/` today and none
+consolidated, not somewhere to go and look now. The old record cited `2ff414d`, which
+is no longer available in this checkout; these modules now live under `src/memstara/` and none
 of them still computes its own paths::
 
-    logging_setup.py:35-36   outputs/logs, outputs/runs
-    tools_data.py:61         outputs/
-    tools_ml.py:64           outputs/
-    make_sample_data.py:78   outputs/
-    matcher_impl/config.py:87  outputs/
-    prep_nhanes.py:74        outputs/
-    prep_hiv_dataset.py:70-71  ../shared/..., outputs/
-    trace_run.py:78          outputs/todo_rows.json
-    bootstrap.py:61-64       .env and ../motoro/.env
-    02_mvp_pipeline.py:419-420, 03_board_pipeline.py:1548-1549,
-    debug_harness.py:46-47, preflight.py:68   the same two `.env` files again
+    logging_setup.py (former lines 35-36)   outputs/logs, outputs/runs
+    tools_data.py (former lines 61)         outputs/
+    tools_ml.py (former lines 64)           outputs/
+    make_sample_data.py (former lines 78)   outputs/
+    matcher_impl/config.py (former lines 87)  outputs/
+    prep_nhanes.py (former lines 74)        outputs/
+    prep_hiv_dataset.py (former lines 70-71)  ../shared/..., outputs/
+    trace_run.py (former lines 78)          outputs/todo_rows.json
+    bootstrap.py (former lines 61-64)       .env and ../motoro/.env
+    02_mvp_pipeline.py (former lines 419-420), 03_board_pipeline.py (former lines 1548-1549),
+    debug_harness.py (former lines 46-47), preflight.py (former lines 68)   the same two `.env` files again
 
 .. repair-citations: on
 
