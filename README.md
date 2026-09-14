@@ -172,8 +172,16 @@ outputs/               datasets, OKF bundles, run records — never committed
 
 ## Setup
 
+**Existing host (2026-09-10):** do not run upstream Motoro Compose to recover services.
+Installed Compose v2.10.2 cannot parse it, and the running database uses the legacy
+`agentic_core_postgres_data` volume. Use `python -m memstara.infra` to inspect, or
+`python -m memstara.infra --start-existing` to start only validated existing containers.
+
+The Compose command below provisions **only Memstara PostgreSQL**, not Motoro or Redis.
+For first-time setup only; do not overwrite an existing `.env`.
+
 ```bash
-# 1) Infrastructure — postgres, redis, schema applied
+# 1) Memstara PostgreSQL only — Motoro/Redis need separate setup
 cp .env.example .env          # then fill in an API key
 docker compose up -d
 
