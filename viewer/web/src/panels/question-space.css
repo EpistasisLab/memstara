@@ -77,3 +77,23 @@
 .interpretation-voices article { border-left:2px solid #ac8fc7; padding:6px 0 6px 22px; }.interpretation-voices article header { display:flex; align-items:center; gap:10px; font-size:13px; margin:10px 0 20px; }
 @container (max-width:600px) { .model-lens { grid-template-columns:1fr; padding:18px; }.model-dial { max-width:270px; }.atlas-map { grid-template-columns:minmax(0,1fr) 25px minmax(85px,.5fr); }.atlas-bridge::before { right:12px; }.atlas-bridge span { left:13px; }.feature-atlas { padding:12px; }.atlas-target { padding:15px 8px; }.atlas-target strong { font-size:13px; }.atlas-inputs button { padding:8px; gap:5px; font-size:13px; }.atlas-inputs svg { display:none; }.atlas-header { font-size:13px; } }
 @container (min-width:760px) { .space-surface { height:clamp(620px,70vh,780px); }.space-question-core { background:radial-gradient(ellipse,rgb(var(--paper) / .97) 45%,rgb(var(--paper) / 0) 74%); padding:18px 0; } }
+
+/* The GPU scene and the accessible labels share one perspective camera. */
+.space-surface { background:radial-gradient(ellipse at 32% 43%,rgb(118 155 200 / .12),transparent 48%),radial-gradient(ellipse at 73% 56%,rgb(172 143 199 / .12),transparent 50%),radial-gradient(ellipse at 49% 78%,rgb(113 174 158 / .08),transparent 60%); }
+.space-surface::after { content:''; pointer-events:none; position:absolute; inset:0; border-radius:inherit; box-shadow:inset 0 0 100px 25px rgb(var(--paper) / .35); }
+.space-surface:focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:-3px; }
+.space-surface .space-gpu { pointer-events:none; }
+.space-overlay-canvas { pointer-events:none; }
+.space-label { backdrop-filter:blur(8px); border:1px solid rgb(var(--line) / .5); border-left:2px solid var(--question-color); border-radius:8px; padding:5px 9px; box-shadow:0 4px 16px rgb(0 0 0 / .06); }
+.space-label:hover,.space-label:focus-visible { border-radius:8px; }
+.space-guide { z-index:1; max-width:80%; }
+.space-guide h2 { font-size:clamp(20px,2.5vw,32px); font-weight:550; }
+.space-guide p { max-width:360px; }
+.space-coordinate { z-index:2; pointer-events:none; }
+.space-controls > div { flex-wrap:wrap; }
+.space-controls button { width:36px; height:36px; }
+.question-space:fullscreen { display:flex; flex-direction:column; width:100vw; height:100dvh; background:rgb(var(--paper)); padding:0; overflow:auto; }
+.question-space:fullscreen .space-surface { flex:1 0 auto; height:calc(100dvh - 110px); }
+.question-space:fullscreen .space-controls { flex-shrink:0; }
+@container (max-width:759px) { .question-space.is-focused:fullscreen .space-surface { height:auto; } }
+@media(prefers-reduced-motion:reduce) { .space-surface::after { transition:none; } }

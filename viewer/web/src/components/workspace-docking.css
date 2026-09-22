@@ -1,0 +1,35 @@
+/* Readable dock slots: insufficient height scrolls the workspace, not the diagram. */
+.window-workspace-shell:has(.docked-workspace) { height:100dvh; min-height:0; overflow:hidden; }
+.docked-workspace.window-workspace { display:block; overflow:auto; overscroll-behavior:contain; min-height:0; flex:1; }
+.workspace-surface { position:relative; width:100%; min-width:0; }
+.docked-workspace .floating-window { position:absolute; min-height:0; max-height:none; }
+.docked-workspace .floating-window[hidden] { display:none !important; }
+.workspace-evidence-bar { position:absolute; display:flex; align-items:center; justify-content:space-between; gap:8px; height:36px; min-width:0; }
+.workspace-evidence-bar [role=tablist] { display:flex; gap:4px; min-width:0; overflow:auto; }
+.workspace-evidence-bar [role=tab] { white-space:nowrap; min-height:32px; border-radius:7px; padding:6px 10px; font-size:13px; color:rgb(var(--ink-soft)); }
+.workspace-evidence-bar [aria-selected=true] { background:rgb(var(--accent) / .1); color:rgb(var(--accent)); font-weight:650; }
+.workspace-split-handle { touch-action:none; flex-shrink:0; cursor:ns-resize; font-size:12px; padding:6px; color:rgb(var(--ink-soft)); }
+.workspace-evidence-bar button:focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:-2px; }
+.docked-workspace .window-titlebar { height:36px; }
+.docked-workspace .window-titlebar button { min-width:28px; min-height:28px; }
+@media(max-width:1023px) {
+ .docked-workspace .floating-window { position:absolute; left:var(--dock-x) !important; top:var(--dock-y) !important; width:var(--dock-w) !important; height:var(--dock-h) !important; max-height:none !important; }
+ .docked-workspace #workspace-control .window-content { max-height:none; overflow:auto; }
+}
+@media(max-width:759px) {
+ .workspace-split-handle { font-size:0; width:28px; }
+ .workspace-split-handle::after { content:"↕"; font-size:18px; }
+ .workspace-evidence-bar [role=tab] { padding-inline:8px; font-size:12px; }
+}
+@media(max-width:1023px) {
+ .docked-workspace #workspace-pipeline, .docked-workspace #workspace-control,
+ .docked-workspace #workspace-feed, .docked-workspace #workspace-results, .docked-workspace #workspace-report {
+   height:var(--dock-h) !important; max-height:none !important;
+ }
+}
+.docked-workspace .window-titlebar button { display:inline-grid; place-items:center; }
+.docked-workspace .window-titlebar > span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.docked-workspace .window-titlebar { min-height:40px; height:40px; padding:4px 10px; }
+@media(min-width:760px) {
+ .docked-workspace #workspace-control { position:sticky !important; top:0 !important; }
+}

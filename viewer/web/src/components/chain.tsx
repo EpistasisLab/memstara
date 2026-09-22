@@ -1,3 +1,4 @@
+import { agentStageLabel } from "../lib/stage";
 import KnowledgeNode from "./KnowledgeNode";
 import PipelineStage from "./PipelineStage";
 import Help from "./Help";
@@ -123,8 +124,8 @@ export function ChainNode({ data }: NodeProps) {
           className="nodrag nopan absolute -right-2 -top-2 flex h-7 w-7 items-center
                      justify-center rounded-full border border-paper-line bg-white
                      text-ink-faint shadow-sm hover:border-ink hover:text-ink"
-          aria-label={`Remove ${agent.stage} ${agent.slot + 1}`}
-          title={`Remove this ${agent.stage} and its skill from the next run`}
+          aria-label={`Remove ${agentStageLabel(agent.stage)} ${agent.slot + 1}`}
+          title={`Remove this ${agentStageLabel(agent.stage)} and its skill from the next run`}
         >
           <X className="h-3 w-3" strokeWidth={2.4} />
         </button>
@@ -155,7 +156,7 @@ export function ChainNode({ data }: NodeProps) {
           {/* The label gets about 108px here (w-[280px], less the padding, the border, the
               32px glyph and the gap), which is roughly 15 characters at this size. A
               longer one is cut with an ellipsis and nothing is raised anywhere, so the
-              `title` is what keeps that from being silent. "Report · Insight" is the
+              `title` is what keeps that from being silent. "Explanation" is the
               longest label there is and sits near that limit; whether it actually clips
               has not been measured. */}
           <div className="break-words text-base font-bold leading-snug" title={agent.label}>
@@ -178,23 +179,6 @@ export function ChainNode({ data }: NodeProps) {
       <div className={`mt-2 flex items-center gap-1.5 text-xs font-bold ${tone.text}`}>
         <StateGlyph className={`h-3.5 w-3.5 shrink-0 ${busy && !reducedMotion ? "animate-spin" : ""}`} strokeWidth={2.2} />
         <Help topic={STATE_LABEL[agent.state]}><span tabIndex={0} className="cursor-help truncate">{STATE_LABEL[agent.state]}</span></Help>
-        {/* How many workers this **one card** stands for, which is only ever more than one
-            at a folded station. The hypothesis station is not folded — it gets a card per
-            worker — so this badge now appears exactly where a stage is running several and
-            drawing one, which is the case that would otherwise be invisible.
-
-            Read off `agent.running` rather than off a count of cards. Those are different
-            numbers and the difference is the whole point: `--data-agents 2` sends one
-            figure with `running: 2`, so counting cards would say 1 and say it silently.
-            Until 2026-09-09 this badge was fed by the card count and therefore never fired
-            for any folded stage at all — the one place it was needed. */}
-        {agent.running > 1 && (
-          <span className="shrink-0 rounded-full px-1.5 font-mono text-xs font-bold"
-                style={{ backgroundColor: `color-mix(in srgb, ${color} 13%, transparent)`, color }}
-                title={`${agent.running} workers of this stage, drawn as one`}>
-            x{agent.running}
-          </span>
-        )}
         {/* Elapsed time is what separates "working" from "wedged". Without it a stuck run
             and a healthy one look identical for as long as anyone cares to watch. */}
         {elapsed && <span className="ml-auto shrink-0 font-mono font-normal">{elapsed}</span>}
@@ -310,13 +294,13 @@ export function ChainAddNode({ data }: NodeProps) {
                  text-xs font-bold text-ink-faint transition hover:border-ink-faint
                  hover:text-ink disabled:cursor-not-allowed disabled:opacity-60
                  disabled:hover:border-paper-line disabled:hover:text-ink-faint"
-      aria-label={`Add ${stage} agent`}
+      aria-label={`Add ${agentStageLabel(stage)} agent`}
       title={atCeiling
-        ? `Maximum of ${maximum} ${stage} agents reached.`
-        : `Add a ${stage} agent with a different skill to the next run`}
+        ? `Maximum of ${maximum} ${agentStageLabel(stage)} agents reached.`
+        : `Add a ${agentStageLabel(stage)} agent with a different skill to the next run`}
     >
       <Plus className="h-3.5 w-3.5" strokeWidth={2.4} style={atCeiling ? undefined : { color }} />
-      {atCeiling ? `${stage} agents · max ${maximum}` : `${stage} agent`}
+      {atCeiling ? `${agentStageLabel(stage)} agents · max ${maximum}` : `${agentStageLabel(stage)} agent`}
     </button>
   );
 }

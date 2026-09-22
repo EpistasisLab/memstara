@@ -1,3 +1,5 @@
+import DetailPreview from "../components/DetailPreview";
+import { agentDisplayName, TOOL_ACTIONS } from "../lib/telemetry";
 import { createColumnHelper } from "@tanstack/react-table";
 import { CircleSlash, ArrowRight } from "lucide-react";
 import { useMemo } from "react";
@@ -28,13 +30,13 @@ const COLUMNS = [
           className="h-2.5 w-2.5 rounded-full"
           style={{ backgroundColor: STAGE_COLOR[c.row.original.agent as StageId] ?? "#c9c7c1" }}
         />
-        {c.getValue()}
+        <DetailPreview title="Agent" text={c.getValue()}><span tabIndex={0}>{agentDisplayName(c.getValue())}</span></DetailPreview>
       </span>
     ),
   }),
-  col.accessor("tool", { header: "Window / tool", cell: (c) => <span className="font-mono text-xs">{c.getValue()}</span> }),
+  col.accessor("tool", { header: "Action / tool", cell: (c) => <details><DetailPreview title="Tool action" text={`${TOOL_ACTIONS[c.getValue()] ?? c.getValue()}. Tool identifier: ${c.getValue()}`}><summary className="cursor-pointer">{TOOL_ACTIONS[c.getValue()] ?? c.getValue()}</summary></DetailPreview><code className="mt-2 block break-all text-xs">{c.getValue()}</code></details> }),
   col.accessor("server", { header: "Server", cell: (c) => <span className="font-mono text-xs text-ink-faint">{c.getValue()}</span> }),
-  col.accessor("store", { header: "Store", cell: (c) => STORE_LABEL[c.getValue()] }),
+  col.accessor("store", { header: "Resource", cell: (c) => STORE_LABEL[c.getValue()] }),
   col.accessor("calls", { header: "Calls", meta: { align: "right" }, cell: (c) => <span className="font-bold">{c.getValue()}</span> }),
 ];
 
@@ -56,10 +58,10 @@ export default function AccessTab() {
 
   return (
     <div className="space-y-8 p-6">
-      <section className="grid grid-cols-3 gap-6">
-        <div className="col-span-2">
-          <h2 className="mb-3 text-sm font-bold">The board&apos;s six windows — who uses them</h2>
-          <div className="grid grid-cols-2 gap-2">
+      <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-2">
+          <h2 className="mb-3 text-sm font-bold">Task coordination tools — who uses them</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {access.windows.map((w) => (
               <div
                 key={w.tool}
@@ -87,11 +89,11 @@ export default function AccessTab() {
         </div>
 
         <div>
-          <h2 className="mb-3 text-sm font-bold">Access by store</h2>
+          <h2 className="mb-3 text-sm font-bold">Calls by resource</h2>
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={byStore} layout="vertical" margin={{ left: 8, right: 24 }}>
               <XAxis type="number" hide />
-              <YAxis type="category" dataKey="label" width={64} tickLine={false} axisLine={false}
+              <YAxis type="category" dataKey="label" width={115} tickLine={false} axisLine={false}
                      tick={{ fontSize: 12 }} />
               <Tooltip formatter={(v) => [`${Number(v)} calls`, "Calls"]} />
               <Bar dataKey="calls" radius={[0, 4, 4, 0]} isAnimationActive={false}>
@@ -105,9 +107,9 @@ export default function AccessTab() {
       </section>
 
       {[
-        { rows: board, title: "Board path", sub: "03_board_pipeline.py" },
-        { rows: supervisor, title: "Supervisor path", sub: "02_mvp_pipeline.py" },
-      ].map((g) => (
+        { rows: board, title: "Pipeline agent calls", sub: "Shared task coordination" },
+        { rows: supervisor, title: "Supervisor agent calls", sub: "Legacy orchestration" },
+      ].filter(g => g.rows.length > 0).map((g) => (
         <section key={g.title}>
           <h2 className="mb-3 flex items-baseline gap-2 text-sm font-bold">
             {g.title}

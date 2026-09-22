@@ -1,3 +1,4 @@
+import { cleanLog } from "../lib/telemetry";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "../lib/cn";
 
@@ -15,7 +16,7 @@ import { cn } from "../lib/cn";
  * one that does not move at all.
  */
 
-type LogKind = "step" | "done" | "note" | "lap" | "plain";
+type LogKind = "step" | "done" | "note" | "lap" | "plain" | "error";
 
 /**
  * Which of the driver's printed shapes a line is.
@@ -31,6 +32,7 @@ type LogKind = "step" | "done" | "note" | "lap" | "plain";
  * not need seventy more characters to be findable.
  */
 function kindOf(line: string): LogKind | null {
+  if (/\b(error|failed|exception|traceback)\b/i.test(line)) return "error";
   if (/^=+$/.test(line.trimEnd())) return null;
   if (/^\s\(\d+'?\)\s/.test(line)) return "step";
   if (/^\s{3}✓/.test(line)) return "done";
@@ -40,6 +42,7 @@ function kindOf(line: string): LogKind | null {
 }
 
 const KIND_CLASS: Record<LogKind, string> = {
+  error: "font-semibold text-red-600",
   step: "mt-3 border-t border-paper-line pt-2 font-bold text-ink",
   done: "font-bold text-emerald-700",
   note: "text-ink-soft",
@@ -59,6 +62,8 @@ export interface RunLogProps {
 export default function RunLog({ lines, skipped, tail }: RunLogProps) {
   const box = useRef<HTMLDivElement>(null);
   const [following, setFollowing] = useState(true);
+  const [showPolling, setShowPolling] = useState(false);
+  const pollingCount = lines.filter(line => kindOf(cleanLog(line)) === "lap").length;
 
   // `useLayoutEffect`, not `useEffect`: the scroll has to happen in the same frame the
   // new lines are painted, or the transcript visibly jumps on every poll.
@@ -79,8 +84,9 @@ export default function RunLog({ lines, skipped, tail }: RunLogProps) {
   }, []);
 
   return (
-    <div className="relative h-full">
-      <div ref={box} className="h-full overflow-auto bg-ink/[0.02] px-3 py-2">
+    <div className="relative flex h-full min-h-0 flex-col">
+      <label className="flex items-center gap-2 border-b border-paper-line px-3 py-2 text-xs text-ink-soft"><input type="checkbox" checked={showPolling} onChange={e => setShowPolling(e.target.checked)} />Show routine polling messages ({pollingCount}{showPolling ? " shown" : " hidden"})</label>
+      <div ref={box} className="min-h-0 flex-1 overflow-auto bg-ink/[0.02] px-3 py-2">
         {skipped > 0 && (
           <div className="mb-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1
                           text-[12px] font-bold text-amber-800">
@@ -93,9 +99,10 @@ export default function RunLog({ lines, skipped, tail }: RunLogProps) {
           <div className="py-6 text-[12px] text-ink-faint">Nothing has been printed yet.</div>
         ) : (
           <pre className="whitespace-pre-wrap break-words font-mono text-[12px] leading-[1.45]">
-            {lines.map((line, i) => {
+            {lines.map((raw, i) => {
+              const line = cleanLog(raw);
               const kind = kindOf(line);
-              if (kind === null) return null;
+              if (kind === null || (kind === "lap" && !showPolling)) return null;
               return (
                 <div key={`${i}-${line}`} className={KIND_CLASS[kind]}>
                   {line || " "}
@@ -104,7 +111,7 @@ export default function RunLog({ lines, skipped, tail }: RunLogProps) {
             })}
             {/* The half-written line, kept apart so it is never mistaken for a finished
                 one and never classified — its shape is not decided yet. */}
-            {tail && <div className="text-ink-faint opacity-60">{tail}</div>}
+            {tail && <div className="text-ink-faint opacity-60">{cleanLog(tail)}</div>}
           </pre>
         )}
       </div>

@@ -4,7 +4,8 @@ export function pointForId(id: number): Point3 {
   const hash = (n: number) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
   const y = hash(id) * 1.8 - .9, a = hash(id + 999) * Math.PI * 2;
   const r = Math.sqrt(1 - y * y);
-  return { x: r * Math.cos(a), y, z: r * Math.sin(a) };
+  const shell = .65 + hash(id + 2026) * .45;
+  return { x: r * Math.cos(a) * shell, y: y * shell, z: r * Math.sin(a) * shell };
 }
 export function cameraForPoint(p: Point3): Camera {
   return { yaw: -Math.atan2(p.x, p.z), pitch: Math.atan2(p.y, Math.hypot(p.x, p.z)), zoom: 1.22 };

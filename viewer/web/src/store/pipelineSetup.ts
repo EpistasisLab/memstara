@@ -6,7 +6,7 @@ export const setupStages = ['hypothesis', 'ml', 'interpreter', 'report'] as cons
 export type SetupStage = typeof setupStages[number];
 type Review = { paused: boolean; confirmed: Partial<Record<SetupStage, string>> };
 export function skillSignature(config: RunRequest, stage: SetupStage) {
-  return JSON.stringify([config[`playbook_${stage}`], stage === 'ml' ? config.evaluation : null]);
+  return JSON.stringify([config[`playbook_${stage === "report" ? "explanation" : stage}`], stage === 'ml' ? config.evaluation : null]);
 }
 export const usePipelineSetup = create(persist<{
   reviews: Record<string, Review>;

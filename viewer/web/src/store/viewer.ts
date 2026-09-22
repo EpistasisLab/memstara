@@ -1,3 +1,5 @@
+import { useContext } from 'react';
+import { SnapshotScope } from '../lib/SnapshotScope';
 import { create } from "zustand";
 import type { Snapshot } from "../types";
 
@@ -56,11 +58,9 @@ interface ViewerState {
    *  place the run's shape — trials, and the stages inside them — is drawn, and a panel
    *  nobody knows to switch on may as well not exist. It is closable because three
    *  columns plus the main area is a lot of width to spend on a laptop. */
-  navOpen: boolean;
 
   setView: (v: ViewId) => void;
   toggleRail: () => void;
-  toggleNav: () => void;
   setRunTag: (t: string | null) => void;
   selectTask: (id: number | null) => void;
   selectAgent: (id: string | null) => void;
@@ -96,14 +96,12 @@ export const useViewer = create<ViewerState>((set, get) => ({
   ticks: 0,
   fetchedAt: null,
   railCollapsed: false,
-  navOpen: true,
 
   setView: (view) => {
     try { localStorage.setItem("memstara-workspace-v1", view === "clinician" ? "clinician" : "research"); } catch { /* Session still works. */ }
     set({ view });
   },
   toggleRail: () => set((s) => ({ railCollapsed: !s.railCollapsed })),
-  toggleNav: () => set((s) => ({ navOpen: !s.navOpen })),
   setRunTag: (runTag) => {
     try { localStorage.setItem(SELECTION_KEY, JSON.stringify({ runTag })); } catch { /* Session still works. */ }
     set({
@@ -132,7 +130,7 @@ export const useViewer = create<ViewerState>((set, get) => ({
       if (inFlight) return;
       inFlight = true;
       try {
-        const response = await fetch("/api/runs", { signal: AbortSignal.timeout(5000) });
+        const response = await fetch("/api/runs", { signal: AbortSignal.timeout(10000) });
         if (response.ok) set({ knownRuns: (await response.json()).runs ?? [] });
       } catch { /* Retain the last run index; the draft does not depend on the API. */ }
       finally { inFlight = false; }
@@ -154,7 +152,7 @@ export const useViewer = create<ViewerState>((set, get) => ({
       // report `signal timed out`. Once the tag is known, the normal scoped snapshot is
       // both smaller and independently cacheable.
       if (!askedFor) {
-        const runsRes = await fetch("/api/runs", { signal: AbortSignal.timeout(5000) });
+        const runsRes = await fetch("/api/runs", { signal: AbortSignal.timeout(10000) });
         if (!runsRes.ok) throw new Error(`${runsRes.status} ${runsRes.statusText}`);
         const runs = (await runsRes.json()).runs as Array<{ run_tag?: string }>;
         if (get().newRunMode || get().runTag !== askedFor) return;
@@ -170,7 +168,7 @@ export const useViewer = create<ViewerState>((set, get) => ({
       // The API returns a structured degraded snapshot after four seconds. Keep the
       // browser timeout slightly above that ceiling so it never sits in Loading after
       // the API has already decided what happened.
-      const res = await fetch(url, { signal: AbortSignal.timeout(7000) });
+      const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       const snapshot: Snapshot = await res.json();
       // Left this run while its answer was in the air. Applying it would draw one run's
@@ -240,10 +238,15 @@ export const useViewer = create<ViewerState>((set, get) => ({
 
 // Selectors. Components subscribe to the slice they draw, so a board update does not
 // re-render the results table.
-export const useScene = () => useViewer((s) => s.snapshot?.scene ?? null);
-export const useBoard = () => useViewer((s) => s.snapshot?.board ?? null);
-export const useHealth = () => useViewer((s) => s.snapshot?.health ?? null);
-export const useAccess = () => useViewer((s) => s.snapshot?.access ?? null);
-export const useResults = () => useViewer((s) => s.snapshot?.results ?? null);
-export const useAgentTotals = () => useViewer((s) => s.snapshot?.agents ?? null);
-export const useFeed = () => useViewer((s) => s.snapshot?.feed ?? null);
+export function useSnapshot() {
+  const scoped = useContext(SnapshotScope);
+  const global = useViewer(s => s.snapshot);
+  return scoped === undefined ? global : scoped;
+}
+export const useScene = () => useSnapshot()?.scene ?? null;
+export const useBoard = () => useSnapshot()?.board ?? null;
+export const useHealth = () => useSnapshot()?.health ?? null;
+export const useAccess = () => useSnapshot()?.access ?? null;
+export const useResults = () => useSnapshot()?.results ?? null;
+export const useAgentTotals = () => useSnapshot()?.agents ?? null;
+export const useFeed = () => useSnapshot()?.feed ?? null;

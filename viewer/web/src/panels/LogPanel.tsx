@@ -1,3 +1,4 @@
+import { useExecutionContext } from "../components/ExecutionContext";
 import { useEffect } from "react";
 import { Terminal } from "lucide-react";
 import Panel from "../components/Panel";
@@ -28,6 +29,7 @@ import { POLL_MS, useViewer } from "../store/viewer";
  */
 
 export default function LogPanel() {
+  const context = useExecutionContext();
   const selected = useViewer((s) => s.runTag);
   const logError = useControl((s) => s.logError);
   const up = useControl((s) => s.up);
@@ -54,12 +56,12 @@ export default function LogPanel() {
   return (
     <Panel
       icon={Terminal}
-      title="Run log"
-      count={lines.length || undefined}
+      title="Execution log"
+
       status={
         logTag ? (
           <>
-            <span className="font-mono">{logTag}</span>
+            <details><summary className="cursor-pointer">{context.name} · execution details</summary><p className="mt-1 break-all">{logTag}</p></details>
             <span className={live ? "font-bold text-emerald-700" : undefined}>
               {live ? "live" : "ended"}
             </span>
@@ -69,17 +71,14 @@ export default function LogPanel() {
       bodyClassName="overflow-hidden p-0"
     >
       {logError && <p role="alert" className="p-3 text-sm text-ink-soft">{logError}</p>}
-      {!selected ? <p className="p-4 text-ink-soft">Select a saved run or start a pipeline to see its log.</p> : up === false ? (
+      {!selected ? <p className="p-4 text-ink-soft">Choose a pipeline in the selector above, or open a previous execution from Run history.</p> : up === false ? (
         <div className="p-8 text-[13px] text-ink-faint">
-          <p>The control service is not running, and it is the only thing that holds the
-             driver's console. Start it on the host:</p>
-          <code className="mt-2 block font-mono text-[12px] text-ink">
-            python -m memstara.control
-          </code>
+          <p>The execution log service is temporarily unavailable. The viewer will retry automatically; existing results can still be inspected.</p>
+
         </div>
       ) : logTag !== selected ? (
         <div className="p-8 text-[13px] text-ink-faint">
-          <p>Waiting for the selected run’s console log.</p>
+          <p>Loading the log for this execution…</p>
         </div>
       ) : (
         <RunLog lines={lines} skipped={skipped} tail={tail} />

@@ -52,7 +52,7 @@ export default function WhyColumns({ resultId }: { resultId: number }) {
       ) : (
         <div className="mt-2">
           <p className="mb-3 text-xs text-ink-faint">
-            What the matcher offered for each concept, in the order it was asked. A blue
+            Matching scores are computed by the matcher, not LLM confidence ratings. Concepts originate from agent requests. What the matcher offered for each concept, in the order it was asked. A blue
             row is a column the agent went on to ask for. The rest are the candidates it
             passed over — the part of the reasoning that exists nowhere else.
           </p>
@@ -63,13 +63,13 @@ export default function WhyColumns({ resultId }: { resultId: number }) {
           </div>
           {/* Said plainly rather than left for someone to notice. The driver files the
               turn's whole matcher record on every task that turn created, so a concept
-              here may belong to a sibling trial. Hiding those would be tidier and would
+              here may belong to a sibling analysis. Hiding those would be tidier and would
               misrepresent the record. */}
           <p className="mt-3 text-xs text-ink-faint">
             {data.match_trace.length} concept{data.match_trace.length === 1 ? "" : "s"} from{" "}
             {data.match_trace_calls} matcher call{data.match_trace_calls === 1 ? "" : "s"}. The
-            record is filed per agent turn, not per trial, so a concept with nothing chosen
-            was probably matched for another trial of the same wave.
+            record is filed per agent turn, not per analysis, so a concept with nothing chosen
+            was probably matched for another analysis of the same wave.
           </p>
         </div>
       )}

@@ -7,6 +7,13 @@ export function scientificProvenance(evaluation?: {
     detail: 'The generation policy will be shown when a linked evaluation record is available.',
   };
   const policy = evaluation?.hypothesis_policy;
+  if (policy?.version === 'iterative_discovery_v1' &&
+      ['primary_knowledge_driven', 'evidence_informed_refinement'].includes(policy.kind ?? '')) return {
+    label: policy.kind === 'evidence_informed_refinement' ? 'Evidence-informed follow-up' : 'Knowledge-driven starting hypothesis',
+    detail: policy.kind === 'evidence_informed_refinement'
+      ? 'Developed from prior loops in this pipeline. Scores are exploratory; reserved validation data has not been evaluated.'
+      : 'Starts from knowledge before prior experimental feedback is available. Reserved validation data has not been evaluated.',
+  };
   if (policy?.version === 'knowledge_only_v1' && policy.kind === 'primary_knowledge_driven') return {
     label: 'Knowledge-driven primary hypothesis',
     detail: 'Generated under a policy excluding prior ML score feedback. This label does not establish independent validation or incremental value.',

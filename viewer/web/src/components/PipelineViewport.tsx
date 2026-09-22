@@ -4,8 +4,8 @@ import { Panel, useReactFlow, useViewport } from "@xyflow/react";
 import { Expand, Maximize2, Minimize2, Minus, Plus, Scan } from "lucide-react";
 
 /** Keep the reader's viewport through telemetry polls and panel resizing. */
-export default function PipelineViewport({ expanded, toggle, topology, entryId, leftGutter = 0, dockInto }: {
-  expanded: boolean; toggle: () => void; topology: string; entryId?: string; leftGutter?: number; dockInto?: HTMLElement|null;
+export default function PipelineViewport({ expanded, toggle, topology, entryId, leftGutter = 0, dockInto, allowExpand = true }: {
+  expanded: boolean; toggle: () => void; topology: string; entryId?: string; leftGutter?: number; dockInto?: HTMLElement|null; allowExpand?: boolean;
 }) {
   const docked=dockInto!==undefined;
   const { getNodes, getNodesBounds, setViewport, fitView, zoomIn, zoomOut, viewportInitialized } = useReactFlow();
@@ -44,11 +44,11 @@ export default function PipelineViewport({ expanded, toggle, topology, entryId, 
         <option value="" disabled>Go to stage…</option>
         <option value="knowledge">Knowledge sources</option>
         <option value="hypothesis">1 · Hypothesis</option><option value="data">2 · Data</option>
-        <option value="ml">3 · ML</option><option value="interpreter">4 · Interpretation</option><option value="report">5 · Report</option>
+        <option value="ml">3 · ML</option><option value="interpreter">4 · Interpretation</option><option value="report">5 · Explanation</option>
       </select>
-      <button className={button} onClick={toggle} aria-pressed={expanded}>
+      {allowExpand && <button className={button} onClick={toggle} aria-pressed={expanded}>
         {expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}{expanded ? "Restore" : "Expand"}
-      </button>
+      </button>}
     </Panel>
     <Panel position="bottom-right" className="!m-3 flex gap-1 rounded-lg border border-paper-line bg-white p-1" >
       {([{ label: "left", dx: 160, dy: 0, glyph: "←" }, { label: "up", dx: 0, dy: 160, glyph: "↑" },

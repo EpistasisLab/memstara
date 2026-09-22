@@ -1,3 +1,4 @@
+import { pipelineLoopLabel } from "../lib/pipelineProgress";
 import { usePipelines } from "../store/pipelines";
 import ControlAgentSettings from "../components/ControlAgentSettings";
 import KnowledgeSelect from "../components/KnowledgeSelect";
@@ -88,13 +89,13 @@ export default function StartRun() {
   return (
     <div className="space-y-2">
       <span className="text-[12px] font-bold uppercase tracking-wider text-ink-faint">
-        {pipeline.name} · Iteration {pipeline.progress.iteration ?? "—"}
+        {pipeline.name} · {pipelineLoopLabel(pipeline)}
       </span>
 
       {running ? (
         <div className="space-y-2">
           <div className="rounded-lg border border-paper-line bg-paper p-3 text-sm">
-            <p className="font-bold text-ink">{running.pause_requested ? "Pause requested" : running.waiting_for_questions ? "Waiting to explore again" : "Exploration running"}</p>
+            <p className="font-bold text-ink">{running.pause_requested ? (running.execution_state === "paused" ? "Stopped · ready to resume" : "Stopping · finishing current work") : running.waiting_for_questions ? "Waiting to explore again" : "Exploration running"}</p>
             <p className="mt-1 break-words leading-relaxed text-ink-soft">{skills.find(s => s.skill === running.skill)?.label || running.skill || "All available knowledge"}</p>
             <p className="mt-2 text-ink-soft">Hypotheses with results: <strong>{completed ?? "—"}</strong></p>
             {!currentSnapshot && <p className="mt-1 text-xs text-ink-faint">Open the active exploration to view its progress.</p>}
@@ -142,7 +143,7 @@ export default function StartRun() {
           >
             <Play className="h-3.5 w-3.5" /> Play
           </button>
-          <p className="text-xs leading-relaxed text-ink-faint">Play starts continuous exploration. Stop ends it; saved findings remain available. When no new hypotheses emerge, agents wait before trying again.</p>
+          <p className="text-xs leading-relaxed text-ink-faint">Play starts an execution with a finite Loop limit. Stop pauses before the next agent call; Resume preserves progress. Calls already in flight may still incur cost.</p>
         </>
       )}
 

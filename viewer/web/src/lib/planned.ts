@@ -1,3 +1,4 @@
+import { agentStageLabel } from "./stage";
 import type { PlaybookStage, RunRequest } from "../store/control";
 import type { SceneAgent } from "../types";
 
@@ -119,7 +120,7 @@ export function withoutInterpreterSlot(form: RunRequest, slot: number): RunReque
  *  set, which is the one way a select can be wrong without looking wrong. */
 export function playbookAt(form: RunRequest, stage: PlaybookStage, slot: number): string {
   if (stage === "interpreter") return asSlots(form.playbook_interpreter, form.interpret_agents)[slot] ?? "";
-  if (stage !== PLANNABLE) return form[`playbook_${stage}`];
+  if (stage !== PLANNABLE) return form[`playbook_${stage === "report" ? "explanation" : stage}`];
   return asSlots(form.playbook_hypothesis, wantedAgents(form))[slot] ?? "";
 }
 
@@ -150,7 +151,7 @@ export function withPlaybookAt(
     slots[slot] = book;
     return { ...form, playbook_interpreter: fromSlots(slots) };
   }
-  if (stage !== PLANNABLE) return { ...form, [`playbook_${stage}`]: book };
+  if (stage !== PLANNABLE) return { ...form, [`playbook_${stage === "report" ? "explanation" : stage}`]: book };
   const slots = asSlots(form.playbook_hypothesis, wantedAgents(form));
   // Out of range rather than clamped: a card's slot always comes from a figure this same
   // module put on the screen, so a slot past the end means the two have already disagreed
@@ -173,14 +174,14 @@ function plannedAgentName(standards: string[], slot: number): string {
 export function withPlannedAgents(agents: SceneAgent[], form: RunRequest, preview = false): SceneAgent[] {
   if (preview) {
     agents = (["data", "ml", "report"] as const).map(stage => ({
-      id: `planned:${stage}`, stage, label: stage, name: `memstara-board-${stage}`,
-      worker: null, slot: 0, running: 0, playbook: form[`playbook_${stage}`], state: "planned",
+      id: `planned:${stage}`, stage, label: agentStageLabel(stage), name: `memstara-board-${stage}`,
+      worker: null, slot: 0, running: 0, playbook: form[`playbook_${stage === "report" ? "explanation" : stage}`], state: "planned",
       at: null, home: { x: 0, y: 0 }, carrying: null, run_id: null, since: null, last_tool: null, windows: [],
     }));
   }
   return ["hypothesis", "interpreter"].flatMap(stage => plannedStage(agents, form, stage as "hypothesis" | "interpreter"))
     .concat(agents.filter(a => a.stage !== "hypothesis" && a.stage !== "interpreter").map(a => ({ ...a,
-      playbook: a.stage === "curator" ? a.playbook : form[`playbook_${a.stage}`] ?? a.playbook,
+      playbook: a.stage === "curator" ? a.playbook : form[`playbook_${a.stage === "report" ? "explanation" : a.stage}`] ?? a.playbook,
     })));
 }
 

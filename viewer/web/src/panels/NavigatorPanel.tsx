@@ -1,3 +1,4 @@
+import { useLoopLabel } from '../lib/useLoopLabel';
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Compass } from "lucide-react";
 import EmptyState from "../components/EmptyState";
@@ -150,6 +151,7 @@ function TaskRow({
 }
 
 export default function NavigatorPanel() {
+  const labelLoop = useLoopLabel();
   const board = useBoard();
   const results = useResults();
   const runTag = useViewer((s) => s.snapshot?.run_tag ?? null);
@@ -159,22 +161,23 @@ export default function NavigatorPanel() {
 
   /** Which trials are folded away. Empty means everything is open, which is the right
    *  default for a run of two or three trials — folding is for the long ones. */
-  const [folded, setFolded] = useState<ReadonlySet<number>>(new Set());
+  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
 
   const tasks = board?.tasks ?? [];
 
   /** Grouped once per snapshot rather than per render: the board can carry a few hundred
    *  rows and this runs every two seconds behind the poll. */
   const trials = useMemo(() => {
-    const byTrial = new Map<number, Task[]>();
-    for (const task of tasks) {
-      const list = byTrial.get(task.trial);
+    const byTrial = new Map<string, Task[]>();
+    for (const task of [...tasks].sort((a,b) => a.trial-b.trial)) {
+      const label = labelLoop(task);
+      const key = label === 'Loop —' ? `Loop unknown · analysis ID ${task.trial}` : label;
+      const list = byTrial.get(key);
       if (list) list.push(task);
-      else byTrial.set(task.trial, [task]);
+      else byTrial.set(key, [task]);
     }
 
     return [...byTrial.entries()]
-      .sort((a, b) => a[0] - b[0])
       .map(([trial, rows]) => ({
         trial,
         rows: [...rows].sort(
@@ -184,7 +187,7 @@ export default function NavigatorPanel() {
         ),
         done: rows.filter((t) => t.status === "done").length,
       }));
-  }, [tasks]);
+  }, [tasks, labelLoop]);
 
   const resultOf = useMemo(() => {
     const map = new Map<number, Result>();
@@ -198,10 +201,11 @@ export default function NavigatorPanel() {
     <Panel
       icon={Compass}
       title="Navigator"
-      count={tasks.length || undefined}
+
       status={summary ? <span>{summary.done} done</span> : undefined}
       bodyClassName="p-0"
     >
+      <p className="px-3 py-2 text-xs text-ink-soft">Question text is an agent proposal; progress and status come from execution records.</p>
       {!board ? (
         <EmptyState what="the run" className="p-6 text-xs" />
       ) : tasks.length === 0 ? (
@@ -242,7 +246,7 @@ export default function NavigatorPanel() {
                   ) : (
                     <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-faint" />
                   )}
-                  <span className="truncate">Trial {trial}</span>
+                  <span className="truncate">{trial}</span>
                   <span className="ml-auto shrink-0 font-mono text-[12px] font-normal text-ink-faint">
                     {done}/{rows.length}
                   </span>

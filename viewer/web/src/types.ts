@@ -179,10 +179,22 @@ export interface Window {
   called_by_agent: boolean;
 }
 
+export interface QuestionContract {
+  version?: string; kind?: string; origin_wave?: number; parent_task_ids?: number[]; learning_goal?: string;
+}
+
+export interface ModelComparison {
+  status: string; baseline_configured: boolean; baseline_columns: string[]; scope: string; parameters_policy: string;
+  group_policy: string;
+  variants: {id:string; label:string; features:string[]; removed_features:string[]; status:string; auc?:number;
+    delta_from_full?:number; delta_from_baseline?:number; error_type?:string; reason?:string}[];
+}
 export interface Result {
   run_tag?: string; pipeline_id?: string; pipeline_name?: string; iteration?: number | null;
   hypothesis_id?: string;
   evaluation?: {
+    comparison?: ModelComparison;
+    question_contract?: QuestionContract;
     hypothesis_policy?: { version?: string; kind?: string; validation_status?: string };
     interpretations_complete?: boolean;
     interpretations?: { slot: number; worker: string; skill: string; status: string; text: string; error: string }[];
@@ -190,9 +202,14 @@ export interface Result {
     seed?: number; test_size?: number; auc_std?: number;
     config_hash?: string;
     data_quality?: { preprocessing?: string; missing_predictor_cells?: number; warnings?: string[] };
-    evaluation?: { plan?: Record<string, unknown>; duration_seconds?: number };
+    evaluation?: { plan?: Record<string, unknown>; duration_seconds?: number;
+      score_scope?: string; validation_reserve?: {status?: string};
+      replicates?: {seed: number; auc: number; split_id: string; cv_folds?: number}[];
+      reproducibility?: {status: string; method?: string; scope?: string; bundle_path?: string;
+        replicates?: {replicate: number; status: string}[] } };
     explanation?: { method?: string; scope?: string; actionability?: string; review_status?: string;
       operating_point?: { probability_cutoff: number; sensitivity: number; specificity: number; precision: number | null;
+        true_positive?: number; true_negative?: number; precision_reason?: string | null;
         false_positive: number; false_negative: number; selection: string; status: string };
       feature_effects?: { feature: string; range_start: number; range_end: number; probability_before: number;
         probability_after: number; direction: string; validation_needed: string }[];
@@ -305,6 +322,7 @@ export interface RunConfiguration {
   interpretation_mode?: string;
   interpreters?: number;
   question?: string; y_column?: string; provider?: string; model?: string;
+  comparison_policy?: {baseline_columns: string[]};
   hypotheses: number; books: Record<string, string[]>; evaluation: Record<string, number | string>;
   trials: number; waves: number; continuous?: boolean;
 }

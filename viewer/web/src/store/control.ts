@@ -26,8 +26,15 @@ export interface Skill {
 }
 
 export interface RunningRun {
+  recoverable?: boolean;
+  recovery_blocked?: string;
+  infrastructure_status?: { status: string; message: string; results_preserved?: boolean };
+  recovery_wave?: number;
   waiting_for_questions?: boolean;
   pause_requested?: boolean;
+  resumable?: boolean;
+  execution_state?: "running" | "stopping" | "paused";
+  active_calls?: number;
   configuration?: RunConfiguration;
   run_tag: string;
   run_dir: string;
@@ -57,8 +64,11 @@ export type PlaybookStage = (typeof PLAYBOOK_STAGES)[number];
 export type EvaluationPlan = { engine: string; seed: number; test_size: number; folds: number; replicates: number; search_trials: number };
 export type SkillInfo = { evaluation?: Partial<EvaluationPlan>; id: string; title: string; stage: PlaybookStage; description: string; content: string; hash: string; source: string };
 export type RunRequest = {
+  combination_skills?: Partial<Record<PlaybookStage,string[]>>;
+  combination_repetitions?: number;
   question: string;
   evaluation: EvaluationPlan;
+  baseline_columns?: string[];
   skill: string;
   trials: number;
   waves: number;
@@ -95,7 +105,7 @@ export type RunRequest = {
    *  five rather than becoming `string | string[]` for one, because the value is a
    *  command-line argument and `--playbook-hypothesis` takes one. `StartRun.tsx` is the
    *  only place that splits it. */
-  [S in PlaybookStage as `playbook_${S}`]: string;
+  [S in PlaybookStage as `playbook_${S extends "report" ? "explanation" : S}`]: string;
 };
 
 /** `y_column` is the cohort's real outcome column, not `board.py:1810`'s CLI default.
@@ -112,6 +122,7 @@ export type RunRequest = {
  *  never a feature — the catalogue the data stage picks columns from does not contain it,
  *  which is what keeps it out of every agent's reach. */
 export const DEFAULT_REQUEST: RunRequest = {
+  baseline_columns: [],
   question: "",
   evaluation: { engine: "xgboost", seed: 42, test_size: .25, folds: 0, replicates: 1, search_trials: 1 },
   skill: "",
@@ -121,8 +132,8 @@ export const DEFAULT_REQUEST: RunRequest = {
   hypothesis_agents: 1,
   interpret_agents: 1,
   y_column: "HIV_DETECTABLE",
-  provider: "azure_foundry",
-  model: "claude-sonnet-4-6",
+  provider: "",
+  model: "",
   // Empty is "the prompt as written", which is what every run before 2026-09-08 was and
   // what the form must still start as. A default playbook would make a standard the
   // silent condition of every run on this screen, and the run record would show it as
@@ -130,13 +141,14 @@ export const DEFAULT_REQUEST: RunRequest = {
   playbook_hypothesis: "treatment-toxicity",
   playbook_data: "",
   playbook_ml: "ml_governance",
-  playbook_interpreter: "interpreter_review_pending",
-  playbook_report: "report_evidence",
+  playbook_interpreter: "interpreter_factual_observations",
+  playbook_explanation: "report_clinical_explanations",
 };
 
 interface ControlState {
   preview: boolean;
   catalog: SkillInfo[];
+  references: SkillInfo[];
   editor: { stage: PlaybookStage; slot: number; add: boolean } | null;
   openEditor: (stage: PlaybookStage, slot?: number, add?: boolean) => void;
   closeEditor: () => void;
@@ -246,8 +258,9 @@ export function applyRunConfiguration(form: RunRequest, config: RunConfiguration
   return { ...form, question: "", ...Object.fromEntries(["skill", "y_column", "provider", "model"].flatMap(k => {
     const value = config[k as keyof RunConfiguration]; return typeof value === "string" ? [[k, value]] : [];
   })), hypothesis_agents: config.hypotheses, interpret_agents: config.interpreters ?? 1, trials: config.trials, waves: config.waves, continuous: config.continuous ?? false,
+    baseline_columns: config.comparison_policy?.baseline_columns ?? [],
     evaluation: { ...form.evaluation, ...config.evaluation } as EvaluationPlan,
-    ...Object.fromEntries(PLAYBOOK_STAGES.map(stage => [`playbook_${stage}`, (config.books[stage] ?? []).join(",")])) };
+    ...Object.fromEntries(PLAYBOOK_STAGES.map(stage => [`playbook_${stage === "report" ? "explanation" : stage}`, (config.books[stage] ?? []).join(",")])) };
 }
 
 function liveAgents(): boolean {
@@ -257,6 +270,7 @@ function liveAgents(): boolean {
 export const useControl = create<ControlState>((set, get) => ({
   preview: false,
   catalog: [],
+  references: [],
   editor: null,
   openEditor: (stage, slot = 0, add = false) => { if (!get().running && !get().busy && (!liveAgents() || usePipelines.getState().selected)) set({ editor: { stage, slot, add } }); },
   closeEditor: () => set({ editor: null }),
@@ -271,7 +285,8 @@ export const useControl = create<ControlState>((set, get) => ({
 
   form: (() => {
     try { const saved = JSON.parse(localStorage.getItem("memstara-draft-v1") ?? "null");
-      return saved ? { ...DEFAULT_REQUEST, ...saved, question: "", evaluation: { ...DEFAULT_REQUEST.evaluation, ...saved.evaluation } } : DEFAULT_REQUEST;
+      if (saved?.playbook_report !== undefined) { saved.playbook_explanation ??= saved.playbook_report; delete saved.playbook_report; }
+      return saved ? { ...DEFAULT_REQUEST, ...saved, provider: "", model: "", question: "", evaluation: { ...DEFAULT_REQUEST.evaluation, ...saved.evaluation } } : DEFAULT_REQUEST;
     } catch { return DEFAULT_REQUEST; }
   })(),
   // An updater rather than a whole-object setter, because the two callers that already
@@ -306,6 +321,9 @@ export const useControl = create<ControlState>((set, get) => ({
       const res = await fetch("/control/health", { signal: AbortSignal.timeout(10000) });
       if (!res.ok) throw new Error(await readError(res));
       const body = await res.json();
+      if (body.llm) {
+        set(state => ({ form: { ...state.form, provider: body.llm.provider ?? "", model: body.llm.model ?? "" } }));
+      }
       const wasDown = get().up !== true;
       // Live run metadata must never overwrite the user's independently saved draft.
       const selectedPipeline = usePipelines.getState().items.find(p => p.id === usePipelines.getState().selected);
@@ -349,7 +367,7 @@ export const useControl = create<ControlState>((set, get) => ({
       const stages: PlaybookStage[] = (body.stages ?? []).filter(
         (s: string): s is PlaybookStage => (PLAYBOOK_STAGES as readonly string[]).includes(s),
       );
-      set({ playbooks: body.playbooks ?? [], catalog: body.catalog ?? [], playbookStages: stages });
+      set({ playbooks: body.playbooks ?? [], catalog: body.catalog ?? [], references: body.references ?? [], playbookStages: stages });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e) });
     }

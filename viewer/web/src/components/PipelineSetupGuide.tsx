@@ -5,7 +5,7 @@ import { setupStages, skillSignature, usePipelineSetup } from '../store/pipeline
 import { STAGE_ICON } from '../lib/icons';
 import { STAGE_COLOR } from '../lib/stage';
 
-const names = { hypothesis: 'Hypothesis', ml: 'Machine learning', interpreter: 'Interpreter', report: 'Report' };
+const names = { hypothesis: 'Hypothesis', ml: 'Machine learning', interpreter: 'Interpreter', report: 'Explanation' };
 const descriptions = {
   hypothesis: 'Choose how this agent uses knowledge to propose promising hypotheses and select features.',
   ml: 'Review model training, validation and reproducibility instructions, together with the evaluation settings.',
@@ -30,7 +30,7 @@ export default function PipelineSetupGuide() {
     <div><strong>{pipeline.name} · Setup unfinished {confirmed.length}/4</strong><p>Your confirmed steps are saved in this browser.</p></div>
     <button disabled={!!pipeline.running||busy} onClick={() => { pause(pipeline.id, false); usePipelines.getState().focus(pipeline.id); }}>Resume setup</button></section>;
   const Icon = STAGE_ICON[stage];
-  const skill = catalog.find(s => s.id === pipeline.configuration[`playbook_${stage}`]);
+  const skill = catalog.find(s => s.id === pipeline.configuration[`playbook_${stage === "report" ? "explanation" : stage}`]);
   return <section className="floor-setup-guide" aria-label="Pipeline skill setup">
     <div className="floor-setup-heading"><Icon size={26} color={STAGE_COLOR[stage]} aria-hidden="true"/>
       <div aria-live="polite"><strong>{pipeline.name} · {names[stage]} · {confirmed.length}/4 confirmed</strong><p>{descriptions[stage]}</p></div>
@@ -40,7 +40,7 @@ export default function PipelineSetupGuide() {
       return <li key={s} aria-current={s===stage?'step':undefined} data-done={confirmed.includes(s)}>
         {confirmed.includes(s)?<Check size={15}/>:<StageIcon size={15}/>} {names[s]}</li>;
     })}</ol>
-    <div className="floor-setup-actions"><span>Selected skill: <strong>{skill?.title || pipeline.configuration[`playbook_${stage}`] || 'Not selected'}</strong></span>
+    <div className="floor-setup-actions"><span>Selected skill: <strong>{skill?.title || pipeline.configuration[`playbook_${stage === "report" ? "explanation" : stage}`] || 'Not selected'}</strong></span>
       <div className="floor-skill-entry" key={stage}>
         {!pipeline.running&&!busy&&<div id="floor-skill-entry-hint" className="floor-skill-entry-hint">
           <span>Review this skill here</span><ArrowDown size={14} aria-hidden="true"/>

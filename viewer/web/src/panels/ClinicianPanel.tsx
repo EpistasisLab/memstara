@@ -1,97 +1,114 @@
+import Help from "../components/Help";
+import ContentOrigin from "../components/ContentOrigin";
+import { transparentReportMarkdown } from "../lib/reportTransparency";
+import { useLoopLabel } from '../lib/useLoopLabel';
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowUpRight, BookOpen, Download, Search, Stethoscope } from "lucide-react";
+import { ArrowUpRight, BookOpen, Download, Search, Stethoscope, Microscope, ClipboardCheck, ChevronDown } from "lucide-react";
 import { usePipelines } from "../store/pipelines";
 import { pipelineLabel } from "../lib/pipelineLabel";
-import LiveOutputDock from "../components/discovery/LiveOutputDock";
-import { useLiveOutputs, type OutputEvent } from "../store/liveOutputs";
+import { useLiveOutputs } from "../store/liveOutputs";
 import { useViewer } from "../store/viewer";
 import ScientificProvenance from "../components/ScientificProvenance";
 import ExplanationEvidence from "../components/ExplanationEvidence";
 import type { Result } from "../types";
 
+import "./clinician.css";
+
 const ReportBody = lazy(() => import("../components/ReportBody"));
 const section = "rounded-2xl border border-paper-line bg-white p-5 sm:p-6";
 
 function Evidence({ result }: { result: Result }) {
+  const labelLoop = useLoopLabel();
   const importance = Object.entries(result.importance ?? {}).filter(([, value]) => Number.isFinite(value))
     .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 8);
   const maximum = Math.max(...importance.map(([, value]) => Math.abs(value)), .000001);
-  return <article className={`${section} min-w-0`} aria-label="Selected hypothesis evidence">
-    <ScientificProvenance result={result} />
-    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-soft">
-      <span>Hypothesis · Trial {result.trial}</span><span>AI-generated interpretation · research evidence</span>
-    </div>
-    <h2 className="mt-3 text-xl font-semibold leading-snug text-ink">{result.hypothesis || result.perspective || "Hypothesis text not recorded"}</h2>
-    <div className="mt-5 rounded-xl bg-stage-hypothesis/5 p-4">
-      <h3 className="text-sm font-bold text-stage-hypothesis">What this may mean</h3>
-      {result.interpretation ? <Suspense fallback={<p>Loading interpretation…</p>}><ReportBody text={result.interpretation} /></Suspense>
-        : <p className="mt-2 text-sm text-ink-soft">A clinical interpretation has not been recorded. Review the measured evidence before drawing conclusions.</p>}
-    </div>
-    <div className="my-5 grid gap-3 sm:grid-cols-3">
-      <div className="rounded-xl border border-paper-line p-3"><p className="text-xs text-ink-soft">Discrimination · AUC</p><p className="mt-1 text-2xl font-semibold">{result.auc == null ? "Not available" : result.auc.toFixed(3)}</p><p className="mt-1 text-xs text-ink-faint">Ranks outcomes; not accuracy or clinical benefit.</p></div>
-      <div className="rounded-xl border border-paper-line p-3"><p className="text-xs text-ink-soft">Features evaluated</p><p className="mt-1 text-2xl font-semibold">{result.columns_used?.length ?? 0}</p><p className="mt-1 text-xs text-ink-faint">Selected from the supplied dataset.</p></div>
-      <div className="rounded-xl border border-paper-line p-3"><p className="text-xs text-ink-soft">Knowledge references</p><p className="mt-1 text-2xl font-semibold">{result.okf_concept_ids?.length ?? 0}</p><p className="mt-1 text-xs text-ink-faint">Recorded sources, not a quality score.</p></div>
-    </div>
-    <h3 className="text-sm font-bold">What informed the prediction</h3>
-    <div className="my-3 flex flex-wrap gap-2">{result.columns_used?.map(feature => <span key={feature} className="max-w-full break-words rounded-lg bg-paper px-2 py-1 text-xs">{feature}</span>)}</div>
-    {importance.length > 0 && <details className="my-4 rounded-xl border border-paper-line p-3">
-      <summary className="cursor-pointer text-sm font-medium">Feature contributions</summary>
-      <p className="my-2 text-xs text-ink-faint">{result.evaluation?.explanation?.method === "holdout_permutation_auc" ? "Change in held-out AUC under feature permutation. Negative values mean permutation improved the measured score." : `Recorded importance from ${result.model || "the fitted model"}; importance is not a causal effect.`} Bar lengths show absolute magnitude.</p>
-      {importance.map(([feature, value]) => <div key={feature} className="mt-3"><div className="flex justify-between gap-3 text-xs"><span className="break-words">{feature}</span><span>{value.toPrecision(3)}</span></div><div className="mt-1 h-1.5 rounded-full bg-paper"><div className="h-full rounded-full" style={{width:`${Math.abs(value) / maximum * 100}%`,background:value < 0 ? '#8f2f4f' : '#2f6b47'}} /></div></div>)}
-    </details>}
-    <ExplanationEvidence result={result} />
-    <section className="mt-5 rounded-xl border border-[#e5dcc5] bg-stage-ml/5 p-4" aria-label="Evidence limitations">
-      <h3 className="text-sm font-bold">Before applying this finding</h3>
-      <p className="mt-2 text-sm leading-relaxed">These are exploratory associations. This view does not establish causality, a validated treatment threshold or readiness for a clinical intervention.</p>
-      {result.columns_missing?.length > 0 && <p className="mt-2 text-sm">Requested features not available: {result.columns_missing.join(', ')}.</p>}
-      {result.evaluation?.data_quality?.warnings?.map((warning, i) => <p key={i} className="mt-2 text-sm">{warning}</p>)}
-      <p className="mt-2 text-sm">Next review: confirm the population, feature definitions and timing; assess independent validation and clinical relevance with the study team.</p>
+  return <article className="clinical-reading-card" aria-label="Selected hypothesis evidence">
+    <div className="clinical-reading-heading"><span className="clinical-eyebrow">The research finding</span><ContentOrigin kind="proposal" compact/></div>
+    <h2>{result.hypothesis || result.perspective || "Hypothesis text not recorded"}</h2>
+    <p className="clinical-context">{labelLoop(result)} · Outcome studied: <strong>{result.y_column || 'Not recorded'}</strong></p>
+    <section className="clinical-meaning">
+      <div className="clinical-section-title"><Stethoscope size={21}/><h3>What could this mean?</h3></div>
+      <p className="clinical-caption">AI-written interpretation of this analysis. It needs review by the research team.</p>
+      {result.interpretation ? <Suspense fallback={<p>Loading interpretation…</p>}><ReportBody origin="llm" text={result.interpretation} /></Suspense>
+        : <p className="clinical-empty">An interpretation has not arrived yet. We will show it here when it is recorded.</p>}
     </section>
-    <details className="mt-4 text-sm"><summary className="cursor-pointer font-medium">Sources and reproducibility</summary>
-      <p className="mt-2">Target: {result.y_column || 'Not recorded'} · Model: {result.model || 'Not recorded'}</p>
-      <p className="mt-2">Seed: {result.evaluation?.seed ?? 'Not recorded'} · Hold-out fraction: {result.evaluation?.test_size ?? 'Not recorded'}</p>
-      <p className="mt-2 break-words">Knowledge reference IDs: {result.okf_concept_ids?.join(', ') || 'Not recorded'}</p>
-      <pre className="mt-2 overflow-auto rounded-lg bg-paper p-3 text-xs">{JSON.stringify(result.evaluation?.evaluation?.plan ?? {}, null, 2)}</pre>
+    <section className="clinical-next-step">
+      <div className="clinical-section-title"><ClipboardCheck size={21}/><h3>What should I do with this?</h3></div>
+      <p>Use this finding to guide a discussion with your research team. It does not yet establish a cause, a treatment recommendation, or a clinical cutoff.</p>
+      <ol><li>Check whether the study population and measurements match your research question.</li><li>Review missing information and alternative explanations.</li><li>Agree on independent validation before considering a change in care.</li></ol>
+      {!!result.columns_missing?.length && <p className="clinical-warning">Some requested measurements were unavailable: {result.columns_missing.join(', ')}.</p>}
+      {result.evaluation?.data_quality?.warnings?.map((warning, i) => <p className="clinical-warning" key={i}>{warning}</p>)}
+    </section>
+    <details className="clinical-disclosure">
+      <summary><Microscope size={20}/><span><strong>Explore the supporting evidence</strong><small>Measurements used, model performance and checks</small></span><ChevronDown size={18}/></summary>
+      <div className="clinical-disclosure-body">
+        <h3>Which measurements were studied?</h3>
+        <p className="clinical-caption">These are the recorded dataset column names. Their exact clinical definitions should be confirmed with the study team.</p>
+        <div className="clinical-feature-list">{result.columns_used?.length ? result.columns_used.map(feature => <span key={feature}>{feature}</span>) : <p>No measurements were recorded.</p>}</div>
+        <div className="clinical-measurement"><div><span>Ability to distinguish outcomes</span><strong>{result.auc == null ? "Not recorded" : result.auc.toFixed(3)} <small>AUC</small></strong></div><p>AUC measures how well the model ranks people with and without the studied outcome. 0.5 represents chance-level ranking; 1.0 is perfect ranking. It is not the percentage of correct predictions or proof of clinical benefit.</p></div>
+        {importance.length > 0 && <section className="clinical-contributions"><h3>What influenced the model?</h3><p className="clinical-caption">The eight largest recorded contributions, at most. A larger bar is not evidence of a larger biological or causal effect. {result.evaluation?.explanation?.method === "holdout_permutation_auc" ? "Values show the change in held-out AUC when a measurement is shuffled. A negative value means shuffling improved the measured score." : "Values use the fitted model’s recorded importance measure."}</p>
+          {importance.map(([feature, value]) => <div key={feature} className="clinical-contribution"><div><span>{feature}</span><strong>{value.toPrecision(3)}</strong></div><div className="clinical-bar"><span style={{width:`${Math.abs(value) / maximum * 100}%`,background:value < 0 ? 'var(--clinical-negative)' : 'var(--clinical-accent)'}} /></div></div>)}
+        </section>}
+        <ExplanationEvidence result={result} />
+      </div>
+    </details>
+    <details className="clinical-disclosure">
+      <summary><BookOpen size={20}/><span><strong>Sources and analysis details</strong><small>Where this finding came from and how it was tested</small></span><ChevronDown size={18}/></summary>
+      <div className="clinical-disclosure-body"><ScientificProvenance result={result}/>
+        <dl className="clinical-source-grid"><div><dt>Outcome studied</dt><dd>{result.y_column || 'Not recorded'}</dd></div><div><dt>Model</dt><dd>{result.model || 'Not recorded'}</dd></div><div><dt>Random seed</dt><dd>{result.evaluation?.seed ?? 'Not recorded'}</dd></div><div><dt>Data held back for testing</dt><dd>{result.evaluation?.test_size == null ? 'Not recorded' : `${(result.evaluation.test_size * 100).toFixed(0)}%`}</dd></div></dl>
+        <p>Knowledge reference IDs: {result.okf_concept_ids?.join(', ') || 'Not recorded'}</p>
+        <details className="mt-4"><summary>Technical evaluation plan</summary><pre className="mt-2 overflow-auto rounded-lg bg-paper p-3 text-xs">{JSON.stringify(result.evaluation?.evaluation?.plan ?? {}, null, 2)}</pre></details>
+      </div>
     </details>
   </article>;
+
 }
 
 export default function ClinicianPanel() {
-  const { snapshot, knownRuns, runTag, setRunTag, setView } = useViewer();
+  const labelLoop = useLoopLabel();
+  const { snapshot, knownRuns, runTag, setRunTag } = useViewer();
   const live=useLiveOutputs();
   const pipelines=usePipelines(s=>s.items);
   const [mode,setMode]=useState<'live'|'archive'>('live');
   const [query,setQuery]=useState('');
   const [selected,setSelected]=useState<number|null>(null);
-  const [reportTag,setReportTag]=useState<string|null>(null);
+  const [seenResult,setSeenResult]=useState<number|null>(null);
+  const newestResult=live.results.reduce((latest,result)=>Math.max(latest,result.result_id),0);
+  useEffect(()=>{if(seenResult===null&&newestResult)setSeenResult(newestResult);},[newestResult,seenResult]);
+  const hasNewFindings=seenResult!==null&&newestResult>seenResult;
   const results=mode==='live'?live.results:snapshot?.results??[];
   const matches=useMemo(()=>results.filter(r=>`${r.hypothesis} ${r.perspective} ${r.columns_used?.join(' ')} ${r.pipeline_name||''}`.toLowerCase().includes(query.toLowerCase())).sort((a,b)=>mode==='live'?b.result_id-a.result_id:a.trial-b.trial),[results,query,mode]);
   // Pin the first finding after load. New arrivals must not replace the item being read.
   useEffect(()=>{if(selected===null&&matches.length)setSelected(matches[0].result_id);},[matches,selected]);
   const active=results.find(r=>r.result_id===selected);
-  const activeRun=mode==='live'?(reportTag||active?.run_tag||Object.keys(live.reports).at(-1)):runTag;
+  const activeRun=mode==='live'?(active?.run_tag||Object.keys(live.reports).at(-1)):runTag;
   const report=mode==='live'?(activeRun?live.reports[activeRun]:null):snapshot?.report;
+  const analysesPerLoop = activeRun === snapshot?.run_tag ? snapshot?.run_configuration?.trials : undefined;
   const recommendation=report?.text?.match(/^##\s+Executive recommendation\s*\n([\s\S]*?)(?=^##\s|$(?![\s\S]))/im)?.[1]?.trim();
   const runs=snapshot?.runs??knownRuns;
   const download=()=>{
     if(!report?.text)return;
-    const url=URL.createObjectURL(new Blob([report.text],{type:'text/markdown;charset=utf-8'}));
+    const url=URL.createObjectURL(new Blob([transparentReportMarkdown(report.text, analysesPerLoop)],{type:'text/markdown;charset=utf-8'}));
     const a=document.createElement('a');a.href=url;a.download=`${activeRun||'analysis'}_report.md`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
-  const openOutput=(event:OutputEvent)=>{setMode('live');if(event.result_id!==null){setSelected(event.result_id);setReportTag(null);}else if(event.stage==='report')setReportTag(event.run_tag);};
-  const switchMode=(next:'live'|'archive')=>{setMode(next);setSelected(null);setReportTag(null);setQuery('');};
-  return <main className="h-full overflow-auto bg-paper text-ink" data-testid="clinician-view">
-    <header className="sticky top-0 z-20 border-b border-paper-line bg-white/95 backdrop-blur"><div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-8"><div className="flex items-center gap-3"><span className="rounded-xl bg-stage-hypothesis/10 p-2 text-stage-hypothesis"><Stethoscope size={23}/></span><div><p className="text-lg font-semibold">Memstara <span className="font-normal text-ink-soft">Clinical insights</span></p><p className="text-xs text-ink-faint">Live findings across your research pipelines</p></div></div><button className="flex items-center gap-2 rounded-lg border border-paper-line px-3 py-2 text-sm" onClick={()=>setView('discovery')}><ArrowLeft size={15}/>Question observatory</button></div></header>
+  const switchMode=(next:'live'|'archive')=>{setMode(next);setSelected(null);setQuery('');};
+  const showNewFindings=()=>{setMode('live');setQuery('');setSelected(newestResult);setSeenResult(newestResult);};
+  return <main className="clinical-view h-full overflow-auto bg-paper text-ink" data-testid="clinician-view">
     <div className="mx-auto max-w-[1440px] space-y-5 px-5 py-6 sm:px-8">
-      <section className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-widest text-stage-hypothesis">Evidence as it emerges</p><h1 className="mt-2 text-2xl font-semibold sm:text-3xl">What are the pipelines finding?</h1><p className="mt-2 max-w-2xl text-sm text-ink-soft">Follow newly recorded findings, understand their clinical meaning, and inspect the evidence behind each one.</p></div><div className="flex gap-2 text-sm"><button aria-pressed={mode==='live'} className={`rounded-lg border px-3 py-2 ${mode==='live'?'border-stage-hypothesis bg-stage-hypothesis/5':'border-paper-line'}`} onClick={()=>switchMode('live')}>Live pipelines</button><button aria-pressed={mode==='archive'} className={`rounded-lg border px-3 py-2 ${mode==='archive'?'border-stage-hypothesis bg-stage-hypothesis/5':'border-paper-line'}`} onClick={()=>switchMode('archive')}>Saved analysis</button></div></section>
-      <LiveOutputDock clinical open={openOutput}/>
-      {mode==='archive'&&<label className="block max-w-full text-xs font-medium">Saved analysis<select aria-label="Clinical analysis" className="mt-1 block w-96 max-w-full rounded-lg border border-paper-line bg-white p-2.5 text-sm" value={runTag??''} onChange={e=>{setSelected(null);setRunTag(e.target.value||null);}}><option value="">Choose a saved analysis</option>{runs.map(run=><option key={run.run_tag} value={run.run_tag}>{run.first_seen?new Date(run.first_seen).toLocaleString():run.run_tag} · {run.run_tag}</option>)}</select></label>}
-      {mode==='archive'&&snapshot?.stale&&<p role="status" className="rounded-xl border border-amber-300 p-4 text-sm">Saved analysis updates are interrupted. Last available records are retained.</p>}
-      <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-ink-soft"><span><strong>{results.length}</strong> retained findings</span><span>{mode==='live'?'Latest findings first · not ranked by AUC':'Saved analysis · trial order'}</span><span>{live.updatedAt&&mode==='live'?`Synchronized ${new Date(live.updatedAt).toLocaleTimeString()}`:''}</span></div>
-      <div className="clinical-findings-layout"><aside className={`${section} min-w-0`}><h2 className="text-lg font-semibold">Incoming findings</h2><label className="my-4 flex items-center gap-2 rounded-lg border border-paper-line px-3"><Search size={16}/><input aria-label="Search clinical findings" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Find a hypothesis or feature" className="min-w-0 flex-1 bg-transparent py-2.5 text-sm outline-none"/></label><div className="max-h-[720px] space-y-2 overflow-auto">{matches.map(result=><button key={result.result_id} aria-pressed={active?.result_id===result.result_id} onClick={()=>{setSelected(result.result_id);setReportTag(null);}} className={`w-full rounded-xl border p-3 text-left transition ${active?.result_id===result.result_id?'border-[#71ae9e] bg-stage-hypothesis/5':'border-paper-line hover:bg-paper'}`}><span className="flex justify-between gap-2 text-xs text-ink-faint">{pipelineLabel(result,pipelines)} · {result.iteration!=null?`Iteration ${result.iteration}`:`Trial ${result.trial}`}<ArrowUpRight size={14}/></span><span className="mt-2 line-clamp-4 text-sm font-medium leading-relaxed">{result.hypothesis||result.perspective||'Untitled finding'}</span><span className="mt-2 block text-xs text-ink-soft">{result.interpretation?'Interpretation available':'Awaiting interpretation'} · {result.columns_used?.length??0} features</span></button>)}{!matches.length&&<p className="py-5 text-sm text-ink-soft">{query?'No matching findings.':'As analyses produce findings, they will appear here automatically.'}</p>}</div></aside>
-      {active?<div className="min-w-0"><p className="mb-3 text-xs text-ink-faint">Reading: {pipelineLabel(active,pipelines)} · {active.iteration!=null?`Iteration ${active.iteration}`:`Trial ${active.trial}`} · selection stays pinned as new findings arrive</p><Evidence result={active}/></div>:<section className={`${section} py-16 text-center`}><BookOpen className="mx-auto mb-4 text-ink-faint"/><h2 className="font-semibold">The next finding will appear here.</h2><p className="mt-3 text-sm text-ink-soft">Questions and hypotheses may already be in progress. Clinical evidence appears when the pipeline records analysis results.</p></section>}</div>
-      <section className={`${section} border-l-4 border-l-[#71ae9e]`} aria-label="Report recommendation"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-stage-hypothesis">The latest recorded synthesis</p><h2 className="mt-1 text-lg font-semibold">Research recommendation</h2></div><button onClick={download} disabled={!report?.text} className="flex items-center gap-2 rounded-lg border border-paper-line px-3 py-2 text-xs disabled:opacity-40"><Download size={14}/>Download report (.md)</button></div><p className="mt-2 break-words text-xs text-ink-faint">{activeRun||'No linked report yet'} · {report?.status||'Awaiting report'}</p>{recommendation?<Suspense fallback={<p>Loading recommendation…</p>}><ReportBody text={recommendation}/></Suspense>:<p className="mt-3 text-sm text-ink-soft">{report?.text?'Read the original report below; no separate executive recommendation was recorded.':'The run report will appear here when it is recorded.'}</p>}{report?.error&&<p className="mt-2 text-sm">{report.error}</p>}{report?.text&&<details className="mt-4 border-t border-paper-line pt-3"><summary className="cursor-pointer text-sm font-semibold">Read the complete report</summary><Suspense fallback={<p>Loading report…</p>}><ReportBody text={report.text}/></Suspense></details>}</section>
-      <footer className="pb-5 text-xs text-ink-faint">Exploratory research evidence · clinical relevance requires review. Live mode retains up to 600 findings in this browser session; use saved analyses to inspect archives.</footer>
+      <section className="clinical-hero clinical-hero-simple"><div><p className="clinical-eyebrow">Memstara · Clinical insights</p><h1 className="mt-2 font-semibold">What is your research finding?</h1><p className="mt-3 text-ink-soft">Choose a finding to understand its meaning and what to check next.</p></div></section>
+      <details className="clinical-history clinical-disclosure">
+        <summary><BookOpen size={18}/><span><strong>Past analyses</strong></span><ChevronDown size={18}/></summary>
+        <div className="clinical-disclosure-body"><p className="clinical-caption">Review results from one saved execution. Otherwise, this page shows the latest findings across your pipelines.</p>
+          <label className="block text-sm">Choose an analysis<select aria-label="Clinical analysis" className="mt-2 block w-full rounded-lg border border-paper-line bg-white p-3 text-sm" value={mode==='archive' ? runTag??'' : ''} onChange={e=>{if(e.target.value){switchMode('archive');setRunTag(e.target.value);}else switchMode('live');}}><option value="">Latest findings across pipelines</option>{runs.map(run=><option key={run.run_tag} value={run.run_tag}>{run.first_seen?new Date(run.first_seen).toLocaleString():run.run_tag} · {run.run_tag}</option>)}</select></label>
+        </div>
+      </details>
+      {mode==='archive'&&<div className="clinical-update"><span>Viewing a saved analysis</span><Help topic="Return to latest findings" description="Show the latest findings across your pipelines again. Your saved analysis stays available under Past analyses."><button onClick={()=>switchMode('live')}>Return to latest findings</button></Help></div>}
+      {mode==='live'&&hasNewFindings&&<div className="clinical-update" role="status"><span>New findings are available.</span><button onClick={showNewFindings}>View new findings<ArrowUpRight size={16}/></button></div>}
+      {(mode==='live'?live.error:snapshot?.stale)&&<p role="status" className="clinical-warning">Updates are temporarily unavailable. You can keep reading the last available findings.</p>}
+      <div className="clinical-findings-layout"><aside className={`${section} min-w-0`}><h2 className="text-lg font-semibold">Explore findings</h2><p className="clinical-caption">{mode==='live'?'Newest first':'From your selected analysis'}</p><label className="my-4 flex items-center gap-2 rounded-lg border border-paper-line px-3"><Search size={16}/><input aria-label="Search clinical findings" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search findings or measurements" className="min-w-0 flex-1 bg-transparent py-2.5 text-sm outline-none"/></label><div className="max-h-[720px] space-y-2 overflow-auto">{matches.map(result=><button data-help="Inspect this finding" data-help-description="Select this hypothesis to read its model evidence, interpretation, limitations and linked report. The selection stays pinned while new findings arrive." key={result.result_id} aria-pressed={active?.result_id===result.result_id} onClick={()=>{setSelected(result.result_id);}} className={`w-full rounded-xl border p-3 text-left transition ${active?.result_id===result.result_id?'border-[#71ae9e] bg-stage-hypothesis/5':'border-paper-line hover:bg-paper'}`}><span className="flex justify-between gap-2 text-xs text-ink-faint">{pipelineLabel(result,pipelines)} · {labelLoop(result)}<ArrowUpRight size={14}/></span><span className="mt-2 line-clamp-4 text-sm font-medium leading-relaxed">{result.hypothesis||result.perspective||'Untitled finding'}</span><span className="mt-2 block text-xs text-ink-soft">{result.interpretation?'Interpretation available':'Awaiting interpretation'}</span></button>)}{!matches.length&&<p className="py-5 text-sm text-ink-soft">{query?'No matching findings.':'As analyses produce findings, they will appear here automatically.'}</p>}</div></aside>
+      {active?<div className="min-w-0"><p className="mb-3 text-xs text-ink-faint">Reading: {pipelineLabel(active,pipelines)} · {labelLoop(active)}</p><Evidence key={active.result_id} result={active}/></div>:<section className={`${section} py-16 text-center`}><BookOpen className="mx-auto mb-4 text-ink-faint"/><h2 className="font-semibold">The next finding will appear here.</h2><p className="mt-3 text-sm text-ink-soft">Questions and hypotheses may already be in progress. Clinical evidence appears when the pipeline records analysis results.</p></section>}</div>
+      <details className="clinical-disclosure" aria-label="Research report"><summary><BookOpen size={20}/><span><strong>Read the research report</strong><small>Summary, full report and download</small></span><ChevronDown size={18}/></summary><div className="clinical-disclosure-body"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-stage-hypothesis">The bigger picture</p><h2 className="mt-1 text-lg font-semibold">Research team briefing</h2></div><button onClick={download} disabled={!report?.text} className="flex items-center gap-2 rounded-lg border border-paper-line px-3 py-2 text-xs disabled:opacity-40"><Download size={14}/>Download report (.md)</button></div><p className="mt-2 break-words text-xs text-ink-faint">{activeRun||'No linked report yet'} · {report?.status||'Awaiting report'}</p>{recommendation?<Suspense fallback={<p>Loading recommendation…</p>}><ReportBody report analysesPerLoop={analysesPerLoop} text={recommendation}/></Suspense>:<p className="mt-3 text-sm text-ink-soft">{report?.text?'Read the original report below; no separate executive recommendation was recorded.':'The run report will appear here when it is recorded.'}</p>}{report?.error&&<p className="mt-2 text-sm">{report.error}</p>}{report?.text&&<details className="mt-4 border-t border-paper-line pt-3"><summary className="cursor-pointer text-sm font-semibold">Read the complete report</summary><Suspense fallback={<p>Loading report…</p>}><ReportBody report analysesPerLoop={analysesPerLoop} text={report.text}/></Suspense></details>}</div></details>
+      <footer className="pb-5 text-xs text-ink-faint">Research findings for review with your study team. Not a treatment recommendation.</footer>
     </div>
   </main>;
 }

@@ -24,9 +24,4 @@ input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size:1
 .floor-agent [class*="text-slate-"], .floor-resource [class*="text-slate-"] { color:rgb(var(--ink-soft)); }
 .floor-agent button { color:rgb(var(--ink)); }
 .recharts-text { font-size:13px; }
-@media(max-width:520px) {
-  .exploration-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .exploration-summary-grid button:nth-child(4)::before { display:block; }
-  .exploration-summary-grid button:nth-child(odd)::before { display:none; }
-  .exploration-summary-heading { flex-wrap:wrap; }
-}
+/* Exploration card responsiveness is owned by exploration-summary.css. */

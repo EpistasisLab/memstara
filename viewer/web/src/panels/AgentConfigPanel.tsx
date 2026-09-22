@@ -1,8 +1,12 @@
+import CreateCustomSkill from '../components/CreateCustomSkill';
+import { agentStageLabel } from "../lib/stage";
+import AgentReferenceKnowledge from '../components/AgentReferenceKnowledge';
+import BaselineSettings from '../components/BaselineSettings';
 import { usePipelines } from "../store/pipelines";
 import { useRunForm } from "../lib/useRunForm";
 import Help from "../components/Help";
 import { useEffect, useRef, useState } from "react";
-import { X, ArrowDown } from "lucide-react";
+import { X, ArrowDown, Upload, FileText } from "lucide-react";
 import { STAGE_ICON } from "../lib/icons";
 import { STAGE_COLOR } from "../lib/stage";
 import { useControl, type EvaluationPlan } from "../store/control";
@@ -27,6 +31,8 @@ function Editor({ close }: { close: () => void }) {
   const pipelineName=usePipelines(s=>s.items.find(p=>p.id===s.selected)?.name);
   const dialog = useRef<HTMLDialogElement>(null);
   const reviewTarget=useRef<HTMLElement>(null);
+  const uploadInput = useRef<HTMLInputElement>(null);
+  const [uploadedName, setUploadedName] = useState("");
   const saveTarget=useRef<HTMLButtonElement>(null);
   const [coach,setCoach]=useState<1|2|3>(1);
   const form = useRunForm();
@@ -34,8 +40,9 @@ function Editor({ close }: { close: () => void }) {
   const [choice, setChoice] = useState(editor?.add ? "" :
     editor?.stage === "hypothesis" ? asSlots(form.playbook_hypothesis, form.hypothesis_agents)[editor.slot] :
     editor?.stage === "interpreter" ? asSlots(form.playbook_interpreter, form.interpret_agents)[editor.slot] :
-      form[`playbook_${editor!.stage}`]);
+      form[`playbook_${editor!.stage === "report" ? "explanation" : editor!.stage}`]);
   const [plan, setPlan] = useState<EvaluationPlan>({ ...form.evaluation });
+  const [baseline, setBaseline] = useState(form.baseline_columns ?? []);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   useEffect(() => { const d = dialog.current; d?.showModal(); return () => d?.close(); }, []);
@@ -50,8 +57,8 @@ function Editor({ close }: { close: () => void }) {
   const multiple = stage === "hypothesis" || stage === "interpreter";
   const count = stage === "interpreter" ? form.interpret_agents : form.hypothesis_agents;
   const maximum = usePipelines.getState().selected ? 1 : 4;
-  const selected = catalog.find(x => x.id === choice);
-  const used = asSlots(form[`playbook_${stage}`], count)
+  const selected = catalog.find(x => x.id === choice && x.stage === stage);
+  const used = asSlots(form[`playbook_${stage === "report" ? "explanation" : stage}`], count)
     .filter((_, i) => add || i !== slot).map(id => catalog.find(x => x.id === id)?.hash).filter(Boolean);
   const duplicate = multiple && selected && used.includes(selected.hash);
   const invalidPlan = stage === "ml" && (
@@ -62,36 +69,44 @@ function Editor({ close }: { close: () => void }) {
     !Number.isInteger(plan.search_trials) || plan.search_trials < 1 || plan.search_trials > 10
   );
   const commit = () => {
-    if (!selected || duplicate || invalidPlan || running || busy) return;
-    if (add && count >= maximum) { setError(`At most ${maximum} ${stage} agents are supported.`); return; }
+    if (!selected || duplicate || invalidPlan || saving || running || busy) return;
+    if (add && count >= maximum) { setError(`At most ${maximum} ${agentStageLabel(stage)} agents are supported.`); return; }
     setForm(f => {
       if (add && stage === "interpreter") return { ...f, interpret_agents: f.interpret_agents + 1,
         playbook_interpreter: fromSlots([...asSlots(f.playbook_interpreter, f.interpret_agents), choice]) };
       if (add) return { ...f, hypothesis_agents: f.hypothesis_agents + 1,
         trials: Math.max(f.trials, f.hypothesis_agents + 1),
         playbook_hypothesis: fromSlots([...asSlots(f.playbook_hypothesis, f.hypothesis_agents), choice]) };
-      return { ...withPlaybookAt(f, stage, slot, choice), evaluation: stage === "ml" ? plan : f.evaluation };
+      return { ...withPlaybookAt(f, stage, slot, choice), baseline_columns: stage === "ml" ? baseline : f.baseline_columns, evaluation: stage === "ml" ? plan : f.evaluation };
     });
     close();
   };
   const upload = async (file?: File) => {
-    if (!file) return;
-    setError(""); setSaving(true);
+    if (!file || saving || running || busy) return;
+    setError(""); setUploadedName(""); setSaving(true);
     try {
+      if (!/\.md$/i.test(file.name)) throw new Error("Choose a Markdown (.md) file.");
+      if (!file.size) throw new Error("This file is empty. Choose a skill with instructions.");
       if (file.size > 48000) throw new Error("Choose a Markdown file smaller than 48 kB.");
-      const res = await fetch("/control/playbooks", { method: "POST", headers: { "Content-Type": "application/json" },
+      const content = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
+      if (!content.trim() || content.includes("\0")) throw new Error("Choose a UTF-8 Markdown file containing instructions.");
+      const res = await fetch("/control/playbooks", { method: "POST", signal: AbortSignal.timeout(15000), headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: file.name.replace(/\.md$/i, "").replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 60),
-          stage, content: await file.text() }) });
+          stage, content }) });
       const body = await res.json();
-      if (!res.ok) throw new Error(body.error);
-      await loadPlaybooks(); setChoice(body.id); setCoach(2);
+      if (!res.ok) throw new Error(body.error || "The skill could not be uploaded. Please try again.");
+      // Registration remains usable even if the subsequent catalog refresh fails.
+      useControl.setState(s => ({ catalog: [...s.catalog.filter(x => x.id !== body.id), body],
+        playbooks: [...new Set([...(s.playbooks ?? []), body.id])] }));
+      setChoice(body.id); setUploadedName(file.name); setCoach(2);
+      void loadPlaybooks();
       if (body.evaluation) setPlan(p => ({ ...p, ...body.evaluation }));
-    } catch (e) { setError(String(e)); } finally { setSaving(false); }
+    } catch (e) { setError(String(e)); } finally { setSaving(false); if (uploadInput.current) uploadInput.current.value = ""; }
   };
   return <dialog ref={dialog} onCancel={close} aria-labelledby="agent-config-title"
     className="agent-settings-dialog m-auto w-[min(34rem,94vw)] max-h-[90vh] overflow-auto rounded-xl border border-paper-line bg-white p-5 text-ink shadow-xl backdrop:bg-ink/30">
     <div className="flex items-center justify-between gap-3">
-      <h2 id="agent-config-title" className="flex items-center gap-2 text-lg font-bold capitalize"><StageIcon size={22} color={STAGE_COLOR[stage]} aria-hidden="true" />{add ? `Add ${stage}` : `${stage} settings`}</h2>
+      <h2 id="agent-config-title" className="flex items-center gap-2 text-lg font-bold capitalize"><StageIcon size={22} color={STAGE_COLOR[stage]} aria-hidden="true" />{add ? `Add ${agentStageLabel(stage)}` : `${agentStageLabel(stage)} settings`}</h2>
       <button onClick={close} aria-label="Close settings" className="rounded p-1 hover:bg-paper"><X size={18} /></button>
     </div>
     {pipelineName&&<p className="mt-2 text-sm font-semibold text-ink-soft">{pipelineName}</p>}
@@ -101,7 +116,7 @@ function Editor({ close }: { close: () => void }) {
       <p id="agent-skill-hint" className="my-2 text-xs leading-relaxed text-ink-soft">Start here: open the list below to choose this agent's instructions. You can keep the current skill.</p>
       {coach===1&&<p className="agent-click-hint" role="status"><ArrowDown size={17} aria-hidden="true"/>Click this list to select a skill.</p>}
       <select id="agent-skill-select" aria-describedby="agent-skill-hint" autoFocus className={`${field} agent-skill-select mt-1 ${coach===1?'agent-click-target':''}`} value={choice} onChange={e => {
-        setChoice(e.target.value);setCoach(e.target.value?2:1);
+        setChoice(e.target.value);setUploadedName("");setCoach(e.target.value?2:1);
         const defaults = catalog.find(x => x.id === e.target.value)?.evaluation;
         if (defaults) setPlan(p => ({ ...p, ...defaults }));
       }}>
@@ -111,13 +126,28 @@ function Editor({ close }: { close: () => void }) {
       </select>
       {coach===1&&selected&&<button type="button" className="mt-3 rounded border border-paper-line px-3 py-2 text-xs font-semibold text-ink" onClick={()=>setCoach(2)}>Keep this skill · review next</button>}
 
-    <details className="mt-3 text-xs text-ink-soft"><summary className="cursor-pointer font-semibold">Or upload your own skill (.md)</summary>
-      <label className="mt-2 block">Choose a Markdown file instead of a skill from the list. <Help topic="Use your own skill (.md)" />
-        <input className="mt-2 block w-full text-xs font-normal" type="file" accept=".md,text/markdown,text/plain"
-          disabled={saving} onChange={e => void upload(e.target.files?.[0])} />
-      </label>
-    </details>
+    <section className="mt-4 border-t border-paper-line pt-3" aria-label="Upload a custom skill" aria-busy={saving}>
+      <h3 className="text-sm font-semibold">Use your own instructions</h3>
+      <p id="custom-skill-help" className="mt-1 text-xs leading-relaxed text-ink-soft">
+        Upload a Markdown file for this {agentStageLabel(stage)} agent. Review it below, then save to apply it.
+        <span className="mt-1 block">UTF-8 · .md · up to 48 kB</span>
+      </p>
+      <input ref={uploadInput} className="hidden" type="file" accept=".md" aria-label="Custom skill Markdown file"
+        disabled={saving || !!running || busy} onChange={e => void upload(e.target.files?.[0])} />
+      <button type="button" aria-describedby="custom-skill-help"
+        className="mt-3 inline-flex max-w-full items-center gap-2 rounded-lg border border-paper-line bg-white px-3 py-2 text-sm font-semibold hover:bg-paper focus-visible:outline focus-visible:outline-2 disabled:opacity-50"
+        disabled={saving || !!running || busy} onClick={() => uploadInput.current?.click()}>
+        <Upload size={17} className="shrink-0" aria-hidden="true" />{saving ? "Uploading…" : "Upload skill (.md)"}
+      </button>
+      <div aria-live="polite" className="mt-2 text-xs leading-relaxed text-ink-soft">
+        {uploadedName && <p className="flex items-start gap-2"><FileText size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 break-words">{uploadedName} · Uploaded and selected. Save settings to apply.</span></p>}
+        {(running || busy) && <p>Stop the pipeline before changing its agent skills.</p>}
+      </div>
+    </section>
     </div>
+    {stage !== "data" && <CreateCustomSkill key={stage} stage={stage} disabled={!!running || busy || saving} onBusy={setSaving}
+      onSelect={skill=>{setChoice(skill.id);setCoach(2);if(skill.evaluation)setPlan(p=>({...p,...skill.evaluation}));}} />}
     <section ref={reviewTarget} aria-label="Review selected skill" className="mt-3 rounded-lg border border-paper-line bg-paper/40 p-3">
       <h3 className="mb-3 text-sm font-semibold"><span className="agent-config-step">2</span>Review what it does</h3>
     {selected ? <div aria-live="polite">
@@ -131,8 +161,11 @@ function Editor({ close }: { close: () => void }) {
       {coach===2&&<button type="button" className="mt-3 rounded border border-paper-line px-3 py-2 text-xs font-semibold text-ink" onClick={()=>setCoach(3)}>Reviewed · show save button</button>}
     </div>:<p className="text-xs text-ink-soft">Choose a skill in step 1 to see its purpose and full instructions here.</p>}
     </section>
+    {stage === "ml" && <AgentReferenceKnowledge />}
+    {choice && !selected && <p role="alert" className="mt-3 text-sm">This saved selection is not a skill for this agent. ML Results Presenter belongs to Explanation; ML Knowledge is reference material. Choose an appropriate skill and save.</p>}
     {stage === "ml" && <fieldset className="mt-4 space-y-2 border-t border-paper-line pt-3">
       <legend className="text-xs font-bold">Predictive model and evaluation <Help topic="Predictive model" /></legend>
+      <BaselineSettings value={baseline} onChange={setBaseline} />
       <select aria-label="Predictive model" className={field} value={plan.engine} onChange={e => setPlan({ ...plan, engine: e.target.value })}>
         <option value="xgboost">XGBoost</option><option value="random_forest">Random forest (scikit-learn)</option>
         <option value="logistic_regression">Logistic regression (scikit-learn)</option>
@@ -151,7 +184,7 @@ function Editor({ close }: { close: () => void }) {
       <p className="text-xs text-ink-faint">Optimization uses training folds only. Hold-out results are not used to choose a model.</p>
     </fieldset>}
     {(error || duplicate || invalidPlan) && <p role="alert" className="mt-3 text-sm text-red-700">{error || (invalidPlan ? "Check evaluation ranges. CV folds must be 0 or 2–10." : "Choose a different skill for this agent.")}</p>}
-    {!add && multiple && count === 1 && <p className="mt-3 text-xs text-ink-faint">At least one {stage} agent is required.</p>}
+    {!add && multiple && count === 1 && <p className="mt-3 text-xs text-ink-faint">At least one {agentStageLabel(stage)} agent is required.</p>}
     <div className="agent-settings-footer mt-5 flex flex-wrap justify-end gap-2">
       <div className="w-full"><p className="text-sm font-semibold"><span className="agent-config-step">3</span>Apply to this agent</p>
         <p className="mt-1 text-xs text-ink-soft">{!selected?'Choose a skill above to enable saving.':invalidPlan?'Correct the evaluation settings above before saving.':saving?'Uploading your skill…':'Click the highlighted button below to save. Then continue the pipeline setup guide.'}</p></div>
@@ -165,7 +198,7 @@ function Editor({ close }: { close: () => void }) {
       <div className="agent-save-target">
       {coach===3&&<p className="agent-click-hint" role="status"><ArrowDown size={17} aria-hidden="true"/>{invalidPlan?'Fix the evaluation values above first.':duplicate?'Choose a different skill above first.':saving||busy?'Wait for the current operation to finish.':'Click here to apply your settings.'}</p>}
       <button ref={saveTarget} className={`rounded bg-accent px-3 py-2 text-sm font-bold text-accent-contrast disabled:opacity-40 ${coach===3?'agent-click-target':''}`} onClick={commit}
-        disabled={!selected || !!duplicate || invalidPlan || saving || !!running || busy}>{add ? `Add ${stage}` : "Save settings"}</button>
+        disabled={!selected || !!duplicate || invalidPlan || saving || !!running || busy}>{add ? `Add ${agentStageLabel(stage)}` : "Save settings"}</button>
       </div>
     </div>
   </dialog>;

@@ -31,3 +31,8 @@ export const STATE_LABEL = {
   // opposite reactions from a reader, so they cannot share a word.
   planned: "Not started",
 } as const;
+
+/** Historical stage IDs remain stable; labels reflect the current agent terminology. */
+export function agentStageLabel(stage: string): string {
+  return stage === "report" || stage === "explanation" ? "Explanation" : stage;
+}

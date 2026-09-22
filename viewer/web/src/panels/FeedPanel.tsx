@@ -1,96 +1,98 @@
-import { Radio } from "lucide-react";
-import EmptyState from "../components/EmptyState";
-import Panel from "../components/Panel";
-import { STAGE_COLOR, STORE_LABEL } from "../lib/stage";
-import { useFeed } from "../store/viewer";
-import type { FeedEvent } from "../types";
+import { lazy, Suspense, useState } from 'react';
+import { agentDisplayName, TOOL_ACTIONS } from '../lib/telemetry';
+import { Radio, ChevronDown, Search } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
+import DetailPreview from '../components/DetailPreview';
+import Panel from '../components/Panel';
+import { useExecutionContext } from '../components/ExecutionContext';
+import { STAGE_COLOR, STORE_LABEL } from '../lib/stage';
+import { useFeed, useSnapshot } from '../store/viewer';
+import { useAgentConversation, type AgentMessage } from '../lib/useAgentConversation';
+import type { FeedEvent } from '../types';
 
-/**
- * The feed — what just happened, in order, newest first.
- *
- * Two things about its scope are said on screen rather than left to be discovered:
- *
- * 1. **All runs.** Only create_task/claim_task/submit_result carry a run_tag at all
- *    (api/queries.py, TASK_TOUCHES), so filtering by the run the control panel selects
- *    would silently drop most of the feed — a curator's okf_read would never appear. The
- *    header says "All runs" instead of pretending.
- * 2. **Both driving paths.** The scene draws board agents only; the supervisor path did
- *    the larger share of the tool calls. A board-only feed would understate the system by
- *    roughly fivefold, so supervisor rows are shown and marked.
- *
- * A row whose agent the viewer cannot name is kept, not dropped — `agent` is null, the
- * dot goes grey, and `label` falls back to the raw agent name. A call it cannot name is
- * exactly the thing someone would want to see.
- *
- * This body is deliberately plain: every field of `FeedEvent`, one row each, no
- * animation and no visual treatment beyond the stage colour. The presentation is left to
- * be designed rather than guessed at here.
- */
+const ReportBody=lazy(()=>import('../components/ReportBody'));
 
-/** `at` is a UTC ISO string from the API (api/scene._iso), shown in local time.
- *  `tabular-nums` keeps the column from shifting as the digits change. */
-function clock(at: string): string {
-  return new Date(at).toLocaleTimeString(undefined, { hour12: false });
+function TextRow({message}:{message:AgentMessage}){
+  const agent=agentDisplayName(message.label||message.name||message.stage);
+  return <li className="telemetry-event" data-activity-kind="text"><details>
+    <summary className="telemetry-event-summary">
+      <span className="telemetry-event-dot" style={{backgroundColor:'rgb(var(--accent))'}}/>
+      <span className="telemetry-event-content"><span className="telemetry-event-action">{message.kind_label||'Agent text'} · LLM output</span>
+        <span className="telemetry-event-agent">{agent}</span>
+        <span className="mt-1 line-clamp-2 whitespace-pre-wrap break-words text-sm text-ink">{message.text}</span>
+      </span>
+      <span className="telemetry-event-meta"><time dateTime={message.at??undefined}>{message.at?new Date(message.at).toLocaleTimeString():'Time unavailable'}</time><span>Read output <ChevronDown size={14}/></span></span>
+    </summary>
+    <div className="telemetry-event-details min-w-0"><p className="mb-3 text-xs text-ink-soft">Recorded agent text · {message.stage} · {message.loop===null?'Execution-wide':`Loop ${message.loop}`}. Agent statements do not by themselves confirm successful analysis.</p>
+      <Suspense fallback={<p>Loading output…</p>}><ReportBody origin="mixed" text={message.text}/></Suspense>
+      {message.truncated&&<p>Display limited to 50,000 characters.</p>}
+    </div>
+  </details></li>;
 }
 
+/** Activity records are scoped server-side. Never imply a call proves success. */
 function Row({ event }: { event: FeedEvent }) {
-  return (
-    <li className="activity-feed-row flex items-baseline gap-2 border-b border-paper-line px-4 py-1.5 text-xs last:border-0">
-      <span className="shrink-0 font-mono tabular-nums text-ink-faint">{clock(event.at)}</span>
-
-      <span
-        className="mt-1 h-2 w-2 shrink-0 self-start rounded-full"
-        style={{ backgroundColor: event.agent ? STAGE_COLOR[event.agent] : "#8a8880" }}
-      />
-
-      <span className="w-24 shrink-0 truncate text-ink-soft" title={event.name}>
-        {event.label}
-      </span>
-
-      <span className="activity-feed-tool min-w-0 flex-1 truncate font-mono font-bold" title={event.tool}>
-        {event.tool}
-      </span>
-
-      <span className="max-w-full shrink-0 truncate text-ink-faint" title={event.server}>
-        {event.server}
-      </span>
-
-      <span className="w-28 shrink-0 truncate text-right text-ink-faint">
-        {STORE_LABEL[event.store]}
-      </span>
-
-      {/* Marked, not hidden: these calls are real work the scene does not draw. */}
-      {event.path === "supervisor" && (
-        <span className="shrink-0 rounded bg-paper px-1.5 py-0.5 text-[12px] text-ink-faint">
-          supervisor
-        </span>
-      )}
-    </li>
-  );
+  const action = TOOL_ACTIONS[event.tool] ?? event.tool;
+  const agent = agentDisplayName(event.label ?? event.name ?? 'Unknown agent');
+  const time = new Date(event.at).toLocaleString();
+  const resource = STORE_LABEL[event.store] ?? event.store;
+  const explanation = `${agent}: ${action}. Resource: ${resource}. Tool: ${event.tool}. Server: ${event.server}. Recorded ${time} (local time). Full agent identifier: ${event.name ?? 'Not recorded'}.`;
+  return <li className="telemetry-event">
+    <details>
+      <DetailPreview title="Recorded activity" text={explanation}>
+        <summary className="telemetry-event-summary">
+          <span className="telemetry-event-dot" style={{backgroundColor: event.agent ? STAGE_COLOR[event.agent] : 'rgb(var(--ink-soft))'}} />
+          <span className="telemetry-event-content">
+            <span className="telemetry-event-action">{action}</span>
+            <span className="telemetry-event-agent">{agent}</span>
+            <span className="telemetry-event-resource">Resource: {resource}</span>
+          </span>
+          <span className="telemetry-event-meta"><time dateTime={event.at}>{new Date(event.at).toLocaleTimeString()}</time><span>Details <ChevronDown size={14}/></span></span>
+        </summary>
+      </DetailPreview>
+      <div className="telemetry-event-details">
+        <p>This is a recorded tool call. It does not by itself confirm that an analysis or loop completed.</p>
+        <dl><dt>Action</dt><dd>{action}</dd><dt>Agent</dt><dd>{event.label ?? event.name ?? 'Unknown agent'}</dd>
+          <dt>Agent identifier</dt><dd><code>{event.name || 'Not recorded'}</code></dd>
+          <dt>Tool</dt><dd><code>{event.tool}</code></dd><dt>Service</dt><dd>{event.server}</dd>
+          <dt>Resource</dt><dd>{resource}</dd><dt>Recorded at</dt><dd>{time} · local time</dd>
+          <dt>Execution method</dt><dd>{event.path === 'supervisor' ? 'Legacy supervisor' : 'Pipeline task coordination'}</dd></dl>
+      </div>
+    </details>
+  </li>;
 }
 
 export default function FeedPanel() {
   const feed = useFeed();
-
-  return (
-    <Panel
-      icon={Radio}
-      title="Activity feed"
-      count={feed?.length}
-      status={<span>Selected run</span>}
-      bodyClassName="p-0"
-    >
-      {!feed ? (
-        <EmptyState what="the feed" />
-      ) : feed.length === 0 ? (
-        <div className="p-8 text-ink-faint">No tool calls recorded yet.</div>
-      ) : (
-        <ul>
-          {feed.map((e) => (
-            <Row key={e.key} event={e} />
-          ))}
-        </ul>
-      )}
-    </Panel>
-  );
+  const snapshot=useSnapshot();
+  const loop=(snapshot as (typeof snapshot & {telemetry?:{loop:number|null}}))?.telemetry?.loop??null;
+  const conversation=useAgentConversation(snapshot?.run_tag||null,loop);
+  const context = useExecutionContext();
+  const [query,setQuery] = useState('');
+  const [agent,setAgent] = useState('');
+  const [kind,setKind] = useState('all');
+  const records=[...(feed??[]).map(event=>({kind:'tool' as const,key:event.key,at:event.at,name:event.name,label:event.label,event})),
+    ...(conversation.data?.messages??[]).map(message=>({kind:'text' as const,key:`text:${message.id}`,at:message.at,name:message.name,label:message.label,message}))]
+    .sort((a,b)=>(b.at?Date.parse(b.at):0)-(a.at?Date.parse(a.at):0)||a.key.localeCompare(b.key));
+  const names=[...new Set(records.map(e=>e.name||'Unknown agent'))];
+  const needle=query.trim().toLowerCase();
+  const activeAgent=names.includes(agent)?agent:'';
+  const matching=records.filter(e=>(!activeAgent||(e.name||'Unknown agent')===activeAgent)&&
+    (kind==='all'||e.kind===kind)&&[e.name,e.label,...(e.kind==='text'?[e.message.text,e.message.kind_label,e.message.stage]:[e.event.tool,e.event.server,STORE_LABEL[e.event.store],TOOL_ACTIONS[e.event.tool]])].join(' ').toLowerCase().includes(needle));
+  return <Panel icon={Radio} title="Activity" bodyClassName="p-0">
+    <div className="telemetry-activity-controls">
+      <p className="text-sm"><strong>{context.name}</strong> · {context.startedLabel} · {loop===null?'All loops':`Loop ${loop}`}</p>
+      <p className="text-sm text-ink-soft">Tool actions and actual agent text, newest first. Expand an entry to read its full output. Text appears when recorded, rather than token by token.</p>
+      <div className="telemetry-filter-row">
+        <label><span><Search size={15}/>Search activity</span><input aria-label="Search activity" placeholder="Agent text, action, agent or resource" value={query} onChange={e=>setQuery(e.target.value)}/></label>
+        <label><span>Agent</span><select aria-label="Filter activity by agent" value={names.includes(agent)?agent:''} onChange={e=>setAgent(e.target.value)}><option value="">All agents in this scope</option>{names.map(name=><option key={name} value={name}>{agentDisplayName(records.find(e=>e.name===name)?.label || name)}</option>)}</select></label>
+        <label><span>Activity type</span><select aria-label="Filter activity by type" value={kind} onChange={e=>setKind(e.target.value)}><option value="all">All activity</option><option value="tool">Tool actions</option><option value="text">Agent text</option></select></label>
+      </div>
+      {conversation.error&&<p role="alert" className="text-sm text-ink-soft">{conversation.error}. Tool actions remain available.{conversation.data?' Showing last available text for this scope.':''}</p>}
+      {!conversation.data&&!conversation.error&&snapshot?.run_tag&&<p className="text-xs text-ink-soft">Loading recorded agent text…</p>}
+      {conversation.data?.limited&&<p className="text-xs text-ink-soft">{conversation.data.note || 'Agent text is limited to recent message-bearing steps.'}</p>}
+      {feed && <p className="text-xs text-ink-soft">Showing {matching?.length ?? 0} of {records.length} recent records · times are local. This list is a recent window, not the full history for this scope.</p>}
+    </div>
+    {!feed&&!conversation.data ? <EmptyState what="the activity records"/> : !matching.length ? <div className="p-6 text-sm text-ink-soft">{query || agent || kind!=='all' ? <>No matching activity. <button className="underline" onClick={()=>{setQuery('');setAgent('');setKind('all');}}>Clear filters</button></> : 'No tool actions or agent text have been recorded for this scope yet.'}</div> : <ul aria-label="Recorded activities">{matching.map(e=>e.kind==='tool'?<Row key={e.key} event={e.event}/>:<TextRow key={e.key} message={e.message}/>)}</ul>}
+  </Panel>;
 }

@@ -1,3 +1,10 @@
+import ContentOrigin from "../components/ContentOrigin";
+import { loopLabel } from '../lib/loopLabel';
+import ResultExplorer, { resultKey } from "../components/ResultExplorer";
+import ResultEvidenceVisuals from "../components/ResultEvidenceVisuals";
+import { useExecutionContext } from '../components/ExecutionContext';
+import { lazy, Suspense } from "react";
+const ReportBody = lazy(() => import("../components/ReportBody"));
 import { useEffect, useState } from "react";
 import { usePipelines } from "../store/pipelines";
 import type { Result } from "../types";
@@ -5,11 +12,10 @@ import FinalReport from "../components/FinalReport";
 import ExplanationEvidence from "../components/ExplanationEvidence";
 import Help from "../components/Help";
 import { BarChart3 } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import EmptyState from "../components/EmptyState";
 import Panel from "../components/Panel";
 import WhyColumns from "../components/WhyColumns";
-import { useBoard, useResults, useViewer } from "../store/viewer";
+import { useBoard, useResults, useViewer, useSnapshot } from "../store/viewer";
 
 /**
  * Finished results — the results table, not the board.
@@ -21,48 +27,18 @@ import { useBoard, useResults, useViewer } from "../store/viewer";
  * Read-only, always. Nothing here writes to the store.
  */
 
-/** What the numbers under Contributions actually measure, given the engine that made them.
- *
- *  Three states reach here and they are said differently on purpose:
- *
- *    a name we know   the engine and the quantity, so two results can be compared or not
- *                     compared knowingly
- *    a name we do not the engine alone. A new engine added to `ml._make_model` and not to
- *                     this table should read as unfamiliar, never as unrecorded
- *    `""`             not recorded. Every result from before 2026-09-08 says this, and it
- *                     cannot be backfilled: the engine was an environment variable read
- *                     inside the call and nothing wrote it down
- *                     (`src/memstara/mcp_servers/ml.py:335`)
- *
- *  The wording comes from `_importance`'s own docstring, which measured it: random_forest
- *  sums to exactly 1.0000 on all four sub-datasets, sklearn_hgb's permutation maps sum to
- *  0.0819 and 0.2572 with a minimum entry of -0.0131.
- *
- *  **Two of the three engines below no longer exist and their rows stay in this table.**
- *  `sklearn_hgb` and `random_forest` were removed from `ml._make_model` on 2026-09-08,
- *  leaving `xgboost` the only engine a new result can name. This panel does not render new
- *  results — it renders whatever is on the board, and 81 rows there say `sklearn_hgb`,
- *  whose numbers are AUC drops rather than gain. Pruning this table to match what the tool
- *  can produce today would turn every one of those rows into "scale not described here",
- *  which is the one thing the table exists to prevent. It shrinks when the rows do. */
-function scaleNote(model: string): string {
-  if (model === "") return "scale not recorded — this result predates the engine being stored";
-  const measure: Record<string, string> = {
-    sklearn_hgb: "mean AUC drop under permutation, no fixed scale, negative is possible",
-    random_forest: "impurity decrease, non-negative, sums to about 1",
-    xgboost: "gain, non-negative, sums to about 1",
-  };
-  return measure[model] ? `${model} · ${measure[model]}` : `${model} · scale not described here`;
-}
-
-export default function ResultsPanel() {
+export default function ResultsPanel({ telemetry = false }: { telemetry?: boolean } = {}) {
+  const snapshot = useSnapshot();
+  const [chosenResult, setChosenResult] = useState('');
+  const executionContext = useExecutionContext();
   const selectedResults = useResults();
-  const savedConfig=useViewer(s=>s.snapshot?.run_configuration);
-  const savedTag=useViewer(s=>s.snapshot?.run_tag);
+  const savedConfig=snapshot?.run_configuration;
+  const savedTag=snapshot?.run_tag;
   const labeledSelected=selectedResults?.map(r=>({...r,run_tag:savedTag,
     pipeline_name:savedConfig?.pipeline_name,
-    iteration:savedConfig?.pipeline_id&&savedConfig.trials?Math.floor(r.trial/savedConfig.trials)+1:null}));
-  const scope=usePipelines(s=>s.resultsScope);
+    iteration:savedConfig?.trials?Math.floor(r.trial/savedConfig.trials)+1:null}));
+  const globalScope=usePipelines(s=>s.resultsScope);
+  const scope=telemetry ? "selected" : globalScope;
   const setScope=(resultsScope:"all"|"selected")=>usePipelines.setState({resultsScope});
   const definitions = usePipelines(s=>s.items);
   const tags=scope==="selected"?"":definitions.map(p=>p.latest?.run_tag).filter(Boolean).sort().join(",");
@@ -88,27 +64,28 @@ export default function ResultsPanel() {
     return ()=>{disposed=true;controller.abort();clearTimeout(timer);};
   },[tags]);
   const results=scope==="all" ? (tags ? (all?.tags===tags?all.results:null) : []) : labeledSelected;
-  const resultName=(r:Pick<Result,"trial"|"pipeline_name"|"iteration"|"run_tag">)=>r.pipeline_name&&r.iteration!=null
-    ? `${r.pipeline_name} · Iteration ${r.iteration}`
-    : `${r.run_tag? r.run_tag+" · ":""}Trial ${r.trial}`;
-  const dataUnavailable = useViewer(s => !s.newRunMode && (s.snapshot?.health.memstara.up === false || !!s.error));
-  const pipeline = useViewer(s => s.snapshot?.pipeline);
+  const resultName=(r:Pick<Result,"trial"|"pipeline_name"|"iteration"|"run_tag">)=>
+    `${r.pipeline_name || r.run_tag || 'Analysis'} · ${loopLabel(r, scope === 'selected' ? savedConfig?.trials : undefined)}`;
+  const globalUnavailable = useViewer(s => !s.newRunMode && (s.snapshot?.health.memstara.up === false || !!s.error));
+  const dataUnavailable = telemetry ? snapshot?.health.memstara.up === false : globalUnavailable;
+  const pipeline = telemetry ? null : snapshot?.pipeline;
   const selectedFailed = (useBoard()?.tasks ?? []).filter(task => task.status === "failed");
   const failed = scope==="all" ? (tags && all?.tags===tags?all.failures:[]) : selectedFailed;
 
-  const compare = (results ?? []).filter(r => r.auc != null).map((r) => ({ name: resultName(r), auc: r.auc }));
+  const activeResult = results?.find(r=>resultKey(r)===chosenResult) ?? results?.[0];
+  useEffect(()=>{if(activeResult && chosenResult !== resultKey(activeResult))setChosenResult(resultKey(activeResult));},[activeResult,chosenResult]);
 
   return (
-    <Panel id="results-panel" icon={BarChart3} title="Results" count={results?.length}>
+    <Panel id="results-panel" icon={BarChart3} title="Results">
       {scope==="selected" && pipeline && pipeline.status !== "completed" && <p role="status" className="m-4 text-sm text-amber-800">Pipeline status: {pipeline.status}. Check stage results and report status.</p>}
       {scope==="selected" && dataUnavailable && <p role="status" className="m-4 text-sm text-amber-800">Connection interrupted. Showing the last available results; this is not an empty or completed run.</p>}
-      <div className="m-4 flex gap-2 text-xs"><button className="rounded border border-paper-line px-3 py-2" aria-pressed={scope==="all"} onClick={()=>setScope("all")}>All pipelines</button><button className="rounded border border-paper-line px-3 py-2" aria-pressed={scope==="selected"} onClick={()=>setScope("selected")}>Selected run</button></div>
-      {tags&&<p className="mx-4 mt-3 text-xs text-ink-soft">All recorded iterations from each pipeline's latest execution. Select an older run to inspect its archived results.</p>}
+      {!telemetry && <div className="m-4 flex flex-wrap gap-2 text-sm"><button className="rounded border border-paper-line px-3 py-2" aria-pressed={scope==="all"} onClick={()=>setScope("all")}>Latest executions across pipelines</button><button className="rounded border border-paper-line px-3 py-2" aria-pressed={scope==="selected"} onClick={()=>setScope("selected")}>This execution</button></div>}
+      {!telemetry && scope==="selected" && <p className="mx-4 text-sm text-ink-soft">Viewing: <strong>{executionContext.label}</strong>. Includes its recorded loops.</p>}
+      {tags&&<p className="mx-4 mt-3 text-xs text-ink-soft">All recorded loops from each pipeline's latest execution. Select an older run to inspect its archived results.</p>}
       {scope==="all"&&fetchError&&<p role="alert" className="m-4 text-sm text-amber-800">{fetchError}. Last available results are retained.</p>}
-      {scope==="selected"&&<FinalReport />}
       {failed.length > 0 && <div role="status" className="m-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
-        <p className="font-bold">{failed.length} trial(s) could not be completed</p>
-        <p>Other trials can continue. Failed trials have no reported performance.</p>
+        <p className="font-bold">{failed.length} analysis task(s) could not be completed</p>
+        <p>Other loops can continue. Failed tasks have no reported performance.</p>
         {failed.map(task => <p key={task.task_id} className="mt-2">{resultName(task)} · {task.task_type}: {task.error || "No diagnostic recorded"}</p>)}
       </div>}
       {!results ? (
@@ -117,36 +94,21 @@ export default function ResultsPanel() {
         <div className="p-8 text-ink-faint">No finished results yet.</div>
       ) : (
         <div className="space-y-5 p-4">
-          <section className="rounded-lg border border-paper-line p-3">
-            <h3 className="mb-2 text-sm font-bold">Performance by pipeline and iteration <Help topic="Performance by trial" /></h3>
-            <ResponsiveContainer width="100%" height={160}>
-              <BarChart data={compare}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#eceae4" vertical={false} />
-                <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
-                {/* 0.5 is chance for AUC; anchoring the axis there stops a coin-flip result
-                    from looking like a tall bar. */}
-                <YAxis domain={[0.5, 1]} tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(v) => [Number(v).toFixed(4), "AUC"]} />
-                <Bar dataKey="auc" radius={[4, 4, 0, 0]} fill="#2a5f8f" isAnimationActive={false} />
-              </BarChart>
-            </ResponsiveContainer>
-            <p className="mt-1 text-xs text-ink-faint">The axis starts at 0.5 — 0.5 is a coin flip.</p>
-          </section>
-
-          {results.map((r) => {
+          <ResultExplorer results={results} selected={activeResult ? resultKey(activeResult) : ''} onSelect={setChosenResult} />
+          <h3 className="result-detail-heading">Selected analysis · evidence and interpretation</h3>
+          {(activeResult ? [activeResult] : []).map((r) => {
             // The importances come off the result, not off the board. The board row is
             // cleaned away eventually and `memstara_results.task_id` is ON DELETE SET
             // NULL, so reading them from the task made the explanation disappear from
             // finished work — the AUC stayed and the reason for it did not.
-            const imp = Object.entries(r.importance ?? {}).sort((a, b) => b[1] - a[1])
-              .map(([col, v]) => ({ col, v }));
             // Asked for, but not in the cohort — the data stage's own list, not
             // `columns` minus `columns_used`. A hypothesis half of whose columns were
             // missing is a different claim from one that got everything it asked for.
             const missing = r.columns_missing ?? [];
+            const predictors = [...new Set(r.columns_used ?? [])].filter(column => column !== r.y_column);
 
             return (
-              <article key={r.result_id} className="rounded-lg border border-paper-line p-4">
+              <article key={resultKey(r)} className="selected-result-card rounded-lg border border-paper-line p-4" aria-label="Selected analysis evidence">
                 <header className="flex items-baseline justify-between gap-4">
                   <h3 className="font-bold">
                     {resultName(r)}
@@ -163,16 +125,17 @@ export default function ResultsPanel() {
                   </span>
                 </header>
 
-                <p className="mt-2 text-sm leading-relaxed text-ink-soft">{r.hypothesis}</p>
+                <ContentOrigin kind="proposal" compact/><p className="mt-2 text-sm leading-relaxed text-ink-soft">{r.hypothesis}</p>
 
                 <p className="mt-2 font-mono text-[12px] text-ink-faint">
-                  {(r.columns_used ?? []).length} column
-                  {(r.columns_used ?? []).length === 1 ? "" : "s"} used
+                  {predictors.length} predictor
+                  {predictors.length === 1 ? "" : "s"} used
                   {missing.length > 0 && `, ${missing.length} asked for and missing`}
                   {(r.okf_concept_ids ?? []).length > 0 &&
                     ` · ${r.okf_concept_ids.length} OKF concept${r.okf_concept_ids.length === 1 ? "" : "s"} behind them`}
                 </p>
 
+                <ResultEvidenceVisuals key={resultKey(r)} result={r} />
                 <section className="mt-3 rounded-lg border border-[#c9d9e8] bg-stage-data/5 p-3" aria-label="Clinical interpretation summary">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h4 className="text-sm font-bold text-ink">Clinical interpretation</h4>
@@ -180,9 +143,9 @@ export default function ResultsPanel() {
                       {r.auc == null ? "Evidence unavailable" : r.auc <= 0.5 ? "Hypothesis not supported by discrimination" : "Exploratory signal · requires validation"}
                     </span>
                   </div>
-                  <p className="mt-2 text-xs text-ink-soft">The model used these features for this trial:</p>
+                  <ContentOrigin kind="rule" compact/><p className="text-xs text-ink-soft">The status above uses a fixed rule: AUC unavailable, AUC ≤ 0.5, or AUC &gt; 0.5. It is not a research-priority assessment.</p><p className="mt-2 text-xs text-ink-soft">Predictor inputs used by the model:</p>
                   <div className="mt-2 flex flex-wrap gap-1">
-                    {(r.columns_used ?? []).map(column => <span key={column} className="rounded border border-[#c9d9e8] bg-white px-1.5 py-0.5 font-mono text-[12px] text-ink-soft">{column}</span>)}
+                    {predictors.map(column => <span key={column} className="rounded border border-[#c9d9e8] bg-white px-1.5 py-0.5 font-mono text-[12px] text-ink-soft">{column}</span>)}
                     {(r.columns_used ?? []).length === 0 && <span className="text-xs text-ink-faint">No features were recorded.</span>}
                   </div>
                   {r.evaluation?.interpreter && <p className="mt-2 text-xs text-ink-faint">Interpreter: {r.evaluation.interpreter.worker} · Skill: {r.evaluation.interpreter.skill || "Default instructions"}</p>}
@@ -190,10 +153,11 @@ export default function ResultsPanel() {
                     <p className="text-xs font-bold">Interpreter perspectives: {r.evaluation.interpretations.filter(i => i.status === "done").length}/{r.evaluation.interpretations.length} complete</p>
                     {r.evaluation.interpretations.map(i => <details key={i.slot} className="rounded border border-paper-line p-2">
                       <summary className="cursor-pointer text-xs">{i.worker} · {i.skill || "Default instructions"} · {i.status}</summary>
-                      <p className="mt-2 whitespace-pre-wrap text-sm">{i.status === "done" ? i.text : "This perspective is not yet available."}</p>
+                      <Suspense fallback={<p>Loading formatted explanation…</p>}><ReportBody origin={i.status === "done" ? "llm" : undefined} text={i.status === "done" ? i.text : "This perspective is not yet available."} /></Suspense>
                     </details>)}
                   </div>}
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-ink">{r.interpretation || "No clinician-readable interpretation was recorded."}</p>
+                  <p className="mt-2 text-sm text-ink-soft">Prediction target (not an input): <strong>{r.y_column || "Not recorded"}</strong></p>
+                  <details className="mt-3" open><summary className="cursor-pointer font-semibold">Read the interpreter’s explanation</summary><Suspense fallback={<p>Loading formatted explanation…</p>}><ReportBody origin={r.interpretation ? "llm" : undefined} text={r.interpretation || "No interpretation was recorded."} /></Suspense></details>
                   <p className="mt-2 text-[12px] text-ink-faint">Predictive association is not causation. A model response curve is not a validated treatment threshold.</p>
                 </section>
 
@@ -206,42 +170,12 @@ export default function ResultsPanel() {
                   </p>
                 )}
 
-                {imp.length > 0 && (
-                  <div className="mt-4">
-                    <h4 className="text-sm font-bold">Contributions <Help topic="Contributions" /></h4>
-                    {/* The scale, beside the bars. Two engines produce two quantities and
-                        neither the chart nor the tooltip could say which: gain sums to
-                        about 1 and is never negative, permutation is an AUC delta on no
-                        fixed scale and goes negative. Drawn without a scale, one result's
-                        bar looks directly comparable to another's, and for two engines it
-                        is not — the same reading `ml._importance` warns against. */}
-                    <p className="mb-2 font-mono text-[12px] text-ink-faint">
-                      {r.evaluation?.explanation?.method === "holdout_permutation_auc" ? "Hold-out permutation importance · change in AUC" : scaleNote(r.model)}
-                    </p>
-                    <ResponsiveContainer width="100%" height={Math.max(140, imp.length * 26)}>
-                      <BarChart data={imp} layout="vertical" margin={{ left: 12, right: 24 }}>
-                        <XAxis type="number" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-                        <YAxis type="category" dataKey="col" width={96} tick={{ fontSize: 12 }}
-                               axisLine={false} tickLine={false} />
-                        <Tooltip formatter={(v) => [Number(v).toFixed(5), "contribution"]} />
-                        {/* A column can be chosen and contribute nothing — or less than
-                            nothing. Negative bars are the point, not an artefact. */}
-                        <Bar dataKey="v" radius={[0, 3, 3, 0]} isAnimationActive={false}>
-                          {imp.map((d) => (
-                            <Cell key={d.col} fill={d.v < 0 ? "#c0392b" : "#2a5f8f"} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-
-                <ExplanationEvidence result={r} />
+                <details className="mt-4"><summary className="cursor-pointer font-semibold">Review detailed explainability evidence and limitations</summary><ExplanationEvidence result={r} /></details>
                 <details className="mt-3">
                   <summary className="cursor-pointer text-sm font-bold hover:text-ink-soft">
-                    Raw interpretation <Help topic="Interpretation" />
+                    Full interpretation document
                   </summary>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{r.interpretation}</p>
+                  <Suspense fallback={<p>Loading formatted explanation…</p>}><ReportBody origin={r.interpretation ? "llm" : undefined} text={r.interpretation || "No interpretation was recorded."} /></Suspense>
                 </details>
 
                 {/* The one thing on this panel that is not in the snapshot. The matcher
@@ -254,10 +188,11 @@ export default function ResultsPanel() {
                   {r.evaluation.data_quality.warnings?.map((warning, index) => <p key={index} className="mt-1">{warning}</p>)}
                 </div>}
                 {r.evaluation && Object.keys(r.evaluation).length > 0 && <details className="mt-3 text-sm">
-                  <summary className="cursor-pointer font-bold">Evaluation and explainability <Help topic="Evaluation and explainability" /></summary>
+                  <summary className="cursor-pointer font-bold">Evaluation and explainability</summary>
+                  <p className="mt-2"><Help topic="Evaluation and explainability" /> How to read evaluation evidence</p>
                   <p className="mt-2">{r.hypothesis_id} · seed {r.evaluation.seed ?? "not recorded"} · hold-out {r.evaluation.test_size ?? "not recorded"}</p>
                   <pre className="mt-2 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(r.evaluation.evaluation?.plan, null, 2)}</pre>
-                  <p className="mt-2 text-xs">{r.evaluation.explanation?.scope}</p>
+                  <Suspense fallback={null}><ReportBody origin="rule" text={r.evaluation.explanation?.scope || ""} /></Suspense>
                   {r.evaluation.explanation?.shap?.mean_absolute && <div className="mt-2">
                     <p className="font-bold">TreeSHAP · mean absolute contribution ({r.evaluation.explanation.shap.units})</p>
                     {Object.entries(r.evaluation.explanation.shap.mean_absolute).sort((a,b) => b[1]-a[1]).slice(0,10).map(([name, value]) =>
@@ -265,10 +200,10 @@ export default function ResultsPanel() {
                   </div>}
                   {r.evaluation.explanation?.partial_dependence?.map(curve => <div key={curve.feature} className="mt-2">
                     <p className="text-xs font-bold">{curve.feature} · model response (not a clinical threshold)</p>
-                    <table className="w-full text-xs"><thead><tr><th>Value</th><th>Predicted probability</th></tr></thead>
-                      <tbody>{curve.values.map((v,i) => <tr key={i}><td>{v.toPrecision(4)}</td><td>{curve.predicted_probability[i]?.toFixed(3)}</td></tr>)}</tbody></table>
+                    <div className="report-table-scroll" role="region" aria-label="Model response values" tabIndex={0}><table className="result-values-table"><thead><tr><th scope="col">Value</th><th scope="col">Predicted probability</th></tr></thead>
+                      <tbody>{curve.values.map((v,i) => <tr key={i}><td>{v.toPrecision(4)}</td><td>{curve.predicted_probability[i]?.toFixed(3)}</td></tr>)}</tbody></table></div>
                   </div>)}
-                  <p className="mt-2 text-xs text-ink-soft">{r.evaluation.explanation?.actionability}</p>
+                  <Suspense fallback={null}><ReportBody origin="rule" text={r.evaluation.explanation?.actionability || ""} /></Suspense>
                 </details>}
                 <WhyColumns resultId={r.result_id} />
               </article>
@@ -276,6 +211,7 @@ export default function ResultsPanel() {
           })}
         </div>
       )}
+      {!telemetry && scope==="selected" && <details className="m-4 rounded-lg border border-paper-line p-4"><summary className="cursor-pointer font-semibold">Open the report for this execution</summary><FinalReport /></details>}
     </Panel>
   );
 }

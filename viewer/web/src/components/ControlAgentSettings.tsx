@@ -21,7 +21,7 @@ export default function ControlAgentSettings({ form }: { form: RunRequest }) {
     { id: "hypothesis", label: "Hypothesis", description: "Discover candidate explanations", icon: Lightbulb, color: "text-stage-hypothesis", count: displayed.hypothesis_agents, maximum: independent ? 1 : MAX_HYPOTHESIS_AGENTS },
     { id: "ml", label: "Machine learning", description: "Evaluate predictive evidence", icon: ChartNoAxesCombined, color: "text-stage-ml", count: 1, maximum: 1 },
     { id: "interpreter", label: "Interpreter", description: "Explain findings and limitations", icon: ScanText, color: "text-stage-interpreter", count: displayed.interpret_agents, maximum: independent ? 1 : 4 },
-    { id: "report", label: "Report", description: "Compare and recommend hypotheses", icon: FileText, color: "text-stage-report", count: 1, maximum: 1 },
+    { id: "report", label: "Explanation", description: "Compare and recommend hypotheses", icon: FileText, color: "text-stage-report", count: 1, maximum: 1 },
   ] as const;
   return <section aria-label="Agent settings" className="overflow-hidden rounded-xl border border-paper-line bg-paper-panel">
     <header className="border-b border-paper-line px-3 py-3">
@@ -33,7 +33,7 @@ export default function ControlAgentSettings({ form }: { form: RunRequest }) {
       {running ? "Settings are locked during exploration. Stop before making changes." : "Applying changes…"}
     </p>}
     <div className="divide-y divide-paper-line">{stages.map(stage => {
-      const books = asSlots(displayed[`playbook_${stage.id}`], stage.count);
+      const books = asSlots(displayed[`playbook_${stage.id === "report" ? "explanation" : stage.id}`], stage.count);
       return <div key={stage.id} className="space-y-2.5 p-3">
         <div className="flex items-start gap-2">
           <stage.icon size={17} aria-hidden="true" className={`mt-0.5 shrink-0 ${stage.color}`} />

@@ -231,7 +231,7 @@ export default function ChainPanel() {
     const labels = [
       ["Hypothesis", "Generate ideas from knowledge"], ["Data", "Select the relevant features"],
       ["Machine learning", "Evaluate predictive evidence"], ["Interpretation", "Explain meaning and limitations"],
-      ["Report", "Recommend promising hypotheses"],
+      ["Explanation", "Recommend promising hypotheses"],
     ];
     return steps.map((step, i) => ({
       id: `stage-${step.stage}`, type: "pipelineStage", zIndex: -1,
@@ -290,7 +290,7 @@ export default function ChainPanel() {
     <Panel
       icon={Workflow}
       title="Pipeline"
-      count={steps.length || undefined}
+
       status={
         scene ? (
           <>

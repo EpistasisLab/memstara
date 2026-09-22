@@ -1,10 +1,12 @@
+import InterfaceHelp from './components/InterfaceHelp';
+import { pipelineLoopLabel } from "./lib/pipelineProgress";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useEffect, lazy, Suspense, type ComponentType } from "react";
 import Panel from "./components/Panel";
 import WindowWorkspace from "./components/WindowWorkspace";
 import { VIEWS } from "./lib/views";
 import ControlPanel from "./panels/ControlPanel";
-import PipelineWorkspace, { PipelineStatus, PipelineOverview } from "./panels/PipelineWorkspace";
+import PipelineWorkspace, { PipelineStatus } from "./panels/PipelineWorkspace";
 const DiscoveryPanel = lazy(() => import("./panels/DiscoveryPanel"));
 import TelemetryPanel from "./panels/TelemetryPanel";
 import { usePipelines } from "./store/pipelines";
@@ -39,7 +41,6 @@ const SECONDARY: Record<Exclude<ViewId, "chain" | "scene" | "log" | "clinician">
 
 function TopRegion() {
   const view = useViewer((s) => s.view);
-  const snapshot = useViewer((s) => s.snapshot);
 
   if (view === "clinician") return <ClinicianPanel />;
   if (view === "chain") return <div className="h-full overflow-auto"><PipelineStatus /></div>;
@@ -49,7 +50,7 @@ function TopRegion() {
   const meta = VIEWS[view];
   const Body = SECONDARY[view];
   return (
-    <Panel icon={meta.icon} title={meta.label} count={snapshot ? meta.count?.(snapshot) : undefined}>
+    <Panel icon={meta.icon} title={meta.label}>
       <Suspense fallback={<p className="p-6 text-ink-soft">Loading view…</p>}><Body /></Suspense>
     </Panel>
   );
@@ -58,7 +59,6 @@ function TopRegion() {
 export default function App() {
   const start = useViewer((s) => s.start);
   const stop = useViewer((s) => s.stop);
-  const navOpen = useViewer((s) => s.navOpen);
   const view = useViewer((s) => s.view);
   useEffect(() => {
     void useLiveOutputs.getState().poll();
@@ -83,12 +83,12 @@ export default function App() {
   }, []);
 
   return <Tooltip.Provider delayDuration={200}>
+    <InterfaceHelp />
     <AgentConfigPanel />
     <PipelineCreationDialog />
     <WindowWorkspace toolbar={<WorkspaceActions only="history"/>} items={[
       { id: "control", title: "Control", content: <ControlPanel /> },
-      ...(navOpen ? [{ id: "navigation", title: "Exploration overview", content: <PipelineOverview /> }] : []),
-      { id: "pipeline", title: `${VIEWS[view].label}${pipeline ? ` · ${pipeline.name} · Iteration ${pipeline.progress.iteration ?? "—"}` : ""}`, content: <TopRegion /> },
+      { id: "pipeline", title: `${VIEWS[view].label}${pipeline ? ` · ${pipeline.name}${view === "agents" ? "" : ` · ${pipelineLoopLabel(pipeline)}`}` : ""}`, content: <TopRegion /> },
       { id: "feed", title: "Activity feed", content: <FeedPanel /> },
       { id: "results", title: "Results", content: <ResultsPanel /> },
       { id: "report", title: `Final Report${pipeline ? ` · ${pipeline.name}` : ""}`, content: <ReportPanel /> },

@@ -1,0 +1,13 @@
+.hypothesis-skill-wizard { margin-top: 1rem; border-top: 1px solid var(--paper-line, #cbd5e1); padding-top: 1rem; min-width: 0; }
+.skill-assistant-trigger { display: inline-flex; align-items: center; gap: .5rem; font-weight: 600; }
+.skill-assistant-body { display: grid; gap: 1rem; padding-top: 1rem; overflow-wrap: anywhere; }
+.skill-assistant-body fieldset { min-width: 0; display: grid; gap: .85rem; }
+.skill-assistant-body legend { font-weight: 600; margin-bottom: .75rem; }
+.skill-assistant-body label { display: grid; gap: .35rem; line-height: 1.5; }
+.skill-assistant-body textarea, .skill-assistant-body input:not([type=checkbox]) { width: 100%; min-width: 0; border: 1px solid var(--paper-line, #94a3b8); border-radius: .5rem; padding: .65rem; background: var(--paper-panel, transparent); color: inherit; }
+.skill-assistant-body textarea { resize: vertical; }
+.skill-assistant-body .skill-review-check { display: flex; align-items: flex-start; gap: .6rem; }
+.skill-review-check input { margin-top: .3rem; flex-shrink: 0; }
+.hypothesis-skill-wizard button { max-width: 100%; white-space: normal; border: 1px solid var(--paper-line, #94a3b8); border-radius: .5rem; padding: .6rem .85rem; text-align: left; }
+.hypothesis-skill-wizard button:disabled { opacity: .5; }
+.hypothesis-skill-wizard button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

@@ -20,9 +20,6 @@ export interface PanelProps {
   id?: string;
   icon: LucideIcon;
   title: string;
-  /** How many rows the body holds. Shown beside the title so an empty panel reads as
-   *  "nothing to show" rather than "still loading". */
-  count?: number;
   /** The header's right-hand slot: a scope note, a warning, a live indicator. */
   status?: ReactNode;
   /** Applied to the scroll region. Pass `overflow-hidden p-0` for a panel that manages
@@ -35,7 +32,6 @@ export default function Panel({
   id,
   icon: Icon,
   title,
-  count,
   status,
   bodyClassName,
   children,
@@ -53,11 +49,6 @@ export default function Panel({
         <Icon className="h-4 w-4 shrink-0 text-ink-soft" strokeWidth={2.2} />
         <Help topic={title}><h2 tabIndex={0} className="cursor-help break-words text-lg font-bold tracking-tight">{title}</h2></Help>
         <Help topic={title} />
-        {count !== undefined && (
-          <span className="shrink-0 rounded-full bg-paper px-2 py-0.5 font-mono text-[12px] text-ink-soft">
-            {count}
-          </span>
-        )}
         {status !== undefined && (
           <div className="ml-auto flex min-w-0 flex-wrap items-center gap-2 text-[12px] text-ink-faint">
             {status}

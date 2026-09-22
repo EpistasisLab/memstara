@@ -1,3 +1,4 @@
+import { useLoopLabel } from '../lib/useLoopLabel';
 import { motion, AnimatePresence } from "framer-motion";
 import { RotateCcw, AlertCircle } from "lucide-react";
 import EmptyState from "../components/EmptyState";
@@ -17,6 +18,7 @@ const NEXT_STAGE = { hypothesis: "Hypothesis", data: "Data", ml: "Train", interp
 const STAGE_OF = { data: "data", ml: "ml", interpret: "interpreter", hypothesis: "hypothesis" } as const;
 
 function Card({ task }: { task: Task }) {
+  const labelLoop = useLoopLabel();
   const select = useViewer((s) => s.selectTask);
   const color = STAGE_COLOR[STAGE_OF[task.task_type] as keyof typeof STAGE_COLOR];
 
@@ -37,7 +39,7 @@ function Card({ task }: { task: Task }) {
           <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
           <span className="font-mono text-sm font-bold">#{task.task_id}</span>
         </span>
-        <span className="text-xs text-ink-faint">Trial {task.trial}</span>
+        <span className="text-xs text-ink-faint">{labelLoop(task)}</span>
       </div>
 
       <div className="mt-1 flex items-center gap-2 text-xs text-ink-soft">

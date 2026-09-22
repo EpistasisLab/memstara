@@ -1,3 +1,7 @@
+import { transparentReportMarkdown } from "../lib/reportTransparency";
+import LoopUsage from "./LoopUsage";
+import { useTelemetryTotals } from "./TelemetryTotals";
+import { loopUsageMarkdown } from "../lib/loopUsage";
 import { lazy, Suspense, useState } from "react";
 import { Download, FileText } from "lucide-react";
 import { useViewer } from "../store/viewer";
@@ -5,13 +9,16 @@ import { useViewer } from "../store/viewer";
 const ReportBody = lazy(() => import("./ReportBody"));
 
 export default function FinalReport() {
+  const analysesPerLoop = useViewer(s => s.snapshot?.run_configuration?.trials);
   const report = useViewer(s => s.snapshot?.report);
   const tag = useViewer(s => s.snapshot?.run_tag ?? "run");
+  const usage=useTelemetryTotals();
+  const execution=usage.data?.executions.find(e=>e.run_tag===tag);
   const [expanded, setExpanded] = useState(false);
   if (!report) return null;
   const download = () => {
     if (!report.text) return;
-    const url = URL.createObjectURL(new Blob([report.text], { type: "text/markdown;charset=utf-8" }));
+    const url = URL.createObjectURL(new Blob([transparentReportMarkdown(report.text, analysesPerLoop) + loopUsageMarkdown(execution,usage.data?.updated_at,usage.error)], { type: "text/markdown;charset=utf-8" }));
     const anchor = document.createElement("a");
     anchor.href = url; anchor.download = `${tag}_report.md`; anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -26,7 +33,8 @@ export default function FinalReport() {
     <p className="px-3 pb-2 text-[12px] text-ink-faint">{tag}</p>
     {report.error && <p role="status" className="px-3 pb-3 text-sm text-amber-800">{report.error}</p>}
     {expanded && <div className="border-t border-paper-line p-4">
-      {report.text ? <Suspense fallback={<p>Loading report…</p>}><div data-final-report-content><ReportBody text={report.text} /></div></Suspense>
+      <LoopUsage execution={execution} updatedAt={usage.data?.updated_at} error={usage.error}/>
+      {report.text ? <Suspense fallback={<p>Loading report…</p>}><div data-final-report-content><ReportBody report analysesPerLoop={analysesPerLoop} text={report.text} /></div></Suspense>
         : <p className="text-sm text-ink-soft">No completed report is available for this run.</p>}
     </div>}
   </section>;
