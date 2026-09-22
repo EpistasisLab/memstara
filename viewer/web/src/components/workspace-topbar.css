@@ -1,0 +1,71 @@
+/* One identity and navigation row; secondary content opens above the workspace. */
+.unified-topbar.memstara-header { display:block; padding:0; position:relative; z-index:50; margin:0 0 10px; }
+.unified-topbar .memstara-identity-row { display:flex; align-items:center; gap:24px; min-height:64px; padding:10px 16px; flex-wrap:nowrap; }
+.unified-topbar .memstara-brand { flex-shrink:0; }
+.topbar-actions { display:flex; align-items:center; gap:6px; margin-left:auto; flex-shrink:0; }
+.topbar-actions > button, .topbar-actions > [data-context-help-managed] > button { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:40px; padding:8px 10px; border:1px solid transparent; border-radius:9px; font-size:13px; font-weight:600; white-space:nowrap; color:rgb(var(--ink)); background:transparent; }
+.topbar-actions > button:hover { background:rgb(var(--accent) / .07); border-color:rgb(var(--line)); }
+.topbar-live-status { display:flex; align-items:center; gap:8px; min-width:0; min-height:40px; padding:8px 12px; border-radius:9px; font-size:13px; color:rgb(var(--accent)); background:rgb(var(--accent) / .06); white-space:nowrap; }
+.topbar-live-status svg { flex-shrink:0; }
+.topbar-result-count { border-left:1px solid rgb(var(--line)); padding-left:10px; margin-left:2px; color:rgb(var(--ink-soft)); }
+.topbar-live-status.is-delayed { color:rgb(var(--ink)); background:rgb(var(--stage-ml) / .13); }
+.unified-topbar button:focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:2px; }
+.topbar-dialog.workspace-dialog { width:min(620px,calc(100vw - 24px)); max-width:calc(100vw - 24px); max-height:calc(100dvh - 32px); overflow:auto; overscroll-behavior:contain; padding:20px; color:rgb(var(--ink)); background:rgb(var(--panel)); border:1px solid rgb(var(--line)); border-radius:16px; }
+.topbar-dialog::backdrop { background:rgb(10 18 30 / .4); backdrop-filter:blur(3px); }
+.topbar-dialog > header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+.topbar-dialog > header h2 { font-size:18px; font-weight:650; }
+.topbar-dialog > header button { display:grid; place-items:center; min-width:40px; min-height:40px; border-radius:8px; }
+.topbar-dialog button:focus-visible, .topbar-dialog summary:focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:2px; }
+.topbar-dialog .workspace-tools-layout { padding:8px 0; }
+.topbar-dialog .workspace-layout-disclosure > summary { padding-inline:0; }
+.topbar-settings-description { font-size:14px; color:rgb(var(--ink-soft)); margin-bottom:16px; }
+.topbar-settings-connections { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px; }
+.topbar-settings-connections > button { display:inline-flex; align-items:center; gap:8px; border:1px solid rgb(var(--line)); border-radius:8px; min-height:44px; padding:10px 12px; }
+.topbar-overview-dialog.workspace-dialog { width:min(1040px,calc(100vw - 24px)); }
+.topbar-overview-dialog .exploration-summary { padding:0; }
+.topbar-overview-dialog .exploration-summary-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+@media(max-width:1150px) {
+ .unified-topbar .memstara-identity-row { gap:12px; }
+ .topbar-result-count { display:none; }
+}
+@media(max-width:850px) {
+ .unified-topbar .memstara-brand span { display:none; }
+ .topbar-actions .saved-analyses-action span, .topbar-settings span { display:none; }
+ .topbar-actions .saved-analyses-action, .topbar-actions .topbar-settings { width:40px; padding:8px; }
+ .topbar-live-status { font-size:12px; padding:8px; }
+}
+@media(max-width:600px) {
+ .unified-topbar .memstara-identity-row { gap:6px; padding:8px; min-height:60px; }
+ .unified-topbar .memstara-brand strong { font-size:18px; }
+ .unified-topbar .memstara-mark { width:28px; height:28px; }
+ .unified-topbar .memstara-brand { gap:6px; }
+ .topbar-live-status { display:none; }
+ .topbar-actions { gap:2px; }
+ .topbar-actions .topbar-overview { padding:8px 6px; font-size:12px; }
+ .topbar-actions .topbar-overview svg { display:none; }
+ .topbar-actions .workspace-theme-control { padding:0; margin:0; border:0; display:flex; }
+ .topbar-actions .workspace-theme-control .theme-toggle { width:36px; min-width:36px; }
+ .topbar-overview-dialog .exploration-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .topbar-dialog.workspace-dialog { padding:14px; }
+}
+@media(max-width:360px) {
+ .unified-topbar .memstara-brand strong { font-size:16px; }
+ .unified-topbar .memstara-mark { display:none; }
+}
+
+/* Keep the toolbar self-contained when applied to older workspace styles. */
+.unified-topbar .memstara-mark { width:36px; height:36px; }
+.unified-topbar .memstara-brand strong { font-size:22px; line-height:1.15; }
+.unified-topbar .memstara-brand span { font-size:11px; letter-spacing:.04em; text-transform:none; }
+.topbar-dialog .workspace-layout-disclosure > summary { display:flex; align-items:center; gap:10px; min-height:44px; cursor:pointer; }
+.topbar-dialog .workspace-layout-label { display:flex; align-items:center; gap:8px; font-weight:600; }
+.topbar-dialog .workspace-layout-chevron { margin-left:auto; }
+.topbar-dialog .workspace-layout-caption { font-size:12px; color:rgb(var(--ink-soft)); }
+.topbar-dialog .workspace-tools-layout, .topbar-dialog .workspace-panel-toggles, .topbar-dialog .workspace-layout-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.topbar-dialog .workspace-tools-layout button { display:flex; align-items:center; gap:6px; min-height:40px; padding:8px 10px; border:1px solid rgb(var(--line)); border-radius:8px; }
+@media(max-width:600px) {
+ .unified-topbar .memstara-mark { width:28px; height:28px; }
+ .unified-topbar .memstara-brand strong { font-size:18px; }
+ .topbar-dialog .workspace-layout-caption { display:none; }
+}
+@media(max-width:360px) { .unified-topbar .memstara-brand strong { font-size:16px; } }

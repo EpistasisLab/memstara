@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, ChevronUp, HelpCircle, Maximize2, Minimize2, RotateCcw } from "lucide-react";
+import { ChevronDown, ChevronUp, Settings2, X, HelpCircle, Maximize2, Minimize2, RotateCcw } from "lucide-react";
 
+import HeaderStatus from "./HeaderStatus";
+import WorkspaceActions from "./WorkspaceActions";
+import ModelConnectionDialog from "./ModelConnectionDialog";
+import "./workspace-topbar.css";
 import ExplorationSummary from "./ExplorationSummary";
 import ThemeToggle from "./ThemeToggle";
 
@@ -13,6 +17,11 @@ const initiallyClosed = ["navigation", "feed", "results"];
 const edges = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 export default function WindowWorkspace({ items, toolbar }: { items: Item[]; toolbar?:ReactNode }) {
   const root = useRef<HTMLDivElement>(null);
+  const overviewDialog = useRef<HTMLDialogElement>(null);
+  const settingsDialog = useRef<HTMLDialogElement>(null);
+  const [overviewOpen, setOverviewOpen] = useState(false);
+  const openOverview = () => { setOverviewOpen(true); overviewDialog.current?.showModal(); };
+  const closeOverview = () => { overviewDialog.current?.close(); setOverviewOpen(false); };
   const [bounds, setBounds] = useState({ w: 1400, h: 900 });
   const [boxes, setBoxes] = useState<Record<string, Box>>(() => {
     try { const parsed = JSON.parse(localStorage.getItem(key) || "{}");
@@ -59,7 +68,8 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
     return fit({ x: x + (index % columns) * (width + 12), y: top + 12 + Math.floor(index / columns) * (height + 12), w: width, h: height });
   };
   return <div className="window-workspace-shell">
-    <header className="memstara-header">
+    <header className="memstara-header unified-topbar">
+      <div className="memstara-identity-row">
       <div className="memstara-brand" aria-label="Memstara">
         <svg className="memstara-mark" viewBox="0 0 48 48" fill="none" aria-hidden="true">
           <rect x="1" y="1" width="46" height="46" rx="14" fill="currentColor" />
@@ -68,21 +78,41 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
         </svg>
         <div><strong>Memstara</strong><span>Research workspace</span></div>
       </div>
-      <ExplorationSummary />
-    </header>
-    <div className="workspace-toolbar flex min-h-10 shrink-0 flex-wrap items-center gap-3 px-3 text-xs text-ink-soft">
-      <div className="workspace-tools-primary">{toolbar}</div>
-      <div className="workspace-tools-layout" role="group" aria-label="Window layout">
-      <button className="workspace-layout-help" aria-label="Window layout help" title="Move windows by dragging their title bars. Resize using an edge or corner. Use the window buttons to show or hide a panel."><HelpCircle size={16}/></button>
-      <button className="flex items-center gap-1 rounded px-2 py-1 hover:bg-paper-panel" onClick={() => { setBoxes({}); setMaximized(""); setCollapsed(initiallyClosed); }}><RotateCcw size={13} />Reset window layout</button>
-      {items.filter(item => collapsible.includes(item.id)).map(item => <button key={item.id} type="button"
-        aria-expanded={!collapsed.includes(item.id)} aria-controls={`workspace-${item.id}`}
-        onClick={() => toggle(item.id)} className="flex items-center gap-1 rounded border border-paper-line bg-white px-3 py-1 font-semibold hover:bg-paper-panel">
-        {collapsed.includes(item.id) ? <ChevronDown size={14} /> : <ChevronUp size={14} />}{item.title}
-      </button>)}
-      <span className="workspace-theme-control"><ThemeToggle /></span>
+      <HeaderStatus onOpen={openOverview} />
+      <nav className="topbar-actions" aria-label="Workspace tools">
+        <button className="topbar-overview" aria-label="Exploration overview" aria-haspopup="dialog" onClick={openOverview}>Overview<ChevronDown size={14}/></button>
+        {toolbar}
+        <button className="topbar-settings" aria-label="Workspace settings" title="Model connection, system status and window layout" aria-haspopup="dialog" onClick={()=>settingsDialog.current?.showModal()}><Settings2 size={18}/><span>Settings</span></button>
+        <span className="workspace-theme-control"><ThemeToggle /></span>
+      </nav>
       </div>
-    </div>
+    </header>
+    <dialog ref={overviewDialog} className="workspace-dialog topbar-dialog topbar-overview-dialog" aria-labelledby="topbar-overview-title" onCancel={()=>setOverviewOpen(false)}>
+      <header><h2 id="topbar-overview-title">Exploration overview</h2><button aria-label="Close overview" onClick={closeOverview}><X size={18}/></button></header>
+      {overviewOpen && <div onClick={event=>{ if ((event.target as HTMLElement).closest(".exploration-summary-grid button")) closeOverview(); }}><ExplorationSummary /></div>}
+    </dialog>
+    <dialog ref={settingsDialog} className="workspace-dialog topbar-dialog" aria-labelledby="topbar-settings-title">
+      <header><h2 id="topbar-settings-title">Workspace settings</h2><button aria-label="Close settings" onClick={()=>settingsDialog.current?.close()}><X size={18}/></button></header>
+      <p className="topbar-settings-description">Manage connections and arrange your workspace.</p>
+      <div className="topbar-settings-connections"><ModelConnectionDialog /><WorkspaceActions only="status"/></div>
+      <details open className="workspace-layout-disclosure">
+
+        <summary><span className="workspace-layout-label"><Maximize2 size={14}/>Window layout</span><span className="workspace-layout-caption">Show, hide or reset workspace panels</span><ChevronDown size={14} className="workspace-layout-chevron"/></summary>
+        <div className="workspace-tools-layout" role="group" aria-label="Window layout">
+          <div className="workspace-panel-toggles">
+            {items.filter(item => collapsible.includes(item.id)).map(item => <button key={item.id} type="button"
+              aria-expanded={!collapsed.includes(item.id)} aria-controls={`workspace-${item.id}`}
+              onClick={() => toggle(item.id)}>
+              {collapsed.includes(item.id) ? <ChevronDown size={14} /> : <ChevronUp size={14} />}{item.title}
+            </button>)}
+          </div>
+          <div className="workspace-layout-actions">
+            <button type="button" onClick={() => { setBoxes({}); setMaximized(""); setCollapsed(initiallyClosed); }}><RotateCcw size={14} />Reset window layout</button>
+            <button type="button" className="workspace-layout-help" aria-label="Window layout help" title="Move windows by dragging their title bars. Resize using an edge or corner. Use the window buttons to show or hide a panel."><HelpCircle size={16}/></button>
+          </div>
+        </div>
+      </details>
+    </dialog>
     <div className="window-workspace" ref={root}>
       {items.filter(item => !collapsed.includes(item.id)).map(item => {
         const normal = fit(boxes[item.id] || initial(item.id));

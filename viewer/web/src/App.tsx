@@ -85,7 +85,7 @@ export default function App() {
   return <Tooltip.Provider delayDuration={200}>
     <AgentConfigPanel />
     <PipelineCreationDialog />
-    <WindowWorkspace toolbar={<WorkspaceActions/>} items={[
+    <WindowWorkspace toolbar={<WorkspaceActions only="history"/>} items={[
       { id: "control", title: "Control", content: <ControlPanel /> },
       ...(navOpen ? [{ id: "navigation", title: "Exploration overview", content: <PipelineOverview /> }] : []),
       { id: "pipeline", title: `${VIEWS[view].label}${pipeline ? ` · ${pipeline.name} · Iteration ${pipeline.progress.iteration ?? "—"}` : ""}`, content: <TopRegion /> },

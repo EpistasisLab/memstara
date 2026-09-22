@@ -4,7 +4,7 @@ import { useViewer, useHealth, POLL_MS } from '../store/viewer';
 import { useControl } from '../store/control';
 import { usePipelines } from '../store/pipelines';
 
-export default function WorkspaceActions() {
+export default function WorkspaceActions({only}: {only?: 'history' | 'status'}) {
   const [open,setOpen]=useState<'history'|'status'|null>(null);
   const [search,setSearch]=useState('');
   const dialog=useRef<HTMLDialogElement>(null);
@@ -22,8 +22,8 @@ export default function WorkspaceActions() {
   const runs=(snapshot?.runs??known).filter(r=>`${label(r)} ${r.run_tag} ${r.model??''}`.toLowerCase().includes(search.toLowerCase()));
   const issue=!!apiError||!!controlError||controlUp===false||health?.memstara.up===false||health?.core.up===false;
   return <>
-    <button className="workspace-action" onClick={()=>setOpen('history')}><History size={14}/>Run history</button>
-    <button className="workspace-action" onClick={()=>setOpen('status')}><Activity size={14}/>{issue?'Status · attention':'System status'}</button>
+    {only !== 'status' && <button className="workspace-action saved-analyses-action" aria-label="Saved analyses" title="Open saved analyses" onClick={()=>setOpen('history')}><History size={16}/><span>Saved analyses</span></button>}
+    {only !== 'history' && <button className="workspace-action" onClick={()=>setOpen('status')}><Activity size={16}/>{issue?'Status · attention':'System status'}</button>}
     {open&&<dialog ref={dialog} onCancel={()=>setOpen(null)} aria-labelledby="workspace-action-title" className="workspace-dialog">
       <header><h2 id="workspace-action-title">{open==='history'?'Saved analyses':'System status'}</h2><button aria-label="Close workspace dialog" onClick={close}><X size={18}/></button></header>
       {open==='history'?<>
