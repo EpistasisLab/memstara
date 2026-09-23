@@ -33,6 +33,8 @@ def test_unrepresentative_holdout_is_rejected_before_training(tmp_path):
 
 
 def test_invalid_input_does_not_create_a_run_or_spawn_process(tmp_path, monkeypatch):
+    monkeypatch.setenv("MEMSTARA_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("MEMSTARA_LLM_MODEL", "test-deployment")
     from memstara.control import service
     path = tmp_path / 'data.csv'
     path.write_text('x,outcome\n,0\n2,0\n3,1\n4,1\n')

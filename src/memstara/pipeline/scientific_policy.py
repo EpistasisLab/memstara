@@ -1,4 +1,4 @@
-"""Explicit information boundaries for primary knowledge-driven discovery."""
+"""Raw feedback tools remain unavailable; iterative evidence is frozen and supplied by the driver."""
 
 PRIMARY_QUESTION_TOOLS = frozenset({
     "okf_list_domains", "okf_search", "okf_read", "read_question_catalog", "propose_questions",

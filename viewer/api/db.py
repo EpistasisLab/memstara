@@ -258,7 +258,13 @@ class Pools:
                 else _dsn("CORE_VIEWER_DSN", CORE_DSN_DEFAULT)
             )
             pool = await asyncpg.create_pool(dsn, min_size=1, max_size=POOL_MAX, timeout=5,
-                                             command_timeout=4)
+                                             command_timeout=4,
+                                             server_settings={
+                                                 "application_name": "memstara-viewer-api",
+                                                 "statement_timeout": "3500",
+                                                 "lock_timeout": "1000",
+                                                 "idle_in_transaction_session_timeout": "30000",
+                                             })
             # The create_pool above: timeout=5 is the limit on "getting connected",
             # command_timeout=4 the limit on "one query" — both are needed to stop a
             # slow DB from holding up the whole screen. The query ceiling sits under
@@ -306,7 +312,11 @@ class Pools:
                 # this attempt actually held, so a failure here cannot take down a pool
                 # another request is reading from.
                 last = e
-                await self._discard(which, pool)
+                # The server deadline cancels one statement, not the connection.
+                # Discarding the whole pool here interrupts unrelated readers and
+                # turns one slow tab into an app-wide reconnect cycle.
+                if not isinstance(e, (asyncpg.QueryCanceledError, TimeoutError)):
+                    await self._discard(which, pool)
                 if attempt == 1 and isinstance(e, _TEARDOWN_ERRORS):
                     # Not evidence about the database. The pool this request was holding
                     # was terminated underneath it — by our own `_discard`, on some other

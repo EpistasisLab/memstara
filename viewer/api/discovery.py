@@ -8,7 +8,7 @@ import scene
 import queries
 import run_artifacts
 
-QUESTION_FIELDS = "question_id, text, okf_tags, rationale, origin_run, origin_wave, times_used, best_auc, status, created_at, writer"
+QUESTION_FIELDS = "question_id, question_contract, text, okf_tags, rationale, origin_run, origin_wave, times_used, best_auc, status, created_at, writer"
 
 
 async def question_list(before: int = 0) -> dict[str, Any]:
@@ -17,6 +17,7 @@ async def question_list(before: int = 0) -> dict[str, Any]:
                                 "WHERE ($1::integer = 0 OR question_id < $1) "
                                 "ORDER BY question_id DESC LIMIT 121", before)
         items = [{**dict(row), 'okf_tags': scene._jsonb(row['okf_tags'], []),
+                  'question_contract': scene._jsonb(row.get('question_contract'), {}),
                   'created_at': scene._iso(row['created_at'])} for row in rows[:120]]
         return {'questions': items, 'next_before': items[-1]['question_id'] if len(rows) > 120 else None}
     result = await pools.guarded('memstara', read, None)
@@ -36,7 +37,8 @@ async def question_detail(question_id: int) -> dict[str, Any]:
         results = await conn.fetch(queries.RESULTS.replace("WHERE ($1 = '' OR run_tag = $1)",
                                     'WHERE question_id = $1').replace('ORDER BY result_id', 'ORDER BY result_id DESC') + ' LIMIT 100', question_id)
         return {
-            'question': {**dict(question), 'okf_tags': scene._jsonb(question['okf_tags'], [])},
+            'question': {**dict(question), 'question_contract': scene._jsonb(question.get('question_contract'), {}),
+                         'okf_tags': scene._jsonb(question['okf_tags'], [])},
             'tasks': [{**dict(t), 'columns': scene._jsonb(t['columns'], []),
                        'columns_used': scene._jsonb(t['columns_used'], []),
                        'columns_missing': scene._jsonb(t['columns_missing'], []),

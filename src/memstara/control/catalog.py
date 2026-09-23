@@ -8,16 +8,16 @@ import re
 from pathlib import Path
 
 from memstara.paths import DEFAULT_OUTPUT_DIR
+from memstara.agent_labels import agent_label
 from memstara.pipeline import prompts
 
-ROLES = ('hypothesis', 'ml', 'interpreter', 'report')
+ROLES = ('hypothesis', 'data', 'ml', 'interpreter', 'report')
 
 # reviewer's shared skills are kept outside this checkout. They remain the source of truth;
 # the catalog exposes them without copying or rewriting their Markdown.
 SHARED_ROOT_SKILLS_DIR = Path(__file__).resolve().parents[4] / 'shared' / 'skills'
 shared_SKILLS = {
     'shared-ml-results': 'ml-results.md',
-    'shared-ml-reference': 'ml-reference.md',
 }
 
 
@@ -30,31 +30,42 @@ def catalog() -> list[dict]:
     for item_id, filename in shared_SKILLS.items():
         path = SHARED_ROOT_SKILLS_DIR / filename
         if path.is_file():
-            items.append(_external_entry(item_id, path))
+            items.append(_external_entry(item_id, path, 'report'))
     for path in sorted(prompts.PLAYBOOKS_DIR.glob('*.md')):
         content = prompts._body(path.read_text(encoding='utf-8'))
-        stage = ('ml' if path.stem.startswith('ml_') else
+        stage = ('data' if path.stem.startswith('data_') else 'ml' if path.stem.startswith('ml_') else
                  'interpreter' if path.stem.startswith('interpreter_') else
                  'report' if path.stem.startswith('report_') else 'hypothesis')
         items.append(_entry(path.stem, content, stage, 'Project default'))
     for path in sorted(user_dir().glob('*.json')):
         item = json.loads(path.read_text(encoding='utf-8'))
+        item['stage_label'] = agent_label(item['stage'])
         items.append(item)
     return items
 
 
-def _external_entry(item_id: str, path: Path) -> dict:
+def reference_knowledge() -> list[dict]:
+    """Tool background, separate from selectable behavioral skills."""
+    path = SHARED_ROOT_SKILLS_DIR / 'ml-reference.md'
+    if not path.is_file():
+        return []
+    item = _external_entry('shared-ml-reference', path, 'ml')
+    return [{**item, 'kind': 'reference', 'automatic': True}]
+
+
+def _external_entry(item_id: str, path: Path, stage: str) -> dict:
     """Read a shared skill without changing its source file or Markdown body."""
     raw = path.read_text(encoding='utf-8')
     if raw.startswith('---\n') and '\n---\n' in raw[4:]:
         raw = raw[raw.find('\n---\n', 4) + len('\n---\n'):]
     content = prompts._body(raw)
-    return _entry(item_id, content, 'ml', f'Shared document · original ({path.name})')
+    return _entry(item_id, content, stage, f'Shared document · original ({path.name})')
 
 
 def _entry(name: str, content: str, stage: str, source: str) -> dict:
     lines = [line.strip().lstrip('#').strip() for line in content.splitlines() if line.strip()]
     return {'id': name, 'title': lines[0] if lines else name, 'stage': stage,
+            'stage_label': agent_label(stage),
             'description': ' '.join(lines[1:4])[:400], 'content': content,
             'hash': hashlib.sha256(content.strip().encode()).hexdigest(), 'source': source}
 
@@ -66,7 +77,7 @@ def resolve(name: str) -> dict:
 def register(body: dict) -> dict:
     stage, name, content = body.get('stage'), body.get('name', ''), body.get('content', '')
     if stage not in ROLES:
-        raise ValueError('Choose hypothesis, ml, interpreter or report')
+        raise ValueError('Choose a Hypothesis, ML, Interpreter or Explanation agent skill')
     if not isinstance(name, str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,60}', name):
         raise ValueError('Use a name of 1–60 letters, numbers, hyphens or underscores')
     if not isinstance(content, str) or not content.strip() or len(content.encode()) > 48_000:
@@ -97,20 +108,20 @@ def register(body: dict) -> dict:
 
 
 def validate_selection(body: dict) -> None:
+    from memstara.control.request import normalize_agent_configuration, playbook_field
+    body = normalize_agent_configuration(body)
     selected = []
     interpreters = []
     if body.get('trials', 3) < body.get('hypothesis_agents', 1):
         raise ValueError('Give every hypothesis at least one trial')
-    if body.get('playbook_data'):
-        raise ValueError('Data skill editing is not part of the V1 user configuration')
     for stage in ROLES:
-        names = body.get(f'playbook_{stage}', '').split(',')
+        names = body.get(playbook_field(stage), '').split(',')
         for name in names:
             if not name:
                 continue
             item = resolve(name)
             if not item or item['stage'] != stage:
-                raise ValueError(f'{name}: select a skill for the {stage} role')
+                raise ValueError(f'{name}: select a skill for the {agent_label(stage)} role')
             if stage == 'hypothesis':
                 if item['hash'] in selected:
                     raise ValueError('Each hypothesis must have a different skill (including its contents)')

@@ -425,8 +425,8 @@ async def main() -> int:
         default=os.environ.get("MEMSTARA_OUTCOME_COLUMN", "outcome"),
         help="name of the outcome column",
     )
-    ap.add_argument("--provider", default="azure_foundry", choices=["anthropic", "azure_foundry", "openai"])
-    ap.add_argument("--model", default="claude-sonnet-4-6")
+    ap.add_argument("--provider", default="", choices=["anthropic", "azure_foundry", "openai"])
+    ap.add_argument("--model", default="")
     # --no-overall: skip the final stage that interprets the whole aggregate. One fewer
     # LLM call, so it is faster, but there is no overall comment for a person to read.
     ap.add_argument("--no-overall", action="store_true", help="skip the final interpretation of the aggregate")
@@ -440,6 +440,8 @@ async def main() -> int:
     ap.add_argument("--verbose", action="store_true", help="console DEBUG: phases, hooks, every tool call")
     ap.add_argument("--run-dir", default=None, help="where to write this run's records (default: a new one)")
     args = ap.parse_args()
+    from memstara.env import configured_llm
+    args.provider, args.model = configured_llm(args.provider, args.model)
 
     started = datetime.now()
     # The tag that goes on the folder name. An ablation gets `_ablate`, so a normal run
@@ -508,7 +510,8 @@ async def _run_pipeline(
 
     # [2] Inject the settings. Once per process, and necessarily before any core module
     # reads a setting — do it later and some module has already taken the old settings.
-    configure(Settings())
+    runtime_settings = Settings()
+    configure(runtime_settings)
 
     # [3] Configure logging. --verbose means DEBUG (hooks and tool calls and all),
     #     otherwise INFO.

@@ -21,7 +21,9 @@
    GET  /control/runs            what is running, and what recently finished
    GET  /control/runs/{tag}/log  that run's console output, from a byte offset.
                                  `{tag}` may be `latest`
-   POST /control/runs/{tag}/stop SIGINT to that child
+   POST /control/runs/{tag}/stop resumable stop at the next agent-call boundary
+   POST /control/runs/{tag}/resume continue that same live execution
+   POST /control/runs/{tag}/end permanently terminate the execution
 
  Easy things to miss
    1. **The branch list is read through the okf server's own loader.** `_load`
@@ -30,10 +32,10 @@
       agents will be confined to. A second enumeration written here would be a
       list that drifts, and it would drift in the direction of offering a
       branch that selects nothing.
-   2. **The child gets SIGINT, not SIGTERM.** `board.py:1931` catches
-      KeyboardInterrupt, prints what to do next, and its `finally` writes the
-      trace files. SIGTERM kills it before any of that, losing the record of
-      precisely the run somebody thought was worth stopping.
+   2. **Stop uses a durable marker for current drivers.** In-flight work finishes;
+      the Python continuation waits before any new agent call. Resume removes the
+      marker. End and legacy-driver Stop use SIGINT so traces can be saved. This
+      does not recover the continuation after a driver crash or machine restart.
    3. **The child is started in its own session** (`start_new_session=True`),
       so stopping this service does not stop a run. A run holds a database
       advisory lock and is doing paid work; it outliving its launcher is the
@@ -63,7 +65,8 @@ from urllib.parse import parse_qs, urlsplit
 
 from memstara.control.workspace import PipelineWorkspace
 from memstara.control.request import build_argv, _MAX_HYPOTHESIS_AGENTS
-from memstara.control.catalog import catalog, register, validate_selection
+from memstara.agent_labels import AGENT_LABELS
+from memstara.control.catalog import catalog, reference_knowledge, register, validate_selection
 from memstara.env import load_env
 from memstara.logging_setup import new_run_dir
 from memstara.mcp_servers.frontmatter import matches, values_for
@@ -158,18 +161,48 @@ class _Runs:
                             break
                 record["configuration"] = {k: config.get(k) for k in
                                            ("hypotheses", "interpreters", "interpretation_mode",
-                                            "books", "evaluation", "trials", "waves", "continuous",
+                                            "books", "evaluation", "comparison_policy", "trials", "waves", "continuous",
                                             "question", "y_column", "provider", "model")}
             except (OSError, ValueError):
                 pass
             record["waiting_for_questions"] = (Path(record["run_dir"]) / "questions.waiting").exists()
             record["pause_requested"] = (Path(record["run_dir"]) / "pause.request").exists()
+            control_path = Path(record["run_dir"]) / "execution_control.json"
+            control = {}
+            try:
+                control = json.loads(control_path.read_text())
+            except (OSError, ValueError):
+                pass
+            record["resumable"] = bool(record.get("resumable") or control.get("resumable"))
+            record["execution_state"] = (
+                ('stopping' if control.get('active_calls', 1) else 'paused')
+                if record['pause_requested'] else 'running'
+            )
+            record["active_calls"] = control.get('active_calls')
+            from memstara.pipeline.run_ownership import infrastructure_status
+            record.update(infrastructure_status(record["run_dir"]))
             return record
 
     def finished(self) -> list[dict[str, Any]]:
         with self._lock:
             self._reap()
-            return [{k: v for k, v in record.items() if k != "process_identity"} for record in self._done]
+            from memstara.pipeline.checkpoint import recovery_status
+            from memstara.pipeline.run_ownership import infrastructure_status
+            return [{**{k: v for k, v in record.items() if k != "process_identity"},
+                     **recovery_status(record["run_dir"]),
+                     **infrastructure_status(record["run_dir"])} for record in self._done]
+
+    def history_records(self):
+        """All owned executions for cumulative counts, beyond the recent-runs menu."""
+        records = []
+        for path in RUNS_DIR.glob("**/control_record.json"):
+            try:
+                record = json.loads(path.read_text())
+                if record.get("pipeline_id") == self.pipeline_id:
+                    records.append({"run_tag": record.get("run_tag"), "run_dir": str(path.parent)})
+            except (OSError, ValueError):
+                continue
+        return records
 
     def locate(self, run_tag: str) -> tuple[str, Path] | None:
         """The tag and directory of a run this service started, or None.
@@ -244,6 +277,7 @@ class _Runs:
             self._live = {
                 "run_tag": run_tag,
                 "pipeline_id": self.pipeline_id,
+                "resumable": True,
                 "run_dir": str(run_dir),
                 "skill": skill,
                 "pid": popen.pid,
@@ -255,9 +289,11 @@ class _Runs:
             return {k: v for k, v in self._live.items() if k not in ("popen", "process_identity")}
 
     def pause(self, run_tag: str, paused: bool) -> dict[str, Any]:
-        """Pause at a round boundary without freezing database transactions."""
+        """Stop at an agent-call boundary; Resume retains the same continuation."""
         with self._lock:
             self._reap()
+            if self._live is None and not paused:
+                return self._resume_checkpoint(run_tag)
             if self._live is None or self._live["run_tag"] != run_tag:
                 raise RuntimeError("this run is not running")
             marker = Path(self._live["run_dir"]) / "pause.request"
@@ -267,7 +303,49 @@ class _Runs:
                 marker.unlink(missing_ok=True)
             return {"pause_requested": paused}
 
+    def _resume_checkpoint(self, run_tag):
+        """Caller holds the manager lock; never accept a client-supplied path."""
+        from memstara.pipeline.checkpoint import recovery_status
+        record = next((r for r in self._done if r["run_tag"] == run_tag), None)
+        if record is None:
+            raise RuntimeError("No saved execution belongs to this pipeline")
+        root = Path(record["run_dir"])
+        status = recovery_status(root)
+        if not status.get("recoverable"):
+            raise RuntimeError(status.get("recovery_blocked", "This execution has no recoverable checkpoint"))
+        saved = json.loads((root / "resume_arguments.json").read_text())
+        if saved.get("run_tag") != run_tag or (saved.get("pipeline_id") or None) != self.pipeline_id:
+            raise RuntimeError("Checkpoint ownership does not match this pipeline")
+        (root / "pause.request").touch()
+        with (root / "control.log").open("ab") as log:
+            popen = subprocess.Popen(
+                [sys.executable, "-u", "-m", "memstara.pipeline.board", "--resume",
+                 "--run-tag", run_tag, "--run-dir", str(root)], cwd=REPO_ROOT,
+                stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+        self._live = {k: v for k, v in record.items()
+                      if k not in ("exit_code", "ended", "recoverable", "recovery_blocked")}
+        self._live.update(pid=popen.pid, popen=popen, process_identity=identity(popen.pid),
+                          resumed_at=datetime.now().isoformat(timespec="seconds"))
+        save_record(self._live)
+        self._done = [r for r in self._done if r["run_tag"] != run_tag]
+        # The restored driver waits on this marker until ownership is recorded.
+        (root / "pause.request").unlink(missing_ok=True)
+        return {"pause_requested": False, "recovered": True, "run_tag": run_tag}
+
     def stop(self, run_tag: str) -> dict[str, Any]:
+        """Request resumable stop for new drivers; interrupt legacy drivers."""
+        with self._lock:
+            self._reap()
+            if self._live is None or self._live['run_tag'] != run_tag:
+                raise RuntimeError("this run is not running")
+            directory = Path(self._live['run_dir'])
+            if self._live.get('resumable') or (directory / 'execution_control.json').exists():
+                (directory / 'pause.request').touch()
+                return {'stopping': run_tag, 'resumable': True}
+            self._live['popen'].send_signal(signal.SIGINT)
+            return {'stopping': run_tag, 'resumable': False}
+
+    def terminate(self, run_tag: str) -> dict[str, Any]:
         """Ask the running child to wind up, or raise `RuntimeError` saying why not."""
         with self._lock:
             self._reap()
@@ -334,6 +412,8 @@ def playbooks() -> dict[str, Any]:
     return {
         "playbooks": [x["id"] for x in catalog()],
         "catalog": catalog(),
+        "references": reference_knowledge(),
+        "agent_labels": AGENT_LABELS,
         "max_hypotheses": _MAX_HYPOTHESIS_AGENTS,
         "stages": [s for s in PLAYBOOK_STAGES if accepts_playbook(f"board/{s}")],
     }
@@ -396,6 +476,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         # No CORS headers, deliberately. The browser reaches this through nginx
         # (`viewer/web/nginx.conf`) or the Vite proxy, so every legitimate request is
         # same-origin and needs none. Adding one to a service that starts processes
@@ -456,7 +537,52 @@ class Handler(BaseHTTPRequestHandler):
                 # Reported, not raised. A missing bundle is a thing to show on screen
                 # next to a dot, not a reason for this service to be down.
                 bundle = {"error": str(e)}
-            self._send(200, {"ok": True, "bundle": bundle, "running": RUNS.running()})
+            from memstara.control.request import configured_llm
+            try:
+                provider, model = configured_llm()
+                from memstara.env import configured_api_base
+                from memstara.config import Settings
+                endpoint = configured_api_base(provider)
+                if not endpoint and provider == "azure_foundry":
+                    from motoro.services.credentials import foundry_api_base
+                    endpoint = foundry_api_base(Settings().anthropic_foundry_resource)
+                host = urlsplit(endpoint or "").hostname or ""
+                is_azure = host.endswith((".services.ai.azure.com", ".openai.azure.com"))
+                llm = {"provider": provider, "model": model, "endpoint": endpoint,
+                       "resource": host.split(".")[0] if is_azure else None,
+                       "source": "motoro/.env (process environment)", "restart_required_after_edit": True}
+            except ValueError as exc:
+                llm = {"provider": "", "model": "", "error": str(exc)}
+            self._send(200, {"ok": True, "bundle": bundle, "running": RUNS.running(), "llm": llm})
+            return
+
+        if path.startswith("/control/pipelines/") and path.endswith("/combinations"):
+            try:
+                key = path.split("/")[3]
+                manager = WORKSPACE.manager(key)
+                loop = int(parse_qs(urlsplit(self.path).query).get("loop", ["1"])[0])
+                running = manager.running()
+                latest = running or next(iter(manager.finished()), None)
+                if not latest:
+                    self._send(200, {"planned": None, "calls": []})
+                    return
+                root = Path(latest['run_dir'])
+                from memstara.combinations import loop_flavors
+                if running and not (root / 'config.json').exists():
+                    self._send(200, {"run_tag": latest['run_tag'], "preparing": True,
+                                     "planned": None, "executed": None, "calls": []})
+                    return
+                plan = json.loads((root / 'config.json').read_text()).get('combination_plan')
+                planned = loop_flavors(plan, loop) if plan else None
+                flavor_file = root / f"loop_{loop}_flavors.json"
+                executed = json.loads(flavor_file.read_text()) if flavor_file.exists() else None
+                execution_path = root / 'execution.json'
+                manifest = json.loads(execution_path.read_text()) if execution_path.exists() else {}
+                calls = [c for c in manifest.get('calls', []) if c.get('loop') == loop]
+                self._send(200, {"run_tag": latest['run_tag'], "planned": planned, "executed": executed,
+                                 "total_loops": plan['total_loops'] if plan else 0, "calls": calls})
+            except (ValueError, OSError, TypeError, KeyError) as exc:
+                self._send(400, {"error": str(exc)})
             return
 
         if path == "/control/pipelines":
@@ -512,6 +638,26 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, {"error": str(e)})
             return
 
+        if path == "/control/llm/key":
+            if body != {"reveal": True}:
+                self._send(400, {"error": "Explicit reveal request required"})
+                return
+            from memstara.control.request import configured_llm
+            from memstara.config import Settings
+            try:
+                provider, _ = configured_llm()
+                settings = Settings()
+                key = {"openai": settings.openai_api_key,
+                       "azure_foundry": settings.anthropic_foundry_api_key,
+                       "anthropic": settings.anthropic_api_key}.get(provider, "")
+                if not key:
+                    self._send(404, {"error": "No API key is configured for this provider"})
+                    return
+                self._send(200, {"api_key": key})
+            except ValueError:
+                self._send(400, {"error": "Model connection is not configured"})
+            return
+
         if path == "/control/playbooks":
             try:
                 self._send(201, register(body))
@@ -526,6 +672,18 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(409, {"error": str(e)})
             return
 
+        if path == "/control/stop-all":
+            result = WORKSPACE.stop_all()
+            legacy = RUNS.running()
+            if legacy:
+                try:
+                    RUNS.stop(legacy['run_tag'])
+                    result['stopping'].append(legacy['run_tag'])
+                except (RuntimeError, OSError) as exc:
+                    result['errors'].append({'pipeline': 'Standalone execution', 'error': str(exc)})
+            self._send(200, result)
+            return
+
         if path == "/control/runs":
             self._start(body)
             return
@@ -535,6 +693,14 @@ class Handler(BaseHTTPRequestHandler):
             tag = prefix[len("/control/runs/"):]
             try:
                 self._send(200, (WORKSPACE.locate_manager(tag) or RUNS).pause(tag, action == "pause"))
+            except RuntimeError as e:
+                self._send(409, {"error": str(e)})
+            return
+
+        if path.startswith("/control/runs/") and path.endswith("/end"):
+            tag = path[len("/control/runs/"):-len("/end")]
+            try:
+                self._send(200, (WORKSPACE.locate_manager(tag) or RUNS).terminate(tag))
             except RuntimeError as e:
                 self._send(409, {"error": str(e)})
             return
@@ -554,14 +720,33 @@ class Handler(BaseHTTPRequestHandler):
         if pipeline_id is not None:
             try:
                 # Freeze the saved definition while validating and launching it.
-                return WORKSPACE.start(pipeline_id, lambda manager, item:
-                    self._launch(item["configuration"], manager, item["name"]))
+                limit = body.pop("iteration_limit", None)
+                if limit is not None and (type(limit) is not int or not 1 <= limit <= 10):
+                    raise ValueError("iteration_limit must be an integer from 1 to 10")
+                def launch(manager, item):
+                    configuration = dict(item["configuration"])
+                    if limit is not None and configuration.get("combination_skills"):
+                        raise ValueError("Combination designs use their reviewed complete schedule")
+                    if limit is not None:
+                        configuration.update(continuous=False, waves=limit)
+                    return self._launch(configuration, manager, item["name"])
+                mode = body.pop("execution_mode", "initial")
+                additional = body.pop("additional_loops", None)
+                expected = body.pop("expected_run_tag", None)
+                if mode == "additional" and limit is not None:
+                    raise ValueError("Use additional_loops alone for additional analysis")
+                return WORKSPACE.start(pipeline_id, launch, mode=mode,
+                                       additional_loops=additional, expected_run_tag=expected)
             except (ValueError, RuntimeError) as e:
                 self._send(409, {"error": str(e)})
                 return
         return self._launch(body, RUNS)
 
     def _launch(self, body, manager, pipeline_name=""):
+        # The web control surface always imposes a finite ceiling, including older clients.
+        body = dict(body)
+        if body.get('continuous') is True:
+            body.update(continuous=False, waves=10)
         try:
             offered = [s["skill"] for s in skills()]
         except OKFError as e:
@@ -590,7 +775,9 @@ class Handler(BaseHTTPRequestHandler):
             book = body.get("playbook_ml", "")
             policy = resolve(book).get("evaluation", {}) if book else {}
             plan = validate({**policy, **body.get("evaluation", {})})
-            preflight(Path(dataset), argv[argv.index("--y-column") + 1], plan)
+            preflight(Path(dataset), argv[argv.index("--y-column") + 1], plan, reserve_validation=True)
+            from memstara.comparisons import validate_baseline
+            validate_baseline(body.get("baseline_columns", []), argv[argv.index("--y-column") + 1], Path(dataset))
         except ValueError as e:
             self._send(422, {"error": f"Run not started. {e}", "code": "input_validation_failed"})
             return

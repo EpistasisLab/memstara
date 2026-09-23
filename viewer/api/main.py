@@ -156,6 +156,14 @@ async def pipeline_results(run_tags: str = Query(min_length=1, max_length=600)):
     return {"results": output, "failures": failures}
 
 
+@app.get("/api/telemetry")
+async def loop_telemetry(run_tag: str = Query(min_length=1, max_length=200),
+                         loop: int | None = Query(default=None, ge=1),
+                         view: str | None = Query(default=None, pattern="^(Totals|Agents|Activity|Logs|Access|Tasks|Results)$")) -> dict[str, Any]:
+    import telemetry
+    return telemetry.project(await telemetry.snapshot(run_tag, loop), view)
+
+
 @app.get("/api/snapshot")
 async def snapshot(run_tag: str | None = Query(default=None)) -> dict[str, Any]:
     # ★ The workhorse endpoint. The frontend calls this one thing every 2 seconds.
@@ -268,3 +276,22 @@ async def discovery_live(run_tags: str = Query(min_length=1, max_length=600)):
     if len(tags) > 3 or any(not tag for tag in tags):
         raise HTTPException(400, 'Choose one to three pipeline executions.')
     return await live_outputs(tags)
+
+
+@app.get("/api/workspace-cost")
+async def workspace_cost(run_tags: str = Query(default="", max_length=6000)):
+    from costs import workspace_cost as read_cost
+    return await read_cost(run_tags.split(",") if run_tags else [])
+
+
+@app.get('/api/telemetry/totals')
+async def telemetry_totals():
+    from telemetry_totals import totals
+    return await totals()
+
+
+@app.get('/api/telemetry/conversation')
+async def telemetry_conversation(run_tag: str = Query(min_length=1, max_length=200),
+                                 loop: int | None = Query(default=None, ge=1)):
+    from conversation import conversation
+    return await conversation(run_tag, loop)

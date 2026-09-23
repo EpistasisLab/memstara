@@ -831,9 +831,9 @@ def okf_search(
 def _read_documents(refs: str, section: str = "", max_chars: int = 0) -> str:
     """Open one or several documents — whole, or one section of each.
 
-    Every document in a Loremaster bundle is written in the same sections. Ask for the
-    one you need instead of the whole paper: `section="Bottom line"` is usually what a
-    hypothesis is built from, and a full body here runs to several thousand characters.
+    Documents have different structures. section="auto" reads Instances for KG
+    metapaths or Bottom line for literature, falling back to the full body. Returned
+    section headings can be used verbatim for follow-up evidence reads.
 
     Args:
         refs: comma-separated. A document answers to its id, its PMID, its filename and
@@ -894,9 +894,13 @@ def _read_documents(refs: str, section: str = "", max_chars: int = 0) -> str:
         sections = _sections(doc.body)
         headings = [name for name, _ in sections]   # the section names this document has
 
-        if section:
+        selected_section = section
+        if section == "auto":
+            selected_section = next((h for h in headings if h.casefold() == "instances"), "")
+            selected_section = selected_section or next((h for h in headings if h.casefold() == "bottom line"), "")
+        if selected_section:
             # Look for an exactly equal section heading. None if there is none.
-            text = next((body for name, body in sections if name == section), None)
+            text = next((body for name, body in sections if name == selected_section), None)
             if text is None:
                 out.append(
                     {
@@ -917,7 +921,7 @@ def _read_documents(refs: str, section: str = "", max_chars: int = 0) -> str:
         entry = {
             **doc.summary,           # the catalogue row (title, tags, journal, PMID ...) laid on as is
             "ref": ref,              # exactly the name the caller used — easy to pair an answer to its request
-            "section": section or None,
+            "section": selected_section or None,
             "text": text,
             "sections": headings,
             # As a STRING, on purpose. The bundle writes `export_safe: "false"` quoted,
@@ -941,8 +945,13 @@ def _read_documents(refs: str, section: str = "", max_chars: int = 0) -> str:
 def okf_read(refs: str, section: str = "", max_chars: int = 0) -> str:
     """Read OKF documents and persist failed references in this run's source audit.
 
-    Arguments and document response are identical to the reader. A configured run
-    records reference/status metadata only, never document bodies or patient data.
+    refs: comma-separated document IDs or paths returned by search.
+    section: exact heading, empty for full text, or "auto" for KG Instances /
+        literature Bottom line (full text if neither exists). The response lists
+        actual headings; copy them exactly for subsequent evidence reads.
+    max_chars: 0 means no truncation. Truncation is explicitly marked.
+    A configured run records reference/status metadata only, never document bodies
+    or patient data. Relation labels describe graph edges, not clinical predictors.
     """
     result = _read_documents(refs, section, max_chars)
     config = os.environ.get("MEMSTARA_RUN_CONFIG", "")

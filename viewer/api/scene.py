@@ -373,6 +373,19 @@ async def result_detail(result_id: int) -> dict[str, Any] | None:
 
 
 async def _core_facts(run_ids: list[str] | None = None, *, task_history: bool = False) -> dict[str, Any]:
+    # Scene and Telemetry poll the same run. Share their expensive JSON scan and
+    # allow only one core scan per API worker, rather than saturating the DB pool.
+    from read_gate import shared_read
+    key = (None if run_ids is None else tuple(sorted(set(run_ids))), task_history)
+    async def read():
+        data = await _core_facts_uncached(run_ids, task_history=task_history)
+        return data, pools.health.core, pools.health.core_error
+    data, up, error = await shared_read(key, read)
+    pools.health.core, pools.health.core_error = up, error
+    return data
+
+
+async def _core_facts_uncached(run_ids: list[str] | None = None, *, task_history: bool = False) -> dict[str, Any]:
     """Everything from core's database, in one connection acquisition.
 
     Why seven queries but not seven calls to `guarded`:
@@ -411,8 +424,12 @@ async def _core_facts(run_ids: list[str] | None = None, *, task_history: bool = 
                 await conn.executemany("INSERT INTO selected_run_ids VALUES ($1) ON CONFLICT DO NOTHING",
                                        [(value,) for value in ids])
             await conn.execute("ANALYZE selected_run_ids")
-        await conn.execute(queries.FLAT_TEMP_TABLE if run_ids is None
-                           else queries.SCOPED_FLAT_TEMP_TABLE)
+        if run_ids is not None and len(ids) > 100:
+            from flat_history import build_flat
+            await build_flat(conn, ids)
+        else:
+            await conn.execute(queries.FLAT_TEMP_TABLE if run_ids is None
+                               else queries.SCOPED_FLAT_TEMP_TABLE)
         return {
             "totals": [dict(r) for r in await conn.fetch(scoped(queries.AGENT_TOTALS))],
             "open": [dict(r) for r in await conn.fetch(scoped(queries.OPEN_RUNS),
@@ -1257,9 +1274,9 @@ def _timeout_snapshot(run_tag: str | None, reason: str) -> dict[str, Any]:
     }
 
 
-async def _snapshot_uncached(run_tag: str | None) -> dict[str, Any]:
+async def _snapshot_uncached(run_tag: str | None, loop: int | None = None, *, telemetry: bool = False) -> dict[str, Any]:
     """The real work. Call `snapshot` instead — it is the one that bounds the load."""
-    runs = await list_runs()
+    runs = [] if telemetry else await list_runs()
     tag = run_tag or (runs[0]["run_tag"] if runs else "")
 
     board = await _board(tag)
@@ -1272,6 +1289,32 @@ async def _snapshot_uncached(run_tag: str | None) -> dict[str, Any]:
     # callback while the file read was in progress.
     artifacts = await asyncio.to_thread(lookup, tag)
     calls = artifacts["calls"] if artifacts else []
+    telemetry_meta = None
+    loop_log = None
+    if telemetry:
+        from loop_history import call_loops, record_loop, read_log
+        from run_artifacts import directory_for, read_json
+        from fastapi import HTTPException
+        config = artifacts["config"] if artifacts else {}
+        calls = call_loops(calls)
+        directory = await asyncio.to_thread(directory_for, tag)
+        outcomes = (await asyncio.to_thread(read_json, directory / "iteration_outcomes.json") if directory else None) or {}
+        numbers = {c['loop'] for c in calls if c['loop'] is not None}
+        numbers.update(n for r in [*board, *results] if (n := record_loop(r, config)) is not None)
+        numbers.update(int(n) for n in outcomes if str(n).isdigit() and int(n) > 0)
+        choices = [{"number": n, "status": outcomes.get(str(n), {}).get('outcome', 'recorded'),
+                    "tasks": sum(record_loop(t, config) == n for t in board),
+                    "results": sum(record_loop(r, config) == n for r in results)} for n in sorted(numbers)]
+        if loop is not None and loop not in numbers:
+            raise HTTPException(404, 'This loop is not present in the selected execution.')
+        telemetry_meta = {"loop": loop, "loops": choices,
+                          "legacy_attribution": any(c['loop_source'] == 'recorded_boundary' and (loop is None or c['loop'] == loop) for c in calls),
+                          "unassigned_calls": sum(c['loop'] is None for c in calls)}
+        if loop is not None:
+            board = [t for t in board if record_loop(t, config) == loop]
+            results = [r for r in results if record_loop(r, config) == loop]
+            calls = [c for c in calls if c['loop'] == loop]
+        loop_log = await asyncio.to_thread(read_log, directory, loop)
     core = await _core_facts([c["run_id"] for c in calls if c.get("run_id")] if tag else [])
     terminal = {c["run_id"] for c in calls if c.get("status") in ("failed", "completed", "cancelled")}
     core["open"] = [r for r in core["open"] if str(r["run_id"]) not in terminal]
@@ -1304,9 +1347,10 @@ async def _snapshot_uncached(run_tag: str | None) -> dict[str, Any]:
 
     return {
         "run_tag": tag,
+        **({"telemetry": telemetry_meta, "loop_log": loop_log} if telemetry else {}),
         "run_configuration": artifacts["config"] if artifacts else None,
-        "report": artifacts["report"] if artifacts else None,
-        "pipeline": artifacts["pipeline"] if artifacts else None,
+        "report": artifacts["report"] if artifacts and loop is None else None,
+        "pipeline": artifacts["pipeline"] if artifacts and loop is None else None,
         "scene_scope": "selected_run",
         "runs": runs,
         # Always present, so the screen never has to read "key missing" as "fresh".

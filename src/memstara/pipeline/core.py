@@ -295,7 +295,7 @@ async def _ensure_agent_from_file(
 
 
 async def provision_all(
-    *, provider: str = "azure_foundry", model: str = "claude-sonnet-4-6"
+    *, provider: str = "", model: str = ""
 ) -> dict[str, uuid.UUID]:
     """Create the four agents (or find the existing ones) and return their ids.
 
@@ -308,7 +308,10 @@ async def provision_all(
     No api_key is passed: ModelConfig.api_key is exclude=True, so it does not survive
     being persisted with the agent. Credentials resolve at call time instead.
     """
-    mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096)
+    from memstara.env import configured_llm, configured_api_base
+    provider, model = configured_llm(provider, model)
+    mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096,
+                     api_base=configured_api_base(provider))
     react = {"execution_pattern": "reason_act"}
 
     hypothesis = await _ensure_agent_from_file(
@@ -457,7 +460,7 @@ BOARD_SERVERS = {
 # which takes their key set to *be* the set of stages and reports anything else as an
 # error. A sixth key would make that checker call a job an agent.
 #
-# Primary generation is knowledge-only, including all subsequent waves.
+# Raw result tools remain excluded. Iterative runs receive scoped feedback from the driver.
 # The catalog is a restricted, current-run duplicate-avoidance view.
 QUESTION_TOOLS = set(PRIMARY_QUESTION_TOOLS)
 QUESTION_SERVERS = {"okf", "memstara-blackboard"}
@@ -524,7 +527,7 @@ def board_workers(playbooks: dict[str, list[str]] | None = None, namespace: str 
 
 
 async def provision_board_agents(
-    *, provider: str = "azure_foundry", model: str = "claude-sonnet-4-6",
+    *, provider: str = "", model: str = "",
     playbooks: dict[str, list[str]] | None = None,
     namespace: str = "",
 ) -> dict[str, uuid.UUID]:
@@ -560,7 +563,10 @@ async def provision_board_agents(
         a stage key** — `BOARD_TOOLS[key]` is wrong for `hypothesis#2` and
         `stage_of(key)` is what turns one into the other.
     """
-    mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096)
+    from memstara.env import configured_llm, configured_api_base
+    provider, model = configured_llm(provider, model)
+    mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096,
+                     api_base=configured_api_base(provider))
     react = {"execution_pattern": "reason_act"}
 
     out: dict[str, uuid.UUID] = {}

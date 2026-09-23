@@ -55,3 +55,21 @@ def test_failed_read_is_saved_outside_trace_files(bundle, monkeypatch):
 def test_audit_failure_is_not_silently_hidden(bundle, monkeypatch):
     monkeypatch.setenv("MEMSTARA_RUN_CONFIG", str(bundle / "missing-directory" / "config.json"))
     assert "audit_error" in json.loads(okf.okf_read("alpha/deep/one"))
+
+
+def test_auto_section_reads_kg_instances_instead_of_nonexistent_bottom_line(bundle):
+    path = bundle / 'alpha' / 'kg.md'
+    path.write_text('---\ntitle: KG example\n---\n# Metapath\nSYMPTOMMANIFESTATIONOFDISEASE\n'
+                    '# Evidence — OBSERVED\nObserved support.\n# Instances\nDelirium → clinical entity\n')
+    result = json.loads(okf._read_documents('kg', section='auto'))
+    row = result['documents'][0] if 'documents' in result else result['results'][0]
+    assert row['section'] == 'Instances'
+    assert 'Delirium' in row['text']
+    assert 'SYMPTOMMANIFESTATIONOFDISEASE' not in row['text']
+    assert 'Evidence — OBSERVED' in row['sections']
+
+
+def test_auto_section_preserves_literature_and_whole_body_fallback(bundle):
+    (bundle / 'alpha' / 'paper.md').write_text('---\ntitle: Paper\n---\n# Bottom line\nConclusion.\n')
+    assert 'Conclusion.' in okf._read_documents('paper', section='auto')
+    assert 'Synthetic only.' in okf._read_documents('alpha/deep/one', section='auto')

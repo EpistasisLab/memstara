@@ -6,7 +6,33 @@ import threading
 import uuid
 from pathlib import Path
 
-from memstara.control.request import DEFAULTS
+from memstara.control.request import DEFAULTS, normalize_agent_configuration, playbook_field
+from memstara.agent_labels import AGENT_LABELS
+
+
+def loop_totals(records):
+    """Count recorded Loop attempts across executions, never configured budgets."""
+    totals = dict(attempted=0, completed=0, blocked=0, unknown_executions=0)
+    seen = set()
+    for record in records:
+        tag = record.get("run_tag")
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        try:
+            progress = json.loads((Path(record["run_dir"]) / "progress.json").read_text())
+            outcome = progress.get("exploration") or {}
+            attempted = outcome.get("attempted", progress.get("iteration"))
+            if type(attempted) is not int or attempted < 0:
+                raise ValueError("No recorded Loop count")
+            totals["attempted"] += attempted
+            for field in ("completed", "blocked"):
+                value = outcome.get(field, 0)
+                if type(value) is int and value >= 0:
+                    totals[field] += value
+        except (OSError, ValueError, KeyError, TypeError):
+            totals["unknown_executions"] += 1
+    return totals
 
 
 class PipelineWorkspace:
@@ -19,7 +45,11 @@ class PipelineWorkspace:
             data = json.loads(path.read_text())
             if not isinstance(data, list) or len(data) > 3:
                 raise ValueError("Invalid pipeline workspace; preserve the file and repair it")
-            self.items = data
+            self.items = [{**item, "agent_labels": dict(AGENT_LABELS),
+                           "configuration": self.configuration(item.get("configuration", {}))}
+                          for item in data]
+            if self.items != data:
+                self._save()
         else:
             self.items = []
 
@@ -50,7 +80,19 @@ class PipelineWorkspace:
                         progress = json.loads((Path(latest["run_dir"]) / "progress.json").read_text())
                     except (OSError, ValueError):
                         pass
-                out.append({**copy.deepcopy(item), "running": current, "latest": latest, "progress": progress})
+                if latest and not current:
+                    # Historical progress must use that execution's frozen limit,
+                    # even after the user changes the next execution's settings.
+                    try:
+                        frozen = json.loads((Path(latest["run_dir"]) / "config.json").read_text())
+                        latest = {**latest, "configuration": {
+                            "waves": frozen.get("waves"), "continuous": frozen.get("continuous", False)}}
+                    except (OSError, ValueError):
+                        pass
+                out.append({**copy.deepcopy(item), "configuration": self.configuration(item["configuration"]),
+                            "running": current, "latest": latest, "progress": progress,
+                            "loop_totals": loop_totals(manager.history_records() if hasattr(manager, "history_records")
+                                                       else [*history, *([current] if current else [])])})
             return out
 
     def mutate(self, body):
@@ -65,6 +107,7 @@ class PipelineWorkspace:
                     raise ValueError("Pipeline name must contain 1–80 characters")
                 item = {
                     "id": uuid.uuid4().hex,
+                    "agent_labels": dict(AGENT_LABELS),
                     "number": number,
                     "name": name.strip(),
                     "configuration": self.configuration(body.get("configuration", {})),
@@ -94,35 +137,98 @@ class PipelineWorkspace:
 
     @staticmethod
     def configuration(value):
+        value = normalize_agent_configuration(value)
         if not isinstance(value, dict) or set(value) - set(DEFAULTS):
             raise ValueError("Invalid pipeline configuration fields")
         config = {
             **copy.deepcopy(DEFAULTS),
+            "playbook_interpreter": "interpreter_factual_observations",
+            "playbook_explanation": "report_clinical_explanations",
             **value,
             "hypothesis_agents": 1,
             "interpret_agents": 1,
             "trials": 1,
-            "waves": 1,
-            "continuous": True,
+            "waves": value.get("waves", 10),
+            "continuous": value.get("continuous", False),
             "question": "",
         }
+        from memstara.control.request import _MAX_WAVES
+        if config.get('combination_skills'):
+            from memstara.combinations import build_plan
+            plan = build_plan(config['combination_skills'], config['combination_repetitions'],
+                              random_start=config['combination_random_start'],
+                              max_loops=config['combination_max_loops'], start_index=0)
+            if plan['total_loops'] > 10000:
+                raise ValueError('At most 10000 combination Loops are supported')
+            config['waves'] = plan['total_loops']
+            config['continuous'] = False
+            for stage, entries in plan['skills'].items():
+                config[playbook_field(stage)] = entries[0]['id']
+        maximum = 10000 if config.get('combination_skills') else _MAX_WAVES
+        if type(config['waves']) is not int or not 1 <= config['waves'] <= maximum:
+            raise ValueError(f'Maximum loops must be between 1 and {_MAX_WAVES}')
+        if type(config['continuous']) is not bool:
+            raise ValueError('Continuous must be a boolean')
+        # Older workspace definitions used continuous=True with a dummy waves=1.
+        # Migrate these to the explicit MVP ceiling before display or launch.
+        if config['continuous']:
+            config['waves'] = 10
+        config['continuous'] = False
         for key in ("playbook_hypothesis", "playbook_interpreter"):
             if not isinstance(config[key], str) or "," in config[key]:
                 raise ValueError("Each pipeline has one hypothesis and one interpreter skill")
         return config
 
-    def start(self, key, launch):
+    def start(self, key, launch, *, mode="initial", additional_loops=None, expected_run_tag=None):
         with self.lock:
             item = next((p for p in self.items if p["id"] == key), None)
             if item is None:
                 raise ValueError("Pipeline does not exist")
-            return launch(self.manager(key), copy.deepcopy(item))
+            manager = self.manager(key)
+            if manager.running():
+                raise ValueError("This pipeline is already running; pause or resume its current execution")
+            history = manager.finished()
+            latest = history[0] if history else None
+            if mode not in ("initial", "additional", "fresh"):
+                raise ValueError("Invalid execution mode")
+            if latest and mode == "initial":
+                raise ValueError("Choose additional analysis and a Loop count, or explicitly start a new execution")
+            if mode in ("additional", "fresh"):
+                if not latest or expected_run_tag != latest.get("run_tag"):
+                    raise ValueError("Execution history changed. Refresh and review before starting")
+            configuration = self.configuration(item["configuration"])
+            if mode == "additional" and configuration.get("combination_skills"):
+                raise ValueError("All Combinations restarts the full reviewed schedule; use a new execution")
+            if mode == "additional":
+                from memstara.control.request import _MAX_WAVES
+                if type(additional_loops) is not int or not 1 <= additional_loops <= _MAX_WAVES:
+                    raise ValueError(f"Additional Loops must be between 1 and {_MAX_WAVES}")
+                configuration.update(waves=additional_loops, continuous=False)
+            elif additional_loops is not None:
+                raise ValueError("Additional Loops require additional analysis mode")
+            return launch(manager, {**copy.deepcopy(item), "configuration": configuration})
+
+    def stop_all(self):
+        """Freeze workspace membership and signal each live pipeline independently."""
+        with self.lock:
+            stopped, errors = [], []
+            for item in self.items:
+                manager = self.manager(item['id'])
+                run = manager.running()
+                if not run:
+                    continue
+                try:
+                    manager.stop(run['run_tag'])
+                    stopped.append(run['run_tag'])
+                except (RuntimeError, OSError) as exc:
+                    errors.append({'pipeline': item['name'], 'error': str(exc)})
+            return {'stopping': stopped, 'errors': errors}
 
     def locate_manager(self, tag):
         with self.lock:
             for item in self.items:
                 manager = self.manager(item["id"])
                 current = manager.running()
-                if current and current["run_tag"] == tag:
+                if (current and current["run_tag"] == tag) or any(r["run_tag"] == tag for r in manager.finished()):
                     return manager
         return None

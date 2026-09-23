@@ -67,7 +67,9 @@ def test_reconciliation_never_fails_a_still_running_worker(monkeypatch):
     assert submit.await_args.args[2]['task_id'] == 2
 
 
-def test_interpreter_skills_are_provisioned_and_forwarded_individually():
+def test_interpreter_skills_are_provisioned_and_forwarded_individually(monkeypatch):
+    monkeypatch.setenv("MEMSTARA_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("MEMSTARA_LLM_MODEL", "test-deployment")
     skills = ['interpreter_clinical', 'interpreter_attribution', 'interpreter_robustness', 'interpreter_actionability']
     argv = build_argv({'interpret_agents': 4, 'playbook_interpreter': ','.join(skills)},
                       [], skills, ['interpreter'])
@@ -79,7 +81,9 @@ def test_interpreter_skills_are_provisioned_and_forwarded_individually():
     assert len({name for name, _ in selected}) == 4
 
 
-def test_four_hypotheses_and_repeated_waves_are_accepted():
+def test_four_hypotheses_and_repeated_waves_are_accepted(monkeypatch):
+    monkeypatch.setenv("MEMSTARA_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("MEMSTARA_LLM_MODEL", "test-deployment")
     argv = build_argv({'hypothesis_agents': 4, 'trials': 4, 'waves': 3}, [])
     assert argv[argv.index('--hypothesis-agents') + 1] == '4'
     assert argv[argv.index('--waves') + 1] == '3'

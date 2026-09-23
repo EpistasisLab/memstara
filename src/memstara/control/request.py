@@ -25,6 +25,7 @@ part that stays importable — the same split that put the `fields=` predicate i
 from __future__ import annotations
 
 import re
+import os
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -101,9 +102,31 @@ PLAYBOOK_STAGES = ("hypothesis", "data", "ml", "interpreter", "report")
 #: the check below does not change shape.
 MULTI_PLAYBOOK_STAGES = ("hypothesis", "interpreter")
 
+def playbook_field(stage):
+    return "playbook_explanation" if stage in ("report", "explanation") else f"playbook_{stage}"
+
+
+def normalize_agent_configuration(body):
+    """Read legacy settings; write only the canonical Explanation configuration key."""
+    if not isinstance(body, Mapping):
+        raise ValueError("Pipeline settings must be an object")
+    result = dict(body)
+    if "playbook_report" in result:
+        legacy = result.pop("playbook_report")
+        if "playbook_explanation" in result and result["playbook_explanation"] != legacy:
+            raise ValueError("Conflicting Explanation skill settings")
+        result["playbook_explanation"] = legacy
+    return result
+
+
 DEFAULTS: dict[str, Any] = {
     "question": "",
+    "combination_skills": {},
+    "combination_repetitions": 1,
+    "combination_random_start": False,
+    "combination_max_loops": None,
     "evaluation": {},
+    "baseline_columns": [],
     "skill": "",
     "trials": 3,
     "waves": 1,
@@ -111,15 +134,29 @@ DEFAULTS: dict[str, Any] = {
     "hypothesis_agents": 1,
     "interpret_agents": 1,
     "y_column": "outcome",
-    "provider": "azure_foundry",
-    "model": "claude-sonnet-4-6",
+    "provider": "",
+    "model": "",
     # One key per stage rather than one `playbooks` object, so the allow-list stays flat
     # and an unknown *stage* is caught by the same check that catches an unknown field
     # — a nested object would need its own copy of that rule, and the copy is what goes
     # wrong. Empty means the prompt as written, which is also what `board.py` means by
     # the flag being absent.
-    **{f"playbook_{stage}": "" for stage in PLAYBOOK_STAGES},
+    **{playbook_field(stage): "" for stage in PLAYBOOK_STAGES if stage != "report"},
+    "playbook_explanation": "",
 }
+
+
+def configured_llm() -> tuple[str, str]:
+    """Only deployment environment selects the LLM; never a stale run or browser draft."""
+    provider = os.environ.get("MEMSTARA_LLM_PROVIDER", "").strip()
+    model = os.environ.get("MEMSTARA_LLM_MODEL", "").strip()
+    if not provider or not model:
+        raise ValueError("Set MEMSTARA_LLM_PROVIDER and MEMSTARA_LLM_MODEL in motoro/.env before starting a pipeline")
+    if provider not in PROVIDERS:
+        raise ValueError("MEMSTARA_LLM_PROVIDER is unsupported")
+    if not _MODEL.fullmatch(model):
+        raise ValueError("MEMSTARA_LLM_MODEL is not a model identifier")
+    return provider, model
 
 
 def _whole_number(body: Mapping[str, Any], key: str, ceiling: int) -> int:
@@ -185,6 +222,7 @@ def build_argv(
             skills, or not a field at all. The message names the field and the value,
             because it is shown to whoever pressed the button.
     """
+    body = normalize_agent_configuration(body)
     unknown = sorted(set(body) - set(DEFAULTS))
     if unknown:
         raise ValueError(
@@ -197,6 +235,8 @@ def build_argv(
     if not isinstance(evaluation, dict):
         raise ValueError("evaluation must be an object")
     validate(evaluation)
+    from memstara.comparisons import validate_baseline
+    baseline = validate_baseline(body.get("baseline_columns", []), body.get("y_column", DEFAULTS["y_column"]))
     question = _text(body, "question")
     if len(question) > 8000:
         raise ValueError("Research question must be at most 8000 characters")
@@ -211,20 +251,30 @@ def build_argv(
     if not _COLUMN.match(y_column):
         raise ValueError(f"y_column {y_column!r} is not a column name")
 
-    provider = _text(body, "provider")
-    if provider not in PROVIDERS:
-        raise ValueError(f"provider must be one of {', '.join(PROVIDERS)}; {provider!r} is not")
-
-    model = _text(body, "model")
-    if not _MODEL.match(model):
-        raise ValueError(f"model {model!r} is not a model identifier")
+    # Validate legacy request fields, but deployment configuration controls execution.
+    requested_provider = _text(body, "provider")
+    requested_model = _text(body, "model")
+    if requested_provider and requested_provider not in PROVIDERS:
+        raise ValueError(f"provider must be one of {', '.join(PROVIDERS)}")
+    if requested_model and not _MODEL.fullmatch(requested_model):
+        raise ValueError("model is not a model identifier")
+    provider, model = configured_llm()
 
     continuous = body.get("continuous", False)
     if not isinstance(continuous, bool):
         raise ValueError("continuous must be a boolean")
 
     trials = _whole_number(body, "trials", _MAX_TRIALS)
-    waves = _whole_number(body, "waves", _MAX_WAVES)
+    combination_plan = None
+    if body.get("combination_skills"):
+        from memstara.combinations import build_plan
+        combination_plan = build_plan(body["combination_skills"], body.get("combination_repetitions", 1),
+                                      random_start=body.get('combination_random_start', False),
+                                      max_loops=body.get('combination_max_loops'))
+        continuous = False
+        if combination_plan['total_loops'] > 10000:
+            raise ValueError('Reduce combinations or repetitions to at most 10000 Loops')
+    waves = combination_plan['total_loops'] if combination_plan else _whole_number(body, "waves", _MAX_WAVES)
     hypothesis_agents = _whole_number(body, "hypothesis_agents", _MAX_HYPOTHESIS_AGENTS)
     interpret_agents = _whole_number(body, "interpret_agents", 4)
 
@@ -236,7 +286,7 @@ def build_argv(
         # The split is here rather than only in `board.py` so the person who pressed the
         # button gets the message: `board.py` refuses the same things, but it does so in a
         # child process whose stderr goes to a log nobody is looking at.
-        books = [b.strip() for b in _text(body, f"playbook_{stage}").split(",") if b.strip()]
+        books = [b.strip() for b in _text(body, playbook_field(stage)).split(",") if b.strip()]
         if not books:
             continue
         if stage not in markable:
@@ -295,10 +345,15 @@ def build_argv(
     if continuous:
         argv += ["--continuous"]
     for stage, book in chosen:
-        argv += [f"--playbook-{stage}", book]
+        argv += [f"--playbook-{"explanation" if stage == "report" else stage}", book]
+    import json
+    if "baseline_columns" in body:
+        argv += ["--baseline-columns", json.dumps(baseline)]
     if "evaluation" in body:
         import json
         argv += ["--evaluation", json.dumps(evaluation)]
     if question:
         argv += ["--question", question]
+    if combination_plan:
+        argv += ["--combination-plan", json.dumps(combination_plan)]
     return argv

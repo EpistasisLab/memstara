@@ -155,6 +155,10 @@ def slice_columns(columns: list[str], y_column: str, tag: str) -> str:
     dataset's" — a wrong diagnosis of a bug in this function. `match_concepts`
     already takes a list; the two tools now agree.
     """
+    from memstara.evaluation import active_plan
+    snapshot = active_plan()
+    if snapshot and y_column != snapshot["y_column"]:
+        return json.dumps({"error": "Extraction target differs from the run's fixed target"})
     try:
         df = pd.read_csv(_dataset_path())
         out_dir = _output_dir()
@@ -188,6 +192,8 @@ def slice_columns(columns: list[str], y_column: str, tag: str) -> str:
     # (blocking leakage at the source).
     if outcome_col:
         wanted = [c for c in wanted if c != outcome_col]
+    baseline = (snapshot or {}).get("comparison_policy", {}).get("baseline_columns", [])
+    wanted = list(dict.fromkeys([c for c in wanted if c != y_column] + baseline))
     if not wanted:
         return json.dumps({"error": "columns is empty"})
 

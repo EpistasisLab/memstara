@@ -68,7 +68,11 @@ def train_and_score(
         }
         plan = validate(plan)
         try:
-            result = score(p, y_column, plan)
+            if (snapshot or {}).get("comparison_policy"):
+                from memstara.comparisons import score_comparisons
+                result = score_comparisons(p, y_column, plan, snapshot)
+            else:
+                result = score(p, y_column, plan)
         except Exception as exc:
             # Never send data values embedded in library exception messages to an LLM.
             detail = str(exc) if isinstance(exc, DataQualityError) else f"Evaluation failed ({type(exc).__name__})"

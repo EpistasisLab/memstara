@@ -55,6 +55,7 @@ from motoro.runner import (
     get_run_steps,      # after it has finished, read the step record it left
 )
 from motoro.schemas.agent import LLMProvider, ModelConfig
+from memstara.env import configured_api_base
 
 
 async def provision(provider: str, model: str) -> Any:
@@ -82,7 +83,8 @@ async def provision(provider: str, model: str) -> Any:
         name=name,
         goal="Answer the user's question accurately and concisely.",
         description="Smoke-test agent for the sandbox.",
-        model_config=ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=2048),
+        model_config=ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=2048,
+                                 api_base=configured_api_base(provider)),
         # Leaving this None would use the orchestrator default, reason_act. Naming it
         # explicitly makes it easy to swap and compare later. Lean on the default and
         # you cannot tell from the code alone which pattern was used.
@@ -94,12 +96,15 @@ async def main() -> int:
     # Command-line options. Given nothing, it asks one multiplication question.
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", default="What is 17 * 23? Show your reasoning briefly.")
-    ap.add_argument("--provider", default="azure_foundry", choices=["anthropic", "azure_foundry", "openai"])
-    ap.add_argument("--model", default="claude-sonnet-4-6")
+    ap.add_argument("--provider", default="", choices=["anthropic", "azure_foundry", "openai"])
+    ap.add_argument("--model", default="")
     ap.add_argument("--trace", action="store_true", help="print the persisted SRPA steps")
     ap.add_argument("--verbose", action="store_true", help="console DEBUG: phases, hooks, tool calls")
     ap.add_argument("--log-file", default=None, help="JSONL log path (default: outputs/logs/hello.jsonl)")
     args = ap.parse_args()
+    from memstara.env import load_env, configured_llm
+    load_env()
+    args.provider, args.model = configured_llm(args.provider, args.model)
 
     # Once per process, and necessarily before any core module reads a setting —
     # the equivalent of a web app's startup / lifespan hook. Get the order the wrong

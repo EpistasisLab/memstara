@@ -43,7 +43,7 @@ def test_user_skill_is_versioned_and_role_scoped(clean_data):
     changed = catalog.register({"stage": "hypothesis", "name": "custom", "content": "# Custom\nUse drugs."})
     assert first["id"] != changed["id"]
     assert "Use anatomy." in load_prompt("board/hypothesis", first["id"])["system_prompt"]
-    with pytest.raises(ValueError, match="ml role"):
+    with pytest.raises(ValueError, match="ML Agent role"):
         catalog.validate_selection({"playbook_ml": first["id"]})
     renamed = catalog.register({"stage": "hypothesis", "name": "other", "content": "# Custom\nUse anatomy."})
     with pytest.raises(ValueError, match="different skill"):
@@ -66,6 +66,9 @@ def test_snapshot_freezes_prompt_and_forces_model_and_seed(clean_data, tmp_path,
         load_prompt("board/hypothesis", "treatment-toxicity")
         == snapshot["prompts"]["board/hypothesis:treatment-toxicity"]
     )
+    from memstara.comparisons import write_context
+    write_context(clean_data, {"columns": ["x", "noise", "kind"], "y_column": "outcome",
+                               "evaluation": {}}, snapshot)
     result = json.loads(train_and_score(str(clean_data), "outcome", seed=999))
     assert "error" not in result, result
     assert result["seed"] == 7
@@ -111,7 +114,9 @@ def test_mcp_training_is_concurrent_and_writes_separate_artifacts(clean_data, tm
     assert clean_data.with_suffix(".evaluation.json").exists() and second.with_suffix(".evaluation.json").exists()
 
 
-def test_governance_request_rejects_unsupported_or_unsafe_options():
+def test_governance_request_rejects_unsupported_or_unsafe_options(monkeypatch):
+    monkeypatch.setenv("MEMSTARA_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("MEMSTARA_LLM_MODEL", "test-deployment")
     for plan in ({"folds": 1}, {"seed": True}, {"replicates": 0}, {"search_trials": 11}, {"test_size": float("nan")}):
         with pytest.raises(ValueError):
             validate(plan)
@@ -198,9 +203,10 @@ def test_encoding_statistics_never_include_holdout(clean_data, monkeypatch):
 
     monkeypatch.setattr(StandardScaler, "fit", track)
     score(clean_data, "outcome", {"engine": "logistic_regression"})
-    assert len(captured) == 1
-    assert captured[0][0] == pytest.approx(frame.iloc[train]["x"].mean())
-    assert captured[0][0] != pytest.approx(frame["x"].mean())
+    assert len(captured) == 2  # Original fit plus independent reproducibility refit.
+    for fitted_mean in captured:
+        assert fitted_mean[0] == pytest.approx(frame.iloc[train]["x"].mean())
+        assert fitted_mean[0] != pytest.approx(frame["x"].mean())
 
 
 def test_threshold_evidence_and_replicates_are_measured(clean_data):
@@ -256,7 +262,9 @@ def test_dirty_input_is_rejected_before_run_configuration_is_frozen(clean_data, 
     assert not (tmp_path / 'config.json').exists()
 
 
-def test_skill_optimization_defaults_reach_frozen_runtime(clean_data, tmp_path):
+def test_skill_optimization_defaults_reach_frozen_runtime(clean_data, tmp_path, monkeypatch):
+    monkeypatch.setenv("MEMSTARA_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("MEMSTARA_LLM_MODEL", "test-deployment")
     skill = catalog.register({'stage': 'ml', 'name': 'replicated',
         'content': '<!-- evaluation: {"replicates": 10, "folds": 2} -->\nUse ten seeded replicates.'})
     argv = build_argv({'playbook_ml': skill['id'], 'evaluation': {'engine': 'logistic_regression'}},
@@ -274,3 +282,14 @@ def test_report_only_snapshot_does_not_relabel_legacy_generation(clean_data, tmp
         y_column='outcome', evaluation='{}', trials=1, waves=1, report_only=True)
     snapshot = freeze(args, tmp_path, {})
     assert snapshot['hypothesis_policy'] == {}
+
+
+@pytest.mark.parametrize('stage', ['hypothesis', 'ml', 'interpreter', 'report'])
+def test_custom_markdown_reaches_each_configurable_agent(stage, tmp_path, monkeypatch):
+    monkeypatch.setenv('MEMSTARA_OUTPUT_DIR', str(tmp_path))
+    instructions = f'# Custom {stage}\nExplicit user instructions for the {stage} role.'
+    item = catalog.register({'stage': stage, 'name': 'uploaded-skill', 'content': instructions})
+    assert catalog.resolve(item['id'])['content'] == instructions
+    catalog.validate_selection({f'playbook_{stage}': item['id']})
+    assert instructions in load_prompt(f'board/{stage}', item['id'])['system_prompt']
+    assert (tmp_path / 'skills' / f'{item["id"]}.json').is_file()

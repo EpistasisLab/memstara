@@ -7,7 +7,9 @@ from memstara.control.request import build_argv
 from memstara.pipeline.exploration import rounds
 
 
-def test_continuous_request_is_explicit_and_validated():
+def test_continuous_request_is_explicit_and_validated(monkeypatch):
+    monkeypatch.setenv("MEMSTARA_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("MEMSTARA_LLM_MODEL", "test-deployment")
     assert "--continuous" not in build_argv({}, [])
     assert "--continuous" in build_argv({"continuous": True}, [])
     for invalid in ("false", "true", 1, None):
@@ -73,3 +75,125 @@ def test_stage_progress_resets_and_only_explicit_completion_reaches_100(tmp_path
     current = json.loads((tmp_path / "progress.json").read_text())
     assert current["stage_percent"] == 0
     assert current["iteration"] == 5
+
+
+def test_loop_timing_preserves_start_and_records_report_completion(tmp_path, monkeypatch):
+    import json
+    import time
+    from memstara.pipeline.exploration import record_round
+    monkeypatch.setattr(time, 'time', lambda: 10)
+    record_round(tmp_path, 1, 'running')
+    monkeypatch.setattr(time, 'time', lambda: 20)
+    record_round(tmp_path, 1, 'analysis_complete')
+    value=json.loads((tmp_path/'iteration_outcomes.json').read_text())['1']
+    assert value['started_at']==10 and 'ended_at' not in value
+    monkeypatch.setattr(time, 'time', lambda: 25)
+    record_round(tmp_path, 1, 'completed')
+    value=json.loads((tmp_path/'iteration_outcomes.json').read_text())['1']
+    assert value['started_at']==10 and value['ended_at']==25
+
+
+def test_stop_keeps_exact_continuation_and_never_replays_completed_calls(tmp_path):
+    from memstara.pipeline.exploration import ExecutionGate
+    import json
+
+    async def scenario():
+        gate = ExecutionGate(tmp_path)
+        entered, finish = asyncio.Event(), asyncio.Event()
+        calls = []
+        async def first():
+            calls.append('ml')
+            entered.set()
+            await finish.wait()
+            return 'saved-model'
+        async def second(model):
+            calls.append(('interpret', model))
+        async def pipeline():
+            model = await gate.call(first)
+            await gate.call(second, model)
+        task = asyncio.create_task(pipeline())
+        await entered.wait()
+        marker = tmp_path / 'pause.request'
+        marker.touch()
+        finish.set()
+        await asyncio.sleep(.03)
+        assert calls == ['ml'] and not task.done()
+        assert json.loads((tmp_path / 'execution_control.json').read_text())['state'] == 'paused'
+        marker.unlink()
+        await asyncio.wait_for(task, 2)
+        assert calls == ['ml', ('interpret', 'saved-model')]
+    asyncio.run(scenario())
+
+
+def test_master_stop_gate_blocks_queued_calls_while_other_calls_finish(tmp_path):
+    from memstara.pipeline.exploration import ExecutionGate
+    import json
+
+    async def scenario():
+        gate = ExecutionGate(tmp_path)
+        started, finish = asyncio.Event(), asyncio.Event()
+        calls = []
+        async def work(name):
+            calls.append(name)
+            started.set()
+            await finish.wait()
+        first = asyncio.create_task(gate.call(work, 'first'))
+        await started.wait()
+        marker = tmp_path / 'pause.request'
+        marker.touch()
+        second = asyncio.create_task(gate.call(work, 'second'))
+        await asyncio.sleep(.03)
+        assert json.loads((tmp_path / 'execution_control.json').read_text())['state'] == 'stopping'
+        finish.set()
+        await asyncio.sleep(.03)
+        assert calls == ['first']
+        assert json.loads((tmp_path / 'execution_control.json').read_text())['active_calls'] == 0
+        marker.unlink()
+        await asyncio.wait_for(asyncio.gather(first, second), 2)
+        assert calls == ['first', 'second']
+    asyncio.run(scenario())
+
+
+def test_resume_does_not_reset_total_loop_limit(tmp_path):
+    from memstara.pipeline.exploration import ExecutionGate
+
+    async def scenario():
+        gate = ExecutionGate(tmp_path)
+        calls = []
+        paused = asyncio.Event()
+        async def work(loop):
+            calls.append(loop)
+            if loop == 1:
+                (tmp_path / 'pause.request').touch()
+                paused.set()
+        async def pipeline():
+            async for loop in rounds(3, False, tmp_path):
+                await gate.call(work, loop)
+        task = asyncio.create_task(pipeline())
+        await paused.wait()
+        await asyncio.sleep(.03)
+        assert calls == [0, 1]
+        (tmp_path / 'pause.request').unlink()
+        await asyncio.wait_for(task, 2)
+        assert calls == [0, 1, 2]
+    asyncio.run(scenario())
+
+
+def test_gate_cleans_active_count_on_failure_and_cancellation(tmp_path):
+    from memstara.pipeline.exploration import ExecutionGate
+    async def scenario():
+        gate = ExecutionGate(tmp_path)
+        async def fail():
+            raise ValueError('provider failed')
+        with pytest.raises(ValueError):
+            await gate.call(fail)
+        assert gate.active_calls == 0
+        async def hang():
+            await asyncio.Event().wait()
+        task = asyncio.create_task(gate.call(hang))
+        await asyncio.sleep(.01)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert gate.active_calls == 0
+    asyncio.run(scenario())

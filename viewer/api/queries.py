@@ -60,54 +60,14 @@ a value.
 ==============================================================================
 """
 
-# Flatten both call shapes into one relation. Everything that counts tool calls builds
-# on this, so the three traps are dealt with once. ★ The heart of this file.
-#
-#   above the UNION ALL = a step holding **one** call (`tool_call->>'server'` is there)
-#   below the UNION ALL = a step holding **several** calls (the `tool_call->'calls'`
-#                         array is unpacked with `json_array_elements`)
-#
-#   Both sides **throw away the JSON literal null first**, with
-#   `json_typeof(s.tool_call) = 'object'`. `IS NOT NULL` does not filter it (trap 1).
-#   And `replace(..., 'ecoxai-', 'memstara-')` folds the old server name in (trap 3).
-#
-#   Every query that counts tool calls reads the result. That is what makes the three
-#   traps handled **once** and done with.
-#   It used to be a CTE that each of the five queries carried its own copy of, and that
-#   is what made the screen stop: five copies is five scans of `run_steps`, ~0.9s each,
-#   so one poll cost ~6s against a 2s interval. Polls then overlapped, the core DB was
-#   measured at 531% CPU running four copies of this same query at once, and the
-#   connection pool drained. Now it is built **once** per `_core_facts` and the five
-#   read the result.
-#
-#   `json_typeof(...) = 'object'` replaced `tool_call::text <> 'null'`. The old form
-#   serialised the whole value — averaging 2.5kB and reaching 46kB, since LLM output is
-#   in there — for every row, only to compare it with a four-character literal.
-#   `json_typeof` reads the first token. Both admit the same rows: measured, 3234 in
-#   each case.
-#
-#   The `steps` CTE exists for the `::jsonb` in it, and that cast is the other half of
-#   the speed-up. `run_steps.tool_call` is `json`, which Postgres stores as **text**: a
-#   `->` on it re-parses the whole document, and this query used to do five of them per
-#   row on documents reaching 46kB. `jsonb` is parsed once and then indexed into. Same
-#   3234 rows either way; measured 1.0s to 0.19s.
-#: The only tools whose `arguments` and `result` anything reads — TASK_TOUCHES, to pull
-#: `task_id`, `run_tag` and `worker` out of them (see its comment below). Every other
-#: tool's payload is carried into `flat`, written to disk, and never looked at; and it is
-#: the expensive half of the table, because a tool that calls a model puts the model's
-#: whole answer in `result`, up to 46kB of it. So the two columns are kept for these four
-#: and nulled for the rest. If a new query needs a payload, widen this list — do not
-#: reach past `flat` for it.
-#:
-#: `claim_question` was added on 2026-09-08, and this is the sanctioned widening the
-#: paragraph above describes rather than an exception to it. **It is the only place a
-#: hypothesis worker writes its own name down.** The other three stages take their work
-#: off the board and so pass `worker=` to `claim_task`; the hypothesis stage creates the
-#: work instead, and the tool it passes `worker=` to is this one
-#: (`src/memstara/mcp_servers/blackboard.py:799`) — `create_task` has no such argument.
-#: Leave it out and the one stage `--hypothesis-agents` actually multiplies is the one
-#: stage whose workers cannot be told apart. Its payload is cheap: the result is a single
-#: question row, not model output.
+# Materialize the requested run IDs before ANY JSON inspection. Without this
+# boundary PostgreSQL can evaluate a JSON predicate on unrelated run_steps before
+# joining selected_run_ids. On the affected execution this took over 11 seconds;
+# an explicit scoped source reduced the same 434 tool calls to 0.13–0.34 seconds.
+# json_to_record keeps large tool results as JSON and reads the outer shape once.
+# Only board arguments/results used for task attribution are converted to JSONB,
+# with the existing escaped-NUL protection. Both single and batched calls remain.
+# These payloads are used to associate actual calls with tasks and named workers.
 BOARD_TOOLS = ("create_task", "claim_task", "claim_question", "submit_result", "propose_questions")
 _TOOLS_SQL = "('" + "', '".join(BOARD_TOOLS) + "')"
 
@@ -117,35 +77,53 @@ def _payload(prefix: str, expr: str) -> str:
     return f"CASE WHEN {prefix}->>'tool' IN {_TOOLS_SQL} THEN {prefix}{expr} END"
 
 
+def telemetry_jsonb(expression: str) -> str:
+    r"""Render JSON safely without changing stored core history.
+
+    PostgreSQL JSON accepts escaped NUL, but JSONB/text rejects it. Replace only
+    an actual JSON NUL escape with U+FFFD; preserve literal backslash-u0000 text.
+    The paired-backslash capture keeps JSON escape parity intact.
+    """
+    cleaned = (
+        "regexp_replace(" + expression + "::text, "
+        + r"$nul$(?<!\\)((?:\\\\)*)\\u0000$nul$, $nul$\1\\ufffd$nul$, 'g')"
+    )
+    # Most payloads need no regex scan. In particular, ML outputs can be large.
+    return (f"(CASE WHEN strpos({expression}::text, " + r"$nul$\u0000$nul$"
+            + f") > 0 THEN {cleaned} ELSE {expression}::text END)::jsonb")
+
+
+
+# Keep large tool results as JSON. Convert only board payloads needed for task
+# attribution; converting every ML/result document to JSONB dominated cold reads.
 _FLAT_SELECT = f"""
-WITH steps AS (
-    SELECT s.run_id,
-           s.id                AS step_id,
-           s.started_at,
-           s.tool_call::jsonb  AS tc
-    FROM run_steps s
-    WHERE json_typeof(s.tool_call) = 'object'
+WITH scoped_steps AS MATERIALIZED (
+    SELECT s.run_id, s.id, s.started_at FROM run_steps s
 )
-SELECT run_id,
-       step_id,
-       started_at,
-       replace(tc->>'server', 'ecoxai-', 'memstara-')  AS server,
-       tc->>'tool'                                     AS tool,
-       {_payload("tc", "->'arguments'")}               AS arguments,
-       {_payload("tc", "->>'result'")}                 AS result
-FROM steps
-WHERE tc->>'server' IS NOT NULL
-UNION ALL
-SELECT run_id,
-       step_id,
-       started_at,
-       replace(c->>'server', 'ecoxai-', 'memstara-'),
-       c->>'tool',
-       {_payload("c", "->'arguments'")},
-       {_payload("c", "->>'result'")}
-FROM steps,
-     jsonb_array_elements(tc->'calls') c
-WHERE tc->'calls' IS NOT NULL
+SELECT s.run_id, s.id AS step_id, s.started_at,
+       replace(c.server, 'ecoxai-', 'memstara-') AS server, c.tool,
+       CASE WHEN c.tool IN {_TOOLS_SQL} THEN
+            {telemetry_jsonb("json_build_object('task_id', attrs.task_id, 'worker', attrs.worker, 'writer', attrs.writer, 'run_tag', attrs.run_tag, 'origin_run', attrs.origin_run)")}
+       END AS arguments,
+       CASE WHEN c.tool IN {_TOOLS_SQL}
+            THEN ({telemetry_jsonb("c.result")}) #>> '{{}}' END AS result
+FROM scoped_steps s
+JOIN run_steps raw ON raw.id=s.id
+CROSS JOIN LATERAL json_to_record(
+    CASE WHEN json_typeof(raw.tool_call) = 'object' THEN raw.tool_call ELSE '{{}}'::json END
+) AS doc(server text, tool text, arguments json, result json, calls json)
+CROSS JOIN LATERAL (
+    SELECT doc.server, doc.tool, doc.arguments, doc.result WHERE doc.server IS NOT NULL
+    UNION ALL
+    SELECT batch.server, batch.tool, batch.arguments, batch.result
+    FROM json_to_recordset(
+        CASE WHEN json_typeof(doc.calls) = 'array' THEN doc.calls ELSE '[]'::json END
+    ) AS batch(server text, tool text, arguments json, result json)
+) c
+CROSS JOIN LATERAL json_to_record(
+    CASE WHEN c.tool IN {_TOOLS_SQL} AND json_typeof(c.arguments) = 'object'
+         THEN c.arguments ELSE '{{}}'::json END
+) AS attrs(task_id json, worker json, writer json, run_tag json, origin_run json)
 """
 
 #: Run once, first thing, on the connection the five queries below will use. Dropped
@@ -373,13 +351,13 @@ TASK_TOUCHES = FLAT_CALLS + f"""
 SELECT a.name,
        f.run_id,
        f.tool,
-       NOT ((f.result::jsonb) ? 'error') AS succeeded,
+       NOT (({telemetry_jsonb("f.result")}) ? 'error') AS succeeded,
        f.started_at,
        coalesce(
-           (f.result::json)->>'task_id',
+           ({telemetry_jsonb("f.result")})->>'task_id',
            f.arguments->>'task_id'
        ) AS task_id,
-       (f.result::json)->>'run_tag' AS run_tag,
+       ({telemetry_jsonb("f.result")})->>'run_tag' AS run_tag,
        -- Which of a stage's workers made this call. Only the arguments side has it:
        -- the worker names itself when it asks for work, and no board row this query
        -- reads is keyed by it.
@@ -464,7 +442,7 @@ WITH named AS (
            coalesce(nullif(f.arguments->>'worker', ''), f.arguments->>'writer') AS worker,
            coalesce(nullif(f.arguments->>'run_tag', ''),
                     nullif(f.arguments->>'origin_run', ''),
-                    nullif((f.result::json)->>'run_tag', '')) AS pipeline_tag
+                    nullif(({telemetry_jsonb("f.result")})->>'run_tag', '')) AS pipeline_tag
     FROM flat f
     JOIN agent_runs r ON r.id = f.run_id
     JOIN agents a ON a.id = r.agent_id

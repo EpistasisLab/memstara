@@ -123,6 +123,13 @@ def test_three_controllers_launch_independently_and_stop_only_the_target(tmp_pat
     with pytest.raises(RuntimeError):
         managers[0].start([], "duplicate", tmp_path, "")
     managers[1].stop("run-1")
+    assert [len(p.signals) for p in processes] == [0, 0, 0]
+    assert [(tmp_path / str(i) / 'pause.request').exists() for i in range(3)] == [False, True, False]
+    restored = service._Runs('b')
+    assert restored.running()['pause_requested'] is True
+    restored.pause('run-1', False)
+    assert not (tmp_path / '1' / 'pause.request').exists()
+    managers[1].terminate('run-1')
     assert [len(p.signals) for p in processes] == [0, 1, 0]
     assert [service._Runs(key).running()["run_tag"] for key in ("a", "b", "c")] == ["run-0", "run-1", "run-2"]
 
@@ -187,3 +194,57 @@ def test_invalid_creation_does_not_leave_a_pipeline(tmp_path, name):
         workspace.mutate({'action': 'add', 'name': name})
     assert workspace.items == []
     assert not path.exists()
+
+
+def test_loop_limit_is_persisted_and_validated():
+    config = PipelineWorkspace.configuration({'waves': 7, 'continuous': False})
+    assert config['waves'] == 7 and config['continuous'] is False
+    for invalid in (0, 11, True, 2.5):
+        with pytest.raises(ValueError, match='Maximum loops'):
+            PipelineWorkspace.configuration({'waves': invalid})
+    assert PipelineWorkspace.configuration({})['continuous'] is False
+    assert PipelineWorkspace.configuration({})['waves'] == 10
+    assert PipelineWorkspace.configuration({'continuous': True, 'waves': 1})['waves'] == 10
+
+
+def test_stop_all_attempts_every_pipeline_even_if_one_fails(tmp_path):
+    class Manager:
+        def __init__(self, key): self.key = key; self.called = False
+        def running(self): return {'run_tag': self.key}
+        def stop(self, tag):
+            self.called = True
+            if tag == 'a': raise RuntimeError('test failure')
+    workspace = PipelineWorkspace(tmp_path/'workspace.json', Manager)
+    workspace.items = [{'id':'a','name':'A'}, {'id':'b','name':'B'}]
+    result = workspace.stop_all()
+    assert result['stopping'] == ['b'] and len(result['errors']) == 1
+    assert all(m.called for m in workspace.managers.values())
+
+
+def test_legacy_unlimited_workspace_is_durably_migrated_before_launch(tmp_path):
+    path = tmp_path / 'workspace.json'
+    path.write_text(json.dumps([{'id': 'legacy', 'name': 'Legacy', 'number': 1,
+                                 'configuration': {'continuous': True, 'waves': 1}}]))
+    workspace = PipelineWorkspace(path, Manager)
+    config = workspace.list()[0]['configuration']
+    assert config['waves'] == 10 and config['continuous'] is False
+    assert json.loads(path.read_text())[0]['configuration'] == config
+    received = workspace.start('legacy', lambda manager, item: item['configuration'])
+    assert received == config
+    restored = PipelineWorkspace(path, Manager)
+    assert restored.items[0]['configuration'] == config
+
+
+def test_finished_loop_limit_uses_frozen_execution_not_next_settings(tmp_path):
+    class FinishedManager(Manager):
+        def finished(self):
+            return [{'run_tag': 'saved', 'run_dir': str(tmp_path), 'exit_code': 0}]
+    (tmp_path/'config.json').write_text(json.dumps({'waves': 10, 'continuous': False}))
+    (tmp_path/'progress.json').write_text(json.dumps({'iteration': 7}))
+    workspace = PipelineWorkspace(tmp_path/'workspace.json', FinishedManager)
+    item = workspace.mutate({'action':'add'})
+    workspace.mutate({'action':'update', 'id':item['id'], 'configuration':{'waves':3}})
+    result = workspace.list()[0]
+    assert result['configuration']['waves'] == 3
+    assert result['latest']['configuration']['waves'] == 10
+    assert result['progress']['iteration'] == 7

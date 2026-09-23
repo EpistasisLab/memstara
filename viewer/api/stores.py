@@ -457,23 +457,15 @@ def label_of(name: str) -> str:
 AGENT_LABELS = {
     # Stage -> the name shown on screen.
     #
-    # "Report · Insight" is one stage under two names on purpose. The plan calls this the
-    # insight agent (`spec/components/05_agents_implementation_plan_KR.md:121` — a finished
-    # board in, a report out) and the code has always called it `report`. Only the label
-    # moves: the
-    # stage key stays `report` here and in the pipeline, and the agent stays
-    # `memstara-board-report` in motoro's database, because `_ensure_agent`
-    # (`src/memstara/pipeline/core.py:234-269`) finds an agent by its name. Renaming it
-    # would create a second agent, orphan the first, and leave every run recorded so far
-    # pointing at a name this table no longer knows — which on this screen means a
-    # character with no label.
+    # Explanation is the public agent name. Keep the report stage and durable
+    # Motoro identity so historical runs, costs, and resumed executions stay linked.
     # `curator` is a retired stage and no screen ever reads this entry — everything goes
     # through `label_of`, which resolves the fold first and arrives at `hypothesis`. It
     # is here because `check_definitions.py:154` requires a label for every stage the
     # viewer knows, and `LEGACY_BOARD_AGENT_NAMES` makes this one of them.
     "curator": "Curator",
     "hypothesis": "Hypothesis", "data": "Data", "ml": "ML",
-    "interpreter": "Interpreter", "report": "Report · Insight",
+    "interpreter": "Interpreter", "report": "Explanation",
 }
 
 # A tool touches exactly one store. Keyed by tool, not by server, because the board
@@ -548,7 +540,7 @@ BOARD_WINDOWS: list[dict[str, str]] = [
     {"tool": "create_task",   "holder": "Hypothesis",          "store": "board"},
     {"tool": "claim_task",    "holder": "Data / ML / Interp.", "store": "board"},
     {"tool": "submit_result", "holder": "Data / ML / Interp.", "store": "board"},
-    {"tool": "read_results",  "holder": "Report",              "store": "results"},
+    {"tool": "read_results",  "holder": "Explanation",              "store": "results"},
     {"tool": "read_board",    "holder": "Driving script",      "store": "board"},
     {"tool": "count_waiting", "holder": "Nobody",              "store": "board"},
     # These two say "Hypothesis" and that is now literally true rather than a reader's

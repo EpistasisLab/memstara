@@ -34,6 +34,12 @@ BOOKS = ["ml_reporting", "governance"]
 MARKED = ["hypothesis", "ml"]
 
 
+@pytest.fixture(autouse=True)
+def deployment_environment(monkeypatch):
+    monkeypatch.setenv("MEMSTARA_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("MEMSTARA_LLM_MODEL", "test-deployment")
+
+
 def flags(argv: list[str]) -> dict[str, str]:
     """`["--trials", "3", ...]` as a dict, so a test can name the one field it means."""
     return dict(zip(argv[::2], argv[1::2], strict=True))
@@ -54,8 +60,8 @@ def test_an_empty_body_is_the_default_run():
     """
     got = flags(build_argv({}, OFFERED))
     assert got == {"--trials": "3", "--waves": "1", "--hypothesis-agents": "1", "--interpret-agents": "1",
-                   "--y-column": "outcome", "--provider": "azure_foundry",
-                   "--model": "claude-sonnet-4-6", "--skill": ""}
+                   "--y-column": "outcome", "--provider": "openai",
+                   "--model": "test-deployment", "--skill": ""}
 
 
 def test_the_skill_is_always_passed_even_when_empty():
@@ -188,7 +194,7 @@ def test_surrounding_whitespace_is_forgiven():
     """A value pasted out of a document arrives with a space on it. That is a typo to
     absorb, not a run to refuse."""
     argv = build_argv({"model": "  gpt-4.1  "}, OFFERED)
-    assert flags(argv)["--model"] == "gpt-4.1"
+    assert flags(argv)["--model"] == "test-deployment"
 
 
 # --------------------------------------------------------------------------- #
@@ -250,7 +256,8 @@ def test_every_playbook_stage_has_a_field():
     """The form is built from `DEFAULTS`, so a stage missing here is a stage that cannot
     be given a standard from the browser however many markers its prompt carries."""
     for stage in PLAYBOOK_STAGES:
-        assert f"playbook_{stage}" in DEFAULTS
+        from memstara.control.request import playbook_field
+        assert playbook_field(stage) in DEFAULTS
 
 
 # --------------------------------------------------------------------------- #

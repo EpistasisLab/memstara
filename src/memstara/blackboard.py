@@ -426,6 +426,7 @@ ALTER TABLE memstara_blackboard ADD COLUMN IF NOT EXISTS claimed_by TEXT NOT NUL
 -- The question bank's own claim, added the same way. The bank is the oldest table here
 -- and the one most certain to already exist, so of every ALTER in this block these are
 -- the three least safe to leave out.
+ALTER TABLE memstara_questions ADD COLUMN IF NOT EXISTS question_contract JSONB NOT NULL DEFAULT '{{}}'::jsonb;
 ALTER TABLE memstara_questions ADD COLUMN IF NOT EXISTS writer TEXT NOT NULL DEFAULT '';
 ALTER TABLE memstara_blackboard ADD COLUMN IF NOT EXISTS evaluation JSONB NOT NULL DEFAULT '{{}}';
 ALTER TABLE memstara_results ADD COLUMN IF NOT EXISTS evaluation JSONB NOT NULL DEFAULT '{{}}';
@@ -484,7 +485,7 @@ class BoardBusy(RuntimeError):
 
 
 @contextlib.asynccontextmanager
-async def run_lock(run_tag: str) -> AsyncIterator[None]:
+async def run_lock(run_tag: str, *, on_lost=None) -> AsyncIterator[None]:
     """Hold an exclusive claim on *run_tag* for as long as this block runs.
 
     Only one driver may work a given run_tag at a time. The board itself is safe
@@ -497,7 +498,7 @@ async def run_lock(run_tag: str) -> AsyncIterator[None]:
 
     This happened, on 2026-08-17: a run believed dead was still alive, and a second
     was started 39 seconds later against the same tag. Nothing broke — the row-level
-    locking held — but four interpretation agents and two reporting agents ran, and
+    locking held — but four interpretation agents and two explanation agents ran, and
     the numbers were unusable.
 
     A Postgres advisory lock rather than a pid file, because it is tied to the
@@ -515,26 +516,58 @@ async def run_lock(run_tag: str) -> AsyncIterator[None]:
     # A connection dedicated to this lock. The lock is tied to the connection, so the
     # moment the block ends — or the process dies and the connection closes — the lock
     # is released with it.
-    conn = await asyncpg.connect(dsn())
+    from memstara.pipeline.run_ownership import (
+        RunLease, RunOwnershipLost, RunLockCleanupError, _current,
+    )
+    conn = await asyncpg.connect(dsn(), timeout=5, command_timeout=3)
+    lease = None
+    token = None
+    body_error = None
+    cleanup_error = None
+    acquired = False
     try:
-        # The try_ form, so it does not wait. If somebody already holds it, false at once.
         if not await conn.fetchval("SELECT pg_try_advisory_lock($1)", key):
-            raise BoardBusy(
-                f"run_tag '{run_tag}' is already being worked by another process.\n"
-                "  Two drivers on one tag reclaim each other's tasks — see run_lock().\n"
-                "  Use a different --run-tag, or wait for the other run to finish."
-            )
+            raise BoardBusy(f"run_tag '{run_tag}' is already being worked by another process.")
+        acquired = True
+        lease = RunLease(conn, on_lost=on_lost)
+        token = _current.set(lease)
+        lease.start()
         try:
-            # This is where the work inside the `with` block happens. The lock is held
-            # throughout.
+            lease.check()
             yield
-        finally:
-            # Whatever happens inside, the lock is released.
-            await conn.execute("SELECT pg_advisory_unlock($1)", key)
+            lease.check()
+        except asyncio.CancelledError:
+            if lease.lost:
+                raise RunOwnershipLost(
+                    "Database execution ownership was lost; saved work requires safe recovery."
+                ) from None
+            raise
+    except BaseException as exc:
+        body_error = exc
+        raise
     finally:
-        # The connection is always closed too. Even if it were not, losing the
-        # connection releases the lock anyway.
-        await conn.close()
+        if lease:
+            await lease.stop()
+        if token is not None:
+            _current.reset(token)
+        # Closing the owning session already releases its advisory lock. Never
+        # reconnect just to unlock: a new session cannot release the old lock.
+        try:
+            if acquired and not conn.is_closed():
+                await conn.execute("SELECT pg_advisory_unlock($1)", key, timeout=3)
+        except Exception as exc:
+            cleanup_error = exc
+        finally:
+            try:
+                await conn.close(timeout=3)
+            except Exception as exc:
+                conn.terminate()
+                cleanup_error = cleanup_error or exc
+        # Do not replace the original analysis/cancellation failure during cleanup.
+        if cleanup_error and body_error is None:
+            raise RunLockCleanupError(
+                "Execution ended, but database lock cleanup could not be verified."
+            ) from cleanup_error
 
 
 async def create() -> None:

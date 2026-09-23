@@ -26,6 +26,9 @@ def test_selected_run_is_filtered_before_json_materialization():
     assert 'JOIN selected_run_ids selected ON selected.id = s.run_id' in materialization
     assert not any(sql.startswith('DELETE FROM flat') for sql in statements)
     assert 'ANALYZE selected_run_ids' in statements
+    assert 'WITH scoped_steps AS MATERIALIZED' in materialization
+    scoped_source = materialization.split(')\nSELECT s.run_id')[0]
+    assert 'json_typeof' not in scoped_source and 'json_to_record' not in scoped_source
 
 
 def test_new_run_empty_scope_cannot_fall_back_to_all_history():

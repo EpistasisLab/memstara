@@ -138,6 +138,7 @@ Run::
 from __future__ import annotations
 
 # ---- standard library -------------------------------------------------------
+from contextvars import ContextVar
 import argparse   # command-line arguments (things like --trials 3)
 import asyncio    # async execution. Most functions in this file are async
 import csv        # used to read only the dataset's first line (the column names)
@@ -163,6 +164,8 @@ from memstara.env import load_env
 
 # memstara/blackboard.py — the board table's definition and connection details
 from memstara.blackboard import BoardBusy, dsn, release_questions, run_lock
+from memstara.pipeline.run_ownership import (RunOwnershipLost, RunLockCleanupError,
+    ownership_lost, require_ownership, record_interruption, record_cleanup_warning)
 # memstara/logging_setup.py — makes a directory per run and also keeps the log in a file
 from memstara.logging_setup import drain_llm_requests, new_run_dir, setup_logging, tee_console
 # memstara/pipeline/core.py — the part the two pipelines (mvp, board) share
@@ -450,24 +453,33 @@ async def setup_tools() -> MCPServerRegistry:
     # `Server.command()` builds each command from `sys.executable` — the very Python
     # running this file — so the five machines come up in the same environment as
     # whatever started them.
-    for name, command in launch_table():
-        existing = await get_server_by_name(name)   # already registered in core's DB?
-        if existing is None:
-            # A server never seen before — register it
-            await register_server(name=name, transport="stdio", command=command, registry=registry)
-        elif existing.command != command:
-            # Already registered, but **the command that starts it has changed** (the
-            # Python path moved, say). It gets updated. This one line is why changing
-            # environments is followed automatically.
-            await update_server(existing.id, command=command, registry=registry)
+    try:
+        for name, command in launch_table():
+            existing = await get_server_by_name(name)   # already registered in core's DB?
+            if existing is None:
+                # A server never seen before — register it
+                await register_server(name=name, transport="stdio", command=command, registry=registry)
+            elif existing.command != command:
+                # Already registered, but **the command that starts it has changed** (the
+                # Python path moved, say). It gets updated. This one line is why changing
+                # environments is followed automatically.
+                await update_server(existing.id, command=command, registry=registry)
 
-    # Actually connect to the registered servers and fetch their tool lists.
-    failed = await hydrate_registry(registry=registry)
-    if failed:
-        # Say so if even one would not attach. It does not stop here — going as far as
-        # the rest allow is better for finding out what is broken.
-        print(f"!! MCP reconnect failed: {failed}", file=sys.stderr)
-    return registry
+        # Actually connect to the registered servers and fetch their tool lists.
+        failed = await hydrate_registry(registry=registry)
+        if failed:
+            # Say so if even one would not attach. It does not stop here — going as far as
+            # the rest allow is better for finding out what is broken.
+            print(f"!! MCP reconnect failed: {failed}", file=sys.stderr)
+        return registry
+    except BaseException:
+        # Cancellation during startup still owns partially opened tool sessions.
+        try:
+            await registry.disconnect_all()
+        except Exception:
+            pass  # Preserve the original startup/ownership failure.
+        raise
+
 
 
 # Collects the agents called in this run, in the order they were called.
@@ -482,10 +494,21 @@ async def setup_tools() -> MCPServerRegistry:
 # run. Those files hold exactly what the agent asked each tool and what came back — which
 # a debugger cannot show. Without collecting them, the records stay in core's DB but
 # **which run was which stage cannot be told.**
+_CURRENT_LOOP: ContextVar[int | None] = ContextVar("memstara_loop", default=None)
 _CALLS: list[dict[str, Any]] = []
+_CURRENT_FLAVORS: ContextVar[dict | None] = ContextVar("memstara_flavors", default=None)
 
 
-async def call_agent(
+_EXECUTION_GATE = None
+
+
+async def call_agent(*args, **kwargs):
+    if _EXECUTION_GATE is None:
+        return await _call_agent_uncontrolled(*args, **kwargs)
+    return await _EXECUTION_GATE.call(_call_agent_uncontrolled, *args, **kwargs)
+
+
+async def _call_agent_uncontrolled(
     agent_id,
     prompt: str,
     *,
@@ -514,6 +537,7 @@ async def call_agent(
         assumption instead of documenting it.
     """
     from memstara.pipeline.scientific_policy import check_primary_tools
+    require_ownership()
     check_primary_tools(stage, tools)
 
     # Overridden only if a temperature was given. None uses the agent's own default.
@@ -536,12 +560,18 @@ async def call_agent(
     # — a mis-labelled trace being the worst of the three, because it looks like evidence.
     entry: dict[str, Any] = {
         "seq": len(_CALLS),
+        "loop": _CURRENT_LOOP.get(),
         "stage": stage or "?",
         "run_id": str(run.id),
         "prompt": prompt,
         "status": "started", "agent_id": str(agent_id), "started_at": time.time(),
         "allowed_tools": sorted({t[k] for t in tools for k in ("tool_name", "name") if t.get(k)}),
     }
+    flavors = _CURRENT_FLAVORS.get()
+    if flavors:
+        entry['combination'] = flavors['combination']
+        entry['repetition'] = flavors['repetition']
+        entry['skill'] = next((a for a in flavors['agents'] if a.get('agent_id') == str(agent_id)), None)
     _CALLS.append(entry)
     write_execution_manifest()
 
@@ -606,19 +636,52 @@ def write_execution_manifest() -> None:
     root = _TRACE_DIR.parent
     temporary = root / "execution.json.tmp"
     temporary.write_text(json.dumps({"calls": [
-        {k: c.get(k) for k in ("stage", "run_id", "status", "started_at", "duration_seconds", "error")}
+        {k: c.get(k) for k in ("stage", "run_id", "status", "started_at", "duration_seconds", "error",
+                              "loop", "seq", "skill", "combination", "repetition")}
         for c in _CALLS
     ]}), encoding="utf-8")
     temporary.replace(root / "execution.json")
+    from memstara.pipeline.checkpoint import atomic_json
+    atomic_json(root / "calls_checkpoint.json", _CALLS)
 
 
 async def settle_finished_workers(registry: MCPServerRegistry, run_tag: str,
-                                  finished_workers: set[str] | None = None) -> None:
+                                  finished_workers: set[str] | None = None,
+                                  interpretation_outputs: dict[str, tuple] | None = None) -> None:
     """Reconcile only returned workers; other pipeline paths may still be running."""
     refreshed = await board_state(registry, run_tag)
     for task in refreshed.get("tasks", []):
         if finished_workers is not None and task.get("claimed_by") not in finished_workers:
             continue
+        if task["status"] == "in_progress" and task["task_type"] == "interpret":
+            from memstara.evaluation import active_plan
+            if (active_plan() or {}).get("recovery_policy"):
+                from memstara.pipeline.recovery import complete_interpretation
+                worker = task.get("claimed_by", "")
+                output = (interpretation_outputs or {}).get(worker)
+                owned = [t for t in refreshed.get("tasks", [])
+                         if t.get("claimed_by") == worker and t.get("status") == "in_progress"]
+                if (output and len(owned) == 1 and output[1].get("status") == "completed"
+                        and complete_interpretation(output[0])):
+                    saved = await call_board_tool(registry, "submit_result", {
+                        "task_id": task["task_id"], "worker": worker, "interpretation": output[0]})
+                    if saved.get("ok"):
+                        note(f"Controller saved the returned interpretation for task {task['task_id']}.")
+                        if _TRACE_DIR:
+                            with (_TRACE_DIR.parent / "controller_handoffs.jsonl").open("a") as audit:
+                                audit.write(json.dumps({"task_id": task["task_id"], "worker": worker,
+                                                        "agent_run_id": output[1].get("run_id"),
+                                                        "source": "completed_agent_response"}) + "\n")
+                        continue
+                    if saved.get("error"):
+                        raise RuntimeError("Returned interpretation could not be committed safely")
+                recovered = await call_board_tool(registry, "recover_interpretation", {
+                    "task_id": task["task_id"], "worker": task.get("claimed_by", "")})
+                if recovered.get("error"):
+                    raise RuntimeError("Could not safely recover the unfinished interpretation")
+                if recovered.get("ok"):
+                    note(f"Interpretation task {task['task_id']} will retry once using the saved ML result.")
+                    continue
         if task["status"] == "in_progress" and task["task_type"] in ("data", "interpret"):
             finalized = await call_board_tool(registry, "submit_result", {
                 "task_id": task["task_id"], "worker": task.get("claimed_by", ""),
@@ -658,7 +721,7 @@ def save_report(run_dir: Path, text: str, entry: dict[str, Any]) -> bool:
     """An empty or failed agent response must never become a successful report."""
     complete = entry.get("status") == "completed" and bool(text.strip())
     status = {"status": "completed" if complete else "failed", "agent_run_id": entry.get("run_id"),
-              "error": None if complete else entry.get("error", "Report agent returned no report text")}
+              "error": None if complete else entry.get("error", "Explanation agent returned no report text")}
     (run_dir / "report_status.json").write_text(json.dumps(status, indent=2), encoding="utf-8")
     if complete:
         temporary = run_dir / "report.md.tmp"
@@ -824,7 +887,7 @@ async def _trace_one(call: dict[str, Any]) -> None:
         # far all over again. Call it 6 times and the same content is stacked six deep
         # (261KB, measured). Appended to the trace file above, the body you actually
         # came to read would be buried underneath it.
-        requests = drain_llm_requests()
+        requests = drain_llm_requests(call["run_id"])
         call["llm_requests"] = len(requests)
         if requests:
             with llm_path.open("w", encoding="utf-8") as lf:
@@ -873,12 +936,24 @@ async def write_traces(run_dir: Path) -> int:
         await _trace_one(call)
     roster_path = run_dir / "prompts.json"
     roster = json.loads(roster_path.read_text()) if roster_path.exists() else {}
+    # Combination agents are provisioned per combination; the initial roster is
+    # only a template and must not falsely report that those agents never ran.
+    manifests = sorted(run_dir.glob("loop_*_flavors.json"))
+    if manifests:
+        roster = {}
+        for path in manifests:
+            for agent in json.loads(path.read_text())["agents"]:
+                roster[agent["agent_id"]] = {
+                    "stage": agent["stage"], "agent_id": agent["agent_id"],
+                    "playbook": agent["id"], "skill_hash": agent["hash"],
+                }
     factors = []
     for key, agent in roster.items():
         if key.startswith("_"):
             continue
         actual = [c for c in _CALLS if c.get("agent_id") == agent.get("agent_id")]
-        factors.append({"agent": key, "enabled": True, "skill": agent.get("playbook"),
+        factors.append({"agent": agent.get("stage", key), "agent_id": agent.get("agent_id"),
+                        "enabled": True, "skill": agent.get("playbook"),
                         "called": bool(actual), "calls": len(actual),
                         "investigated": any(c.get("stage", "").startswith("hypothesis") for c in actual),
                         "completed": sum(c.get("status") == "completed" for c in actual)})
@@ -1091,14 +1166,15 @@ async def questions_for_wave(
 
     Returns:
         ``(rows, recycled)``. `rows` is bank entries, newest first, at most `want`; an
-        empty list means the caller should fall back to the built-in perspective list.
-        `recycled` is True when the call produced nothing new. Previously banked
-        questions are never returned for execution.
+        empty list means no experiment can be started. `recycled` is True after
+        bounded attempts produced no executable question. Unused questions from
+        this exact run and wave can be recovered; older waves are never reassigned.
         It is returned rather than only printed because the run is otherwise unable to
         tell "investigated something new" from "investigated the same thing again".
     """
-    before = await call_board_tool(registry, "read_questions", {"status": "open", "limit": 200})
-    known = {q["question_id"] for q in (before or {}).get("questions", [])}
+
+    if want <= 0:
+        return [], True
 
     # The first sentence says which of the agent's two jobs this call is. Its system
     # prompt describes both, so without it the agent has to infer from the tools it was
@@ -1108,20 +1184,28 @@ async def questions_for_wave(
         "This call is the question-writing half of your work: decide what gets asked, "
         "and do not investigate anything. "
         f"Propose {want} question(s) for wave {wave} of run '{run_tag}'. "
-        f"Call propose_questions once, with origin_run='{run_tag}' and origin_wave={wave}. "
+        "Call propose_questions, repair any rejection using its feedback, "
+        f"with origin_run='{run_tag}' and origin_wave={wave}. "
     )
-    ask += (
-        "Generate a primary, knowledge-driven hypothesis using only KG/OKF evidence. "
-        "Use read_question_catalog only to avoid duplicate questions. Do not use previous "
-        "AUC, feature importance, successful features or failed features to choose the question. "
-        "Keep any evidence-informed refinement separate from this primary hypothesis."
-    )
-    # This is the first call of the wave to touch the corpus, and under a skill it is
-    # reading one branch of it. Left unsaid, "work from the corpus" asks it to ground
-    # questions in what looks like a very small literature, and the reasonable response
-    # to that is to search wider — which the server will refuse, call after call.
     from memstara.evaluation import active_plan
+    from memstara.pipeline.question_contract import generation_instructions
+    from memstara.pipeline.iteration_learning import enabled as learning_enabled, summarize, save_feedback, instructions
     snapshot = active_plan()
+    if learning_enabled(snapshot):
+        history = await call_board_tool(registry, "read_board", {"run_tag": run_tag}) if wave else {"tasks": []}
+        if not isinstance(history, dict) or "tasks" not in history or history.get("error"):
+            raise RuntimeError("Cannot read prior iteration evidence; refusing to silently generate without feedback")
+        context = summarize(history["tasks"], snapshot, wave)
+        save_feedback(context)
+        ask += instructions(context)
+    else:
+        ask += ("Generate a primary, knowledge-driven hypothesis using only KG/OKF evidence. "
+                "Use read_question_catalog only to avoid duplicate questions. Do not use previous "
+                "AUC, feature importance, successful features or failed features to choose the question. "
+                "Keep any evidence-informed refinement separate from this primary hypothesis.")
+    ask += generation_instructions(snapshot)
+    from memstara.pipeline.feature_context import instructions as feature_instructions
+    ask += feature_instructions(snapshot)
     if snapshot and snapshot.get("question"):
         ask += " Research question: " + snapshot["question"]
     if skill:
@@ -1147,35 +1231,50 @@ async def questions_for_wave(
             allocation = want // len(writers) + (slot < want % len(writers))
             if not allocation:
                 return
+            from memstara.pipeline.question_repair import retry_instructions, prior_failure_instructions
+            repair = (retry_instructions(snapshot or {}, wave, key)
+                      + prior_failure_instructions(snapshot or {}, wave, key))
             await call_agent(
-                agent, ask + f" Your writer identity is '{key}'. Pass writer='{key}' to propose_questions. "
+                agent, ask + repair + f" Your writer identity is '{key}'. Pass writer='{key}' to propose_questions. "
                 f"Propose exactly up to {allocation} grounded questions; this replaces the total requested above.",
                 tools=by_stage["question"], registry=registry, stage=f"question{wave}-{slot + 1}",
             )
-        outcomes = await asyncio.gather(*(write_one(i, k, a) for i, (k, a) in enumerate(writers)),
-                                        return_exceptions=True)
-        for outcome in outcomes:
-            if isinstance(outcome, BaseException):
-                note(f"question writer failed: {outcome}")
-
-    except Exception as e:  # noqa: BLE001 - the fallback below is the point
-        note(f"(the question step failed: {type(e).__name__} — going with the built-in "
-             "perspective list)")
-        # Not recycling: a call that crashed says nothing about whether the corpus
-        # still has questions in it. Those are different situations with different fixes.
-        return [], False
-
-    after = await call_board_tool(registry, "read_questions", {"status": "open", "limit": 200})
-    rows = (after or {}).get("questions", [])
-    fresh = [q for q in rows if q["question_id"] not in known and q.get("origin_run") == run_tag
-             and q.get("origin_wave") == wave]
-
-    # Only questions created for this run and wave may be executed. An empty
-    # generation must not silently select questions saved by an earlier execution.
-    if not fresh:
-        note("(no new questions — previously saved questions will not be reused)")
+        for attempt in range(2):
+            # Recover a saved but not yet executed question from THIS wave only.
+            # Never reassign an older question to a different feedback context.
+            current = await call_board_tool(registry, "read_questions", {"status": "open", "limit": 200})
+            if not isinstance(current, dict) or current.get("error") or "questions" not in current:
+                raise RuntimeError("Question bank unavailable; generation cannot safely be replayed")
+            fresh = [q for q in current["questions"] if q.get("origin_run") == run_tag
+                     and q.get("origin_wave") == wave and not q.get("times_used", 0)]
+            if fresh:
+                return fresh[:want], False
+            if attempt:
+                ask += (" Recovery attempt: no valid question was persisted. Check tool rejection reasons. "
+                        "Use concrete clinical entities from Instances, source_ids from okf_read, "
+                        "an array of okf_tags, and "
+                        "parent_task_ids plus learning_goal when prior evidence is supplied. "
+                        "Do not repeat an already banked question from an earlier wave.")
+            outcomes = await asyncio.gather(*(write_one(i, k, a) for i, (k, a) in enumerate(writers)),
+                                            return_exceptions=True)
+            for outcome in outcomes:
+                if isinstance(outcome, asyncio.CancelledError):
+                    raise outcome
+                if isinstance(outcome, BaseException):
+                    note(f"question writer failed: {type(outcome).__name__}")
+        after = await call_board_tool(registry, "read_questions", {"status": "open", "limit": 200})
+        if not isinstance(after, dict) or after.get("error") or "questions" not in after:
+            raise RuntimeError("Question bank unavailable after generation")
+        fresh = [q for q in after["questions"] if q.get("origin_run") == run_tag
+                 and q.get("origin_wave") == wave and not q.get("times_used", 0)]
+        if fresh:
+            return fresh[:want], False
+        note("No executable question after two attempts; no fallback or completed iteration is claimed.")
         return [], True
-    return fresh[:want], False
+    except Exception as exc:
+        # Do not hide infrastructure failures as a depleted corpus or restart a
+        # mutation when the read-back itself is unavailable.
+        raise RuntimeError("Question generation could not be verified") from exc
 
 
 def summarise(tasks: list[dict]) -> tuple[dict[str, int], list[tuple[int, int]]]:
@@ -1229,9 +1328,9 @@ def summarise(tasks: list[dict]) -> tuple[dict[str, int], list[tuple[int, int]]]
 
 
 def report_skill_note(skill: str) -> str:
-    """What the report agent is told about the branch this run was confined to.
+    """What the explanation agent is told about the branch this run was confined to.
 
-    A function rather than a variable because the report agent is called from two
+    A function rather than a variable because the explanation agent is called from two
     places — `--report-only`, which rescues a run that was interrupted, and the end of a
     full run — and the rescue path is the one that is used when something has already
     gone wrong. A note written into only one of them would be missing exactly then.
@@ -1279,7 +1378,9 @@ def chosen_playbooks(args: argparse.Namespace) -> dict[str, list[str]]:
     """
     out: dict[str, list[str]] = {}
     for stage in PLAYBOOK_STAGES:
-        names = [b.strip() for b in getattr(args, f"playbook_{stage}").split(",") if b.strip()]
+        field = "playbook_explanation" if stage == "report" else f"playbook_{stage}"
+        selected = getattr(args, field, getattr(args, f"playbook_{stage}", ""))
+        names = [b.strip() for b in selected.split(",") if b.strip()]
         if names:
             out[stage] = names
     return out
@@ -1289,10 +1390,34 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     """The body of the run. (1) through (6) of "How to read this file" at the top are
     here, in that order."""
     from memstara.pipeline.snapshot import freeze
-    configure(Settings())   # Set up the runtime before provisioning or opening tools.
+    from memstara.pipeline.exploration import ExecutionGate
+    global _EXECUTION_GATE
+    _EXECUTION_GATE = ExecutionGate(run_dir)
+    combination_plan = json.loads(getattr(args, "combination_plan", "") or "null")
+    if combination_plan:
+        # Enforce the frozen budget for both fresh and checkpoint-restored runs.
+        limit = combination_plan.get('total_loops')
+        if type(limit) is not int or not 1 <= limit <= 10000:
+            raise ValueError('Invalid frozen combination Loop limit')
+        args.waves = limit
+        args.continuous = False
+        args.trials = args.hypothesis_agents = args.interpret_agents = 1
+    if args.pipeline_id and not combination_plan:
+        if args.continuous:
+            args.waves = 10
+        if not 1 <= args.waves <= 10:
+            raise ValueError("Maximum Loops per pipeline must be between 1 and 10")
+        args.continuous = False
+    runtime_settings = Settings()
+    configure(runtime_settings)   # Set up the runtime before provisioning or opening tools.
     from memstara.pipeline.diagnostics import install
     install()
     freeze(args, run_dir, chosen_playbooks(args))
+    from memstara.pipeline.checkpoint import Checkpoint, atomic_json
+    checkpoint = None if args.report_only else Checkpoint(run_dir, resume=args.resume)
+    _EXECUTION_GATE.checkpoint = checkpoint
+    if checkpoint and not args.resume:
+        atomic_json(run_dir / "resume_arguments.json", vars(args))
     from memstara.blackboard import create
     await create()  # Apply additive result/provenance columns before the first tool call.
     log_path = setup_logging(level="DEBUG" if args.verbose else "INFO", log_file=run_dir / "run.jsonl")
@@ -1303,6 +1428,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     global _TRACE_DIR
     _TRACE_DIR = run_dir / "trace"
     _TRACE_DIR.mkdir(parents=True, exist_ok=True)
+    if args.resume and (run_dir / "calls_checkpoint.json").exists():
+        _CALLS[:] = json.loads((run_dir / "calls_checkpoint.json").read_text())
     print()
     print("=" * 74)
     print(f" board pipeline — run named '{args.run_tag}'")
@@ -1420,7 +1547,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         step("(3)", "decide who gets which button", "cut them off from other people's work")
         _ROLE = {"hypothesis": "hypothesis agent (answering)", "data": "data agent",
                  "ml": "ml agent", "interpreter": "interpreter agent",
-                 "report": "report agent", "question": "hypothesis agent (asking)"}
+                 "report": "explanation agent", "question": "hypothesis agent (asking)"}
         for stage, ts in by_stage.items():
             names = sorted(x["tool_name"] for x in ts)
             print(f"   {_ROLE.get(stage, stage):<30} {len(names)}  {' · '.join(names)}")
@@ -1435,14 +1562,15 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         #
         # (4) and (5) are skipped and it **only wraps up.** It gathers the results of a
         # run that already finished and writes them as one page. Only one person (the
-        # report agent) is called, so it is cheap.
+        # explanation agent) is called, so it is cheap.
         #
         # It also makes a report for a run that was interrupted or only partly finished,
         # out of whatever had piled up by then.
         if args.report_only:
+            _CURRENT_LOOP.set(None)
             step("(6)", "wrap up at the end",
                  f"read the finished drawer of '{args.run_tag}' — (4) and (5) are skipped")
-            note("call the report agent once (the only LLM call of this run)")
+            note("call the explanation agent once (the only LLM call of this run)")
             text, report_entry = await call_report(
                 agents["report"],
                 f"Write the report for run '{args.run_tag}'. Call read_results with that "
@@ -1467,8 +1595,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         # results on the table, and the next wave's question step reads them.
         #
         # Trial numbers that were seeded but left nothing on the board. They accumulate
-        # across waves, and at the end they are handed to the report agent too.
-        missing_trials: list[int] = []
+        # across waves, and at the end they are handed to the explanation agent too.
+        missing_trials: list[int] = list(checkpoint.state["missing_trials"])
 
         # Before the first wave, take back anything this tag left in_progress last time.
         # `reclaim_stalled` is also called inside the work loop, but only once that loop
@@ -1477,7 +1605,14 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         # here is what makes "same --run-tag again" mean "carry on where it stopped".
         # stale_after still applies: a run that is genuinely still alive holds the
         # advisory lock above, so we cannot get here while one is.
-        recovered = await reclaim_stalled(registry, args.run_tag, args.stale_after)
+        if args.resume:
+            recovery_board = await board_state(registry, args.run_tag)
+            if recovery_board.get("error") or "tasks" not in recovery_board:
+                raise RuntimeError("Cannot verify saved task state for recovery")
+            if any(t.get("status") == "in_progress" for t in recovery_board["tasks"]):
+                from memstara.pipeline.checkpoint import RecoveryBlocked
+                raise RecoveryBlocked("Uncommitted task ownership requires review before recovery")
+        recovered = 0 if args.resume else await reclaim_stalled(registry, args.run_tag, args.stale_after)
         if recovered:
             note(f"returned {recovered} tasks left by the last run to the queue — "
                  "carrying on")
@@ -1488,11 +1623,23 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         # The corpus is finite — 333 documents across 37 tags — so the bank runs dry by
         # construction, not by accident. `--waves N` is a count, and a count cannot know
         # when there is nothing left to ask; this is the part that can.
-        dry_streak = 0
-        waves_run = 0        # waves actually seeded. If it stops early this differs from args.waves
-        seeded_total = 0     # hypothesis agents actually called. This number goes to the report agent
-        from memstara.pipeline.exploration import rounds, wait_for_new_questions, write_progress
-        async for wave in rounds(args.waves, args.continuous, run_dir):
+        dry_streak = checkpoint.state["dry_streak"]
+        waves_run = checkpoint.state["waves_run"]  # Seeded waves may be fewer than args.waves.
+        seeded_total = checkpoint.state["seeded_total"]  # Actual hypotheses requested; used by Explanation.
+        from memstara.pipeline.exploration import (rounds, wait_for_new_questions, write_progress,
+                                                    record_round, round_summary, finalize_rounds)
+        async for wave in rounds(args.waves, args.continuous, run_dir, start=checkpoint.state["next_wave"]):
+            _CURRENT_LOOP.set(wave + 1)
+            if combination_plan:
+                from memstara.combinations import prepare_loop
+                agents, flavors, playbooks, namespace = await prepare_loop(
+                    combination_plan, wave + 1, provider=args.provider, model=args.model,
+                    run_tag=args.run_tag, provision=provision_board_agents,
+                )
+                _CURRENT_FLAVORS.set(flavors)
+                workers = board_workers(playbooks, namespace)
+                atomic_json(run_dir / f"loop_{wave + 1}_flavors.json", flavors)
+            record_round(run_dir, wave + 1, "running")
             write_progress(run_dir, wave + 1, "hypothesis")
             base = wave * args.trials          # trial numbers carry on across waves
             if args.continuous or args.waves > 1:
@@ -1504,12 +1651,13 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             recycled = False
             if not args.no_curator:
                 step("(3')", "decide what to ask",
-                     "the question step reads only knowledge evidence"
+                     "the question step follows the frozen knowledge/iteration-feedback policy"
                      + f" and makes {args.trials} questions")
-                questions, recycled = await questions_for_wave(
+                questions, recycled = await checkpoint.phase(
+                    f"{wave}:questions", lambda agents=agents, wave=wave: questions_for_wave(
                     registry, agents, by_stage,
                     run_tag=args.run_tag, wave=wave, want=args.trials, skill=args.skill,
-                )
+                ))
                 for q in questions:
                     note(f"question #{q['question_id']} {q['text']}"
                          f"  [{'·'.join(q.get('okf_tags') or []) or 'no tags'}]")
@@ -1523,8 +1671,14 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             # with nothing left in it. The break happens *before* seeding, so a run that
             # has run dry pays for one more question call and not for a whole wave of
             # trials it has already done.
+            if not questions and not args.no_curator:
+                record_round(run_dir, wave + 1, "blocked",
+                             "No executable question after bounded recovery; no analysis was completed.")
+                write_progress(run_dir, wave + 1, "hypothesis")
             dry_streak = dry_streak + 1 if recycled else 0
-            dry_limit = 0 if args.continuous else args.stop_after_dry
+            # Workspace exploration keeps searching until the configured Loop ceiling
+            # or an explicit stop; two rejected candidates must not silently end it.
+            dry_limit = 0 if args.continuous or args.pipeline_id else args.stop_after_dry
             if dry_limit and dry_streak >= dry_limit:
                 note(f"the questions have run dry — {dry_streak} waves in a row produced "
                      f"no new question. Stopping without starting wave "
@@ -1532,12 +1686,16 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 break
             if args.continuous and not questions and not args.no_curator:
                 note("No new grounded questions; waiting before exploring again. Stop remains available.")
+                checkpoint.advance(wave, dry_streak=dry_streak, waves_run=waves_run,
+                               seeded_total=seeded_total, missing_trials=missing_trials)
                 await wait_for_new_questions(run_dir, dry_streak)
                 continue
             waves_run += 1
 
             if not questions and not args.no_curator:
                 note("No grounded primary question was produced; skipping this wave without a fallback hypothesis.")
+                checkpoint.advance(wave, dry_streak=dry_streak, waves_run=waves_run,
+                               seeded_total=seeded_total, missing_trials=missing_trials)
                 continue
 
             # If question generation was explicitly switched off, fall back to the
@@ -1600,7 +1758,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             )
 
             async def seed_one(i: int, q: dict[str, Any], slot: int, *,
-                               from_bank: bool = from_bank, skill_note: str = skill_note):
+                               from_bank: bool = from_bank, skill_note: str = skill_note, agents=agents):
                 """Call one hypothesis worker and attach what its matcher calls saw.
 
                 `slot` is the position inside the concurrent chunk, and it is what
@@ -1647,6 +1805,25 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                         f"run_tag='{args.run_tag}', trial={i}, perspective='{text}', "
                         f"question_id={q['question_id']}.{skill_note}"
                     )
+                from memstara.pipeline.question_contract import enabled, hypothesis_text, validate_saved
+                from memstara.evaluation import active_plan
+                plan = active_plan()
+                if enabled(plan):
+                    contract = validate_saved(q.get("question_contract"), text, plan)
+                    if contract.get("source_ids"):
+                        ask += (" The question was derived from these source document IDs: "
+                                + json.dumps(contract["source_ids"]) + ". Open them directly with okf_read "
+                                "section='auto' BEFORE searching. A metadata/title search returning zero hits "
+                                "does not mean a clinical entity is absent from their Instances tables. "
+                                "Use these document IDs as okf_concept_ids and source_id in feature_mapping. ")
+                    ask += (" Preserve the assigned question exactly. Pass perspective exactly as the question text "
+                            f"and hypothesis exactly as {hypothesis_text(contract)!r} to create_task. "
+                            "Map only the question's predictor concepts; the target cannot change. "
+                            "Supply feature_mapping entries with concept (the exact assigned name), column, "
+                            "source_id (one of okf_concept_ids), and clinical rationale. Cover every assigned "
+                            "concept and selected column. Read actual Instances and pass clinical entities "
+                            "to match_concepts, never relation labels. "
+                            "If those concepts cannot be mapped, stop without creating an unrelated task.")
                 _, call = await call_agent(
                     agent_id, ask,
                     tools=by_stage["hypothesis"], registry=registry, temperature=temperature_for(i),
@@ -1662,7 +1839,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             # A trial that never calls `create_task` leaves nothing behind: no board row,
             # no result, no error. On 2026-08-30 one of four trials spent 31 steps and
             # $1.88 that way and the run ended looking successful — the only thing that
-            # noticed was the report agent, in prose, by luck. The count was already
+            # noticed was the explanation agent, in prose, by luck. The count was already
             # being printed below; it was never compared, so nothing could notice.
             #
             # **How that is caught changed with this loop.** It used to read the whole
@@ -1689,10 +1866,20 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                     assignments[slot].append(index)
                 async def produce_slot(slot):
                     for index in assignments[slot]:
-                        try:
-                            await seed_one(base + index, questions[index], slot)
-                        except Exception as exc:
-                            note(f"Hypothesis trial {base + index} failed: {exc}")
+                        from memstara.pipeline.recovery import ensure_artifact
+                        trial = base + index
+                        async def present(trial=trial):
+                            current = await board_state(registry, args.run_tag)
+                            if not isinstance(current, dict) or current.get("error") or "tasks" not in current:
+                                raise RuntimeError("Cannot verify whether hypothesis work was committed")
+                            return any(t["trial"] == trial for t in current["tasks"])
+                        async def invoke(attempt, trial=trial, index=index):
+                            if attempt:
+                                note(f"Retrying hypothesis trial {trial}; no task was persisted.")
+                            await seed_one(trial, questions[index], slot)
+                        ok, reason = await ensure_artifact(invoke, present)
+                        if not ok:
+                            note(f"Hypothesis trial {trial} blocked: {reason}")
                 async with asyncio.TaskGroup() as group:
                     for slot in range(args.hypothesis_agents):
                         group.create_task(produce_slot(slot))
@@ -1720,7 +1907,13 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                         note(f"gave {freed} question(s) back to the bank")
 
 
-            seed_task = asyncio.create_task(produce_hypotheses())
+            async def durable_seed():
+                await produce_hypotheses()
+                return list(missing_trials)
+            async def restore_seed(wave=wave):
+                saved_missing = await checkpoint.phase(f"{wave}:seed", durable_seed)
+                missing_trials[:] = saved_missing
+            seed_task = asyncio.create_task(restore_seed())
             state = await board_state(registry, args.run_tag)
 
             # -- work it down ----------------------------------------------
@@ -1757,7 +1950,9 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                         note(f"Worker failed: {type(outcome).__name__}: {outcome}")
                 if outcomes:
                     await settle_finished_workers(registry, args.run_tag, {
-                        f"{STAGE_TASK_TYPE[stage]}#{slot}" for (stage, slot), _ in outcomes})
+                        f"{STAGE_TASK_TYPE[stage]}#{slot}" for (stage, slot), _ in outcomes},
+                        {f"interpret#{slot}": outcome for (stage, slot), outcome in outcomes
+                         if stage == "interpreter" and isinstance(outcome, tuple) and len(outcome) == 2})
                 if seed_task.done():
                     await seed_task  # propagate producer/cleanup errors
                 # Work can arrive while hypotheses are still being generated.
@@ -1882,9 +2077,18 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 note(f"(could not write the score into the question bank: {type(e).__name__})")
 
 
-            if args.continuous:
+            verified_state = await board_state(registry, args.run_tag)
+            verified_tasks = [t for t in verified_state["tasks"] if base <= t["trial"] < base + args.trials]
+            analysis_complete = (bool(questions) and len(verified_tasks) == len(questions)
+                                 and all(t["status"] == "done" for t in verified_tasks))
+            record_round(run_dir, wave + 1, "analysis_complete" if analysis_complete else "blocked",
+                         "" if analysis_complete else "One or more hypotheses produced no task or an analysis failed.")
+
+            if combination_plan or args.continuous or args.waves > 1:
                 write_progress(run_dir, wave + 1, "report")
-                text, report_entry = await call_report(
+                text, report_entry = await checkpoint.phase(
+                    f"{wave}:report",
+                    lambda agents=agents, seeded_total=seeded_total, waves_run=waves_run: call_report(
                     agents["report"],
                     f"Write an interim report for run '{args.run_tag}'. Call read_results "
                     f"with that run_tag. {seeded_total} trials were requested across "
@@ -1892,22 +2096,27 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                     "failed results explicitly. Rank useful hypotheses by evidence and "
                     "limitations; interpretations are not independent experiments.",
                     tools=by_stage["report"], registry=registry, stage="report",
-                )
+                ))
                 report_saved = save_report(run_dir, text, report_entry)
                 wave_state = await board_state(registry, args.run_tag)
                 wave_tasks = [t for t in wave_state["tasks"] if base <= t["trial"] < base + args.trials]
                 successful = (report_saved and len(wave_tasks) >= len(questions) and bool(questions)
                               and all(t["status"] == "done" for t in wave_tasks))
+                record_round(run_dir, wave + 1, "completed" if successful else "blocked",
+                             "" if successful else "Analysis or report incomplete; saved results remain available.")
                 write_progress(run_dir, wave + 1, "report", wave_tasks, completed=successful)
+            checkpoint.advance(wave, dry_streak=dry_streak, waves_run=waves_run,
+                               seeded_total=seeded_total, missing_trials=missing_trials)
 
 
         # -- report -----------------------------------------------------
         # -- (6) wrap up at the end -------------------------------------
         #
-        # The report agent reads **the finished drawer, not the board.** The board is a
+        # The explanation agent reads **the finished drawer, not the board.** The board is a
         # workbench and disappears when it is cleared; the finished drawer is the record
         # that stays.
-        step("(6)", "wrap up at the end", "the report agent reads the finished drawer")
+        _CURRENT_LOOP.set(None)
+        step("(6)", "wrap up at the end", "the explanation agent reads the finished drawer")
         # How many trials were seeded is told to the reporter, because the results table
         # cannot say it. read_results only returns rows that exist, so a trial that died
         # before create_task is invisible there — and a report that silently describes
@@ -1921,7 +2130,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         report_state = await board_state(registry, args.run_tag)
         incomplete = [{"trial": t["trial"], "status": t["status"], "error": t.get("error", "")}
                       for t in report_state["tasks"] if t["status"] != "done"]
-        text, report_entry = await call_report(
+        text, report_entry = await checkpoint.phase("final_report", lambda: call_report(
             agents["report"],
             f"Write the report for run '{args.run_tag}'. Call read_results with that run_tag. "
             f"{seeded_total} trials were seeded across {waves_run} wave(s)"
@@ -1933,8 +2142,13 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
               "Do not count interpretations as independent hypotheses or repeated ML experiments. "
             + report_skill_note(args.skill) + " Unfinished trials (report these explicitly): " + json.dumps(incomplete),
             tools=by_stage["report"], registry=registry, stage="report",
-        )
+        ))
         report_ok = save_report(run_dir, text, report_entry)
+        finalize_rounds(run_dir, report_ok)
+        summary = round_summary(run_dir)
+        if summary:
+            write_progress(run_dir, summary["attempted"], "report",
+                           completed=summary["outcome"] == "completed")
 
         # The last state of the board is saved whole as well. It is what a later retrace
         # reads.
@@ -1952,14 +2166,25 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         if not report_ok:
             note("Report failed; see report_status.json. Completed analysis results are preserved.")
         unfinished = [t["task_id"] for t in final["tasks"] if t["status"] != "done"]
-        complete = report_ok and not unfinished and not missing_trials
+        complete = (report_ok and bool(final["tasks"]) and not unfinished and not missing_trials
+                    and not (summary or {}).get("blocked", 0))
         (run_dir / "pipeline_status.json").write_text(json.dumps({
             "status": "completed" if complete else "incomplete",
             "report_completed": report_ok, "unfinished_task_ids": unfinished,
             "missing_trials": sorted(set(missing_trials)),
         }, indent=2), encoding="utf-8")
+        checkpoint.finish()
         return 0 if complete else 1
     except asyncio.CancelledError:
+        from memstara.pipeline.exploration import close_active_round
+        if ownership_lost():
+            # Preserve unfinished checkpoint calls/phases: their effects must not
+            # be blindly replayed. No database cleanup after losing ownership.
+            close_active_round(run_dir, "interrupted", "Database execution ownership lost; saved results retained.")
+            raise
+        if checkpoint:
+            checkpoint.finish()
+        close_active_round(run_dir, "interrupted", "Stopped by the user; this attempt was not completed.")
         if seed_task is not None and not seed_task.done():
             seed_task.cancel()
             await asyncio.gather(seed_task, return_exceptions=True)
@@ -1975,6 +2200,11 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         except Exception:
             note("Cancellation recorded; board cleanup could not complete. Inspect task state before resuming.")
         raise
+    except Exception as exc:
+        from memstara.pipeline.exploration import close_active_round
+        close_active_round(run_dir, "blocked",
+                           f"Execution could not be verified ({type(exc).__name__}). Review run log.")
+        raise
     finally:
         if seed_task is not None and not seed_task.done():
             seed_task.cancel()
@@ -1987,7 +2217,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         # nothing to do with the tool servers, but reversing the order would break quietly
         # the day somebody changes this to use a tool.
         try:
-            n = await write_traces(run_dir)
+            n = 0 if ownership_lost() else await write_traces(run_dir)
             if n:
                 print(f"  {n} files in trace/ · runs.json — what the agents asked the "
                       f"tools and what they got back is in here")
@@ -2137,6 +2367,7 @@ async def main() -> int:
     ap.add_argument("--pipeline-id", default="")
     ap.add_argument("--pipeline-name", default="")
     ap.add_argument("--evaluation", default="{}")
+    ap.add_argument("--baseline-columns", default="[]", help="JSON array of fixed baseline predictor columns")
     ap.add_argument("--question", default="")
     ap.add_argument("--trials", type=int, default=3, help="how many hypotheses to seed per wave")
     ap.add_argument("--continuous", action="store_true",
@@ -2168,8 +2399,8 @@ async def main() -> int:
              "\"mechanism_family=treatment-toxicity,terminus_kind=sud\". Empty (the "
              "default) leaves the whole bundle readable",
     )
-    ap.add_argument("--provider", default="azure_foundry", choices=["anthropic", "azure_foundry", "openai"])
-    ap.add_argument("--model", default="claude-sonnet-4-6")
+    ap.add_argument("--provider", default="", choices=["anthropic", "azure_foundry", "openai"])
+    ap.add_argument("--model", default="")
     ap.add_argument("--run-tag", default=None, help="names this run on the board")
     ap.add_argument("--report-only", action="store_true", help="write the report from what has finished")
     ap.add_argument(
@@ -2233,15 +2464,49 @@ async def main() -> int:
     # `data` gets a flag although the meeting listed four stages. Leaving it out would be
     # a rule in the code that nobody decided, and one nobody could find later.
     for stage_flag in ("hypothesis", "data", "ml", "interpreter", "report"):
+        public_stage = "explanation" if stage_flag == "report" else stage_flag
         ap.add_argument(
-            f"--playbook-{stage_flag}", default="",
-            help=f"a behavioural standard for the {stage_flag} stage, named without the "
+            *( ["--playbook-explanation", "--playbook-report"] if stage_flag == "report"
+               else [f"--playbook-{stage_flag}"] ),
+            dest="playbook_explanation" if stage_flag == "report" else f"playbook_{stage_flag}",
+            default={"interpreter": "interpreter_factual_observations",
+                     "report": "report_clinical_explanations"}.get(stage_flag, ""),
+            help=f"a behavioural standard for the {public_stage} stage, named without the "
                  f".md — the prompt must carry a {{{{playbook}}}} line to receive it "
                  f"(default: the prompt as written)",
         )
+    ap.add_argument("--combination-plan", default="", help="Frozen Cartesian skill schedule")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--run-dir", default=None)
+    ap.add_argument("--resume", action="store_true", help="Recover this execution from its durable checkpoint")
     args = ap.parse_args()
+    if args.combination_plan and not args.resume:
+        from memstara.combinations import validate_plan
+        try:
+            schedule = json.loads(args.combination_plan)
+            validate_plan(schedule)
+            args.waves = schedule['total_loops']
+            args.trials = args.hypothesis_agents = args.interpret_agents = 1
+            args.continuous = False
+            for stage, entries in schedule['skills'].items():
+                for entry in entries:
+                    load_prompt(f'board/{stage}', entry['id'])
+        except (ValueError, KeyError, TypeError, OSError) as exc:
+            ap.error(str(exc))
+    if args.resume:
+        from memstara.pipeline.checkpoint import Checkpoint
+        if not args.run_dir:
+            ap.error("--resume requires --run-dir")
+        root = Path(args.run_dir).resolve()
+        Checkpoint(root, resume=True)
+        saved = json.loads((root / "resume_arguments.json").read_text())
+        if args.run_tag and args.run_tag != saved.get("run_tag"):
+            ap.error("Resume run tag does not match the saved execution")
+        args = argparse.Namespace(**saved)
+        args.resume = True
+        args.run_dir = str(root)
+    from memstara.env import configured_llm
+    args.provider, args.model = configured_llm(args.provider, args.model)
     from memstara.evaluation import validate
     try:
         args.evaluation = json.dumps(validate(json.loads(args.evaluation)))
@@ -2346,20 +2611,44 @@ async def main() -> int:
                      "pipeline_id": args.pipeline_id or None})
 
     # Whatever is printed to the screen is left in console.log as well.
-    with tee_console(run_dir / "console.log"):
+    with tee_console(run_dir / "console.log", append=args.resume):
         try:
             # Refuse to be the second driver on this tag. Held for the whole run and
             # released with the connection, so a killed process leaves nothing behind.
             # Two of them once ran at the same time, taking each other's sheets, and the
             # board ended up scrambled.
-            async with run_lock(args.run_tag):
+            async with run_lock(args.run_tag, on_lost=lambda reason: record_interruption(run_dir, reason)):
+                if args.resume:
+                    (run_dir / "infrastructure_status.json").unlink(missing_ok=True)
+                    record = json.loads((run_dir / "control_record.json").read_text())
+                    if record.get("pid") != os.getpid():
+                        record = {k: v for k, v in record.items() if k not in ("exit_code", "ended")}
+                        record.update(pid=os.getpid(), process_identity=identity(os.getpid()))
+                        save_record(record)
+                    (run_dir / "pause.request").unlink(missing_ok=True)
                 return await run(args, run_dir)
+        except RunOwnershipLost:
+            record_interruption(run_dir, "execution_ownership_lost")
+            print("Execution interrupted by database connection loss; saved results and checkpoints are retained.",
+                  file=sys.stderr)
+            return 75
+        except RunLockCleanupError:
+            return record_cleanup_warning(run_dir)
         except BoardBusy as e:
             # Somebody is already running under this name.
             print(f"\n{e}", file=sys.stderr)
             return 2
         except Exception as exc:
             from memstara.evaluation import DataQualityError
+            import traceback
+            # Preserve the failure location without serializing locals, credentials,
+            # tool arguments or patient records into diagnostics.
+            (run_dir / "failure_frames.json").write_text(json.dumps({
+                "error_type": type(exc).__name__,
+                "frames": [{"file": frame.filename, "line": frame.lineno,
+                            "function": frame.name}
+                           for frame in traceback.extract_tb(exc.__traceback__)],
+            }, indent=2), encoding="utf-8")
             message = (str(exc) if isinstance(exc, DataQualityError) else
                        "Pipeline could not safely continue; inspect console.log and trace/.")
             (run_dir / "pipeline_status.json").write_text(json.dumps({

@@ -51,7 +51,10 @@ def test_question_writers_share_budget_and_overlap(monkeypatch, want, allocation
             await asyncio.wait_for(all_started.wait(), timeout=1)
             completed.append(agent)
         monkeypatch.setattr(board, "call_agent", call)
-        monkeypatch.setattr(board, "call_board_tool", AsyncMock(return_value={"questions": []}))
+        async def read_bank(*args):
+            return {"questions": ([{"question_id": i + 1, "origin_run": "new", "origin_wave": 0}
+                                  for i in range(want)] if completed else [])}
+        monkeypatch.setattr(board, "call_board_tool", read_bank)
         agents = {"hypothesis": "a", "hypothesis2": "b", "hypothesis3": "c", "report": "r"}
         await board.questions_for_wave(None, agents, {"question": []}, run_tag="new", wave=0, want=want)
         assert len(completed) == len(started) == len(allocations)
