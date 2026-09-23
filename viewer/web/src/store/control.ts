@@ -66,6 +66,8 @@ export type SkillInfo = { evaluation?: Partial<EvaluationPlan>; id: string; titl
 export type RunRequest = {
   combination_skills?: Partial<Record<PlaybookStage,string[]>>;
   combination_repetitions?: number;
+  combination_random_start?: boolean;
+  combination_max_loops?: number | null;
   question: string;
   evaluation: EvaluationPlan;
   baseline_columns?: string[];

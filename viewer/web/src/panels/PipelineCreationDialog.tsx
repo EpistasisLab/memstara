@@ -36,7 +36,7 @@ function ChooseBuildMode() {
   return <FloorDetailDialog title="Build pipelines" close={()=>usePipelines.getState().closeCreation()}>
     <div className="space-y-4 p-3">
       <button type="button" className="w-full rounded-xl border border-paper-line p-4 text-left" onClick={()=>setMode('selected')}><strong>Selected Pipelines</strong><p>Build one pipeline, then run it when ready. Add more separately.</p></button>
-      <button type="button" className="w-full rounded-xl border border-paper-line p-4 text-left" onClick={()=>setMode('all')}><strong>All Combinations</strong><p>Select multiple skills per agent and run every complete combination as a Loop.</p></button>
+      <button type="button" className="w-full rounded-xl border border-paper-line p-4 text-left" onClick={()=>setMode('all')}><strong>All Combinations</strong><p>Select multiple skills per agent, choose a starting method and set your maximum Loops.</p></button>
     </div>
   </FloorDetailDialog>;
 }
@@ -49,7 +49,7 @@ function CreationWizard() {
   const [name, setName] = useState('');
   const [draft, setDraft] = useState<RunRequest>(() => {
     const form = structuredClone(useControl.getState().form);
-    return { ...form, combination_skills: {}, combination_repetitions: 1, question: '', hypothesis_agents: 1, interpret_agents: 1,
+    return { ...form, combination_skills: {}, combination_repetitions: 1, combination_random_start: false, combination_max_loops: null, question: '', hypothesis_agents: 1, interpret_agents: 1,
       trials: 1, waves: 10, continuous: false,
       playbook_hypothesis: form.playbook_hypothesis.split(',')[0],
       playbook_data: form.playbook_data.split(',')[0],

@@ -17,7 +17,7 @@ export default function AdditionalAnalysisDialog({pipeline:p,close,fresh=false}:
   return <FloorDetailDialog title={fresh?'Start a new execution':'Additional analysis'} close={()=>{if(!busy)close();}} className="pipeline-management-dialog">
     <div className="pipeline-management">
       <div className="pipeline-management-identity"><span>Pipeline {p.number}</span><h3>{p.name}</h3></div>
-      {fresh?<section><h3>A new execution with your saved settings</h3><p>This starts up to {p.configuration.waves} Loops, beginning at Loop 1. Existing results remain saved. This does not clear the pipeline’s research history.</p></section>:<section>
+      {fresh?<section><h3>A new execution with your saved settings</h3><p>This starts up to {p.configuration.waves} Loops, beginning at Loop 1. Existing results remain saved. This does not clear the pipeline’s research history. {p.configuration.combination_random_start&&'Random Start draws a new starting combination for this execution; resuming an existing execution does not.'}</p></section>:<section>
         <h3>How many more Loops?</h3><p>Run more analysis with this pipeline’s current settings. Each Loop generates and evaluates a research hypothesis.</p>
         <label className="block mt-4 text-sm font-semibold" htmlFor="additional-loop-count">Additional Loops</label>
         <input id="additional-loop-count" type="number" min={1} max={10} step={1} value={loops} onChange={e=>setLoops(e.target.value)} disabled={busy} aria-describedby="additional-loop-help" className="mt-2 w-full rounded-lg border border-paper-line bg-paper p-3 text-lg"/>

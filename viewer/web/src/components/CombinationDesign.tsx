@@ -17,7 +17,7 @@ const roles={
 };
 type Flavor={stage:PlaybookStage;id:string;title?:string;hash?:string};
 type Call={run_id?:string;stage:string;status:string;skill?:Flavor};
-type Trace={calls:Call[];planned?:{combination:number;repetition:number;agents:Flavor[]}|null;total_loops?:number;run_tag?:string;preparing?:boolean};
+type Trace={calls:Call[];planned?:{combination:number;repetition:number;selection_policy?:string;start_combination?:number;agents:Flavor[]}|null;total_loops?:number;run_tag?:string;preparing?:boolean};
 const callRole=(c:Call):PlaybookStage|undefined=>c.skill?.stage ?? (c.stage.startsWith('question')?'hypothesis':PLAYBOOK_STAGES.find(s=>c.stage.startsWith(s)));
 const statusLabel=(s?:string)=>s==='completed'?'Completed':(s==='running'||s==='started')?'Running':s==='failed'?'Failed':s==='cancelled'?'Cancelled':s??'Not recorded';
 export default function CombinationDesign({pipeline:p}:{pipeline:PipelineDefinition}){
@@ -31,7 +31,7 @@ export default function CombinationDesign({pipeline:p}:{pipeline:PipelineDefinit
  useEffect(()=>{if(board.current)board.current.scrollLeft=0;},[role,search,view]);
  const choices=p.configuration.combination_skills??{};
  const lists=PLAYBOOK_STAGES.map(stage=>(choices[stage]??[]).filter((id,i,ids)=>ids.findIndex(other=>(catalog.find(s=>s.id===other)?.hash??other)===(catalog.find(s=>s.id===id)?.hash??id))===i));
- const count=lists.reduce((n,ids)=>n*ids.length,1),repetitions=p.configuration.combination_repetitions??1,total=count*repetitions;
+ const count=lists.reduce((n,ids)=>n*ids.length,1),repetitions=p.configuration.combination_repetitions??1,total=p.configuration.combination_max_loops??count*repetitions;
  const following=view==='floor'&&!preview&&!!(p.running||p.latest);
  const requestedLoop=following?Math.max(1,p.progress.iteration??1):loop;
  const runTag=p.running?.run_tag??p.latest?.run_tag;
@@ -65,9 +65,9 @@ export default function CombinationDesign({pipeline:p}:{pipeline:PipelineDefinit
    {p.running&&<span className="cs-run-state"><Clock3 size={15}/>{p.running.execution_state==='paused'?'Paused':'Execution in progress'}</span>}
   </header>
   <div className="cs-budget" aria-label="Configured combination schedule">
-   <div><strong>{count.toLocaleString()}</strong><span>unique combinations</span></div><span aria-hidden="true">×</span>
-   <div><strong>{repetitions}</strong><span>repetitions</span></div><ArrowRight size={18} aria-hidden="true"/>
-   <div className="cs-total"><strong>{total.toLocaleString()}</strong><span>planned Loops</span></div>
+   <div><strong>{count.toLocaleString()}</strong><span>possible combinations</span></div><ArrowRight size={18} aria-hidden="true"/>
+   <div><strong>{p.configuration.combination_random_start?'Random Start':'Ordered start'}</strong><span>then fixed-order cycles</span></div><ArrowRight size={18} aria-hidden="true"/>
+   <div className="cs-total"><strong>{total.toLocaleString()}</strong><span>maximum Loops</span></div>
   </div>
   </div>
   <div className="cs-control-row"><nav className="cs-tabs" aria-label="Combination views">
@@ -109,7 +109,7 @@ export default function CombinationDesign({pipeline:p}:{pipeline:PipelineDefinit
    </div>
    {error&&<div className="cs-error" role="alert"><AlertCircle size={17}/><span>{error} {trace?'Showing the last records for this Loop.':'This does not mean the Loop is empty.'}</span><button onClick={()=>setRetry(n=>n+1)}>Retry</button></div>}
    {!trace&&!error?<p className="cs-empty" role="status">Loading this Loop’s execution path…</p>:trace&&<>
-    <div className="cs-path-caption"><span>{trace.planned?`Combination ${trace.planned.combination} · repetition ${trace.planned.repetition}`:trace.preparing?'Preparing execution…':'No execution plan recorded'}</span><span>{trace.calls.length} recorded calls · refreshes every 3 seconds</span></div>
+    <div className="cs-path-caption"><span>{trace.planned?`Combination ${trace.planned.combination} · cycle ${trace.planned.repetition}${trace.planned.start_combination ? ` · ${trace.planned.selection_policy==='random_start_then_cycle_v1'?'Random':'Ordered'} start: ${trace.planned.start_combination}` : ''}`:trace.preparing?'Preparing execution…':'No execution plan recorded'}</span><span>{trace.calls.length} recorded calls · refreshes every 3 seconds</span></div>
     <CombinationFloor recorded skills={PLAYBOOK_STAGES.map(stage=>{const flavor=trace.calls.filter(c=>callRole(c)===stage).at(-1)?.skill??trace.planned?.agents.find(a=>a.stage===stage);return flavor?[flavor]:[];})} calls={trace.calls} inspect={setDetail}/>
     <details className="cs-stage-details"><summary>Stage details and skill versions</summary><div className="cs-path">{PLAYBOOK_STAGES.map((stage,i)=>{
      const planned=trace.planned?.agents.find(a=>a.stage===stage),calls=trace.calls.filter(c=>callRole(c)===stage),last=calls.at(-1),actual=last?.skill,Icon=roles[stage].icon;
