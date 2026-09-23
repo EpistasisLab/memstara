@@ -7,7 +7,7 @@ try{for(const mode of ['Selected Pipelines','All Combinations']){
 const p=await b.newPage({viewport:{width:1280,height:900}});p.setDefaultTimeout(15000);let saves=[],calls=[],failure=true,n=0,transient=false;
 const roles=['hypothesis','data','ml','interpreter','report'];let catalog=roles.map(stage=>({id:stage,stage,title:stage,content:'# Base',hash:stage,source:'Default'}));
 p.on('pageerror',e=>console.log('PAGE ERROR',e.message));
-await p.route('**/api/**',async r=>{const u=new URL(r.request().url());const response=await r.fetch({url:'http://127.0.0.1:8070'+u.pathname+u.search});return r.fulfill({response});});
+await p.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Offline wizard fixture'}}));
 await p.route('**/control/**',r=>{const path=new URL(r.request().url()).pathname;
 if(path==='/control/pipelines')return r.fulfill({json:{pipelines:[]}});
 if(path==='/control/skills')return r.fulfill({json:{skills:[]}});

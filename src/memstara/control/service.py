@@ -528,6 +528,19 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path.rstrip("/")
 
+        if path == "/control/skill-drafts/models":
+            from memstara.control.skill_drafts import models
+            try:
+                self._send(200, models())
+            except ValueError:
+                self._send(503, {"error": "Configure the model connection before generating a skill."})
+            return
+        if path.startswith("/control/skill-drafts/"):
+            from memstara.control.skill_drafts import get
+            draft = get(path.rsplit("/", 1)[-1])
+            self._send(200 if draft else 404, draft or {"error": "Draft expired or server restarted. Generate again."})
+            return
+
         if path == "/control/health":
             try:
                 root = str(_bundle_root())
@@ -636,6 +649,14 @@ class Handler(BaseHTTPRequestHandler):
             body = self._body()
         except ValueError as e:
             self._send(400, {"error": str(e)})
+            return
+
+        if path == "/control/skill-drafts":
+            from memstara.control.skill_drafts import start
+            try:
+                self._send(202, start(body))
+            except ValueError as exc:
+                self._send(400, {"error": str(exc)})
             return
 
         if path == "/control/llm/key":
