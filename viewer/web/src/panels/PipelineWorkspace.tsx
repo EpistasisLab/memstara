@@ -7,7 +7,7 @@ import FloorDatabaseNode from "../components/FloorDatabaseNode";
 import LoopUsage from "../components/LoopUsage";
 import { useTelemetryTotals } from "../components/TelemetryTotals";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ReactFlow, Background, BackgroundVariant, MarkerType, useNodesState, useReactFlow, useNodesInitialized, useStore as useFlowStore, getViewportForBounds, type NodeProps, type Node } from "@xyflow/react";
+import { ReactFlow, Controls, Background, BackgroundVariant, MarkerType, useNodesState, useReactFlow, useNodesInitialized, useStore as useFlowStore, getViewportForBounds, type NodeProps, type Node } from "@xyflow/react";
 import { Plus, Layers3, Activity, Sparkles, Settings2, X } from "lucide-react";
 import { usePipelines, type PipelineDefinition } from "../store/pipelines";
 import { useControl, type PlaybookStage } from "../store/control";
@@ -167,7 +167,7 @@ export default function PipelineWorkspace(){
       useControl.getState().openEditor(stage as PlaybookStage);
   },[select]);
   const snapshot=useViewer(s=>s.snapshot);
-  const combinationPipeline=items.find(p=>p.id===selected&&Object.keys(p.configuration.combination_skills??{}).length>0);
+  const combinationPipeline=comparison.length?undefined:items.find(p=>p.id===selected&&Object.keys(p.configuration.combination_skills??{}).length>0);
   const selectedPipeline=items.find(p=>p.id===selected);
   const focused=items.find(p=>p.id===inspected?.id&&p.id===selected);
   const allPlaces=useMemo(()=>[
@@ -249,12 +249,22 @@ export default function PipelineWorkspace(){
     <div className="floor-execution-strip" aria-label="All pipeline execution controls"><MasterStop/></div>
     <div className="pipeline-explorer-layout">
       <PipelineBrowser onSettings={id=>{select(id);setSettings({id,section:"runtime"});}} items={items} selected={selected} onSelect={id=>{if(comparison.length&&!comparison.includes(id))setComparison([]);usePipelines.getState().focus(id);}} compare={comparison} onCompare={ids=>{setComparison(ids);if(ids.length&&!ids.includes(selected??""))usePipelines.getState().focus(ids[0]);}}/>
-      <div className={`pipeline-detail-workspace ${combinationPipeline?"has-combination-studio":""}`}>
+      <div className={`pipeline-detail-workspace ${combinationPipeline||comparison.length?"has-combination-studio":""}`}>
       {selectedPipeline&&<div className="floor-compact-actions" aria-label="Selected pipeline controls"><strong title={selectedPipeline.name}>{selectedPipeline.name}</strong><PipelineRowActions compact pipeline={selectedPipeline} onSettings={()=>setSettings({id:selectedPipeline.id,section:"runtime"})}/></div>}
+    {comparison.length>0&&<div className="floor-comparison-heading" role="status"><strong>Comparing {visibleItems.length} pipelines</strong><span>Each pipeline keeps its own visualization, Loop and execution state. Pan and zoom each view independently.</span></div>}
+    {comparison.length>0&&<div className="floor-comparison-grid">{visibleItems.map(p=>{
+      const isCombination=Object.keys(p.configuration.combination_skills??{}).length>0;
+      const ownNodes=nodes.filter(n=>n.id.startsWith(p.id+"-"));
+      const ids=new Set(ownNodes.map(n=>n.id));const ownEdges=edges.filter(e=>ids.has(e.source)&&ids.has(e.target));
+      return <section className="floor-comparison-pane" key={p.id} aria-label={`Comparison · ${p.name}`}>
+       <header className="floor-comparison-pane-heading"><strong>{p.name}</strong><span>{isCombination?'All Combinations':'Selected pipeline'} · Loop {p.progress.iteration??'—'} · {p.running?(p.running.execution_state==='paused'?'Paused':labels[p.progress.stage as keyof typeof labels]??'Running'):'Not running'}</span></header>
+       {isCombination?<CombinationDesign pipeline={p}/>:<div className="floor-comparison-standard"><ReactFlow nodes={ownNodes} edges={ownEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView fitViewOptions={{padding:.12}} minZoom={.15} maxZoom={1.6} nodesDraggable={false} nodesConnectable={false} panOnScroll zoomOnScroll={false} onNodeClick={(_,node)=>{if(node.type==='station')configureStation(p.id,String(node.data.stage));}}><Background variant={BackgroundVariant.Lines} gap={32} color="rgb(var(--ink) / .05)"/><Controls showInteractive={false}/></ReactFlow></div>}
+      </section>;
+    })}</div>}
     {combinationPipeline&&<CombinationDesign key={combinationPipeline.id} pipeline={combinationPipeline}/>}
     <div className="floor-detail-links"><button aria-pressed={showResources} title="Show shared knowledge, data, tools and storage alongside the pipeline" onClick={()=>setShowResources(v=>!v)}>Shared resources</button><button onClick={()=>setDetail('tools')}>Recent tool calls</button><button onClick={()=>setDetail('progress')}>Pipeline progress</button>{focused&&inspected&&<button onClick={()=>setDetail('agent')}>Selected agent details</button>}</div>
     <div ref={setToolbarHost} className="floor-docked-controls floor-visible-controls" role="group" aria-label="Floor Plan view controls"/>
-    <div className="floor-canvas" style={combinationPipeline?{display:"none"}:undefined}>
+    <div className="floor-canvas" style={combinationPipeline||comparison.length?{display:"none"}:undefined}>
       <ReactFlow nodes={canvasNodes} onNodesChange={onNodesChange} edges={canvasEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
         defaultViewport={{x:16,y:60,zoom:1}} minZoom={.1} maxZoom={1.6} nodesDraggable={false} nodesConnectable={false}
         panOnScroll zoomOnScroll={false} onNodeClick={(_,node)=>{if(node.type==="station"){const p=node.data.pipeline as PipelineDefinition;configureStation(p.id,String(node.data.stage));}}} onPaneClick={()=>setInspected(null)}>
