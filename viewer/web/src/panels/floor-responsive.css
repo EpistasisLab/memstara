@@ -9,7 +9,7 @@
 .floor-execution-strip .master-run-controls button { min-height:36px; padding:7px 12px; font-size:12px; }
 .floor-execution-strip .master-run-error,.floor-execution-strip .batch-start-results { flex-basis:100%; max-height:52px; overflow:auto; }
 .floor-observatory .pipeline-explorer-layout { min-height:340px; }
-.floor-observatory .pipeline-browser { flex-basis:230px; width:230px; }
+.floor-observatory .pipeline-browser { flex-basis:250px; width:250px; }
 .floor-observatory .pipeline-browser.is-closed { flex-basis:42px; width:42px; }
 .floor-observatory .pipeline-detail-workspace { display:flex !important; min-height:300px; }
 .floor-observatory .pipeline-detail-workspace > .floor-canvas { min-height:260px; }

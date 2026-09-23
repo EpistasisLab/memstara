@@ -4,6 +4,7 @@ import { usePipelines, type PipelineDefinition } from '../store/pipelines';
 import FloorDetailDialog from './FloorDetailDialog';
 import AdditionalAnalysisDialog from './AdditionalAnalysisDialog';
 import PipelineNameEditor from './PipelineNameEditor';
+import PipelineDeleteDialog from './PipelineDeleteDialog';
 import PipelineSetupGuide from './PipelineSetupGuide';
 
 export default function PipelineManagementDialog({pipeline:p,onSettings,close}:{pipeline:PipelineDefinition;onSettings:()=>void;close:()=>void}) {
@@ -12,18 +13,7 @@ export default function PipelineManagementDialog({pipeline:p,onSettings,close}:{
   const [confirm,setConfirm]=useState<'delete'|'end'|null>(null);
   const combinations=!!p.configuration.combination_skills&&Object.keys(p.configuration.combination_skills).length>0;
   const paused=!!p.running&&(p.running.pause_requested||p.running.execution_state==='paused');
-  if(confirm==='delete')return <FloorDetailDialog title="Delete pipeline?" close={()=>{if(!busy)setConfirm(null);}} className="pipeline-management-dialog">
-    <div className="pipeline-management">
-      <p>Remove <strong>{p.name}</strong> from your workspace?</p>
-      <p>Only this pipeline setup is deleted. Saved analysis results remain available in Run history.</p>
-      {error&&<p role="alert">{error}</p>}
-      {p.running&&<p role="alert">This pipeline is running. End its execution before deleting it.</p>}
-      <div className="pipeline-management-buttons">
-        <button type="button" autoFocus disabled={busy} onClick={()=>setConfirm(null)}>Keep pipeline</button>
-        <button type="button" disabled={busy||!!p.running} onClick={async()=>{if(await usePipelines.getState().remove(p.id))close();}}>{busy?'Deleting…':'Confirm deletion'}</button>
-      </div>
-    </div>
-  </FloorDetailDialog>;
+  if(confirm==='delete')return <PipelineDeleteDialog pipeline={p} close={()=>setConfirm(null)} onDeleted={close}/>;
   if(fresh)return <AdditionalAnalysisDialog pipeline={p} fresh close={()=>setFresh(false)}/>;
   return <FloorDetailDialog title="Pipeline settings and actions" close={close} className="pipeline-management-dialog">
     <div className="pipeline-management">
