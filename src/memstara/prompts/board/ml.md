@@ -48,3 +48,13 @@ to name one invites a guess. The tool already returned the answer.
 -->
 
 Pass the AUC, the per-column feature importance, and `model` to submit_result. `model` is the engine name train_and_score returned; copy it through unchanged rather than deciding what it should be. Leave it out and nobody can say afterwards what scale the importance numbers are on.
+
+
+<!-- Paired comparisons distinguish knowledge-derived predictor groups from fixed covariates. -->
+When a result contains `comparison`, use its measured baseline increment and group
+ablations. Do not invent comparisons for older results or failed variants. A missing
+clinical baseline means a prevalence-only reference, not a standard-care model.
+The baseline is fixed by the run; hypothesis predictors are mapped concept groups.
+Removing a group can also remove shared columns; ablation effects are not additive.
+Compare within the same paired experiment, not unmatched historical AUCs. These are
+adaptive exploratory results, not independent validation or causal effects.
