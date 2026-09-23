@@ -3,6 +3,8 @@ import json
 from unittest.mock import AsyncMock
 
 import pytest
+pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
+
 from memstara.pipeline.scientific_policy import check_primary_tools
 from memstara.pipeline import board
 from memstara.mcp_servers import blackboard as bb

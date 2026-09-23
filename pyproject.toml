@@ -67,6 +67,10 @@ dependencies = [
     # imports it; the matcher runs on numpy and sentence-transformers.
     "xgboost",
     "python-dotenv",
+    # Logging is imported directly by the control service and driver.
+    "structlog",
+    # The OKF adapter parses Markdown frontmatter directly.
+    "PyYAML",
     # `src/memstara/blackboard.py:99` and `src/memstara/mcp_servers/blackboard.py:76`
     # import this at module top, so it is needed to *import* the MCP server, not just
     # to connect. Nothing else declared here brings it in — checked, not assumed:

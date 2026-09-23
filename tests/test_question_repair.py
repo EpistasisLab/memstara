@@ -97,6 +97,8 @@ def test_failed_proposal_without_task_is_available_in_next_loop(plan):
 
 
 def test_question_writer_retry_receives_exact_tool_failure(plan, monkeypatch):
+    import pytest
+    pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     from memstara.pipeline import board
     monkeypatch.setattr('memstara.evaluation.active_plan', lambda: plan)
     prompts = []

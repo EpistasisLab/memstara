@@ -176,6 +176,8 @@ def test_tiny_minority_disables_cv_search_explicitly(clean_data):
 
 
 def test_failed_tasks_do_not_keep_retry_loop_alive():
+    import pytest
+    pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     from memstara.pipeline.board import summarise
     counts, retries = summarise([
         {"task_id": 1, "task_type": "ml", "status": "failed", "attempts": 9},

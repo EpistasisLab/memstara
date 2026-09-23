@@ -90,6 +90,8 @@ def test_loop_api_uses_frozen_execution_and_filters_actual_calls(skills, tmp_pat
     from unittest.mock import MagicMock
     import memstara.paths
     monkeypatch.setattr(memstara.paths, 'RUNS_DIR', tmp_path)
+    import pytest
+    pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     from memstara.control import service
     plan = build_plan(skills, 2)
     (tmp_path/'config.json').write_text(json.dumps({'combination_plan': plan}))
@@ -130,6 +132,8 @@ def test_identical_content_different_ids_deduplicates_by_hash(skills, monkeypatc
 def test_execution_factors_use_provisioned_combination_agents(tmp_path, monkeypatch):
     import json
     from unittest.mock import AsyncMock
+    import pytest
+    pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     from memstara.pipeline import board
     (tmp_path/'prompts.json').write_text(json.dumps({'hypothesis': {'agent_id': 'unused-template'}}))
     (tmp_path/'loop_1_flavors.json').write_text(json.dumps({'agents': [
@@ -148,6 +152,8 @@ def test_execution_factors_use_provisioned_combination_agents(tmp_path, monkeypa
 def test_loop_api_during_startup_is_pending_not_bad_request(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import MagicMock
+    import pytest
+    pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     from memstara.control import service
     manager=SimpleNamespace(running=lambda:{'run_tag':'starting','run_dir':str(tmp_path)})
     monkeypatch.setattr(service,'WORKSPACE',SimpleNamespace(manager=lambda key:manager))

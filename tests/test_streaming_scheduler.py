@@ -1,6 +1,9 @@
 import asyncio
 from unittest.mock import AsyncMock
 
+import pytest
+pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
+
 from memstara.pipeline.scheduler import StageWorkers
 from memstara.pipeline import board
 from memstara.pipeline.core import board_workers

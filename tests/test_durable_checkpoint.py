@@ -93,6 +93,8 @@ def test_durable_pause_flushes_phase_before_waiting_for_next_call(tmp_path):
 
 
 def test_controller_resume_keeps_identity_and_appends_log(tmp_path, monkeypatch):
+    import pytest
+    pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     from memstara.control import service, recovery
     monkeypatch.setattr(service, 'RUNS_DIR', tmp_path)
     root = tmp_path/'run'; root.mkdir()
@@ -131,6 +133,8 @@ def test_changed_code_is_not_silently_used_for_recovery(tmp_path, monkeypatch):
 
 
 def test_controller_refuses_unknown_effects_without_spawning(tmp_path, monkeypatch):
+    import pytest
+    pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     from memstara.control import service, recovery
     monkeypatch.setattr(service, 'RUNS_DIR', tmp_path)
     root = tmp_path/'run'; root.mkdir()

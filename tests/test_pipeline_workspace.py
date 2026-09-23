@@ -91,6 +91,8 @@ def test_progress_has_iteration_not_invented_percentage(tmp_path):
 
 
 def test_three_controllers_launch_independently_and_stop_only_the_target(tmp_path, monkeypatch):
+    import pytest
+    pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     from memstara.control import service
 
     monkeypatch.setattr(service, "RUNS_DIR", tmp_path)
@@ -135,6 +137,8 @@ def test_three_controllers_launch_independently_and_stop_only_the_target(tmp_pat
 
 
 def test_agent_names_are_separate_across_independent_runs():
+    import pytest
+    pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     from memstara.pipeline.core import board_workers
 
     first = board_workers({"hypothesis": ["same"]}, "run-a")

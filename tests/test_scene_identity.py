@@ -9,6 +9,8 @@ import scene  # noqa: E402
 
 
 def test_skill_identity_survives_adding_a_second_agent():
+    import pytest
+    pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     from memstara.pipeline.core import hypothesis_agent_names
 
     one = hypothesis_agent_names(["treatment-toxicity"])

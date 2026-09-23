@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
+
 from memstara.pipeline import board, question_contract as qc
 from memstara.pipeline.exploration import record_round, write_progress, round_summary, finalize_rounds
 from memstara.pipeline.recovery import ensure_artifact

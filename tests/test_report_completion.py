@@ -2,6 +2,8 @@ import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
+pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
+
 from memstara.pipeline import board
 
 import json

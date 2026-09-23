@@ -35,6 +35,8 @@ def test_missing_target_and_empty_predictors_fail_closed(tmp_path):
 
 def test_each_question_writer_receives_frozen_context_before_call(monkeypatch, tmp_path):
     from memstara import evaluation
+    import pytest
+    pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     from memstara.pipeline import board
     dataset = tmp_path / 'cohort.csv'
     dataset.write_text('BMI,Y\n23,0\n')

@@ -60,6 +60,8 @@ def test_job_capacity(monkeypatch):
 
 
 def test_motoro_receives_selected_model_and_no_tools(monkeypatch):
+    import pytest
+    pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     import motoro
     import motoro.runner as runner
     from memstara import env
@@ -89,6 +91,8 @@ def test_motoro_receives_selected_model_and_no_tools(monkeypatch):
 
 
 def test_http_routes_accept_and_poll_without_pipeline_mutation(monkeypatch):
+    import pytest
+    pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     from memstara.control.service import Handler
     handler = object.__new__(Handler)
     handler._refuse_stranger = lambda: False

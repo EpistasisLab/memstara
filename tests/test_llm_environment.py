@@ -19,6 +19,8 @@ def test_missing_environment_rejects_saved_selection(monkeypatch):
 
 
 def test_motoro_native_resolver_keeps_azure_endpoint(monkeypatch):
+    import pytest
+    pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     from motoro import config as core_config
     from motoro.schemas.agent import ModelConfig, LLMProvider
     from motoro.services.credentials import env_credential_resolver

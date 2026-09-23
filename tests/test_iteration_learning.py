@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
+
 from memstara import evaluation
 from memstara.pipeline import iteration_learning as learning, question_contract as qc, board
 from memstara.mcp_servers import blackboard as bb

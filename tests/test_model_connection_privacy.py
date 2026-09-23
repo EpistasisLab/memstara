@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 from io import BytesIO
 import pytest
+pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
 from memstara.control import service
 
 
