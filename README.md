@@ -382,3 +382,96 @@ reason on every run.
 mirror, not a summary, and **the English file is the one that is correct if the two
 disagree.** Nothing checks them: they are not scanned for citations and CI never sees
 them, so a citation *into* one is reported as *not verifiable here*.
+
+### Agent terminology
+
+The final synthesis role is **Explanation Agent**, distinct from the Interpreter
+Agent. Existing `report` stage IDs, `playbook_report` settings, skill IDs and report
+artifact paths are compatibility identifiers, not user-facing agent names. They
+remain readable so saved executions and Motoro history stay connected. New saved
+pipeline definitions and execution snapshots include `agent_labels`, mapping
+`report` to `Explanation Agent`. The CLI accepts `--playbook-explanation` and its
+legacy alias `--playbook-report`. Historical execution artifacts are not rewritten.
+
+### Final-stage skills
+
+- `interpreter_factual_observations` — **Factual observations for clinicians**:
+  measured observations, understandable model/feature explanations, uncertainty and
+  limitations. The Interpretation role excludes speculation, causal claims,
+  recommendations and next steps, including when an older attached skill requests them.
+- `report_clinical_explanations` — **Clinical meaning and next steps**:
+  the Explanation Agent separates observed facts from inferred clinical/biological
+  meaning and labels proposed next steps as requiring further validation.
+
+New pipeline definitions default to these two skills. Select different skills in Create a pipeline or the agent's settings. Both dialogs also
+support uploading Markdown and writing a custom skill using **Write a custom skill**.
+Saving a custom skill adds it to the library and selects it; apply the surrounding
+settings or finish pipeline creation to use it. Existing selections and frozen runs
+are not silently replaced. Prompt instructions guide LLM behavior; the wording is
+not a deterministic guarantee that every generated answer complies.
+
+### Pipeline-building modes
+
+**Selected Pipelines** preserves the existing one-pipeline-at-a-time configuration
+and explicit Run workflow. **All Combinations** selects one or more skills for all
+five roles, including Data. Markdown upload and custom skill creation are available
+at each role. Data skills must still obey the fixed-target, exact-column extraction
+contract; they do not enable preprocessing.
+
+The design grid has one column per role and as many rows as the largest number of
+unique skill contents in any role. Empty cells do not represent extra agents.
+For 2 Hypothesis, 3 Data, 2 ML, 2 Interpretation and 1 Explanation variants there
+are 24 combinations and 3 design rows. Every combination is one Loop, with one
+hypothesis at a time. New designs use a user-reviewed maximum of 1–10,000 Loops
+(default 10), independent of the combination count. A limit below 24 visits only part
+of that set; a limit above 24 repeats combinations after a full cycle. Random Start
+draws the initial combination uniformly, then cycles in fixed order. Resume preserves
+the frozen starting point and budget. Legacy full-set repetition schedules remain readable.
+The design is one saved workspace entry, not 24 separate pipeline cards.
+
+One complete path runs at a time within a combination design, using the existing
+stage scheduler. Different saved designs/pipelines can run concurrently. Dataset,
+knowledge filter, model/evaluation settings remain fixed within an execution;
+later Loops share the design's iterative research history. This is adaptive
+exploration, not an independently randomized comparison of skills.
+
+`config.json` freezes the full schedule and all selected prompts. Per-Loop
+`loop_N_flavors.json` records planned skill IDs, titles, content hashes, roles and
+provisioned agent IDs. `execution.json` records actual calls, their invocation order,
+Loop, combination/repetition and skill identity. The UI's Loop selector shows actual
+calls separately from the planned combination through the read-only control route
+`GET /control/pipelines/{id}/combinations?loop=N`. Missing/blocked stages remain
+missing/blocked; a planned skill is not presented as having executed.
+
+Run requires an explicit click after creation. Pause/resume and master stop use the
+existing execution controls. A completed combination design starts another complete
+reviewed schedule through the new-execution confirmation; the ordinary additional-
+Loops shortcut is rejected for this mode to avoid silently changing the approved budget.
+Existing selected-pipeline settings and historical results are retained.
+
+### LLM-assisted Hypothesis skill wizard
+
+Use **Create a skill with AI** while configuring the Hypothesis Agent. Answer the
+four questions about domain, population/setting, candidate predictors and inclusion/
+exclusion preferences, then choose a model/deployment available on the configured
+connection. Generation does not change the pipeline model or start a pipeline.
+Review and edit the generated Markdown, confirm review, and explicitly save it.
+Selected Pipelines selects that one skill; All Combinations supports saving another
+skill and adding it to the set. Manual writing and Markdown upload remain available.
+This assistant is intentionally limited to Hypothesis. Backend generation is bounded
+and failed retrieval can check the same job without starting another model call.
+
+### Requirement delivery status (2026-09-23)
+
+- #132: UI/backend naming and legacy configuration migration delivered; complete
+  historical document/diagram terminology coverage remains an audit task.
+- #133: final-stage instruction skills and custom skill round-trips implemented.
+- #134: both modes, one-hypothesis Loops, schedule/provenance and bounded Random Start
+  delivered; fresh real-LLM full-schedule acceptance remains open.
+- #135: assisted wizard implementation and mocked two-mode verification complete;
+  actual selected-deployment generation was not exercised in this delivery.
+- #136: responsive layout improvements and targeted regression checks delivered;
+  this is not certification that every application screen has no UX defects.
+
+Offline integrated tests: 599 passed and 4 subtests passed. Frontend build and
+20 unit tests passed. Backend lint passed. No paid LLM run was launched.
