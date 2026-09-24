@@ -35,6 +35,8 @@ from __future__ import annotations
 
 import sys
 
+from memstara.matcher.rules import load_rules
+
 from memstara.matcher import config
 from memstara.matcher.catalog import build_catalog, save_catalog, save_catalog_meta
 from memstara.matcher.embedder import (
@@ -55,6 +57,7 @@ from memstara.matcher.service import (
 
 
 def main() -> int:
+    rules = load_rules()
     run_config = build_run_config()
     csv_path = dataset_path()  # raises if unset or missing — no fallback cohort
     outcome = outcome_column()  # raises if unset — no literal label name
@@ -74,7 +77,7 @@ def main() -> int:
         return 1
 
     print("[2/5] building the catalog")
-    entries = build_catalog(columns, outcome_col=outcome)
+    entries = build_catalog(columns, outcome_col=outcome, rules=rules)
     by_type: dict[str, int] = {}
     for e in entries:
         by_type[e.feature_type] = by_type.get(e.feature_type, 0) + 1
@@ -103,7 +106,7 @@ def main() -> int:
     catalog_json = config.CATALOG_JSON
     save_catalog(entries, catalog_json)
     save_embeddings(matrix, catalog_json, match_texts=match_texts, cfg=run_config.embedding)
-    meta = save_catalog_meta(entries, catalog_json, current_fingerprint(run_config))
+    meta = save_catalog_meta(entries, catalog_json, current_fingerprint(run_config, rules=rules))
     for p in (catalog_json, embeddings_path(catalog_json), embeddings_stamp_path(catalog_json)):
         print(f"      {p}")
     print(f"      fingerprint columns_sha1={meta['columns_sha1'][:12]}… outcome={meta['outcome_col']}")

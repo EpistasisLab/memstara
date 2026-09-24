@@ -306,14 +306,17 @@ def _parse_column(col: str) -> CatalogEntry:
 # SOURCE: SANDBOX-ORIGINAL, upstream name reused. afc-forge's build_catalog
 #   (catalog.py:322, ~200 lines) takes a DataFrame + CohortDescriptor + RuleSet.
 #   This shares its name and its return type, and no code.
-def build_catalog(columns: list[str], outcome_col: str) -> list[CatalogEntry]:
+def build_catalog(columns: list[str], outcome_col: str, *, rules=None) -> list[CatalogEntry]:
     """Build the catalog from an EcoXAI CSV header, excluding `outcome_col`.
 
     Exclusion is by **exact name match only**. Adding prefix or substring matching
     would silently drop legitimate columns — the only other column containing
     "HIV" is `DX__G63__Neuropathy due to HIV (HCC)`, a real feature.
     """
-    entries = [_parse_column(c) for c in columns if c != outcome_col]
+    if rules is not None:
+        rules.validate_columns(columns, outcome_col)
+    excluded = rules.excluded if rules is not None else frozenset()
+    entries = [_parse_column(c) for c in columns if c != outcome_col and c not in excluded]
     names = {e.feature_name for e in entries}
     if outcome_col in names:  # redundant with the filter above; an invariant should be stated
         raise AssertionError(f"outcome column {outcome_col!r} leaked into the catalog")
@@ -323,8 +326,7 @@ def build_catalog(columns: list[str], outcome_col: str) -> list[CatalogEntry]:
 # SOURCE: SANDBOX-ORIGINAL, upstream name reused. afc-forge's catalog_fingerprint
 #   (ade_forge/tools/impl/catalog.py:587) hashes a CohortDescriptor and a leakage
 #   RuleSet and stores `leakage_rules_sha1`. This one hashes a column list. The
-#   MISSING field is the visible sign that the leakage layer did not come across
-#   — see __init__.py.
+#   adapter now also hashes the explicit resolved-column RuleSet (issue #5).
 def catalog_fingerprint(
     *,
     cohort_file: str | Path,
@@ -334,6 +336,7 @@ def catalog_fingerprint(
     builder_version: int,
     embedding_model: str,
     embedding_revision: str | None,
+    rules=None,
 ) -> dict[str, Any]:
     """The identity of the inputs this catalog was built from.
 
@@ -348,8 +351,12 @@ def catalog_fingerprint(
     catches that change but the catalog meta does not, and the two guards have to be
     independent.
     """
+    from memstara.matcher.rules import EMPTY_RULES_SHA1
+    if rules is not None:
+        rules.validate_columns(columns, outcome_col)
     ordered = json.dumps(columns, ensure_ascii=False)
     return {
+        "leakage_rules_sha1": rules.sha1 if rules is not None else EMPTY_RULES_SHA1,
         "schema_version": schema_version,
         "builder_version": builder_version,
         "cohort_file": Path(cohort_file).name,

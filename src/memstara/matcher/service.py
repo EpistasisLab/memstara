@@ -13,6 +13,7 @@ outcome column, how an encoder is obtained — lives here instead.
 from __future__ import annotations
 
 import csv
+import json
 import logging
 import os
 import re
@@ -22,6 +23,7 @@ from pathlib import Path
 from memstara.matcher import config as cfg_mod
 from memstara.matcher.catalog import catalog_fingerprint
 from memstara.matcher.config import RunConfig
+from memstara.matcher.rules import load_rules
 from memstara.matcher.embedder import sentence_transformer_encoder
 from memstara.matcher.matcher import Match, Matcher, MatchResult
 
@@ -127,7 +129,10 @@ def build_run_config() -> RunConfig:
     return RunConfig()
 
 
-def current_fingerprint(run_config: RunConfig | None = None) -> dict:
+_LOAD_RULES = object()
+
+
+def current_fingerprint(run_config: RunConfig | None = None, *, rules=_LOAD_RULES) -> dict:
     """The identity of the catalog this environment would produce right now.
 
     The builder and the server call the same function, which is what makes the
@@ -143,23 +148,45 @@ def current_fingerprint(run_config: RunConfig | None = None) -> dict:
         builder_version=cfg_mod.CATALOG_BUILD_VERSION,
         embedding_model=run_config.embedding.model,
         embedding_revision=run_config.embedding.revision,
+        rules=load_rules() if rules is _LOAD_RULES else rules,
     )
 
 
-@lru_cache(maxsize=1)
 def get_matcher() -> Matcher:
+    # Re-read policy on each request so an edited policy cannot reuse a stale singleton.
+    rules = load_rules()
+    fingerprint = current_fingerprint(rules=rules)
+    return _get_matcher_cached(json.dumps(fingerprint, sort_keys=True),
+                               rules.model_dump_json() if rules is not None else None)
+
+
+@lru_cache(maxsize=1)
+def _get_matcher_cached(fingerprint_json, rules_json) -> Matcher:
     """Loaded once per process — the model (~420MB) and matrix cannot be re-read
     on every call."""
+    from memstara.matcher.rules import RuleSet
+    from memstara.matcher.catalog import meta_path
+    rules = RuleSet.model_validate_json(rules_json) if rules_json is not None else None
+    fingerprint = json.loads(fingerprint_json)
+    # Legacy unstamped caches remain eligible only for policies with no exclusions.
+    # An explicit empty policy cannot remove entries; activation verifies and stamps
+    # the existing artifacts. Nonempty policies always require a matching stamp.
+    metadata = meta_path(cfg_mod.CATALOG_JSON)
+    if (rules is None or not rules.exclusions) and metadata.exists():
+        if 'leakage_rules_sha1' not in json.loads(metadata.read_text()):
+            fingerprint.pop('leakage_rules_sha1', None)
     run_config = build_run_config()
     matcher = VerifiedMatcher.from_catalog(
         cfg_mod.CATALOG_JSON,
         encoder=sentence_transformer_encoder(run_config.embedding),
         config=run_config,
-        fingerprint=current_fingerprint(run_config),
+        fingerprint=fingerprint,
     )
     # Runtime backstop. The builder excluding the outcome is a guarantee that holds
     # at build time; this is an invariant that must also hold for a catalog someone
     # hand-edited or copied in from another build.
+    if rules is not None and any(e.feature_name in rules.excluded for e in matcher.entries):
+        raise RuntimeError('Catalog contains study-excluded features; rebuild the matcher cache')
     outcome = outcome_column()
     if any(e.feature_name == outcome for e in matcher.entries):
         raise RuntimeError(

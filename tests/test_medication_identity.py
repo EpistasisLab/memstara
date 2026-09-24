@@ -50,3 +50,35 @@ def test_diagnosis_ranking_is_unchanged():
     assert VerifiedMatcher.build([entry], encoder=encode).match("hypertension") == Matcher.build(
         [entry], encoder=encode,
     ).match("hypertension")
+
+
+def test_original_five_queries_with_historical_positive_columns():
+    from scripts.check_medication_identity import check_results, QUERIES
+    names = ["NALOXONE", "VALACYCLOVIR", "BUPRENORPHINE", "CITALOPRAM"]
+    entries = [CatalogEntry(f"MED__{n}", "medication", n, "wide_passthrough", f"MED__{n}") for n in names]
+    matcher = VerifiedMatcher.build(entries, encoder=lambda texts: np.ones((len(texts), 2)))
+    rows = check_results(matcher, [e.feature_name for e in entries])
+    assert [row["query"] for row in rows] == list(QUERIES)
+    assert [row["present"] for row in rows] == [False, False, False, True, True]
+    assert not any(row["historical_membership_changed"] for row in rows)
+
+
+def test_replay_distinguishes_dataset_change_from_incorrect_match():
+    from scripts.check_medication_identity import check_results
+    entry = CatalogEntry("MED__CITALOPRAM", "medication", "CITALOPRAM", "wide_passthrough", "MED__CITALOPRAM")
+    matcher = VerifiedMatcher.build([entry], encoder=lambda texts: np.ones((len(texts), 2)))
+    rows = check_results(matcher, [entry.feature_name])
+    assert [r["query"] for r in rows if r["historical_membership_changed"]] == ["Buprenorphine"]
+    with pytest.raises(AssertionError, match="catalog and dataset header disagree"):
+        check_results(matcher, [entry.feature_name, "MED__BUPRENORPHINE"])
+
+
+def test_buprenorphine_absent_is_not_replaced_and_naloxone_remains_valid():
+    from scripts.check_medication_identity import check_results
+    names = ["NALOXONE", "CITALOPRAM"]
+    entries = [CatalogEntry(f"MED__{n}", "medication", n, "wide_passthrough", f"MED__{n}") for n in names]
+    matcher = VerifiedMatcher.build(entries, encoder=lambda texts: np.ones((len(texts), 2)))
+    rows = check_results(matcher, [e.feature_name for e in entries],
+                         ("Buprenorphine", "Naltrexone", "Naloxone", "Citalopram"))
+    assert [r["present"] for r in rows] == [False, False, True, True]
+    assert not rows[2]["historical_membership_changed"]
