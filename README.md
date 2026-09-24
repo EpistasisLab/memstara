@@ -307,8 +307,7 @@ rather than relying on a test count embedded in this document.
 Run Python entry points as `python -m memstara.<module>`. Load configuration
 before runtime use, following the existing entry points. Agent prompts live in
 `src/memstara/prompts/`; prompt changes are experimental conditions and should
-
-
+be reviewed separately from code changes. Track development through
 [GitHub issues](https://github.com/HyunjunA/memstara/issues) and the
 
 ## Resetting your dev environment
