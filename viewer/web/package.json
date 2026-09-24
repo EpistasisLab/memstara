@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc -b",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "@radix-ui/react-tabs": "^1.1.21",

@@ -3,9 +3,11 @@ import {chromium} from '@playwright/test';
 const b=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
 try{const p=await b.newPage({viewport:{width:1400,height:1000}});let items=[],starts=[];
 await p.route('**/control/**',async r=>{const path=new URL(r.request().url()).pathname;
+if(path==='/control/playbooks'){const stages=['hypothesis','data','ml','interpreter','report'];const catalog=stages.map(stage=>({id:stage+'-fixture',stage,title:stage+' test skill',content:'# Test instructions',hash:stage,description:'Synthetic fixture',source:'fixture'}));return r.fulfill({json:{catalog,stages,playbooks:catalog.map(s=>s.id),references:[],max_hypotheses:4}});}
 if(path==='/control/pipelines'){if(r.request().method()==='GET')return r.fulfill({json:{pipelines:items}});const q=r.request().postDataJSON();if(Object.keys(q.configuration.combination_skills??{}).length)throw Error('Combination settings leaked');const x={id:'selected-'+(items.length+1),number:items.length+1,name:q.name,configuration:q.configuration,running:null,latest:null,progress:{}};items.push(x);return r.fulfill({json:x});}
 if(path==='/control/runs'&&r.request().method()==='POST'){const q=r.request().postDataJSON();starts.push(q.pipeline_id);return r.fulfill({json:{run_tag:'mock-'+q.pipeline_id}});}
 if(r.request().method()==='POST')throw Error('Unexpected write');return r.continue();});
+await p.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Isolated fixture'}}));
 await p.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');
 for(let i=1;i<=2;i++){
 await p.getByRole('button',{name:/Add Pipeline/}).click();await p.getByRole('button',{name:/Selected Pipelines/}).click();const d=p.getByRole('dialog',{name:'Create a pipeline',exact:true});await d.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();await d.getByRole('button',{name:'Next',exact:true}).click();

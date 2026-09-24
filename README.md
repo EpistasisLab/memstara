@@ -289,23 +289,75 @@ for the complete interface. `--skill` filters the knowledge corpus;
 
 ## Development
 
-```bash
-ruff check src/
-python -m pytest -q -ra
-python scripts/check_citations.py
-python scripts/check_markdown.py
+Use Python 3.12 or 3.13 and a separate test environment so synchronizing test
+dependencies does not replace the application runtime:
 
-# Frontend (Node.js 22), in a separate terminal from the repository root:
-cd viewer/web
-npm ci
-npm run build
+```bash
+export UV_PROJECT_ENVIRONMENT=.venv-test
+uv sync --frozen --extra dev
+uv run --frozen ruff check src/
+uv run --frozen lint-imports
+uv run --frozen pytest -q --cov --cov-report=term --cov-report=xml
+uv run --frozen python scripts/check_public_tree.py
+uv run --frozen python scripts/check_markdown.py
 ```
 
-Backend CI runs lint, pytest, citation checks, and tracked Markdown link checks. Runtime-dependent tests can
-skip when Motoro is absent; read the skip reasons. These checks do not certify
-live database, MCP, or paid model execution. Citation checks verify that a cited
-location exists, not that it supports the claim. Read the current command output
-rather than relying on a test count embedded in this document.
+CI runs the following checks on every push and pull request:
+
+| Check | Scope |
+|---|---|
+| Python unit and component tests | Configuration, model evaluation, pipeline logic, API helpers and regression contracts |
+| MCP protocol test | Real subprocess startup, handshake and synthetic data tool calls |
+| PostgreSQL integration | Schema reapplication, concurrent claims, run locks and measured-result persistence |
+| Python import boundaries | Dependency direction between foundational, matching and orchestration modules |
+| Python type and format diagnostics | Mypy and Ruff formatting; advisory while existing findings are addressed |
+| Frontend unit tests | Evaluation settings, metrics, loop labels, routing, start behavior and geometry |
+| Frontend type, lint and build | TypeScript project references, Oxlint and production assets |
+| Browser regression tests | Isolated fixtures for pipeline configuration, combinations, navigation and responsive layouts |
+| Distribution checks | Source/wheel builds, packaged prompts and installed version metadata |
+| Publication checks | Tracked-file hygiene and Markdown links |
+
+Coverage and JUnit reports, browser reports and distributions are saved as CI
+artifacts. Coverage is measured without excluding untested application modules;
+there is no claim of full coverage or validated clinical performance.
+
+For the database tests, start the dedicated disposable service and supply its
+URL explicitly. Tests refuse a database whose name does not end in `_test` and
+create a fresh schema for each test.
+
+```bash
+docker compose -f compose.test.yml up -d --wait
+MEMSTARA_TEST_DATABASE_URL=postgresql://memstara_test:memstara_test@127.0.0.1:55473/memstara_test \
+  uv run --frozen pytest tests/integration --run-integration -q
+docker compose -f compose.test.yml down
+```
+
+Frontend checks require Node.js 22.18 or newer:
+
+```bash
+cd viewer/web
+npm ci
+npm run typecheck
+npm run lint
+npm test
+npm run build
+npx playwright install chromium
+npm run test:browser
+```
+
+The browser suite starts its own static server on port 4175 with no backend
+proxy. Fixtures supply API responses; these tests do not start real research
+pipelines or make paid model calls. The deployment diagnostics
+`app-ux-audit.browser.mjs` and `telemetry-live.browser.mjs` require an existing
+running application and are excluded from automated fixture tests. Live provider,
+external dataset and embedding-model validation remain deployment checks.
+
+Build and verify distributions from a clean checkout:
+
+```bash
+uv run --frozen python -m build
+uv run --frozen python scripts/check_distribution.py
+```
 
 Run Python entry points as `python -m memstara.<module>`. Load configuration
 before runtime use, following the existing entry points. Agent prompts live in

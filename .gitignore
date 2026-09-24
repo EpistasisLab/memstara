@@ -36,3 +36,15 @@ papers/
 /scripts/local/
 /src/memstara/_version.py
 /dist/
+
+# Test and analysis artifacts.
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.import_linter_cache/
+/viewer/web/playwright-report/
+/viewer/web/test-results/
+
+/test-results/
+/.venv-test/

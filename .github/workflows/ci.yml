@@ -3,33 +3,156 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  check:
+  backend:
+    name: Python tests (${{ matrix.python }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.12', '3.13']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-
-      - name: Install
-        run: pip install -e ".[dev]" build
-
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv lock --check
+      - run: uv sync --frozen --extra dev
       - name: Lint
-        run: ruff check src/
+        run: uv run --frozen ruff check src/ tests/integration tests/test_mcp_protocol.py tests/test_saved_skill_compatibility.py scripts/check_distribution.py
+      - name: Import boundaries
+        run: uv run --frozen lint-imports
+      - name: Unit, component and MCP protocol tests
+        run: uv run --frozen pytest -q --cov --cov-report=term --cov-report=xml --junitxml=test-results/python.xml
+      - name: Public tree and Markdown
+        run: |
+          uv run --frozen python scripts/check_public_tree.py
+          uv run --frozen python scripts/check_markdown.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: python-${{ matrix.python }}-reports
+          path: |
+            coverage.xml
+            test-results/
 
-      - name: Test
-        run: pytest -q -ra
+  analysis:
+    name: Python type and formatting diagnostics
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --extra dev
+      - name: Mypy (advisory)
+        continue-on-error: true
+        run: uv run --frozen mypy src/memstara
+      - name: Formatting (advisory)
+        continue-on-error: true
+        run: uv run --frozen ruff format --check src/
 
-      - name: Public tree
-        run: python scripts/check_public_tree.py
+  integration:
+    name: PostgreSQL integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: memstara_test
+          POSTGRES_PASSWORD: memstara_test
+          POSTGRES_DB: memstara_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U memstara_test -d memstara_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MEMSTARA_TEST_DATABASE_URL: postgresql://memstara_test:memstara_test@127.0.0.1:5432/memstara_test
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --extra dev
+      - run: uv run --frozen pytest tests/integration --run-integration -q --junitxml=test-results/postgres.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: postgres-reports
+          path: test-results/
 
-      - name: Markdown links
-        run: python scripts/check_markdown.py
+  frontend:
+    name: Frontend unit, type, lint and browser tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: viewer/web
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+          cache: npm
+          cache-dependency-path: viewer/web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-reports
+          path: |
+            viewer/web/playwright-report/
+            viewer/web/test-results/
 
-      - name: Build distributions
-        run: python -m build
+  package:
+    name: Distribution build and installed version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --extra dev
+      - run: uv run --frozen python -m build
+      - run: uv run --frozen python scripts/check_distribution.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/

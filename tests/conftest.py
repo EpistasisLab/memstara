@@ -66,3 +66,17 @@ def fake_encoder():
     """A fresh encoder per test — the token index is state, and sharing it hides
     a fixture that only ranks correctly because an earlier test seeded a token."""
     return bag_of_words_encoder()
+
+
+def pytest_addoption(parser):
+    parser.addoption("--run-integration", action="store_true", help="Run tests against an explicit test database")
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--run-integration"):
+        return
+    selected, deselected = [], []
+    for item in items:
+        (deselected if item.get_closest_marker("integration") else selected).append(item)
+    items[:] = selected
+    config.hook.pytest_deselected(items=deselected)

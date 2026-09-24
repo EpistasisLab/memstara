@@ -43,7 +43,13 @@ dev = [
     # The test suite. Listed as a dependency, not an aside, because the matcher's claim
     # to be a faithful port of afc-forge rests on 31 upstream tests running unmodified —
     # an environment that cannot run them does not preserve that evidence.
-    "pytest",
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6",
+    "mypy>=1.15",
+    "import-linter>=2",
+    "httpx",
+    "build",
     # Offline viewer API tests import FastAPI; match viewer/requirements.txt.
     "fastapi==0.115.6",
     "debugpy",
@@ -68,6 +74,9 @@ packages = ["src/memstara"]
 # --------------------------------------------------------------------------- #
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--strict-markers --strict-config"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 # The line this whole file exists for. Until now the tests found `tools_blackboard`,
 # `tools_data` and `matcher_impl` only because pytest happened to be started from the
@@ -79,7 +88,9 @@ testpaths = ["tests"]
 # `src/memstara` on the path properly, so pytest needs no help.
 
 markers = [
-    "unit: pure logic over a stubbed encoder — no model, no catalog, no filesystem",
+    "unit: deterministic logic without external services",
+    "integration: real PostgreSQL tests; requires --run-integration and a test database",
+    "protocol: real MCP subprocess transport with synthetic data",
 ]
 
 [tool.ruff]
@@ -128,3 +139,34 @@ select = ["E", "F", "UP", "B"]
 "src/memstara/matcher/matcher.py" = ["F401"]
 "src/memstara/matcher/embedder.py" = ["F401"]
 "src/memstara/matcher/vocab.py" = ["F401"]
+
+[tool.coverage.run]
+branch = true
+source = ["memstara"]
+omit = ["*/_version.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+exclude = ["_version.py"]
+
+[tool.importlinter]
+root_packages = ["memstara"]
+
+[[tool.importlinter.contracts]]
+name = "Matcher does not depend on orchestration"
+type = "forbidden"
+source_modules = ["memstara.matcher"]
+forbidden_modules = ["memstara.control", "memstara.pipeline"]
+
+[[tool.importlinter.contracts]]
+name = "Foundational paths and labels do not depend on application layers"
+type = "forbidden"
+source_modules = ["memstara.paths", "memstara.agent_labels"]
+forbidden_modules = ["memstara.control", "memstara.pipeline", "memstara.mcp_servers", "memstara.matcher"]
