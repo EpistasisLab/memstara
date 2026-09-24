@@ -2,8 +2,6 @@
 
 Prepare a concise evidence-based update for a team meeting or demonstration.
 
-<!-- Purpose-specific project report skill. Retains the existing report schema and measured-evidence contract. -->
-
 ## Focus
 
 Make the executive recommendation readable aloud in about one minute: the

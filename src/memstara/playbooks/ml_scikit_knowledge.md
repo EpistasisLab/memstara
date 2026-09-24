@@ -1,5 +1,3 @@
-<!-- Adapted from shared/skills/ml-reference.md. -->
-
 Apply this operational knowledge to the ML stage.
 
 - Define the target first, then split the data. Fit preprocessing inside a pipeline and inside each training fold; never impute labels or preprocess the complete dataset before validation.

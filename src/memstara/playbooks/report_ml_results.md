@@ -1,5 +1,3 @@
-<!-- Adapted from shared/skills/ml-results.md. -->
-
 Use this reporting standard when communicating ML evaluation results.
 
 - Identify the task, evaluation source, sample size, outcome prevalence, comparator, threshold, and uncertainty when available. Never invent missing metrics, clinical impact, confidence intervals, or thresholds.

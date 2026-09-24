@@ -2,8 +2,6 @@
 
 Explore knowledge-grounded substance-use phenotypes using the available predictors.
 
-<!-- Demo focus requested in reviewer feedback item 19. Research guidance, not a validated performance claim. -->
-
 ## Domain focus
 
 Focus on substance use disorders and related exposures, treatment context and

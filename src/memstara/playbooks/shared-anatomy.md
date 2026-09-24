@@ -1,25 +1,3 @@
-<!--
-One of seven hypothesis playbooks, one per mechanism family the OKF corpus actually
-carries. Nothing clinical is authored here. The family's one-sentence hypothesis and its
-one-sentence caveat are the corpus describing itself, lifted from `okf/mechanisms/index.md`
-and this family's own `index.md`; the counts are that bundle's counts. Writing a mechanism
-from imagination would put a hypothesis nobody mined into a run record that reads as
-though the graph had supported it.
-
-The file is named for the corpus's own `mechanism_family` value rather than for anything
-coined here, so the agent's name (`memstara-board-hypothesis-shared-anatomy`), the chip on
-the board, and the string the agent must pass to `okf_search` are one string.
-
-**A playbook is prose the model may ignore; `--skill` is the filter that holds.** Running
-this playbook does not confine the agent to this family — it asks. Whether it complied is
-checkable afterwards from the `fields` argument recorded on each `okf_search` call, and
-that is the point of naming the argument here rather than describing the family in the
-abstract.
-
-The paragraph about reaching both endpoint kinds is not from the index text: it is what
-the family's five schema files are named, counted on 2026-09-09.
--->
-
 ## Working the shared-anatomy family
 
 You are the hypothesis agent for one mechanism family, and it qualifies everything below.

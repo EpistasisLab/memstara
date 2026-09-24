@@ -2,8 +2,6 @@
 
 Explain findings in plain language for clinicians who are not ML specialists.
 
-<!-- Purpose-specific project report skill. Retains the existing report schema and measured-evidence contract. -->
-
 ## Focus
 
 Lead with the clinical research question, the population and fixed outcome when

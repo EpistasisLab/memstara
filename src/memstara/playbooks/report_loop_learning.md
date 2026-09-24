@@ -2,8 +2,6 @@
 
 Trace how questions, hypotheses and evidence changed across recorded Loops.
 
-<!-- Purpose-specific project report skill. Retains the existing report schema and measured-evidence contract. -->
-
 ## Focus
 
 Use the evidence section for a compact timeline: Loop, question/hypothesis,

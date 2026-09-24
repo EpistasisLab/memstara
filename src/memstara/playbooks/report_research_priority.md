@@ -2,8 +2,6 @@
 
 Recommend which hypotheses deserve the next experiment and explain why.
 
-<!-- Purpose-specific project report skill. Retains the existing report schema and measured-evidence contract. -->
-
 ## Focus
 
 Focus the executive recommendation on at most two feasible next experiments.

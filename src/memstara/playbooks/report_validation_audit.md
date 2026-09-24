@@ -2,8 +2,6 @@
 
 Examine whether each conclusion is supported and what verification remains.
 
-<!-- Purpose-specific project report skill. Retains the existing report schema and measured-evidence contract. -->
-
 ## Focus
 
 Focus on traceability from question to fixed target, selected features, actual

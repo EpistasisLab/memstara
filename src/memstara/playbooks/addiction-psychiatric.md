@@ -2,8 +2,6 @@
 
 Explore psychiatric phenotypes and their documented links to the fixed prediction target.
 
-<!-- Demo focus requested in reviewer feedback item 19. Research guidance, not a validated performance claim. -->
-
 ## Domain focus
 
 Focus on psychiatric disorders, symptoms and comorbidities supported by the selected

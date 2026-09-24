@@ -2,8 +2,6 @@
 
 Explore social-context hypotheses while making missing measurements and proxies explicit.
 
-<!-- Demo focus requested in reviewer feedback item 19. Research guidance, not a validated performance claim. -->
-
 ## Domain focus
 
 Focus on social determinants of health supported by the selected sources, such as

@@ -13,13 +13,9 @@ in-process library for agent execution, model calls, MCP integration, and runtim
 persistence. Memstara adds the research pipeline, its own database, a host control
 service, and a browser workspace. Motoro and Memstara own separate databases.
 
-The GitHub repository is `HyunjunA/memstara`. The local checkout remains
-`memstara`, with `motoro` alongside it; the examples below preserve
-that arrangement.
-
 ## Releases and development
 
-This checkout is a development workspace. The package declares version `0.1.0`
+Memstara is under active development. The package declares version `0.1.0`
 in [pyproject.toml](pyproject.toml); that number alone does not identify a tested
 application release. Record both repositories' commits when reproducing a run:
 
@@ -119,7 +115,7 @@ own PostgreSQL service.
 
 ```bash
 git clone https://github.com/EpistasisLab/motoro.git motoro
-git clone https://github.com/HyunjunA/memstara.git memstara
+git clone https://github.com/HyunjunA/memstara.git
 cd memstara
 cp .env.example .env
 conda env create -f environment.yml
@@ -140,18 +136,6 @@ its services and apply its migrations. Then, from the Memstara checkout:
 docker compose up -d
 docker compose ps
 ```
-
-On the existing shared host, inspect the validated containers instead:
-
-```bash
-python -m memstara.infra
-# Start validated existing containers when necessary:
-python -m memstara.infra --start-existing
-```
-
-That host uses the legacy `agentic_core_postgres_data` volume and an older
-Compose installation. Do not replace its infrastructure with a fresh upstream
-Motoro stack. Use the inspection command above to check the existing setup.
 
 **3. Configure the connection and research inputs.** Set the deployed provider
 and model in `../motoro/.env`. The board driver resolves the deployment-wide
@@ -239,8 +223,7 @@ clinical or biological meaning and next steps requiring validation.
 separates planned combinations from calls that ran. Missing or blocked stages
 must not be interpreted as completed work.
 
-An outcome column, including `HIV_DETECTABLE` for the local HIV cohort, is a
-label and never a predictor. Keep the target consistent between dataset,
+The configured outcome column is a label and never a predictor. Keep the target consistent between dataset,
 matcher, and evaluation. Scores and feature importance describe the configured
 experiment; they are not evidence of a causal effect.
 
@@ -249,7 +232,6 @@ experiment; they are not evidence of a causal effect.
 Run these from the Memstara checkout with the `memstara` environment active:
 
 ```bash
-python -m memstara.infra                           # inspect existing services
 python -m memstara.trace.board --last 3 --summary   # inspect recent runs
 docker compose -f viewer/docker-compose.yml logs -f api
 docker compose -f viewer/docker-compose.yml up -d --build web
@@ -275,7 +257,7 @@ schema upgrades. A viewer rebuild does not apply Motoro database migrations.
 
 See [.env.example](.env.example), [config.py](src/memstara/config.py), and
 [request.py](src/memstara/control/request.py) for the configuration contract.
-The local ports are 5463 (Memstara PostgreSQL), 5453 (Motoro PostgreSQL),
+The example service ports are 5463 (Memstara PostgreSQL), 5453 (Motoro PostgreSQL),
 6381 (Redis), and 8070–8072 (workspace, observation API, control).
 
 The board CLI supports `--trials` (default 3), `--waves`, `--continuous`,
@@ -309,7 +291,7 @@ Run Python entry points as `python -m memstara.<module>`. Load configuration
 before runtime use, following the existing entry points. Agent prompts live in
 `src/memstara/prompts/`; prompt changes are experimental conditions and should
 be reviewed separately from code changes. Track development through
-[GitHub issues](https://github.com/HyunjunA/memstara/issues) and the
+[GitHub issues](https://github.com/HyunjunA/memstara/issues).
 
 ## Resetting your dev environment
 
@@ -321,5 +303,5 @@ docker compose -f viewer/docker-compose.yml down
 
 Memstara and Motoro use separate databases and volumes. Removing a database
 volume deletes its stored work; resetting Motoro can also affect other products
-using that runtime. Use the existing-host procedure and database backups for a
-reset, rather than treating a shared installation as a disposable example.
+using that runtime. Back up both databases and verify which volumes belong to
+the deployment before resetting them.
