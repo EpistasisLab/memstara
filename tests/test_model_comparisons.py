@@ -37,6 +37,8 @@ def test_paired_real_models_same_parameters_and_reserved_rows(experiment):
     variants = result['comparison']['variants']
     assert len(variants) == 4 and all(v['status'] == 'completed' for v in variants)
     assert result['features'] == ['age', 'signal', 'noise']
+    assert result['comparison']['timing_status'] == 'unverified'
+    assert 'not been verified' in result['comparison']['interpretation_limit']
     base, full, removed_signal, _ = variants
     assert full['auc'] > base['auc'] and removed_signal['auc'] < full['auc']
     assert full['delta_from_baseline'] == pytest.approx(full['auc'] - base['auc'])

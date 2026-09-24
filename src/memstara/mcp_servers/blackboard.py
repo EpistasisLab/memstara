@@ -125,6 +125,13 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
     # commas included, is left exactly as given.
     cols = [str(c).strip() for c in columns if str(c).strip()]
     ids = [str(c).strip() for c in (okf_concept_ids or []) if str(c).strip()]
+    from memstara.pipeline.critic import review
+    try:
+        critic = review(cols, snapshot, question_id, trial)
+    except (OSError, ValueError):
+        return json.dumps({"error": "Critic audit unavailable; no training task created"})
+    if critic and critic['verdict'] == 'rejected':
+        return json.dumps({"error": "Pre-training critic rejected this candidate", "critic": critic})
     from memstara.pipeline.question_contract import predictor_column_error
     column_error = predictor_column_error(cols, snapshot)
     if column_error:
@@ -159,7 +166,10 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
                             raise ValueError('Task iteration does not match the assigned question')
                         if perspective != question["text"] or hypothesis != hypothesis_text(contract):
                             raise ValueError("Question and hypothesis must match the fixed-target contract exactly")
-                        if not cols or not ids:
+                        from memstara.pipeline.ablation import enabled as ablation_enabled
+                        if ablation_enabled(snapshot) and ids:
+                            raise ValueError("OKF ablation tasks must not claim knowledge source IDs")
+                        if not cols or (not ids and not ablation_enabled(snapshot)):
                             raise ValueError("Grounded feature columns and knowledge concept IDs are required")
                     except ValueError as exc:
                         return json.dumps({"error": str(exc)})
@@ -195,7 +205,8 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
                                 "skills": task_books(snapshot, trial),
                                 "hypothesis_policy": {**snapshot.get("hypothesis_policy", {}),
                                     **({"kind": contract["kind"]} if contract and "kind" in contract else {})},
-                                "question_contract": contract, "feature_mapping": feature_mapping} if snapshot else {}),
+                                "question_contract": contract, "feature_mapping": feature_mapping,
+                                "critic": critic} if snapshot else {}),
                 )
         finally:
             await conn.close()
@@ -1167,7 +1178,8 @@ async def propose_questions(questions: list[QuestionProposal] | str, origin_run:
                     if not text:
                         rejected.append({"text": text, "why": "empty text"})
                         continue
-                    if not tags:
+                    from memstara.pipeline.ablation import enabled as ablation_enabled
+                    if not tags and not ablation_enabled(plan):
                         rejected.append({
                             "text": text,
                             "why": "no okf_tags — a question the corpus cannot answer forces "

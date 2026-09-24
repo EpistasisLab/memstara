@@ -94,7 +94,8 @@ def comparison_feedback(comparison):
     """Compact aggregates only: do not send repeated model parameters in feedback."""
     if not comparison:
         return None
-    return {**{k: comparison.get(k) for k in ('status', 'baseline_configured', 'baseline_columns', 'scope')},
+    return {**{k: comparison.get(k) for k in ('status', 'baseline_configured', 'baseline_columns',
+                                              'scope', 'timing_status', 'interpretation_limit')},
             'variants': [{k: v[k] for k in ('id', 'label', 'status', 'features', 'removed_features',
                                            'auc', 'delta_from_full', 'delta_from_baseline', 'reason') if k in v}
                          for v in comparison.get('variants', [])]}

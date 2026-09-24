@@ -196,7 +196,7 @@ _PROVIDER_KEYS = {
 }
 
 
-async def check_environment(provider: str = "", y_column: str = "") -> list[str]:
+async def check_environment(provider: str = "", y_column: str = "", *, use_okf: bool = True) -> list[str]:
     """Everything missing, reported at once, before anything starts.
 
     What is missing is collected **all together** rather than reported one at a time.
@@ -225,6 +225,8 @@ async def check_environment(provider: str = "", y_column: str = "") -> list[str]
         ("MEMSTARA_OUTPUT_DIR", "where sub-datasets go"),
         ("MOTORO_DATABASE_URL", "core's own database — agents and run history"),
     ):
+        if name == "AGENTIC_OKF_BUNDLE_DIR" and not use_okf:
+            continue
         value = os.environ.get(name, "").strip()   # empty string if unset
         if not value:
             problems.append(f"{name} is not set — {hint}")
@@ -320,6 +322,17 @@ async def setup_tools() -> MCPServerRegistry:
     # running this file — so the five machines come up in the same environment as
     # whatever started them.
     try:
+        from memstara.evaluation import active_plan
+        from memstara.pipeline.ablation import enabled
+        if enabled(active_plan()):
+            # Do not hydrate persisted servers: that would reconnect OKF too.
+            for name, command in launch_table():
+                if name == 'okf':
+                    continue
+                entry = await registry.register(name=name, command=command)
+                if entry.error:
+                    raise RuntimeError(f'Ablation MCP startup failed: {name}')
+            return registry
         for name, command in launch_table():
             existing = await get_server_by_name(name)   # already registered in core's DB?
             if existing is None:
@@ -404,6 +417,12 @@ async def _call_agent_uncontrolled(
     """
     from memstara.pipeline.scientific_policy import check_primary_tools
     require_ownership()
+    from memstara.evaluation import active_plan
+    from memstara.pipeline.ablation import enabled, filter_tools, INSTRUCTIONS
+    plan = active_plan()
+    tools = filter_tools(tools, plan)
+    if enabled(plan):
+        prompt += '\n' + INSTRUCTIONS
     check_primary_tools(stage, tools)
 
     # Overridden only if a temperature was given. None uses the agent's own default.
@@ -2176,6 +2195,8 @@ async def main() -> int:
     ap.add_argument("--pipeline-id", default="")
     ap.add_argument("--pipeline-name", default="")
     ap.add_argument("--evaluation", default="{}")
+    ap.add_argument("--ablate-okf", action="store_true",
+                    help="Disable OKF retrieval and mark the execution as an ablation")
     ap.add_argument("--baseline-columns", default="[]", help="JSON array of fixed baseline predictor columns")
     ap.add_argument("--question", default="")
     ap.add_argument("--trials", type=int, default=3, help="how many hypotheses to seed per wave")
@@ -2368,6 +2389,7 @@ async def main() -> int:
     problems = await check_environment(
         provider=args.provider,
         y_column="" if args.report_only else args.y_column,
+        use_okf=not args.ablate_okf,
     )
     if problems:
         print("Environment is not ready:", file=sys.stderr)
@@ -2379,6 +2401,8 @@ async def main() -> int:
     # If no run name is given, one is made from the clock. This name is what ties the
     # sheets on the board together.
     args.run_tag = args.run_tag or started.strftime("board_%Y%m%dT%H%M%S")
+    if args.ablate_okf and not args.run_tag.endswith("_ablate_okf"):
+        args.run_tag += "_ablate_okf"
     run_dir = Path(args.run_dir) if args.run_dir else new_run_dir(
         f"board_{args.trials}trials", started.strftime("%Y-%m-%dT%H%M%S")
     )

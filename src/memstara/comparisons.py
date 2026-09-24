@@ -128,6 +128,11 @@ def score_comparisons(path, target, plan, snapshot):
         'variants': variants,
         'parameters_policy': 'Full-model training-CV selection, then frozen across variants per replicate',
         'scope': 'Adaptive exploratory comparison; not independent validation or evidence of causality',
+        'timing_status': snapshot['comparison_policy'].get('timing_status', 'unverified'),
+        'interpretation_limit': snapshot['comparison_policy'].get('interpretation_limit',
+            'Predictor timing has not been verified. Not validated prospective prediction.'),
+        'baseline_source': snapshot['comparison_policy'].get('baseline_source', 'historical_configuration'),
+        'study_policy_sha256': snapshot['comparison_policy'].get('study_policy_sha256'),
         'group_policy': 'Remove all mapped non-baseline columns for each concept, including shared columns; '
                         'effects are not additive',
         'validation_reserve': result['evaluation'].get('validation_reserve'),

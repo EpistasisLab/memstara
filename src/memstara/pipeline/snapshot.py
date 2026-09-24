@@ -35,8 +35,13 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         frame = validate_clean_dataset(dataset, args.y_column, allow_missing=evaluation['engine'] == 'xgboost')
         partition = discovery_partition(frame[args.y_column], evaluation['seed'])
         evaluation_splits(frame[args.y_column], evaluation, partition=partition)
-    from memstara.comparisons import validate_baseline
-    baseline = validate_baseline(json.loads(getattr(args, "baseline_columns", "[]")), args.y_column, dataset)
+    from memstara.study_comparison import resolve_comparison
+    comparison_policy = resolve_comparison(json.loads(getattr(args, "baseline_columns", "[]")), args.y_column, dataset)
+    ablate_okf = bool(getattr(args, "ablate_okf", False))
+    if ablate_okf:
+        from memstara.pipeline.ablation import INSTRUCTIONS
+        for prompt in resolved.values():
+            prompt['system_prompt'] = INSTRUCTIONS + '\n\n' + prompt['system_prompt']
     digest = hashlib.sha256()
     with dataset.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -45,6 +50,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     from memstara.env import configured_api_base
     state = {
         "schema_version": 1,
+        "critic_policy": {"version": "deterministic_feasibility_v1", "extra_llm_calls": 0},
+        "knowledge_policy": {"mode": "no_okf" if ablate_okf else "okf", "retrieval_enabled": not ablate_okf},
         "agent_labels": dict(AGENT_LABELS),
         "combination_plan": combination_plan,
         "recovery_policy": {"version": "artifact_checked_v1", "question_attempts": 2, "hypothesis_attempts": 2},
@@ -73,14 +80,14 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         "books": books,
         "prompts": resolved,
         "evaluation": evaluation,
-        "comparison_policy": {"version": "paired_groups_v1", "baseline_columns": baseline},
+        "comparison_policy": comparison_policy,
         "input_contract": "clean single dataset; column selection only; fixed binary target",
         "missing_value_policy": "native_xgboost" if evaluation["engine"] == "xgboost" else "reject",
         "explainability_review": "Review required; provisional specification",
         "dataset_sha256": digest.hexdigest(),
         **({"feature_context": freeze_feature_context(dataset, args.y_column)}
            if not getattr(args, "report_only", False) else {}),
-        "knowledge_path": os.environ.get("AGENTIC_OKF_BUNDLE_DIR"),
+        "knowledge_path": None if ablate_okf else os.environ.get("AGENTIC_OKF_BUNDLE_DIR"),
         "trials": args.trials,
         "waves": args.waves,
         "continuous": getattr(args, "continuous", False),
@@ -92,7 +99,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
             for p in sorted(knowledge.rglob("*.md"))
             if p.is_file()
         }
-        if knowledge.is_dir()
+        if knowledge.is_dir() and not ablate_okf
         else {}
     )
     state["config_hash"] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()

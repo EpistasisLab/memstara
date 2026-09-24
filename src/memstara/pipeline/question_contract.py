@@ -94,8 +94,14 @@ def make_contract(item, plan):
         rationale = ' '.join(rationale.split())
     else:
         rationale = knowledge_text(item.get("rationale"), "rationale")
+    from memstara.pipeline.ablation import enabled as ablation_enabled
+    ablated = ablation_enabled(plan)
     sources = item.get("source_ids")
-    if plan.get("recovery_policy") or sources is not None:
+    if ablated:
+        if sources not in (None, []) or item.get('okf_tags') not in (None, []):
+            raise ValueError('OKF ablation must not claim source documents or corpus tags')
+        sources = []
+    elif plan.get("recovery_policy") or sources is not None:
         if (not isinstance(sources, list) or not sources
                 or any(not isinstance(s, str) or not s.strip() for s in sources)):
             raise ValueError("source_ids must list the exact document IDs returned by okf_read")
@@ -106,6 +112,7 @@ def make_contract(item, plan):
             raise ValueError("Source document is not in the frozen knowledge bundle")
     contract = {"version": VERSION, "target": target, "predictor_concepts": concepts,
                 "rationale": rationale, **lineage,
+                **({"evidence_mode": "no_okf"} if ablated else {}),
                 **({"source_ids": sources} if sources is not None else {})}
     if item.get("text") not in (None, "", question_text(contract)):
         raise ValueError("Omit free-text questions; the server binds the predictor concepts to the fixed target")
@@ -157,7 +164,8 @@ def validate_mapping(mapping, contract, columns, source_ids):
             raise ValueError("Each feature_mapping entry must be an object")
         if row.get("concept") not in concepts or row.get("column") not in columns:
             raise ValueError("Feature mapping must reference the assigned concepts and selected columns exactly")
-        if row.get("source_id") not in source_ids:
+        if (row.get("source_id") != "" if contract.get("evidence_mode") == "no_okf"
+                else row.get("source_id") not in source_ids):
             raise ValueError("Feature mapping must cite a selected knowledge source ID")
         rationale = row.get("rationale")
         if not isinstance(rationale, str) or not rationale.strip() or len(rationale) > 2000:
