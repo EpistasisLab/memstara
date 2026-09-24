@@ -101,3 +101,20 @@ def test_mcp_persists_metrics_and_explanation_failure(sparse_dataset, monkeypatc
     assert np.isfinite(result['auc'])
     assert result['explanation']['status'] == 'failed'
     assert 'private diagnostic' not in json.dumps(result)
+
+
+def test_permutation_variability_and_final_split_scope_are_serializable(sparse_dataset):
+    result = evaluation.score(sparse_dataset, 'target', {'engine': 'xgboost', 'replicates': 2})
+    explanation = result['explanation']
+    assert explanation['evaluated_replicate'] == explanation['total_replicates'] == 2
+    final_split = result['evaluation']['replicates'][-1]
+    assert explanation['evaluated_seed'] == final_split['seed']
+    assert explanation['evaluation_rows'] == final_split['n_test']
+    permutations = explanation['permutation']
+    assert permutations['n_repeats'] == 3
+    assert set(permutations['repeat_values']) == set(result['feature_importance'])
+    for feature, values in permutations['repeat_values'].items():
+        assert len(values) == 3
+        assert np.mean(values) == pytest.approx(result['feature_importance'][feature])
+        assert np.std(values) == pytest.approx(permutations['standard_deviation'][feature])
+    json.dumps(explanation, allow_nan=False)

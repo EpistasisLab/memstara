@@ -331,6 +331,16 @@ def _explain(best, X, y, train, test, numeric, plan, runs):
                    'method': 'holdout_permutation_auc', 'partial_dependence': curves,
                    'operating_point': runs[-1]['operating_point'],
                    'scope': 'Explanation of the final replicate; AUC summary spans all replicates.',
+                   'evaluated_replicate': len(runs), 'total_replicates': len(runs),
+                   'evaluated_seed': runs[-1]['seed'], 'evaluation_rows': len(test),
+                   'permutation': {
+                       'n_repeats': int(imp.importances.shape[1]),
+                       'random_state': plan['seed'], 'scoring': 'roc_auc',
+                       'standard_deviation': dict(zip(map(str, X.columns), imp.importances_std.tolist(), strict=True)),
+                       'repeat_values': {str(c): values.tolist() for c, values in
+                                         zip(X.columns, imp.importances, strict=True)},
+                       'scope': 'Repeated shuffles of the same held-out data, not independent train/test splits.',
+                   },
                    'clinical_threshold': None,
                    'review_status': 'Review required — provisional implementation, not independently reviewed',
                    'actionability': 'Exploratory model associations only. Clinical thresholds and interventions '

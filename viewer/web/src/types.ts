@@ -163,6 +163,7 @@ export interface QuestionContract {
 }
 
 export interface ModelComparison {
+  timing_status?: string; interpretation_limit?: string; baseline_source?: string; study_policy_sha256?: string;
   status: string; baseline_configured: boolean; baseline_columns: string[]; scope: string; parameters_policy: string;
   group_policy: string;
   variants: {id:string; label:string; features:string[]; removed_features:string[]; status:string; auc?:number;
@@ -186,7 +187,10 @@ export interface Result {
       replicates?: {seed: number; auc: number; split_id: string; cv_folds?: number}[];
       reproducibility?: {status: string; method?: string; scope?: string; bundle_path?: string;
         replicates?: {replicate: number; status: string}[] } };
-    explanation?: { method?: string; scope?: string; actionability?: string; review_status?: string;
+    explanation?: { method?: string; scope?: string;
+      evaluated_replicate?: number; total_replicates?: number; evaluated_seed?: number; evaluation_rows?: number;
+      permutation?: {n_repeats: number; random_state?: number; scoring?: string; scope?: string;
+        standard_deviation: Record<string, number>; repeat_values?: Record<string, number[]>}; actionability?: string; review_status?: string;
       operating_point?: { probability_cutoff: number; sensitivity: number; specificity: number; precision: number | null;
         true_positive?: number; true_negative?: number; precision_reason?: string | null;
         false_positive: number; false_negative: number; selection: string; status: string };

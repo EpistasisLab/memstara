@@ -27,13 +27,14 @@ function Evidence({ result }: { result: Result }) {
     <h2>{result.hypothesis || result.perspective || "Hypothesis text not recorded"}</h2>
     <p className="clinical-context">{labelLoop(result)} · Outcome studied: <strong>{result.y_column || 'Not recorded'}</strong></p>
     <section className="clinical-meaning">
-      <div className="clinical-section-title"><Stethoscope size={21}/><h3>What could this mean?</h3></div>
-      <p className="clinical-caption">AI-written interpretation of this analysis. It needs review by the research team.</p>
+      <div className="clinical-section-title"><Stethoscope size={21}/><h3>What did the analysis observe?</h3></div>
+      <p className="clinical-caption">Interpretation Agent summary of recorded observations and limitations. AI-written; review it against the measured evidence.</p>
       {result.interpretation ? <Suspense fallback={<p>Loading interpretation…</p>}><ReportBody origin="llm" text={result.interpretation} /></Suspense>
         : <p className="clinical-empty">An interpretation has not arrived yet. We will show it here when it is recorded.</p>}
     </section>
     <section className="clinical-next-step">
-      <div className="clinical-section-title"><ClipboardCheck size={21}/><h3>What should I do with this?</h3></div>
+      <div className="clinical-section-title"><ClipboardCheck size={21}/><h3>Before using this finding</h3></div>
+      <p className="clinical-caption">General review checklist — not a recommendation generated from this result.</p>
       <p>Use this finding to guide a discussion with your research team. It does not yet establish a cause, a treatment recommendation, or a clinical cutoff.</p>
       <ol><li>Check whether the study population and measurements match your research question.</li><li>Review missing information and alternative explanations.</li><li>Agree on independent validation before considering a change in care.</li></ol>
       {!!result.columns_missing?.length && <p className="clinical-warning">Some requested measurements were unavailable: {result.columns_missing.join(', ')}.</p>}
