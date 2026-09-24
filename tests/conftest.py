@@ -1,11 +1,11 @@
 # SOURCE: MIXED. `bag_of_words_encoder` and `fake_encoder` are PORTED VERBATIM
-#   from shared/afc-forge/tests/conftest.py:220-272 — the ported tests are
+#   from afc-forge/tests/conftest.py:220-272 — the ported tests are
 #   only evidence if they run against upstream's encoder stub, not a rewritten
 #   one. Anything else in this file is sandbox-original.
 """Shared test fixtures.
 
 `bag_of_words_encoder` and `fake_encoder` are ported verbatim from
-`shared/afc-forge/tests/conftest.py:220-272`. The rest of that file builds a
+`afc-forge/tests/conftest.py:220-272`. The rest of that file builds a
 mock cohort out of the descriptor system, which this sandbox does not carry.
 """
 
@@ -17,32 +17,6 @@ from collections.abc import Sequence
 import numpy as np
 import pytest
 
-# ---------------------------------------------------------------------------
-# This import is load-bearing and its position is the whole point.
-#
-# xgboost and torch each ship their own copy of the OpenMP runtime, and on macOS
-# whichever one loads first is the one both then use. torch's copy cannot run an
-# xgboost fit: the process aborts inside `XGBClassifier.fit` with
-#
-#     OMP: Error #179: Function pthread_mutex_init failed
-#     OMP: System error #22: Invalid argument
-#
-# which pytest reports as `Fatal Python error: Segmentation fault` and no test
-# name, because the process is gone before the report is written. xgboost's copy
-# runs both, so the fix is only to get there first.
-#
-# It could not be fixed inside `tests/test_ml_engines.py`. torch arrives during
-# `tests/test_matcher.py`, which exercises the offline-flag path that imports it
-# for its side effect (`src/memstara/matcher/embedder.py:154`) — and `matcher`
-# sorts before `ml_engines`. A conftest is imported before any test module, which
-# is what makes this the only position that works.
-#
-# **This is a test-suite problem and not a pipeline one.** Tool servers are child
-
-# pandas, scikit-learn and xgboost and nothing that reaches torch — verified by
-# importing it and finding `torch` absent from `sys.modules`. Only the test suite
-# puts the two in one process.
-# ---------------------------------------------------------------------------
 import xgboost  # noqa: F401  — imported first for its OpenMP runtime; see above
 
 # ---------------------------------------------------------------------------

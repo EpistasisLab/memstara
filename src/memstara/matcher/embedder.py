@@ -1,5 +1,5 @@
 # SOURCE: PORTED FROM afc-forge — NOT sandbox-authored code.
-#   upstream: shared/afc-forge/ade_forge/tools/impl/embedder.py (312 lines)
+#   upstream: afc-forge/ade_forge/tools/impl/embedder.py (312 lines)
 # --- PORT NOTE (memstara) -------------------------------------
 # A port of afc-forge `ade_forge/tools/impl/embedder.py`. Four differences:
 #   1. the EmbeddingConfig import points at memstara.matcher.config

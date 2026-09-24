@@ -75,38 +75,14 @@ export type RunRequest = {
   trials: number;
   waves: number;
   continuous?: boolean;
-  /** How many hypothesis workers seed the board at once, and **the only stage count on
-   *  this form**. The meeting of 2026-08-26 fixed one data, one ml and one interpreter
-   *  for V1, so those three are not offered here; they are still free on the command
-   *  line, where whatever number results is drawn as one character with the count on it.
-   *
-   *  The ceiling of 8 is not enforced here. `src/memstara/control/request.py` holds it,
-   *  and this form is deliberately not a validator — a 9 comes back as the service's own
-   *  sentence naming the field, which is one place deciding what a legal request is
-   *  instead of two. (It was 3 until `d34ebe7`, which is what the floor plan's fixed-step
-   *  fan could draw; the fan now divides its envelope, so the drawing no longer caps the
-   *  number.) */
+
   hypothesis_agents: number;
   interpret_agents: number;
   y_column: string;
   provider: string;
   model: string;
 } & {
-  /** One key per stage — `playbook_ml` — holding a playbook's stem or `""` for the
-   *  prompt as written. Written as a mapped type rather than five lines so that the
-   *  form can index it with a stage name it got from the service and still be checked.
-   *
-   *  Per-stage and not one `playbook` box because a run legitimately gives different
-   *  stages different standards, and because the service refuses a standard aimed at a
-   *  prompt that cannot receive one — a single box would have nowhere to say which
-   *  stage it was for.
-   *
-   *  **`playbook_hypothesis` may hold several stems separated by commas, one per agent**
-   *  (`A-32`): that stage provisions an agent per standard, so `hypothesis_agents: 3`
-   *  with three names is three agents that can disagree. The type stays `string` for all
-   *  five rather than becoming `string | string[]` for one, because the value is a
-   *  command-line argument and `--playbook-hypothesis` takes one. `StartRun.tsx` is the
-   *  only place that splits it. */
+
   [S in PlaybookStage as `playbook_${S extends "report" ? "explanation" : S}`]: string;
 };
 
@@ -136,10 +112,6 @@ export const DEFAULT_REQUEST: RunRequest = {
   y_column: "HIV_DETECTABLE",
   provider: "",
   model: "",
-  // Empty is "the prompt as written", which is what every run before 2026-09-08 was and
-  // what the form must still start as. A default playbook would make a standard the
-  // silent condition of every run on this screen, and the run record would show it as
-  // deliberate.
   playbook_hypothesis: "treatment-toxicity",
   playbook_data: "",
   playbook_ml: "ml_governance",
@@ -172,17 +144,7 @@ interface ControlState {
   /** A request is in flight; the button is disabled so one press is one run. */
   busy: boolean;
 
-  /** What the run form currently says.
-   *
-   *  **It was `useState` inside `StartRun` until 2026-09-09**, and moving it here is not
-   *  tidying: the two pipeline drawings now read it. Setting *Hypothesis* to 5 draws five
-   *  cards, the ones with no worker behind them yet in the `planned` state
-   *  (`lib/planned.ts`), and a panel cannot read another panel's local state. So the form
-   *  became shared the moment something other than the form depended on it.
-   *
-   *  Held as one object, edited through `setForm`, because `RunRequest` is the shape the
-   *  service takes and splitting it into twelve pieces of state would be twelve chances
-   *  for the request sent to differ from the form shown. */
+
   form: RunRequest;
   setForm: (update: (form: RunRequest) => RunRequest) => void;
 
@@ -224,21 +186,6 @@ async function readError(res: Response): Promise<string> {
   try {
     const body = await res.json();
     if (typeof body?.error === "string") {
-      // **A 404 from this service means the service is older than this page**, and it is
-      // the one diagnosis the service cannot make about itself: a build that predates a
-      // route has no code in it that knows the route was ever added, so the most it can
-      // say is that the path is not one of the ones it has.
-      //
-      // The judgement therefore belongs here, where both versions are visible — the page
-      // asked for a route it was built to expect, and got told there is no such thing.
-      // This happened on 2026-09-09: `/control/playbooks` had existed in the checkout for
-      // a day and the process answering had been up since the Thursday before, so the
-      // Playbook row never rendered and the message under the button was
-      // `no route /control/playbooks`, which names the symptom and no cure.
-      //
-      // The command is spelled out rather than described. The service is a **host**
-      // process, not one of the containers `docker compose` restarts, so "restart the
-      // viewer" is the wrong instinct and rebuilding the containers changes nothing.
       if (res.status === 404 && body.error.startsWith("no route")) {
         return (
           `${body.error} — the control service running on this machine is older than ` +

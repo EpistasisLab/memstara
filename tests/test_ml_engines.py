@@ -1,30 +1,6 @@
 # SOURCE: SANDBOX-ORIGINAL — not copied from afc-forge. afc-forge has no ML tool
 #   server, so there is no counterpart upstream.
-"""`_make_model` — one engine, and one seed that reaches it.
-
-**Until 2026-09-08 this file did not exist and neither did any test of the ml tool
-server.** That is what let the following stand unnoticed: `train_and_score` exposed
-`seed` as a tool parameter and used it to split the data, while all three engines
-carried a hard-coded `random_state=0`. Passing a different seed moved the split and
-left the model exactly where it was, so the seed the caller chose was never the seed
-the run used. NFR-2b asks that the seed *can be fixed*
-(`spec/Memstara_SRS_KR.md:949`); half of it could not be reached at all.
-
-**Three engines became one, later the same day.** XGBoost was made the default, and then
-`sklearn_hgb` and `random_forest` were removed outright. So this file now guards two
-things that look similar and are not: that the one engine takes its seed, and that the
-two that no longer exist are *refused by name* rather than quietly ignored.
-
-These tests are offline and take milliseconds. `_make_model` is a pure function — it
-builds an estimator and returns it, fitting nothing — so no CSV, no Postgres, no model
-call and no pipeline run is involved. That is why the gap was cheap to leave open and
-is cheap to close.
-
-`test_no_seed_is_written_into_this_module` is the one that keeps it closed. The other
-tests check the parameter arrives; that one checks nobody adds a fourth engine, or a
-second `permutation_importance` call, with a literal seed beside it — which is exactly
-how the original divergence appeared, one plausible line at a time.
-"""
+"""`_make_model` — one engine, and one seed that reaches it."""
 
 from __future__ import annotations
 
@@ -36,35 +12,12 @@ import pytest
 
 from memstara.mcp_servers import ml as tools_ml
 
-#: The two engines that existed until 2026-09-08 and do not any more. Named here rather
-#: than inline because three separate tests are about them, and because the list is the
-#: thing that has to change if `A-26` ever brings a second engine back.
 REMOVED_ENGINES = ["sklearn_hgb", "random_forest"]
 
 
 @pytest.mark.parametrize("seed", [0, 7, 42])
 def test_xgboost_takes_the_seed_it_is_given(seed: int) -> None:
-    """The seed argument reaches the estimator, whatever its value.
-
-    Three seeds rather than one: with a single value a test passes just as well against a
-    hard-coded constant that happens to equal it, which is the state this module was in
-    when the constant was 0. There used to be two more engines parametrised alongside
-    this one; they were removed on 2026-09-08 and so was the parametrisation over them.
-
-    This test spent its first day skipped. xgboost was undeclared then, so it ran only
-    where somebody had installed it by hand, and it was worth writing anyway because the
-    xgboost branch is the one that cannot be checked by reading: `XGBClassifier` accepts
-    unknown keyword arguments without complaint, so a misspelled `random_state` would
-    look correct in the source and do nothing. It is a declared dependency as of
-    2026-09-08 (`pyproject.toml:64`), so the skip below no longer fires.
-
-    Note what this does *not* claim. `random_state` only changes an XGBoost fit when
-    `subsample` or `colsample_*` is below 1.0, and `_make_model` sets neither, so two
-    seeds are expected to produce the same numbers. The test is that the value is
-    carried, not that it changes anything — which is exactly what makes it worth keeping
-    now that this is the only engine: the day somebody adds subsampling, the seed has to
-    already be arriving.
-    """
+    """The seed argument reaches the estimator, whatever its value."""
     pytest.importorskip("xgboost")
     model = tools_ml._make_model("xgboost", seed)
     assert model.random_state == seed
@@ -103,13 +56,7 @@ def test_standalone_async_mcp_accepts_explicit_governance(subset, monkeypatch):
 
 
 def test_the_default_seed_is_42() -> None:
-    """42 is the documented value and the default must stay it.
-
-
-    for reproducibility and sets it to 42. Every result on the board was produced by a
-    call that did not pass one, so moving the default silently re-bases the whole
-    record against numbers nobody can reproduce.
-    """
+    """42 is the documented value and the default must stay it."""
     default = inspect.signature(tools_ml.train_and_score).parameters["seed"].default
     assert default == 42
 
@@ -138,17 +85,7 @@ def subset(tmp_path, monkeypatch):
 
 
 def test_the_conditions_come_back_with_the_numbers(subset) -> None:
-    """`seed` and `test_size` are in the return, at whatever value was passed.
-
-    They are tool parameters, so an agent can pass something other than the default.
-    Before 2026-09-08 doing so left no trace: the return carried the AUC and not the
-    conditions that produced it, which made the docstring's promise — that a result can
-    be re-scored by hand and checked against the board — true only of calls that passed
-    neither.
-
-    A non-default seed rather than 42, for the reason the parametrised tests above take
-    three values: against a hard-coded default, echoing the default proves nothing.
-    """
+    """`seed` and `test_size` are in the return, at whatever value was passed."""
     out = json.loads(tools_ml.train_and_score(str(subset), "outcome", test_size=0.4, seed=7))
 
     assert "error" not in out, out
@@ -159,19 +96,7 @@ def test_the_conditions_come_back_with_the_numbers(subset) -> None:
 
 
 def test_the_default_engine_is_xgboost() -> None:
-    """A run that sets nothing is an XGBoost run.
-
-    This is a project requirement as of 2026-09-08, not a preference: XGBoost is the
-    engine the 2026-08-06 meeting named and the one the 2026-08-10 implementation guide
-    wrote as the default. This file shipped `sklearn_hgb` for two months instead, to
-    keep the install to one package, and nothing failed — which is exactly why the
-    divergence lasted. A test is what stops it recurring the next time somebody weighs
-    a dependency against a default.
-
-    Asserted twice on purpose. `_DEFAULT_ENGINE` is the constant, and the second
-    assertion is that `train_and_score` actually *reaches* it with the environment
-    unset — a constant nothing reads would satisfy the first line alone.
-    """
+    """A run that sets nothing is an XGBoost run."""
     assert tools_ml._DEFAULT_ENGINE == "xgboost"
 
 
@@ -206,7 +131,7 @@ def test_a_path_outside_the_output_directory_is_refused(subset, tmp_path) -> Non
 
     Named here because this file is now the only test of this module: `train_and_score`
     resolves symlinks and then requires the path to sit under the output directory
-    (`src/memstara/mcp_servers/ml.py (at commit 0990ec5, lines 242-249)`), and that check deliberately runs *above*
+    in the ML server, and that check deliberately runs *above*
     the scikit-learn import so it cannot be skipped wherever the optional dependency is
     absent. A refusal is JSON rather than an exception, per this directory's rule that
     an agent must get something it can act on.

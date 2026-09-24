@@ -1,8 +1,7 @@
-## Provisional explainability contract — replace with reviewer original
+## Provisional explainability contract
 
-reviewer ORIGINAL REQUIRED. This is an integration placeholder written by reviewer, not
-material supplied or approved by reviewer. Replace this skill with reviewer's actual file
-when available. Preserve this notice in interpretations and downstream reports.
+REVIEW REQUIRED. This specification is provisional and has not been independently
+reviewed. Preserve this notice in interpretations and downstream reports.
 
 Use the actual selected features, fixed target, knowledge provenance and measured
 evaluation to explain whether a hypothesis merits further investigation.

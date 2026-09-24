@@ -25,11 +25,7 @@ import WorkspaceActions from "./components/WorkspaceActions";
 import { useLiveOutputs } from "./store/liveOutputs";
 import { useControl } from "./store/control";
 
-/**
- * Preserve the existing resizable workspace and shared editors.
- * reviewer's Floor Plan contains independently owned pipeline rows and their Status view.
- * Reports follow the selected run; technical panels remain accessible in Telemetry.
- */
+
 const SECONDARY: Record<Exclude<ViewId, "chain" | "scene" | "log" | "clinician">, ComponentType> = {
   discovery: DiscoveryPanel,
   report: ReportPanel,

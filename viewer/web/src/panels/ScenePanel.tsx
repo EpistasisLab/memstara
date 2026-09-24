@@ -168,23 +168,6 @@ export default function ScenePanel() {
       });
     }
 
-    // The one line on this floor that is not something happening: an arrow from **each**
-    // hypothesis figure to the single data figure. It is the shape of the pipeline, not
-    // the traffic on it, so it is still and pale where the other two are animated and
-    // coloured — a viewer who cannot tell those apart at a glance learns nothing from
-    // either.
-    //
-    // This is what the vertical stack was chosen for (meeting of 2026-08-26): three
-    // hypothesis agents above one another, three arrows converging on one data agent, and
-    // the fan-in readable without being told. Until 2026-09-08 the stack was drawn and the
-    // arrows were not, so the layout was there and the thing it was the layout *for* was
-    // missing.
-    //
-    // Drawn at one hypothesis worker too, not only at two or more. An element that appears
-    // only under a non-default flag is an element the default run never checks.
-    // Over `drawn`, so a planned figure is wired into the shape like any other. It is the
-    // shape of the pipeline that is being drawn here, not the traffic on it, and a figure
-    // standing on the floor with no line leaving it would read as one that feeds nothing.
     const flowStages = ["hypothesis", "data", "ml", "interpreter", "report"];
     const pipe: Edge[] = flowStages.slice(0, -1).flatMap((stage, index) =>
       drawn.filter(a => a.stage === stage).flatMap(source =>

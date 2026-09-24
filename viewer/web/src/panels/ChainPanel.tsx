@@ -29,34 +29,7 @@ import { STAGE_COLOR } from "../lib/stage";
 import { PLAYBOOK_STAGES, useControl, type PlaybookStage } from "../store/control";
 import { useScene, useViewer } from "../store/viewer";
 
-/**
- * The pipeline as a left-to-right chain: six stages drawn as five columns in the order they
- * run, links between them, and a dot travelling along a link while work is flowing into the
- * stage on its right. The curator shares the first column with the hypothesis stage —
- * `lib/chain.ts:CHAIN` says why.
- *
- * **The first column is a stack.** The hypothesis station draws one card per worker and
- * every one of them points at the single data card, which is the screen the 2026-08-26
- * meeting adopted over three tabs and over three complete pipeline rows
 
- * one card however many workers run behind them and carry the count as a badge — the same
- * split `stores.SPLITTABLE` makes on the floor plan, decided in the same meeting.
- *
- * This is the default view because it is the one that answers the first question anyone
- * asks of a running pipeline — how far along is it. The floor plan answers "who is
- * touching what", which is the second question.
- *
- * Two things it refuses to do, both copied from other people's mistakes:
- *
- *  - It never infers position by walking the chain. Every card reads its own state (see
- *    `lib/chain.ts:linkIsLive`), because stages here genuinely overlap and a single
- *    "we are at step 3" pointer would be wrong most of the time.
- *  - It never draws a tick. Nothing in the snapshot distinguishes "finished" from "not
- *    started yet", so both are `idle`, and both are drawn as `idle`.
- *
- * The viewport opens at a readable scale. Readers can pan, zoom, jump to a stage
- * or fit the entire graph without telemetry updates resetting their position.
- */
 
 /** A 280px card with 80px of routing space between stages. */
 const STEP_X = 360;
@@ -244,12 +217,6 @@ export default function ChainPanel() {
 
   const edges: Edge[] = useMemo(
     () =>
-      // Every card of one column to every card of the next. With only the hypothesis
-      // station splitting that is a fan-in of N arrows onto the single data card and then
-      // one arrow per link the rest of the way — which is the meeting's figure. Written
-      // as a full cross product rather than special-casing `hypothesis` so that the panel
-      // stays correct if `stores.SPLITTABLE` ever gains a station; it would then be wrong
-      // about nothing, only busy.
       steps.slice(0, -1).flatMap(({ agents: from }, i) =>
         from.flatMap((source) =>
           steps[i + 1].agents.map((to) => {

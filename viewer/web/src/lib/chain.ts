@@ -14,24 +14,7 @@ import type { SceneAgent, StageId } from "../types";
  * rows, which is a separate change; `stateOf` below is the one seam it will attach to.
  */
 
-/**
- * The order work actually runs in, and the only place the frontend states it.
- *
- * It mirrors `viewer/api/stores.py:233-239` (`HOME`), whose comment says the same thing —
- * "in the order the pipeline runs them". Read from the snapshot's agent array instead,
- * the order would be whatever the API's dict iteration happened to give, which is right
- * today by accident rather than by contract.
- *
- * **Five cards for the pipeline's five stages.** There is a sixth stage key, `curator`,
- * and it is deliberately absent: the pipeline retired it on 2026-09-07, when writing the
- * wave's questions became the hypothesis agent's other job. Runs made before that are
- * still in the database, and `viewer/api/stores.py` (`DRAWN_AS`) folds them into the
- * hypothesis stage so they still appear; `stores.reported_as` carries the same fold into
- * the cost table, the access map and the feed, so no screen the frontend draws names the
- * curator. This array is about who gets a box drawn, nothing more. It has to agree with
- * the backend, because `ChainPanel` compares its length against the agents the API sent
- * and reports a shortfall as an error.
- */
+
 export const CHAIN: StageId[] = [
   "hypothesis",
   "data",
@@ -43,44 +26,11 @@ export const CHAIN: StageId[] = [
 /** One column of the chain: a stage, and every figure the scene sent for it. */
 export interface ChainStep {
   stage: StageId;
-  /** The cards drawn in this column, in the order the API sent them — which is `slot`
-   *  order, so the stack does not reshuffle itself between polls.
-   *
-   *  One card for four of the five stages. The hypothesis station sends one agent per
-   *  worker (`stores.SPLITTABLE`) and each of them gets a card, because that is the
-   *  screen the 2026-08-26 meeting adopted. */
+
   agents: SceneAgent[];
 }
 
-/**
- * The stages in chain order, skipping any the API did not send.
- *
- * **The chain stays five columns however many workers run, and the hypothesis column
- * stacks.** This panel answers "how far along is the work", and three hypothesis workers
- * are three hands on one step of the pipeline rather than three steps — laid out **in a
- * row** they would push `data`, `ml`, `interpreter` and `report` to the right and make the
- * picture say the pipeline had grown. That was the reason this returned one card per stage
- * until 2026-09-09, and it is still the right reason: it rules out a row. It does not rule
- * out a **column**. Stacking them vertically leaves all five columns exactly where they
- * are, and the several-into-one fan-in is the shape the meeting chose over three tabs and
- * over three complete pipelines
 
- *
- * What replaced the count is not a smaller thing. An `x3` badge said *there are three of
- * these somewhere*; three cards each carrying their own state, their own age and their own
- * standard is the comparison itself.
- *
- * The other four stages still get one card however many workers run behind them — the API
- * folds them and puts the whole count on `running`, which the card shows as a badge. That
- * is the same decision as `SPLITTABLE`'s and it is deliberate: the user chooses how many
- * hypothesis agents to run and should not have to know the rest are internally run more
-
- *
- * Grouping by `stage` and not by `id` is also what keeps the hypothesis column on screen at
- * all: since 2026-09-08 a stage running several workers sends no agent whose id is
- * `hypothesis`, so a lookup by id would silently return nothing for exactly the stage
- * `--hypothesis-agents` multiplies.
- */
 export function chainAgents(agents: SceneAgent[]): ChainStep[] {
   return CHAIN.map((stage) => {
     const mine = agents.filter((a) => a.stage === stage);

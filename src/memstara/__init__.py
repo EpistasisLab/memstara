@@ -1,35 +1,13 @@
-"""The Memstara sandbox package.
-
-This file is empty of imports on purpose, and must stay that way.
-
-Why it holds a single `setdefault`
-----------------------------------
-.. repair-citations: off
-
-litellm reads `LITELLM_LOG` **while it is being imported** (`litellm/_logging.py:80`).
-Set it any later and the request bodies go unlogged — silently, which is exactly how
-it first failed. `src/memstara/env.py` (formerly bootstrap.py, lines 42-53) records the
-rule that came out of that:
-
-    every entry point must import the env module **before** anything that pulls in
-    motoro / litellm. This has caught us twice.
-
-.. repair-citations: on
-
-A rule every entry point must remember is a rule that will be forgotten a third time.
-Here it stops being a convention: under `python -m memstara.<anything>`, the
-interpreter cannot reach a submodule without executing this file first. The ordering
-is no longer something to get right — it is something that cannot be got wrong.
-
-That guarantee is worth exactly as much as this file's emptiness. **Import nothing
-here.** One import of a module that itself imports litellm, and the line below runs
-too late again, in a place nobody thinks to look.
-
-It is a `setdefault`, so a value from the shell or from `launch.json` still wins.
-"""
-
+"""Memstara package metadata and logging initialization."""
 from __future__ import annotations
 
 import os
 
+# Set this before any dependency can import the model client.
 os.environ.setdefault("LITELLM_LOG", "DEBUG")
+
+try:
+    from memstara._version import __version__
+except ImportError:
+    # Source checkouts report an unknown version until built or installed.
+    __version__ = "0.0.0+unknown"

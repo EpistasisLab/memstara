@@ -1,70 +1,5 @@
 #!/usr/bin/env python3
-"""Read a run directory and say, in one file, whether the run went normally.
-
-The records were already complete before this existed. What was missing was something
-that *reads* them. On 2026-08-13 a run reported "3/3 succeeded" while two warnings sat
-in its own `run.jsonl` — an OKF tool had failed, and the trial that hit the failure came
-back with one column where its prompt allowed three to eight. Nothing surfaced either,
-so nobody looked.
-
-So this asks the questions a person would ask, and puts the answers at the top:
-
-- did any log record come out at warning or above?
-- did any tool call fail?
-- did any trial fail, or break the column constraint its own prompt set?
-
-Only the run directory is read — never the database. An archived folder has to keep
-working after the rows are gone, and it does, because everything needed is already in
-manifest.json, todo_rows.json, summary.json and run.jsonl.
-
-Usage::
-
-    python -m memstara.trace.report outputs/runs/<run>
-
-src/memstara/pipeline/mvp.py calls :func:`build_report` at the end of every run, so a run
-directory arrives with its REPORT.md already written.
-
-
-==============================================================================
- How to read this file
-==============================================================================
-
- It reads one run directory and writes **"was this run normal"** into a single file
- (REPORT.md). There are three verdicts — normal, warning, failed. And the reason the
- verdict came out that way goes at the top.
-
- There are five functions.
-
-   _read_json / _read_jsonl   read a file. A missing or broken one does not stop it
-   collect(run_dir)           gathers every number needed from the four files
-   judge(data)                looks at what was gathered and produces verdict + reasons
-   render(...)                turns the verdict into markdown prose
-   build_report(run_dir)      strings the three together and writes REPORT.md
-
- The only things read are the four files inside the run directory — manifest.json,
- todo_rows.json, summary.json, run.jsonl. **The database is not consulted.** An old
- folder has to keep reading the same after the database rows are gone.
-
- Easy things to miss:
-
-   · **Counting tool calls naively doubles them.** One call to a tool makes
-     `mcp.tool.executed` show up **once from each of two loggers.** So only the
-     adapters side is kept and the rest filtered out. The details are in the comment
-     inside collect().
-   · A failed tool call never arrives at `mcp.tool.executed` at all. It has to be
-     counted separately.
-   · **It also checks whether the hypothesis kept its own promise (3-8 columns).** A
-     run that succeeded while picking 1 column is not normal, and somebody has to be
-     able to say so.
-   · Cost is taken from the trial rows where possible. Adding up the log alone gives
-     about a tenth of the real figure.
-
- Why this file exists: some run on 2026-08-13 reported "3/3 succeeded" while that run's
- run.jsonl held two warnings. A tool had failed, and the trial that met the failure came
- back having picked only 1 column — even though the prompt allowed 3 to 8. Neither
- surfaced anywhere, and so nobody looked. The records were already complete. What was
- missing was the side that **reads them.**
-"""
+"""Read a run directory and say, in one file, whether the run went normally."""
 
 from __future__ import annotations
 
@@ -131,20 +66,6 @@ def collect(run_dir: Path) -> dict[str, Any]:
     # text in full, uncut, too.
     problems = [r for r in records if r.get("level") in ("warning", "error", "critical")]
 
-    # One tool call produces TWO mcp.tool.executed events: motoro.mcp.client logs the
-    # transport, motoro.mcp.adapters logs the call the agent made. On all three real
-    # runs the two counts were identical (88/88, 75/75, 49/49), so counting both doubled
-    # every figure in this report — and those figures reached the documents. The question
-    # this report answers is how often an *agent* reached for a tool, so count the adapter
-    # side; a driving script's own direct call appears only on the client side and is
-    # rightly left out.
-    #
-    # Matched on the suffix, not the whole name. The logger name is derived from the
-    # module path, and core's package was renamed on 2026-09-01 (v0.5.2), so every
-    # run.jsonl written before that date carries a different first segment. Pinning
-    # the whole name would leave `by_adapter` empty for those, fall through to the
-    # `or executed` below, and silently double every historical figure — the exact
-    # bug the paragraph above says already reached the documents once.
     executed = [r for r in records if r.get("event") == "mcp.tool.executed"]
     by_adapter = [r for r in executed
                   if str(r.get("logger", "")).endswith(".mcp.adapters")]
@@ -157,9 +78,6 @@ def collect(run_dir: Path) -> dict[str, Any]:
     tool_calls: Counter[tuple[str, bool]] = Counter()
     for r in executed:
         tool_calls[(str(r.get("tool")), bool(r.get("success", True)))] += 1
-    # A tool that errors never reaches mcp.tool.executed — it is reported separately, so
-    # counting only the executed events would show a clean sheet — which is exactly what
-    # happened on 2026-08-13.
     tool_errors: Counter[str] = Counter(
         str(r.get("tool")) for r in records if r.get("event") == "mcp.tool.error_result"
     )

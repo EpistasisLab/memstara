@@ -1,17 +1,4 @@
-"""What the control service will accept as a request to start a run.
-
-This is the boundary between a browser and a process on this machine, so the rules are
-tested rather than trusted. `memstara.control.request` imports the standard library and
-nothing else for exactly this reason — `service.py` next to it reads the bundle through
-`memstara.mcp_servers.okf`, which needs `yaml` and `../motoro`, and neither is on a CI
-
-`tests/test_okf_fields.py`.
-
-What is **not** covered here: that the argument list this builds is one `board.py`
-accepts, and that the HTTP layer refuses a stranger. The first is a `Verified:` line
-(the real driver, `--help` and a rejected `--skill`); the second is a `Verified:` line
-too (curl with a foreign `Host` and a foreign `Origin`).
-"""
+"""What the control service will accept as a request to start a run."""
 
 from __future__ import annotations
 
@@ -51,13 +38,7 @@ def flags(argv: list[str]) -> dict[str, str]:
 
 
 def test_an_empty_body_is_the_default_run():
-    """A form nobody touched starts what the CLI with no flags would start.
-
-    Written as `==` on the whole dict rather than a check per flag, which is what makes
-    it also the test that **a new field does not silently join every run.** The five
-    `playbook_*` keys were added to `DEFAULTS` on 2026-09-08 and this line is where they
-    had to prove they add no argument until one is chosen.
-    """
+    """A form nobody touched starts what the CLI with no flags would start."""
     got = flags(build_argv({}, OFFERED))
     assert got == {"--trials": "3", "--waves": "1", "--hypothesis-agents": "1", "--interpret-agents": "1",
                    "--y-column": "outcome", "--provider": "openai",
@@ -144,8 +125,7 @@ def test_a_number_written_as_text_is_refused():
 
 
 def test_three_hypothesis_agents_is_accepted():
-    """The number the meeting of 2026-08-26 named as the screen's ceiling. It has to be
-    reachable from the form, or the ceiling is a floor of one."""
+    """Verify that three hypothesis agents is accepted."""
     assert flags(build_argv({"hypothesis_agents": 3}, OFFERED))["--hypothesis-agents"] == "3"
 
 
@@ -260,19 +240,10 @@ def test_every_playbook_stage_has_a_field():
         assert playbook_field(stage) in DEFAULTS
 
 
-# --------------------------------------------------------------------------- #
-#  One standard per hypothesis agent (A-32)
-# --------------------------------------------------------------------------- #
 
 
 def test_the_hypothesis_stage_takes_one_standard_per_agent():
-    """The whole of `A-32` seen from the request side: three agents, three standards,
-    one flag carrying all three.
-
-    Commas rather than three fields, because `--playbook-hypothesis` is one argument on
-    the command line and `build_argv` returns a command line. A second encoding here
-    would be one the driver has to learn.
-    """
+    """Verify that the hypothesis stage takes one standard per agent."""
     argv = build_argv(
         {"playbook_hypothesis": "governance,ml_reporting", "hypothesis_agents": 2},
         OFFERED, BOOKS, MARKED,

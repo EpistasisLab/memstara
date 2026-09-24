@@ -1,139 +1,5 @@
 #!/usr/bin/env python3
-"""The same four stages, driven by a shared board instead of a supervisor.
-
-In `src/memstara/pipeline/mvp.py` a Python function calls the stages in order and carries each
-output to the next by variable. Here nobody carries anything: the hypothesis stage puts
-work on a board, and the other stages take work off it. Each task says which stage
-should pick it up next, so an agent only has to know its own type.
-
-**That file is untouched.** Both paths exist so they can be compared — a board that
-produces different answers than the supervisor did would be worth knowing about, and
-only one of them can be the reason.
-
-Why a driving script rather than agents that watch the board: core runs an agent once
-and returns. There is no pattern that keeps one alive waiting for work, so something
-has to look at the board and call whoever is needed. That something is deterministic
-and cheap, which is what the 2026-08-12 alignment concluded ("this doesn't have to be
-an agent, it could be just a deterministic script").
-
-A task whose agent dies goes back to waiting and is retried. Retries used to be
-unlimited, which meant a task that always failed kept the board from draining and the
-report never ran — the only thing that could end such a run was a person watching the
-console. `--max-attempts` (default 5) now closes a task that keeps coming back, marks
-it failed, and lets the rest of the run finish; the trial it belonged to is reported as
-lost rather than quietly dropped. `--max-attempts 0` restores the old behaviour. The
-retry count is still printed every round, because the cap ends a stuck run without
-explaining it. `--report-only` writes the report from whatever has accumulated, for
-when a run is interrupted.
-
-Setup is the same as 02, plus the board::
-
-    python -m memstara.blackboard --create
-
-Run::
-
-    python -m memstara.pipeline.board --trials 3
-    python -m memstara.pipeline.board --report-only --run-tag <tag>
-
-
-==============================================================================
- How to read this file
-==============================================================================
-
- - Think of it as one laboratory
-
- There are five processing roles and one shared board; roles can have multiple workers.
- Question writing is another call made by the hypothesis workers, not a curator agent.
-
-   hypothesis    reads the papers and proposes "these variables look like the answer"
-   data          cuts just those variables out of the original
-   ml            runs a model on what was cut and produces a score
-   interpreter   puts the score that came out into words
-   reporter      gathers it all and writes it up on one page
-
- **Nobody hands anything to the next person directly.** Work is pinned to the board and
- the next person takes it down themselves. Each sheet says "whose turn is next", so each
- person only has to know their own type.
-
- There are three reasons it was built that way.
-   · what each person did **stays on paper**
-   · if one of them dies the sheet is still on the board — restart and it carries on
-   · adding more people later is easy
-
-
- - What happens when this file is started
-
-   (1) provision the configured agents          provision_board_agents()
-       fetch the role description that says what kind of work each of them does.
-       If it is the first time, write it fresh.
-
-   (2) switch on the four machines   setup_tools()
-       people cannot work bare-handed. The paper store, the data machine, the learning
-       machine, the board window — these four go on.
-
-   (3) decide who gets which button  tools_for()
-       the hypothesis person is **not given** the "cut it out" button. Give it to them
-       and they will do the whole thing themselves, and then whose judgement produced
-       the result can no longer be told.
-
-   (4) pin the first instruction to the board     (seeding)
-       call the hypothesis person and say "think about it from this perspective and pin
-       it to the board". Repeat once per trial.
-
-   (5) run until the board is empty               (the work loop)
-       look at the board -> if there is somebody to do it, call them -> if not, wait a
-       moment. Repeat until the board is empty.
-
-   (6) wrap up at the end                          (the report)
-       the reporter gathers what finished and writes it on one page.
-
- Run with `--report-only` and it skips (4) and (5) and does **only (6)**. It is
- gathering the results of a run that already finished, so it calls only one person —
- which is why it is cheap.
-
- `--waves` is **a ceiling, not a target.** The knowledge source is finite, so the
- questions dry up eventually, and at that point the program starts recycling questions
- out of the bank. If no new question comes out for `--stop-after-dry` rounds in a row
- (default 2) it does not start the remaining waves; it stops right there and says so.
- `--stop-after-dry 0` never stops. While this was absent, a dried-out run was
- indistinguishable on screen from a run making progress — both just kept going.
-
- **Carrying on without a person.** This program has no daemon and no cron. An infinite
- loop is not the answer for a finite knowledge source, and if you want to run it several
- times a shell loop is safer (state stays in the DB even if it dies mid-way). What this
- file and the window do instead is keep three things so that **the place one run left
- off passes cleanly to the next**:
-
-   · `run_tag` is sent along with `claim_task` — a task another run left behind is never
-     picked up. Without it the oldest is picked first, so a dead run's tasks catch
-     **first of all**.
-   · at startup it reclaims its own tag's stalled tasks once — running again with the
-     same `--run-tag` becomes "carry on".
-   · `--max-attempts` closes a task that never comes right — it ends with nobody watching.
-
- Clearing up somebody else's orphans that are already there is what
- `blackboard.py --orphans / --reclaim / --close` does. This file looks only at its own run.
-
-
- - One thing that is easy to miss
-
- **Five programs are running.** This file is one, and the four machines switched on in
- (2) are each a separate program. So attaching a debugger to this file will not stop
- inside `tools_*.py` — those are somebody else's program.
-
- There are two ways to stop in there:
-   · `python -m memstara.debug_harness data`  — pull the machine into this program and use it here
-   · turn on `MEMSTARA_DEBUGPY=data` and attach a debugger to that machine separately
-
-
-
-
- - Code structure
-
-   main()             reads the arguments, checks the environment, takes the lock,
-                      calls run()
-     └ run()          holds (1) through (6) above, in that order
-"""
+"""The same four stages, driven by a shared board instead of a supervisor."""
 
 from __future__ import annotations
 
@@ -999,14 +865,7 @@ _MATCHER_TOOLS = ("match_concepts", "match_concept")
 
 
 def _matcher_call_failed(result: Any) -> bool:
-    """Did this matcher call actually answer, or did it come back an error?
-
-    This has to be asked before anything is filed as evidence. The 2026-08-30 run
-    filed 27 calls into the results table whose every result was "Not authorized:
-    Tool 'match_concepts' is not in this run's allowed tool set" — a dead server
-    registration meant the matcher never ran, and the durable table recorded the
-    refusals as if they were candidate lists. This is the check that stops that.
-    """
+    """Did this matcher call actually answer, or did it come back an error?"""
     if isinstance(result, dict):
         return "error" in result
     if isinstance(result, str):
@@ -1355,27 +1214,7 @@ PLAYBOOK_STAGES = ("hypothesis", "data", "ml", "interpreter", "report")
 
 
 def chosen_playbooks(args: argparse.Namespace) -> dict[str, list[str]]:
-    """Stage -> the standards this run gave it, in worker order.
-
-    Read in two places — `main` checks every one of them before Postgres is touched, and
-    `run` hands them to provisioning and writes them into `prompts.json` — so it is one
-    function rather than the same comprehension twice. Stages with no playbook are left
-    out entirely, so an empty dict and *no standards anywhere* are the same value.
-
-    **A list, not a name, and for every stage rather than only the one that can use
-    several.** `--hypothesis-agents 3` runs three workers, and until 2026-09-08 they
-    shared one system prompt, so the meeting's "several hypothesis agents with different
-    skills" was not something a run could ask for. Splitting on the comma here is what
-    lets it.
-
-    Only `hypothesis` may hold more than one and `main` refuses the rest by name. The
-    return type is a list for all five anyway: a shape that is `str` for four stages and
-    `list[str]` for one is a shape every reader has to check the stage before trusting,
-    and the four call sites would each grow the same branch.
-
-    Empty names are dropped, so `"a,,b"` is two standards and `","` is none — a trailing
-    comma from a form field or a shell history is not a request for a nameless playbook.
-    """
+    """Stage -> the standards this run gave it, in worker order."""
     out: dict[str, list[str]] = {}
     for stage in PLAYBOOK_STAGES:
         field = "playbook_explanation" if stage == "report" else f"playbook_{stage}"
@@ -1740,17 +1579,6 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             # to reason about would buy nothing.
             from_bank = any(q["question_id"] for q in questions)
 
-            # The branch is enforced in the okf server whether or not this sentence is
-            # written, so saying it buys nothing in safety — it buys the agent an
-            # explanation. Without it, a search that returns 52 documents where the
-            # bundle holds 312 reads as a thin literature, and the sensible response to a
-            # thin literature is to search again more broadly. Told what it is looking
-            # at, it spends those calls on the branch instead.
-            #
-            # It is written here, in the driver's per-call message, and not into
-            # `prompts/board/hypothesis.md`: a prompt file is the same for every run, and
-            # the branch is the one thing about this run that the user chose
-
             skill_note = (
                 f" The knowledge bundle is confined to {args.skill} for this run; "
                 f"okf_search and okf_read return that branch and nothing else."
@@ -1836,25 +1664,6 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 # and missing from the place that is kept.
                 return i, await harvest_match_trace(registry, call)
 
-            # A trial that never calls `create_task` leaves nothing behind: no board row,
-            # no result, no error. On 2026-08-30 one of four trials spent 31 steps and
-            # $1.88 that way and the run ended looking successful — the only thing that
-            # noticed was the explanation agent, in prose, by luck. The count was already
-            # being printed below; it was never compared, so nothing could notice.
-            #
-            # **How that is caught changed with this loop.** It used to read the whole
-            # board's count before and after each call and blame the current trial for the
-            # difference. Attributing a delta to one worker only works while exactly one
-            # worker is running, and it was never quite right even then — any row from
-            # anywhere would have counted as this trial's. The board carries the trial
-            # number, so what is asked below is the direct question: is there a row for
-            # trial i? That is concurrency-safe and strictly more truthful.
-            # `k` is the position inside the chunk and it does two jobs: it completes the
-            # trial number, and — since this loop's stride is `--hypothesis-agents` — it
-            # is also the slot, so slot k is the same agent in every chunk of the run.
-            # The last chunk can be short, and then the tail slots simply do not run this
-            # wave; they are not reassigned, because a slot that changed standard between
-            # chunks would make "two workers agreed" mean nothing.
             async def produce_hypotheses(questions=questions, base=base, from_bank=from_bank, seed_one=seed_one):
                 # Keep each question with its author, serializing that author's
                 # calls even when question-bank order differs from slot order.
@@ -2430,39 +2239,12 @@ async def main() -> int:
             f"--{stage_flag}-agents", type=int, default=1,
             help=f"how many {what} workers claim from the board at once (default 1)",
         )
-    # The seeding stage's own count. It is separate from the three above because it is not
-    # the same kind of number: those three are how many workers stand at the board through
-    # a whole run, this is how many of a wave's trials are seeded at once. --trials still
-    # decides how many trials there are; this only decides how many are in flight.
-    #
-    # **This is the one stage the viewer draws a figure per worker for**, which is why the
-    # help says where the drawing stops being comfortable. The meeting of 2026-08-26 asked
-    # for one to two hypothesis agents with the screen expandable to three, and the floor
-    # plan was laid out to that: the figures stack upwards from a row of five stations 175
-    # apart, and the space above the row runs out somewhere past three. There is
-    # deliberately **no upper limit in the code** — a cap belongs to the drawing and would
-    # here stop an experiment, and a run of three worked on 2026-09-08. Past three the run
-    # is fine and the picture is crowded, and it is better for that to be said than
-    # enforced.
     ap.add_argument(
         "--hypothesis-agents", type=int, default=1,
         help="how many hypothesis workers seed the board at once. Each claims its own "
              "question out of the bank, so two never set out from one question (default 1; "
              "the floor plan is laid out for up to 3 and is not capped)",
     )
-    # A behavioural standard spliced into one stage's system prompt, by name, out of
-    # `src/memstara/playbooks/`. One flag per stage, because the whole point is that a
-    # stage can be given one and the others not — a single --playbook would make every
-    # run a five-stage condition and nothing attributable to any one of them.
-    #
-    # **This is not --skill, and the two words are deliberately different.** --skill
-    # narrows the OKF corpus and is enforced inside the okf tool server, so it holds
-    # whether or not a model cooperates. A playbook is prose the model may ignore. The
-    # meeting of 2026-08-26 called both of them skills; `H-21` is why only one of them
-    # keeps the word here.
-    #
-    # `data` gets a flag although the meeting listed four stages. Leaving it out would be
-    # a rule in the code that nobody decided, and one nobody could find later.
     for stage_flag in ("hypothesis", "data", "ml", "interpreter", "report"):
         public_stage = "explanation" if stage_flag == "report" else stage_flag
         ap.add_argument(

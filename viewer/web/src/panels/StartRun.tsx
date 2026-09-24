@@ -45,11 +45,6 @@ export default function StartRun() {
   const skills = useControl(s => s.skills);
   const currentSnapshot = running && snapshot?.run_tag === running.run_tag ? snapshot : null;
   const completed = currentSnapshot ? new Set(currentSnapshot.results.map(r => r.trial)).size : null;
-  // In the store rather than in this component since 2026-09-09. The two pipeline drawings
-  // pad themselves to `form.hypothesis_agents`, so the form stopped being this panel's
-  // private business the moment something else on the screen answered to it. Nothing about
-  // how the form behaves changed — both writers below already computed the next form from
-  // the current one, which is exactly what `setForm` takes.
   const form = useRunForm();
   const setForm = useControl((s) => s.setForm);
   const set = <K extends keyof RunRequest>(k: K, v: RunRequest[K]) =>

@@ -29,7 +29,6 @@ export default function ExplanationEvidence({ result }: { result: Result }) {
     <h3 className="font-bold">How to interpret this hypothesis</h3>
     <ValidationStatus result={result}/>
     {reproducibilityNote}
-    {/* reviewer specification handoff remains pending. Track it internally in
 
     {point && <>
       <p className="mt-2 text-xs font-bold">Prediction cutoff: {point.probability_cutoff} · held-out cohort</p>

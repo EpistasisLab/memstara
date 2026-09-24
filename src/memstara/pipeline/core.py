@@ -1,59 +1,4 @@
-"""The body of the MVP pipeline — agent definitions, supervisor, aggregation.
-
-The four stages fixed in the 2026-08-06 meeting, expressed against the
-motoro API.
-
-    (1) hypothesis   read the OKF, decide which columns to pull   <- the only judge
-    (2) data         slice those columns plus Y                   <- pure executor
-    (3) ML           train, report AUC and feature importance     <- pure executor
-    (4) interpreter  narrate the result                           <- narrator
-
-The supervisor is :func:`run_one_trial` — a Python function, not an LLM. When the job
-is "call these in order and hand each output to the next," there is no reason to pay a
-model to do it; it only adds cost and non-determinism.
-
-The to-do list is :class:`TodoRow`. The meeting called this a blackboard pattern, but
-core does not ship one yet (2 of 37 patterns ported) and the four stages are linear, so
-a dataclass is enough.
-
-
-==============================================================================
- How to read this file
-==============================================================================
-
- The **body shared by both pipelines** (02 and 03). It defines the agents, writes
- the prompts, and gathers the results.
-
- The four stages, exactly as fixed in the 2026-08-06 meeting:
-
-   (1) hypothesis   read the knowledge source, decide which columns to pull
-                                                          <- **the only one that judges**
-   (2) data         cut those columns plus the outcome     <- does as it is told
-   (3) ML           train, report AUC and importance       <- does as it is told
-   (4) interpreter  put the result into words              <- narrates only
-
- There are three blocks of it.
-
-   (1) Diversity        PERSPECTIVES, temperature_for
-                        Asking the same question 20 times obviously produces the
-                        same answer. That is not evidence. Shaking the perspective
-                        is what makes it "different angles converged on one place"
-
-   (2) Agent definitions  provision_all (the 4 for 02), provision_board_agents
-                        (the 6 for 03). What each agent is told is **not** in
-                        here — it is one .md file per agent under
-                        src/memstara/prompts/, read by memstara.pipeline.prompts.
-                        These two functions name the files and pass the model
-                        configuration; the prose they used to hold is the thing
-                        most often edited, and it is edited there now
-
-   (3) Execution and aggregation  run_one_trial (02's supervisor), aggregate,
-                        tools_for
-
- The key point is that the supervisor **is a Python function, not an LLM.** There is
- no reason to pay a model for "call these in order and hand each output to the next"
- — it only costs money and makes the result waver.
-"""
+"""The body of the MVP pipeline — agent definitions, supervisor, aggregation."""
 
 from __future__ import annotations
 
@@ -80,17 +25,6 @@ from motoro.schemas.agent import LLMProvider, ModelConfig
 from memstara.pipeline.scientific_policy import PRIMARY_QUESTION_TOOLS
 from memstara.pipeline.prompts import load_prompt
 
-# --------------------------------------------------------------------------- #
-#  Diversity — what makes 20 repetitions mean anything
-# --------------------------------------------------------------------------- #
-#
-# Running the same agent on the same prompt 20 times will obviously produce overlap.
-# That is evidence of "the same input yields the same answer," not of "these features
-# are the most predictive." Varying the perspective is what turns overlap into
-# "different angles converged on the same features," which is the claim the paper
-# actually makes.
-#
-# The meeting never discussed this. It is a design judgement, not a settled decision.
 PERSPECTIVES: list[str] = [
     "from a metabolic-pathway perspective",
     "from a cardiovascular risk-factor perspective",
@@ -398,43 +332,11 @@ BOARD_AGENT_NAMES = {
 # stages are separated is so a result can be traced back to whose judgement produced it,
 # and doing somebody else's work destroys that.
 BOARD_TOOLS = {
-    # okf_* rather than core's search_concepts/get_concept/list_concepts. Core's three
-    # are still registered on the server and still work; they are simply not handed to
-    # this agent. Measured on reviewer's 142-paper bundle, core's set reports 152 documents,
-    # matches 132 of them on the substring "art", and returns whole 6,700-character
-    # bodies. See src/memstara/mcp_servers/okf.py. Putting the old three names back here reverts the change.
-    # `match_concepts` / `match_concept` are the same pair 02 hands its hypothesis
-    # agent (see run_one_trial). `describe_matcher` is deliberately not here: it
-    # reports cache paths and versions, which is a fact about this machine and not
-    # about the cohort.
-    # `claim_question` is the one thing this stage takes rather than makes. It is not a
-    # softening of the rule below — the stage still claims no *task*, and it is still the
-    # only stage that puts work on the board. What it claims is the question it sets out
-    # from, which stops two hypothesis workers of one wave both investigating the newest
-    # question in the bank.
-    #
-    # Question writing and feature mapping have separate tool lists. Neither may
-    # read ML results. Only the outcome-free question catalog is exposed to writing;
-    # mapping receives the assigned question without scores or historical rationale.
     "hypothesis": {"okf_list_domains", "okf_search", "okf_read", "describe_dataset",
                    "match_concepts", "match_concept", "claim_question", "create_task"},
     "data": {"describe_dataset", "slice_columns", "claim_task", "submit_result"},
     "ml": {"train_and_score", "claim_task", "submit_result"},
     "interpreter": {"claim_task", "submit_result"},
-    # This is the stage `spec/components/05_agents_implementation_plan_KR.md:121` calls the
-    # insight agent: a finished board in, a report out. It is given the corpus so that a claim in the
-    # report can be grounded in the branch the run was confined to, rather than in the
-    # model's memory of the literature. `read_results` stays what it works from; the two
-    # okf tools are for checking a number against what the branch actually says.
-    #
-    # `okf_list_domains` is deliberately not here. It is the tool for finding your way
-    # around a bundle before searching it, and this stage arrives with results in hand —
-    # it has something to look up, not a shelf to browse.
-    #
-    # This contradicts that same spec file's allow-list at :135, which gives insight no
-    # knowledge tools at all. The spec is a plan and this is the decision that supersedes
-
-    # diffing.
     "report": {"read_results", "okf_search", "okf_read"},
 }
 
@@ -531,38 +433,7 @@ async def provision_board_agents(
     playbooks: dict[str, list[str]] | None = None,
     namespace: str = "",
 ) -> dict[str, uuid.UUID]:
-    """Create the board-driven agents (or find the existing ones).
-
-    What each stage is, and what it must do first, is one file per stage under
-    `src/memstara/prompts/board/`, named for its key in `BOARD_AGENT_NAMES`.
-    Changing the pipeline's behaviour usually means editing that prose rather than
-    this code, which is the whole reason the prose is no longer in here.
-
-    It goes through `_ensure_agent`, so editing a prompt file **updates the existing
-    agent** on the next run — the name stays and only the contents change.
-
-    **There are five agents unless the hypothesis stage was given more than one
-    standard**, which is the 2026-08-26 meeting's "several hypothesis agents with
-    different skills". Then there is one hypothesis agent per standard and the
-    returned mapping grows keys `hypothesis#2`, `hypothesis#3`, … beside the
-    unsuffixed `hypothesis`, which is always the first. The four other stages take at
-    most one standard each and are unaffected.
-
-    Args:
-        provider: The LLM provider.
-        model: The model id.
-        playbooks: Stage key -> the standards that stage was given, in worker order.
-            Absent, empty, and `[""]` all mean the prompt as written. The four keys
-            the meeting named are `hypothesis`, `ml`, `interpreter` and `report`;
-            `data` takes one too, because refusing it would be a rule in the code that
-            nobody decided. Only `hypothesis` may hold more than one.
-
-    Returns:
-        Key -> agent id. The key is the stage for the first agent of each stage, and
-        `stage#N` (N from 2) for a further hypothesis agent. **It is a worker key, not
-        a stage key** — `BOARD_TOOLS[key]` is wrong for `hypothesis#2` and
-        `stage_of(key)` is what turns one into the other.
-    """
+    """Create the board-driven agents (or find the existing ones)."""
     from memstara.env import configured_llm, configured_api_base
     provider, model = configured_llm(provider, model)
     mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096,
@@ -872,17 +743,6 @@ async def run_one_trial(trial: int, cfg: TrialConfig) -> TodoRow:
 #  Aggregation — the paper's output. Done in code, not by an LLM.
 # --------------------------------------------------------------------------- #
 
-# The real signal planted by src/memstara/prep/sample.py. Meaningful ONLY on that dataset.
-# Opaque codes on purpose — see that file's module docstring.
-#
-# The answer key **planted deliberately** in the synthetic data. src/memstara/prep/sample.py
-# makes these four genuinely predict the outcome (univariate AUC 0.73/0.66/0.63/0.60,
-# against 0.51 for the noise columns).
-#
-# It is what makes it possible to **score** "did the pipeline find the right thing".
-# Real data (NHANES, reviewer's cohort) has no such key, so there no claim about
-# performance can be made — only the weaker check of "do the clinically well-known
-# ones come out on top".
 PLANTED_SIGNAL = ["LBXGH", "BMXBMI", "RIDAGEYR", "BPXSY1"]
 
 
@@ -892,25 +752,7 @@ def aggregate(
     y_column: str,
     dataset_columns: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Extract the two things the paper needs from a set of trials.
-
-    - selection_frequency : how often each column was chosen — the meeting's "overlap"
-    - weighted_importance : the running sum of actual contribution
-
-    Both are needed: counting selections alone cannot separate "chosen often" from
-    "chosen often and actually contributed."
-
-    *dataset_columns* decides whether the planted-signal check applies. It is scored
-    only when the dataset actually contains every planted column — that is, only on the
-    synthetic dataset the answer key belongs to.
-
-    Scoring it unconditionally was a real defect, not a hypothetical one. The first run
-    against a real cohort reported "0/4" for columns that dataset never had, and because
-    `interpret_overall` hands this whole summary to an agent, the agent wrote up a
-    "Critical Failure … the hypothesis must be considered not supported." Nothing had
-    failed. So when the check does not apply the keys are **absent**, not null — an
-    agent reading the summary must not see a standard that does not exist here.
-    """
+    """Extract the two things the paper needs from a set of trials."""
     ok = [r for r in rows if r.ok]
 
     freq: Counter[str] = Counter()
@@ -951,12 +793,7 @@ def aggregate(
 
 
 async def interpret_overall(agent_id: uuid.UUID, summary: dict[str, Any], *, registry: Any) -> str:
-    """Interpret the whole set of trials once more, over the aggregate.
-
-    The meeting never said whether the interpreter runs per trial or once over the
-    aggregate, so this does both. That costs one extra call and yields the
-    whole-experiment narrative the paper needs.
-    """
+    """Interpret the whole set of trials once more, over the aggregate."""
     row = TodoRow(trial=-1)
     return await _run_stage_text(
         agent_id,

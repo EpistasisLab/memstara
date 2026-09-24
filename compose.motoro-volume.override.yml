@@ -1,9 +1,6 @@
-# Optional overlay for a FUTURE, reviewed adoption of upstream Compose >= 2.17.
-# Current host uses `python -m memstara.infra` with existing containers instead.
-# Do not run upstream `up` without checking legacy container/project ownership.
-# external prevents Compose from creating an empty replacement or deleting this
-# existing database volume with `down -v`. This file does not modify Motoro.
+# Optional overlay for an existing database volume.
+# Set MOTORO_POSTGRES_VOLUME to the existing volume name before using it.
 volumes:
   postgres_data:
     external: true
-    name: agentic_core_postgres_data
+    name: ${MOTORO_POSTGRES_VOLUME:?Set MOTORO_POSTGRES_VOLUME to the existing volume name}

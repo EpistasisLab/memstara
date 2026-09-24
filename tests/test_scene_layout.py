@@ -26,9 +26,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "viewer" / "api"))
 
 import stores  # noqa: E402
 
-#  Copied from viewer/web/src/panels/ScenePanel.tsx:76 and the `w-32` on the agent node
-#  (viewer/web/src/components/nodes.tsx:53). A figure is drawn from `home.x - 64`, which
-#  is half its width, so it stands centred on its station.
 FIGURE_WIDTH = 128
 SLOT_STEP_X = 0  # Vertical stacks keep every slot in the same column.
 CEILING = 4  # slots 0..3; see `_MAX_HYPOTHESIS_AGENTS` in src/memstara/control/request.py
@@ -48,11 +45,7 @@ def test_every_splittable_station_is_a_station():
 
 
 def test_a_full_stack_does_not_reach_the_next_station():
-
-
-    Four figures stack vertically. Increasing the count must not consume the next
-    stage column; the horizontal footprint stays one figure wide.
-    """
+    """Verify that a full stack does not reach the next station."""
     ordered = sorted(stores.HOME, key=lambda s: stores.HOME[s]["x"])
     for station, neighbour in zip(ordered, ordered[1:], strict=False):
         if station not in stores.SPLITTABLE:
@@ -65,15 +58,7 @@ def test_a_full_stack_does_not_reach_the_next_station():
 
 
 def test_every_station_has_the_same_room_whether_it_uses_it_or_not():
-    """Why A-33's deferred *layout* decision turned out not to be one.
-
-    The item expected a second stacking station to need a new floor plan. It would not
-    have: the row is evenly spaced, so the clearance is the same 3px at every station.
-    A-33 was then settled the other way for a reason that has nothing to do with pixels
-    — the design puts one interpreter on screen — but that is exactly why this test is
-    kept. It is what says the next such question is a design question too, and what
-    would stop being true if someone moved a station and made it a layout one again.
-    """
+    """Verify that every station has the same room whether it uses it or not."""
     ordered = sorted(stores.HOME, key=lambda s: stores.HOME[s]["x"])
     for station, neighbour in zip(ordered, ordered[1:], strict=False):
         _, right = _span(station, CEILING)
@@ -82,20 +67,7 @@ def test_every_station_has_the_same_room_whether_it_uses_it_or_not():
 
 
 def test_hypothesis_and_interpreter_stations_are_drawn_per_worker():
-    """The design's own shape, and the half of it that is easy to lose while implementing
-    the other half.
-
-    V1 is *hypothesis 1–2, and data · ML · interpreter · report one role each*; reading
-    one hypothesis with several interpreters was considered and rejected for the volume of
-
-    non-hypothesis roles still run N workers internally, and not showing that as a
-    duplicated role is the decision, not an omission — so `--data-agents 2` must stay one
-    character with a 2 on it.
-
-    `interpreter` was in `SPLITTABLE` for part of 2026-09-08 on a misreading of that
-    design. This test is written as an equality rather than as four `not in`s so that
-    adding a station fails here and has to be argued for.
-    """
+    """The design's own shape, and the half of it that is easy to lose while implementing"""
     # Extended multi-agent scope: independently configured interpreters are visible,
     # while replicated data/ML workers remain one role on screen.
     assert stores.SPLITTABLE == frozenset({"hypothesis", "interpreter"})

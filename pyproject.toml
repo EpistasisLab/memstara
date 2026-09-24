@@ -1,70 +1,14 @@
-# The sandbox, as an installable package.
-#
-# Why this file did not exist until now
-# -------------------------------------
-# Every peer repository has one — motoro, ASAREE, BaseAgent, tpot. This one did not,
-# and that absence is what let `tests/` resolve its imports by accident: `pytest.ini`
-# set no `pythonpath`, `tests/conftest.py` does no path work, yet
-# `tests/test_board_columns.py:24` says `import tools_blackboard`. Run from the
-# repository root that collects 67 tests; run from anywhere else it is 5 collection
-# errors. Nothing was broken to repair — something was missing to add.
-#
-# This file is step 1 of `H-20` (issue #33). It moves nothing. The move into
-# `src/memstara/` comes afterwards, and lands in a commit of its own.
-
 [project]
 name = "memstara"
-# Written here rather than derived from a git tag. motoro uses hatch-vcs because a
-# product pins it *by tag* and the release procedure would otherwise drift; this
-# repository has no tags and nothing installs it from an index, so a version derived
-# from `git describe` would say `0.1.dev<N>+g<sha>` and mean nothing to anyone.
-version = "0.1.0"
+dynamic = ["version"]
 description = "Memstara sandbox: the agentic ML pipeline, its MCP tool servers, and the shared blackboard."
 readme = "README.md"
 requires-python = ">=3.12"
 
-# What the sandbox imports directly.
-#
-# This used to read "and motoro does not already bring in", which was the wrong rule.
-# It was true of this machine, where `-e ../motoro` (`environment.yml:36`) installs
-# asyncpg, pydantic, structlog, torch and the rest as a side effect. It is not true
-# anywhere else, and "a neighbouring package happens to install it" is a fact about
-# one environment, not a declaration. That is the same shape as the mistake recorded
-# on the `mcp` line below: a version cap written in one file and relied on from
-# another.
-#
-# `motoro` itself is deliberately absent. It is a local editable checkout at
-# `../motoro`, not something a resolver can fetch, so it stays in `environment.yml`
-# where the relative path belongs. Anyone who installs this package without motoro
-# present will find out at the first `import motoro`, which is the honest failure.
-#
-# Still undeclared, on purpose: structlog, PyYAML, sentence-transformers, torch,
-# huggingface_hub. Every one of them is reached only from a module that
-# imports motoro anyway, or is imported lazily inside a function, so declaring them
-# would not make this package standalone — it would only drag torch (~489MB,
-# `environment.yml:20-22`) into every install. When one of those modules stops
-# needing motoro, its dependency moves up here.
-#
-# **xgboost left that list on 2026-09-08** and is declared below. It was optional
-# while the default engine was scikit-learn; it is not optional now that it *is* the
-# default, and an undeclared package that every run needs is a checkout that installs
-# cleanly and dies at the third stage.
 dependencies = [
     "pandas",
     "scikit-learn",
     "numpy",
-    # Default ML engine; the evaluation MCP also supports scikit-learn models.
-    # Historical single-engine implementation:
-    # (`src/memstara/mcp_servers/ml.py (at commit 0990ec5, lines 93)`). The 2.4MB arm64 wheel is why this is
-    # affordable where torch is not — it pulls only numpy and scipy, both of which
-    # scikit-learn already requires.
-    #
-    # scikit-learn stays declared above it and did not become dead weight when the two
-    # scikit-learn engines were removed. It is down to two imports, both in
-    # `train_and_score` (`src/memstara/mcp_servers/ml.py (at commit 0990ec5, lines 273-274)`) — `train_test_split`
-    # and `roc_auc_score` — but those two produce every number this server reports, so
-    # it is a hard requirement rather than a leftover. Nothing else in the repository
-    # imports it; the matcher runs on numpy and sentence-transformers.
     "xgboost",
     "python-dotenv",
     # Logging is imported directly by the control service and driver.
@@ -102,18 +46,19 @@ dev = [
     "pytest",
     # Offline viewer API tests import FastAPI; match viewer/requirements.txt.
     "fastapi==0.115.6",
-    # The tool servers are child processes, so attaching a debugger to one needs this.
-
     "debugpy",
-    # The linter, configured in `[tool.ruff]` below and run by
-    # `.github/workflows/ci.yml`. Declared here rather than installed ad hoc so that
-    # the version CI uses and the version this machine uses come from one place.
     "ruff",
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/memstara/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/memstara"]
@@ -122,15 +67,6 @@ packages = ["src/memstara"]
 # pytest. This section replaces `pytest.ini`, which is deleted in the same commit.
 # --------------------------------------------------------------------------- #
 [tool.pytest.ini_options]
-# `testpaths = tests` is deliberate, and widening it gains nothing.
-#
-# This carries `pytest.ini`'s reasoning across. There used to be a `test_blackboard.py`
-# at the repository root that looked excluded by this line, but it was never a pytest
-# file: it holds `cleanup`/`ok`/`main` and an `if __name__ == "__main__"` block, needs a
-# live Postgres, and is run by hand. Setting `testpaths = ["tests", "."]` was measured —
-# it collects the same 67 tests and only adds an import of a database script. The name
-# was what misled, so the file is now `scripts/check_blackboard.py`, renamed in the
-# move commit along with its one call site, `src/memstara/pipeline/mvp.py:306`.
 testpaths = ["tests"]
 
 # The line this whole file exists for. Until now the tests found `tools_blackboard`,
@@ -146,29 +82,7 @@ markers = [
     "unit: pure logic over a stubbed encoder — no model, no catalog, no filesystem",
 ]
 
-# --------------------------------------------------------------------------- #
-# ruff. Run by `.github/workflows/ci.yml` as `ruff check src/`.
-#
-# There is no mypy here, and that is a decision rather than an omission: `src/`
-# is 12,426 lines carrying no type hints, so `--strict` would produce thousands
-# of findings and exactly one habit, which is ignoring the output. Adding types
-# is a piece of work with its own backlog item, not a flag to switch on.
-#
-# The scope is `src/`, and it is set by the command rather than by an `exclude`
-# here, so that a deliberate `ruff check scripts/` still works. `scripts/` is
-# one-off tooling written to be read rather than reused, and `tests/` carries
-# ported afc-forge tests that are evidence only while they stay unmodified
-# (the ported matcher fixtures). Both would be linted under a rule
-# they were not written to, for no gain.
-# --------------------------------------------------------------------------- #
 [tool.ruff]
-# Measured, not chosen. The distribution of line lengths across `src/` on
-# 2026-09-01: median 45, p90 87, p95 90, p99 106, longest 182. At 100 ruff
-# reports 85 lines; at 110, 20; at 120, exactly one
-# (`src/memstara/trace/__init__.py:7`). 120 is therefore the limit that gates
-# what gets written next instead of generating a backlog of reflowing existing
-# prose — and a limit that produces 85 findings on day one is a limit that gets
-# added to `ignore` within a week.
 line-length = 120
 
 [tool.ruff.lint]

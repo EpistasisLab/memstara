@@ -1,75 +1,4 @@
-"""Read an agent's system prompt from a file instead of a string literal.
-
-Why this file exists
---------------------
-Every agent's role — what it is, what it must do first, what it must never do — used
-to be a string literal inside `core.py`, and `provision_board_agents` said so in its
-own docstring: *"What each stage is, and what it must do first, is written out here as
-a prompt and nowhere else."* Ten agents' worth of that prose is about 13,000
-characters, and it sat in the middle of a 1,200-line module.
-
-The reason for moving it is not tidiness. It is that **in this project a prompt is an
-
-records the decision and names the cost of not doing it: *this prompt changed, so this
-result changed* cannot be traced afterwards while the prompt's history is
-tangled with every unrelated edit to the module it lived in. One file per agent makes
-`git log` on that file the experiment log for that agent.
-
-What this is not
-----------------
-**A reader, not a template engine.** There is no expression syntax, no loops, no
-conditionals, and exactly one include. Everything a prompt needs at *call* time —
-the run tag, the worker name, the trial number, the outcome column — is interpolated
-into the per-call message in `board.py` and deliberately stays there, where the
-branching that chooses it is visible as code.
-
-The file format
----------------
-::
-
-    ---
-    goal: One line. Handed to the model as the agent's goal.
-    ---
-
-    <!--
-    Why the text below is worded the way it is. Stripped before the model sees it.
-    -->
-
-    You are a question agent. You do not investigate anything. ...
-
-Three rules, and they are the whole of it:
-
-1. **Front matter.** `goal` is the only key. An unrecognised key raises rather than
-   being ignored — a key that is silently dropped is a prompt that silently does not
-   say what its author wrote, and the author has no way to notice.
-2. **`<!-- ... -->` blocks are stripped**, along with the blank lines they leave
-   behind. This is where the reasoning lives. It stays with the text it explains
-   rather than in a comment beside a call site, because those two drift apart and the
-   text is the thing people edit.
-3. **Two includes, and the leading underscore is what tells them apart.** A line that is
-   exactly ``{{_claim_preamble}}`` is replaced by the body of `_claim_preamble.md` in
-   the same directory: a fixed fragment, chosen when the prompt was written. It exists
-   because the data, ml and interpreter stages share a passage *in the middle* of their
-   prompts — the one that tells a worker to claim from the board and to stop when there
-   is nothing to claim. Three copies of it would defeat the point of their sharing it.
-
-   A line that is exactly ``{{playbook}}`` is replaced by the behavioural standard **this
-   run** chose for this stage, out of `PLAYBOOKS_DIR`, and by nothing at all when the run
-   chose none. No underscore, because the file is not beside this one and its name is not
-   in this file — it arrives as an argument. That is the whole of the difference, and it
-   is worth a character: everything else about the two directives is the same.
-
-   There is no nesting and no third directive.
-
-Failure is loud on purpose. A missing file, an empty body or an unknown key raises;
-none of them returns "". An agent provisioned with an empty system prompt does not
-fail, it behaves strangely, and it looks like a model problem for as long as it takes
-someone to go and check.
-
-**A playbook handed to a prompt with no ``{{playbook}}`` line raises too**, for the same
-reason an unknown front matter key does. The alternative is a run that was asked to work
-to a standard, did not, and says nowhere that it did not.
-"""
+"""Read an agent's system prompt from a file instead of a string literal."""
 
 from __future__ import annotations
 
@@ -223,6 +152,8 @@ def load_prompt(name: str, playbook: str = "") -> dict[str, str]:
     snapshot = active_plan()
     if snapshot and f"{name}:{playbook}" in snapshot.get("prompts", {}):
         return dict(snapshot["prompts"][f"{name}:{playbook}"])
+    from memstara.control.catalog import canonical_name
+    playbook = canonical_name(playbook) if playbook else playbook
     path = (PROMPTS_DIR / name).with_suffix(".md")
     front, body = _read(path)
 
@@ -240,12 +171,12 @@ def load_prompt(name: str, playbook: str = "") -> dict[str, str]:
         item = resolve(playbook)
         if playbook == "shared-ml-reference":
             raise ValueError(
-                "reviewer ML Knowledge is reference knowledge, not a skill. "
+                "ML reference knowledge is not a selectable skill. "
                 "Select an ML skill such as ml_governance."
             )
         if playbook == "shared-ml-results" and name != "board/report":
             raise ValueError(
-                "ML Results Presenter is a Explanation agent skill. "
+                "ML Results Presenter is an Explanation agent skill. "
                 "Select an ML skill such as ml_governance for the ML agent."
             )
         if item and item.get("source", "").startswith("Shared document"):

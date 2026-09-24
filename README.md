@@ -15,19 +15,39 @@ service, and a browser workspace. Motoro and Memstara own separate databases.
 
 ## Releases and development
 
-Memstara is under active development. The package declares version `0.1.0`
-in [pyproject.toml](pyproject.toml); that number alone does not identify a tested
-application release. Record both repositories' commits when reproducing a run:
+Memstara uses semantic release tags (`vMAJOR.MINOR.PATCH`). The Git tag is the
+source of the Python package version: `hatch-vcs` generates package metadata and
+`memstara.__version__` during installation or build. Commits between tags produce
+a development version. An unbuilt source checkout reports `0.0.0+unknown`.
+
+The `main` branch contains ongoing development. For a reproducible installation,
+choose a published tag from the [tags page](https://github.com/HyunjunA/memstara/tags)
+when available, and record the Motoro revision and run configuration as well.
+Reinstall editable packages after changing revisions to refresh version metadata.
 
 ```bash
+python -c "import memstara; print(memstara.__version__)"
 git rev-parse HEAD
 git -C ../motoro rev-parse HEAD
 ```
 
-[environment.yml](environment.yml) installs both repositories in editable mode.
-Updating the adjacent Motoro checkout therefore changes the runtime used by
-Memstara without reinstalling it. Validate a new pair of revisions before using
-it for a study; preserve run configuration, prompt snapshots, and data provenance.
+To prepare a release, merge and validate the intended revision on `main`, then
+create and push an annotated tag. Replace `vX.Y.Z` with the next version; do not
+move an already published release tag.
+
+```bash
+git tag -a vX.Y.Z -m "Release vX.Y.Z"
+git push origin vX.Y.Z
+```
+
+Build from a Git checkout with tags available, or from a generated source
+distribution. A plain source archive without version metadata is not a release
+build input. The viewer is part of the same release; its private npm package
+version is not an independent application release number.
+
+[environment.yml](environment.yml) installs Memstara and Motoro in editable mode.
+Validate the pair of revisions before using it for a study, and preserve prompt
+snapshots and data provenance alongside each run.
 
 ## Features
 

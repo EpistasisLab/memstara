@@ -1,35 +1,4 @@
-"""The settings class every sandbox script shares.
-
-The one settings object every entry point in this package shares. It subclasses core's
-`CoreSettings` and overrides **only those of core's defaults that do not suit this
-project.** There are four:
-
-    mcp_allowed_env_vars        which environment variables reach a tool server
-                                (a child process)
-    llm_call_timeout_seconds    how long to wait for one LLM call
-    hook_timeout_seconds        the fence around that — core's defaults have the
-                                inner and outer bounds the wrong way round
-    act_prior_result_max_chars  how many characters before a tool result is cut
-
-It also picks an environment prefix. Core deliberately sets no prefix of its own —
-that is a product concern, and here the product is this sandbox.
-
-The prefix is `MOTORO_` because core's own `.env.example` already uses
-`MOTORO_DATABASE_URL` / `MOTORO_REDIS_URL`. Reusing it avoids a second set of
-names for the same things.
-
-The prefix was `AGENTIC_` until core's rename landed here on 2026-09-01 (v0.5.2).
-One name did **not** move with it: `AGENTIC_OKF_BUNDLE_DIR`. That one is read by
-bare name, not through this prefix — `mcp_servers/okf.py:66` and the subprocess
-allowlist in `mcp/client.py:57` both spell it out — so renaming it to match would
-leave the OKF server unable to find its bundle.
-
-Provider credentials are the exception — **they carry no prefix.** `CoreSettings`
-gives them bare-name validation aliases, so `ANTHROPIC_API_KEY` /
-`ANTHROPIC_FOUNDRY_API_KEY` / `ANTHROPIC_FOUNDRY_RESOURCE` / `OPENAI_API_KEY` are
-read exactly as written, *without* the prefix — they are conventional names other
-tooling already sets.
-"""
+"""The settings class every sandbox script shares."""
 
 from __future__ import annotations
 
@@ -46,63 +15,6 @@ class Settings(CoreSettings):
 
     model_config = SettingsConfigDict(env_prefix="MOTORO_", env_file=".env", extra="ignore")
 
-    # ------------------------------------------------------------------ #
-    # MCP subprocess env allowlist — the tool servers die without this
-    # ------------------------------------------------------------------ #
-    #
-    # Core does not hand an MCP subprocess the host environment wholesale. It
-    # copies only what is on the allowlist (`build_subprocess_env` in
-    # mcp/client.py). The point is isolation: secrets must not leak into a
-    # server core does not control.
-    #
-    # Default allowlist: PATH · HOME · SHELL · TERM · USER · LOGNAME · LANG ·
-    #                    LC_ALL · AGENTIC_OKF_BUNDLE_DIR (+ two ARES-specific)
-    #
-    # AGENTIC_OKF_BUNDLE_DIR is already there because core ships its own OKF
-    # server. The three below belong to this sandbox's tool servers
-    # (src/memstara/mcp_servers/data.py / src/memstara/mcp_servers/ml.py), so they have to be opened explicitly.
-    #
-    # **Leave a name off this list and it fails silently.** The variable never
-    # reaches the tool server and nothing raises an error; the only symptom is a
-    # one-line "could not connect", which does not point at the cause. That has
-    # caught us twice — once a path, once a debugging switch. `preflight.py` now
-    # reads the sources and checks them against this list.
-    #
-    # MEMSTARA_DATABASE_URL is the fourth, and it is a different kind of entry.
-    #
-    # The default list leaves database credentials out on purpose — `build_subprocess_env`
-    # in mcp/client.py says it is there to keep secrets from reaching *untrusted* MCP
-    # server subprocesses. The blackboard server is not untrusted; it is this folder's
-    # own file, and the 2026-08-12 alignment put the board in a table precisely so the
-    # agents would reach it through a server rather than by querying a database.
-    #
-    # Extending this list is the mechanism core provides for exactly that — the
-    # allowlist is assembled as "default + whatever the product configured"
-    # (mcp/client.py:56). So this is the sanctioned path, not a way around a wall.
-    # Only this one server needs it; the other three never read it.
-    #
-    # Note what is NOT here: `MOTORO_DATABASE_URL`. The board has its own database now
-    # (compose.yml), and core's credentials have no business reaching a server
-    # of ours. Passing them once is how the board ended up inside core's database.
-    #
-    # The last two are for debugging and carry no secret. A tool server runs as a child
-    # process, so a debugger attached to the pipeline never reaches it; `src/memstara/mcp_servers/debug_hook.py`
-    # lets one wait for a debugger, but only when told to by name. Without these on the
-    # list the variable never arrives and the hook silently does nothing — which is
-    # exactly how it first failed here, with the port simply never opening.
-    #
-    #     MEMSTARA_DEBUGPY        which servers should wait: "data" or "okf,ml"
-    #     MEMSTARA_DEBUGPY_WAIT   "0" opens the port without blocking startup
-    #
-    # Unset means unchanged behaviour: the hook returns immediately and nothing is
-    # imported. Verified — a normal run shows four servers connected and no mention of
-    # debugpy anywhere.
-    #
-    # MEMSTARA_OKF_FIELDS is the branch of the knowledge bundle a run may read — the
-    # user's chosen skill, set by `--skill` on the driver and enforced inside the okf
-    # server (`src/memstara/mcp_servers/okf.py`). It is on this list for the reason the
-    # whole list exists: left off, the server reads no lock, every run silently sees the
-    # whole corpus, and the screen still says which skill was picked.
     mcp_allowed_env_vars: str = (
         "MEMSTARA_DATASET_PATH,MEMSTARA_OUTPUT_DIR,MEMSTARA_ML_ENGINE,MEMSTARA_DATABASE_URL,"
         "MEMSTARA_OUTCOME_COLUMN,MEMSTARA_OKF_FIELDS,MEMSTARA_RUN_CONFIG,"

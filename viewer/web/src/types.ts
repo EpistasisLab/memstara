@@ -15,12 +15,7 @@
  *  that has run and stopped, which is a different and false claim. */
 export type AgentState = "idle" | "moving" | "working" | "unknown" | "planned";
 export type StoreId = "okf" | "matcher" | "board" | "results" | "dataset" | "ml" | "unknown";
-/** The five stages the pipeline has, plus one it used to. `curator` was retired on
- *  2026-09-07 — writing the wave's questions is the hypothesis agent's other job now —
- *  and the API never sends it: `stores.reported_as` folds it into `hypothesis` on every
- *  screen. It stays in the union because the databases still hold runs recorded against
- *  it, and because a stage the API cannot name is better handled by a `Record` that has
- *  a key for it than by an undefined lookup. */
+
 export type StageId = "curator" | "hypothesis" | "data" | "ml" | "interpreter" | "report";
 
 export interface Place {
@@ -54,26 +49,10 @@ export interface SceneAgent {
   /** Which of its stage's figures this is, from 0. The floor plan offsets by it so two
    *  workers of one stage do not stand on the same spot. */
   slot: number;
-  /** How many runs **this figure** stands for — 0 when it is resting.
-   *
-   *  Only `hypothesis` is drawn as one figure per worker (`stores.SPLITTABLE`), so there
-   *  this is 1 on each. The other four are one figure however many run behind them, which
-   *  is what the meeting of 2026-08-26 asked for, and there this is the whole count. That
-   *  is why folding them is not the same as hiding them: `--data-agents 2` draws one data
-   *  character with a 2 on it, not two characters and not a silent one. */
+
   running: number;
   name: string;
-  /** The behavioural standard this worker runs under, or `""` for the prompt as written.
-   *
-   *  Separate from `label` because they belong to different things: `label` is the
-   *  station's and every figure standing at it shares it, while the standard is the
-   *  worker's. Since `A-32` a run may give three hypothesis agents three different
-   *  standards, and until this field existed all three drew figures reading `Hypothesis`
-   *  — the one comparison the stacked drawing exists to let a person read.
-   *
-   *  Drawn as *no standard* when empty rather than omitted: "the prompt as written" and
-   *  "the name lost its suffix somewhere" are the same blank on screen and need opposite
-   *  fixes. */
+
   playbook: string;
   state: AgentState;
   /** Which place it is standing at, or null when resting at home. */
@@ -237,22 +216,7 @@ export interface Result {
   /** What the AUC is an AUC *of*. Carried over from the board. */
   y_column: string;
   auc: number | null;
-  /** The engine that produced `importance`, and therefore the **scale those numbers are
-   *  on**. `sklearn_hgb` reached the permutation route and its numbers are AUC deltas;
-   *  `random_forest` and `xgboost` carry `feature_importances_` and theirs are impurity
-   *  or gain, summing to about 1. Ranking one against the other is reading an AUC delta
-   *  against a fraction of impurity, which is why this field travels with the map.
-   *
-   *  Since 2026-09-08 `xgboost` is the only engine, so every *new* row is on one scale.
-   *  The field is not therefore redundant: this type describes rows read off the board,
-   *  and the board still holds rows from all three. A screen that assumed one scale
-   *  because the current code only produces one would be right about today's runs and
-   *  wrong about the 81 it renders alongside them.
-   *
-   *  `""` means **not recorded**, not "unknown engine" — the column is
-   *  `TEXT NOT NULL DEFAULT ''` and every result stored before 2026-09-08 takes it,
-   *  because the engine was read from the environment inside the call and never written
-   *  down. It cannot be backfilled and the screen says so rather than guessing. */
+
   model: string;
   interpretation: string;
   created_at: string;

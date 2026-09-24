@@ -1,7 +1,7 @@
 # SOURCE: MIXED — this file is part afc-forge and part sandbox. Every top-level
 #   symbol below carries its own SOURCE tag; the map is also given here.
 #
-#   upstream: shared/afc-forge/ade_forge/tools/impl/catalog.py (674 lines)
+#   upstream: afc-forge/ade_forge/tools/impl/catalog.py (674 lines)
 #
 #   PORTED VERBATIM (byte-identical to upstream, docstrings included) — 7:
 #       norm_upper   CatalogEntry   save_catalog   load_catalog

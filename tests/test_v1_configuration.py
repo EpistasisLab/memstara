@@ -224,7 +224,7 @@ def test_threshold_evidence_and_replicates_are_measured(clean_data):
         assert op["true_negative"] + op["false_positive"] == rep["test_class_counts"]["0"]
         assert op["sensitivity"] == pytest.approx(op["true_positive"] / rep["test_class_counts"]["1"])
     explanation = result["explanation"]
-    assert "reviewer original required" in explanation["review_status"]
+    assert "Review required" in explanation["review_status"]
     assert explanation["clinical_threshold"] is None
     for effect in explanation["feature_effects"]:
         assert effect["range_start"] <= effect["range_end"]

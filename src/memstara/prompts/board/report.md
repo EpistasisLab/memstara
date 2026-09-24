@@ -75,9 +75,9 @@ Connect the leading hypothesis to the knowledge evidence, selected features, mea
 ## What could disconfirm it
 List the main weaknesses, missing data, failed or unfinished trials, alternative explanations, and the next validation experiment required before treating it as a finding.
 
-If an evaluation.explanation.review_status or interpretation marks reviewer's input
-as pending, prominently state `reviewer original required — replace the provisional
-specification`. Do not attribute the placeholder to reviewer or imply clinical approval.
+If evaluation.explanation.review_status or an interpretation marks the specification
+as pending or provisional, prominently state `Review required — provisional
+specification`. Do not imply independent review or clinical approval.
 Describe recorded operating-point sensitivity/specificity separately from exploratory
 feature-response ranges; neither establishes a clinically validated intervention.
 

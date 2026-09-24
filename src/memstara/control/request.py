@@ -50,46 +50,8 @@ _MODEL = re.compile(r"[A-Za-z0-9._:/-]{1,120}\Z")
 _MAX_TRIALS = 20
 _MAX_WAVES = 10
 
-#: **This was 3 until 2026-09-09, and three was a drawing's limit rather than a run's.**
-#: The meeting of 2026-08-26 scoped V1 to one or two hypothesis agents with the screen
-#: expandable to three, and the floor plan was laid out to exactly that: the figures fan
-#: upwards from a row of five stations 175 apart, a figure is 128 wide, and a fixed 22px
-#: sideways step means three span 172 and the fourth walks into the next station.
-#:
-#: The step is no longer fixed. `ScenePanel.tsx` now divides the same 175-wide envelope by
-#: however many figures there are, so the stack tightens instead of overflowing and there
-#: is no N at which it draws something wrong. That removes the reason this number was 3,
-#: and a number kept after its reason has gone is the kind that gets cited later as though
-#: it meant something.
-#:
-#: It is 8 rather than removed. `board.py` deliberately does **not** cap
-#: `--hypothesis-agents` (`src/memstara/pipeline/board.py:1930-1933`), because a cap in the
-#: driver stops an experiment; this one is on the *screen's* requests, where the thing being
-#: guarded is a slipped keypress in a number field — the same reason as `_MAX_TRIALS` above,
-#: and the same kind of ceiling. Eight hypothesis agents is already a run nobody starts by
-#: accident, and the CLI is still there for a deliberate ninth.
 _MAX_HYPOTHESIS_AGENTS = 4
 
-#: What the form sends when a field is left alone. The same values as `board.py`'s own
-#: argparse defaults, so a request that names nothing starts the run the CLI would.
-#:
-#: `hypothesis_agents` is the only stage count here. The same meeting fixed the other
-#: three at one each — one data, one ml, one interpreter — so putting them on the form
-#: would reopen a decision on screen that was made in a meeting. They are still free on
-#: the command line, and `A-24` draws whatever number results as one character with the
-#: count on it.
-#: The stages that may be given a playbook, in the order they are put on the command
-#: line. The same five as `board.py`'s `PLAYBOOK_STAGES`, written out rather than
-#: imported for the reason in the module docstring — and `tests/test_control_request.py`
-#: compares the two lists, so the copy cannot drift without a test failing.
-#:
-#: **Every stage is here, and whether a stage can actually take one is not this file's
-#: answer.** A prompt has to carry a `{{playbook}}` line to receive a standard. All five
-#: carry it as of 2026-09-08 — but that is a fact about five `.md` files, changeable with a
-#: one-line edit, and a copy of it here would be a second answer to the same question kept
-#: in step by hand. `GET /control/playbooks` reads the prompts themselves and the caller
-#: passes the answer in. This list stays the *stages a flag exists for*, which is a
-#: different and slower-moving question.
 PLAYBOOK_STAGES = ("hypothesis", "data", "ml", "interpreter", "report")
 
 #: The one stage that may be given several standards, one per worker. Everything else runs
@@ -186,42 +148,7 @@ def build_argv(
     playbooks: Iterable[str] = (),
     playbook_stages: Iterable[str] = (),
 ) -> list[str]:
-    """The arguments for one run, or `ValueError` saying which field was wrong.
-
-    Args:
-        body: the decoded JSON object from the request.
-        offered: the skills `GET /control/skills` listed, as `field=value` strings. A
-            skill outside this set is refused **even though it may be a perfectly good
-            filter**: the list is generated from the bundle, so anything missing from
-            it selects no documents, and a run confined to nothing is a run whose
-            agents can read nothing and will not say so.
-        playbooks: the playbook stems `GET /control/playbooks` listed. Named here for
-            the same reason the skills are: `board.py` refuses an unknown one, but it
-            does so after the process has started, where the message reaches a log
-            rather than the person who pressed the button.
-        playbook_stages: the stages whose prompts carry a ``{{playbook}}`` line, out of
-            the same endpoint. **Both default to empty, which refuses every playbook.**
-            A caller that does not say what exists cannot be assumed to have meant
-            anything is allowed, and no playbook is the state every run was in until
-            this field existed.
-
-    **`playbook_hypothesis` may name several standards, comma-separated, one per agent.**
-    That is the request half of `A-32`: the hypothesis stage provisions an agent per
-    standard, so two workers choosing the same column is two standards agreeing rather
-    than one standard asked twice. The count has to equal ``hypothesis_agents`` — they are
-    paired by position, and the check is here as well as in `board.py` so that a mismatch
-    is a red message under the button instead of a process that exits 2 into a log.
-
-    Returns:
-        The tail of the command line — `["--trials", "3", ...]`. The caller adds
-        `--run-tag` and `--run-dir`, because those are its own bookkeeping and are
-        never taken from the request.
-
-    Raises:
-        ValueError: one field was missing a type, out of range, outside the offered
-            skills, or not a field at all. The message names the field and the value,
-            because it is shown to whoever pressed the button.
-    """
+    """The arguments for one run, or `ValueError` saying which field was wrong."""
     body = normalize_agent_configuration(body)
     unknown = sorted(set(body) - set(DEFAULTS))
     if unknown:

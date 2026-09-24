@@ -36,7 +36,7 @@ independent validation, using actual records rather than requested settings.
 
 Report missing, failed and unfavorable evidence. Do not invent features, effect
 directions, metrics, thresholds, citations, patient details or clinical approval.
-Preserve recorded provisional/reviewer-pending notices. Distinguish an exploratory
+Preserve recorded provisional/review-pending notices. Distinguish an exploratory
 association from causation and research priority from clinical readiness. An
 interesting follow-up may merit study without being clinically actionable; never
 inflate the evidence to justify that recommendation. Mark previous-result-informed

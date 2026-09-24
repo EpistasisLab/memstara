@@ -1,21 +1,4 @@
 {
-  // The top entry is the default. VS Code remembers the name of the configuration
-  // last chosen, and falls back to the first one when that name is not here.
-  //
-  // ── Why the default is "full, 1 trial" ─────────────────────────────────
-  //  --report-only runs stages (1)(2)(3)(6) only, which shows **one person** — the
-  //  one who reports. Following what the hypothesis, data, training and
-  //  interpretation roles did takes stages (4) and (5).
-  //
-  //  --run-tag is **deliberately left off.** Without it the name is generated from
-  //  the clock on every run (board_20260820T094148), so every run starts from an
-  //  empty board. Reusing one name mixes the previous run's notes in with this
-  //  one's, and they become hard to tell apart.
-  //
-  //  One trial is also deliberate — five people appearing once each is the clearest
-  //  way to watch the flow, whereas 3 trials only repeats the same scene three
-  //  times. It also costs three times as much.
-  // ─────────────────────────────────────────────────────────────────────
   "version": "0.2.0",
   "configurations": [
     {
@@ -25,18 +8,14 @@
       "console": "integratedTerminal",
       "justMyCode": true,
       "cwd": "${workspaceFolder}",
-      "python": "${workspaceFolder}/.venv/bin/python",
-      "name": "board pipeline · full, 1 trial (default)",
+      "name": "board pipeline \u00b7 full, 1 trial (default)",
       "args": [
         "--trials",
         "1",
         "--y-column",
-        "HIV_DETECTABLE"
+        "Y"
       ],
-      "env": {
-        "AGENTIC_OKF_BUNDLE_DIR": "${workspaceFolder}/../shared/hiv-suppression/okf",
-        "MEMSTARA_DATASET_PATH": "${workspaceFolder}/outputs/hiv_cohort.csv"
-      }
+      "env": {}
     },
     {
       "type": "debugpy",
@@ -45,18 +24,14 @@
       "console": "integratedTerminal",
       "justMyCode": true,
       "cwd": "${workspaceFolder}",
-      "python": "${workspaceFolder}/.venv/bin/python",
-      "name": "board pipeline · full, 3 trials",
+      "name": "board pipeline \u00b7 full, 3 trials",
       "args": [
         "--trials",
         "3",
         "--y-column",
-        "HIV_DETECTABLE"
+        "Y"
       ],
-      "env": {
-        "AGENTIC_OKF_BUNDLE_DIR": "${workspaceFolder}/../shared/hiv-suppression/okf",
-        "MEMSTARA_DATASET_PATH": "${workspaceFolder}/outputs/hiv_cohort.csv"
-      }
+      "env": {}
     },
     {
       "type": "debugpy",
@@ -65,17 +40,14 @@
       "console": "integratedTerminal",
       "justMyCode": true,
       "cwd": "${workspaceFolder}",
-      "python": "${workspaceFolder}/.venv/bin/python",
-      "name": "board pipeline · full, 1 trial · every litellm raw message (rarely used)",
+      "name": "board pipeline \u00b7 full, 1 trial \u00b7 every litellm raw message (rarely used)",
       "args": [
         "--trials",
         "1",
         "--y-column",
-        "HIV_DETECTABLE"
+        "Y"
       ],
       "env": {
-        "AGENTIC_OKF_BUNDLE_DIR": "${workspaceFolder}/../shared/hiv-suppression/okf",
-        "MEMSTARA_DATASET_PATH": "${workspaceFolder}/outputs/hiv_cohort.csv",
         "MEMSTARA_LLM_RAW": "1"
       }
     },
@@ -86,17 +58,13 @@
       "console": "integratedTerminal",
       "justMyCode": true,
       "cwd": "${workspaceFolder}",
-      "python": "${workspaceFolder}/.venv/bin/python",
-      "name": "board pipeline · report only (fast, one LLM call)",
+      "name": "board pipeline \u00b7 report only (fast, one LLM call)",
       "args": [
         "--report-only",
         "--run-tag",
         "example"
       ],
-      "env": {
-        "AGENTIC_OKF_BUNDLE_DIR": "${workspaceFolder}/../shared/hiv-suppression/okf",
-        "MEMSTARA_DATASET_PATH": "${workspaceFolder}/outputs/hiv_cohort.csv"
-      }
+      "env": {}
     },
     {
       "type": "debugpy",
@@ -105,20 +73,16 @@
       "console": "integratedTerminal",
       "justMyCode": false,
       "cwd": "${workspaceFolder}",
-      "python": "${workspaceFolder}/.venv/bin/python",
-      "name": "board pipeline · report only (stepping into motoro — spare)",
+      "name": "board pipeline \u00b7 report only (stepping into motoro \u2014 spare)",
       "args": [
         "--report-only",
         "--run-tag",
         "example"
       ],
-      "env": {
-        "AGENTIC_OKF_BUNDLE_DIR": "${workspaceFolder}/../shared/hiv-suppression/okf",
-        "MEMSTARA_DATASET_PATH": "${workspaceFolder}/outputs/hiv_cohort.csv"
-      }
+      "env": {}
     },
     {
-      "name": "1. tool harness (okf · data · ml · board)",
+      "name": "1. tool harness (okf \u00b7 data \u00b7 ml \u00b7 board)",
       "type": "debugpy",
       "request": "launch",
       "module": "memstara.debug_harness",
@@ -127,11 +91,10 @@
       ],
       "console": "integratedTerminal",
       "justMyCode": true,
-      "cwd": "${workspaceFolder}",
-      "python": "${workspaceFolder}/.venv/bin/python"
+      "cwd": "${workspaceFolder}"
     },
     {
-      "name": "attach → okf (5678)",
+      "name": "attach \u2192 okf (5678)",
       "type": "debugpy",
       "request": "attach",
       "connect": {
@@ -147,7 +110,7 @@
       ]
     },
     {
-      "name": "attach → data (5679)",
+      "name": "attach \u2192 data (5679)",
       "type": "debugpy",
       "request": "attach",
       "connect": {
@@ -163,7 +126,7 @@
       ]
     },
     {
-      "name": "attach → ml (5680)",
+      "name": "attach \u2192 ml (5680)",
       "type": "debugpy",
       "request": "attach",
       "connect": {
@@ -179,7 +142,7 @@
       ]
     },
     {
-      "name": "attach → blackboard (5681)",
+      "name": "attach \u2192 blackboard (5681)",
       "type": "debugpy",
       "request": "attach",
       "connect": {

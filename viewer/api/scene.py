@@ -257,12 +257,6 @@ async def _results(run_tag: str) -> list[dict[str, Any]]:
              "importance": _jsonb(r["feature_importance"], {}),
              "okf_concept_ids": _jsonb(r["okf_concept_ids"], []),
              "y_column": r["y_column"], "auc": r["auc"],
-             # The engine that produced `importance`, and it travels with it because the
-             # two engines do not measure the same thing — gain for the boosted trees,
-             # mean AUC drop under permutation for the forest. Passed through exactly as
-             # stored, empty string included: `''` is *not recorded*, which is what every
-             # result from before 2026-09-08 says, and turning it into "unknown" here
-             # would put a word in the database's mouth on the screen's behalf.
              "model": r["model"], "evaluation": _jsonb(r["evaluation"], {}),
              "hypothesis_id": r["hypothesis_id"],
              "interpretation": r["interpretation"], "created_at": _iso(r["created_at"])}
@@ -460,21 +454,7 @@ async def _core_facts_uncached(run_ids: list[str] | None = None, *, task_history
 
 
 def _carrying(touches: list[dict[str, Any]]) -> dict[str, int]:
-    """Which agent **run** currently holds which task, replayed from the board windows.
-
-    A `claim_task` puts a task in an agent's hands; the matching `submit_result` takes
-    it back. Replaying in time order leaves exactly what is still held — the board's own
-    `in_progress` rows say a task is held but not by whom, and "by whom" is the thing
-    the scene needs to draw.
-
-    **Keyed by run id, not by stage.** It was keyed by stage until 2026-09-08, on the
-    stated assumption that one stage holds one thing at a time. That is false the moment
-    `--data-agents 2` is passed: two workers of one stage claim two tasks, the second
-    claim overwrote the first here, and the floor showed one card where there were two.
-    A *run* really does hold one task at a time — `call_agent` is given one task to do
-    (`src/memstara/pipeline/board.py:1591`) — so the assumption is true at this key and
-    was only ever approximately true at the old one.
-    """
+    """Which agent **run** currently holds which task, replayed from the board windows."""
     held: dict[str, int] = {}
     for t in touches:
         # The stage is not the key any more, but it is still the filter: only board-path
@@ -576,17 +556,6 @@ def _recency(run_id: str | None, last: dict[str, Any] | None,
 
 
 def _members_of_each_character() -> dict[str, list[str]]:
-    # Which real stages each character on the floor stands for.
-    #
-    # Five stages come out of the pipeline and five characters stand on the floor, so
-    # for anything run since 2026-09-07 this is an identity. It is not dead code: the
-    # retired `curator` stage still reaches the floor through `stores.DRAWN_AS`, which
-    # is the only route by which a run recorded against `memstara-board-curator` gets
-    # drawn at all. See `stores.LEGACY_BOARD_AGENT_NAMES`.
-    #
-    # Read off `BOARD_AGENT_NAMES_ANY` rather than written out, so a stage added to the
-    # pipeline arrives here by itself instead of going missing until somebody notices —
-    # and a stage *retired* from it stays, which `BOARD_TOOLS` would not give us.
     members: dict[str, list[str]] = {character: [] for character in stores.HOME}
     for stage in stores.BOARD_AGENT_NAMES_ANY:
         members.setdefault(stores.drawn_as(stage), []).append(stage)
@@ -594,36 +563,6 @@ def _members_of_each_character() -> dict[str, list[str]]:
 
 
 def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
-    # ★ Assembles the scene: the characters' **state, position and what they are
-    # holding,** and the lines that will flash.
-    #
-    # **A character is one worker, not one stage.** Until 2026-09-08 this walked
-    # `stores.HOME` and produced exactly five figures, so `--hypothesis-agents 3` — which
-    # the pipeline has supported since A-11 — drew one hypothesis character while three
-    # were running, and the two it dropped were invisible rather than merged: their runs,
-    # their tool calls and the cards in their hands were simply not on the screen. The
-    # floor plan is the thing people watch to see whether parallelism is doing anything,
-    # and it was the one screen that could not show it.
-    #
-    # `stores.HOME` is still the list of *characters* and still has five entries — the
-    # floor has five stations and each stage rests at its own. What changed is that a
-    # station can now have more than one figure standing at it.
-    #
-    # **And only one station may.** The first version of this split all five, which is the
-    # opposite of what the meeting decided and of what A-24 was written to do: the user
-    # chooses how many hypothesis agents to run and sees them, and everything else is one
-    # character however many workers are behind it (`stores.SPLITTABLE`). The count is not
-    # hidden — it rides on the card as `running`.
-    #
-    # First the rows that came from core are indexed by **run**. `stores.stage_of_agent`
-    # is what does the filtering — only **board-path characters** appear in the scene, so
-    # supervisor-path agents are quietly dropped here.
-    # (The access map is the opposite: it has to count both. See _access.)
-    #
-    # A function rather than `name in stores.AGENT_BY_NAME`, and that is not a style
-    # preference: since `A-32` a hypothesis agent may be named for the standard it
-    # carries, so the set of board agent names is open and the dict holds only the bases.
-    # A membership test would drop every run made under a playbook — no figure, no error.
     open_by_run = {
         str(r["run_id"]): r
         for r in core["open"] if stores.stage_of_agent(r["name"]) is not None
@@ -647,32 +586,7 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
     # is holding a card — the "moving" state below exists for exactly that run, and
     # without this line it would have no stage and no figure.
     stage_by_run: dict[str, str] = {}
-    # …and which **agent** it ran as, which is a different question since `A-32`. The stage
-    # is `hypothesis` for every hypothesis worker; the agent name is what carries the
-    # standard it was provisioned with (`memstara-board-hypothesis-cardiometabolic`), and
-    # it is the only place on this path that standard survives. `stage_by_run` cannot
-    # answer it — resolving the stage is exactly the step that takes the suffix off.
     agent_by_run: dict[str, str] = {}
-    # …and the same question asked of a **station** rather than a run, which is the only
-    # form that survives the run ending. A figure with nothing open has no `run_id` to
-    # look up, so until 2026-09-09 its standard came back `""` and the card read *no
-    # standard* the moment the work finished — the one reading the field exists to rule
-    # out. The standard belongs to the agent, and the agent does not stop having been
-    # provisioned under it because its run closed.
-    #
-    # **The most recent agent, not the only one.** A set of every name ever seen at the
-    # station was tried first and answered nothing on this machine: the database holds
-    # every run since August, so `hypothesis` had both `memstara-board-hypothesis` and
-    # `memstara-board-hypothesis-ml_reporting` in it and a rule of "use it when there is
-    # exactly one" fell through on the very case it was written for. Recency is the
-    # question actually being asked — *what was this station last doing* — and
-    # `last_call.started_at` is the one timestamp that answers it for a run that has
-    # closed. Built from `last_call` alone because it is the only one of the three that
-    # carries that column.
-    #
-    # While two workers run at once under two standards this is not consulted at all:
-    # each has an open run and `agent_by_run` answers per figure. It is only what an
-    # **idle** figure falls back to, and there the station has one past, not two.
     agents_at: dict[str, tuple[Any, str]] = {}
     for r in core["last_call"]:
         stage = stores.stage_of_agent(r["name"])
@@ -702,37 +616,6 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
         if stage is not None:
             live.setdefault(stores.drawn_as(stage), []).append(run_id)
 
-    # **A splittable station keeps a figure for every worker it has, not only for the ones
-    # mid-call.** The two lines above are "what is happening this instant", and for the
-    # four folded stations that is the whole question. For `hypothesis` it is not.
-    #
-    # Three workers propose their questions roughly together and finish roughly together,
-    # so with the rule above alone the column held three cards for **two minutes and
-    # twenty-seven seconds** of a run that lasted twenty (measured, 2026-09-09 07:03:01 to
-    # 07:05:28) and one card for the rest of it. Anyone who looked before or after saw a
-    # pipeline with a single hypothesis agent, which is the picture the stack was built to
-    # replace — and it was not wrong about this instant, it was answering a different
-    # question from the one being asked. The number of hypothesis agents is a property of
-    # the **run**, chosen on the form before it started; it does not drop to one because
-    # the workers happen to be between calls.
-    #
-    # A worker is known here by having named itself to the board, and `workers` above now
-    # reads that from two queries rather than one. That is the half of this fix made on
-    # **2026-09-09 in the afternoon**, and the reason is that the paragraph above was still
-    # true for fifteen minutes and false afterwards: `TASK_TOUCHES` is windowed on `now()`,
-    # so the stack survived the run by exactly `RUN_ALIVE_SECONDS` and then folded back to
-    # one card. Measured — the 07:31 run's three cards were still there at 07:44:05 and the
-    # snapshot read at 08:02:31 had one, `idle`. The paragraph above says why that is the
-    # wrong answer, and it is no less wrong at minute sixteen than at minute two.
-    #
-    # `queries.LAST_ROSTER` asks the same question with the window anchored on the run's own
-    # newest call instead of on the clock, so the cohort is grouped the same way and simply
-    # does not expire. **Two runs of the same station less than 900s apart will show the
-    # workers of both**, which is unchanged, and is the honest answer for a panel whose own
-    # header says `All runs`.
-    #
-    # Only splittable stations. Adding a resting figure at a folded station would put a
-    # second `data` character on the floor that the meeting asked to be drawn once.
     active_hypotheses = [r for r in core["open"]
                          if stores.stage_of_agent(r["name"]) == "hypothesis"]
     active_names = {r["name"] for r in active_hypotheses}
@@ -798,11 +681,6 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
             instances.append((run_id, open_by_run.get(run_id), last_by_run.get(run_id),
                               stage_by_run.get(run_id)))
         if not instances:
-            # Idle. `last` is then the most recent call across every run of every stage
-            # this character stands for — what the character last did, rather than what
-            # any one of its runs last did. Both members can have a last call: on a
-            # pre-2026-09-07 run the curator and the hypothesis stage were two agents
-            # drawn as one figure.
             calls = [(r, stores.stage_of_agent(r["name"])) for r in core["last_call"]
                      if stores.stage_of_agent(r["name"]) in mine]
             last, last_stage = (max(calls, key=lambda pair: pair[0]["started_at"])
@@ -821,12 +699,6 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
             instances = [max(instances, key=lambda inst: _recency(inst[0], inst[2],
                                                                   open_by_run))]
 
-        # How many runs **each figure** stands for. One apiece where the station splits,
-        # all of them where it folds, and zero for a figure that is resting. This is the
-        # reason folding is not the same as hiding: the meeting asked for the data agent
-        # to be *drawn* once, not for the second one's existence to be taken off the
-        # screen, and without a count `--data-agents 2` would look exactly like
-        # `--data-agents 1` with nothing anywhere to say otherwise.
         stands_for = [len(runs)] if folded else [
             1 if run_id is not None and (run_id in open_by_run or run_id in held) else 0
             for run_id, *_ in instances
@@ -845,17 +717,6 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
             if len(instances) == 1:
                 ids.append(character)
             else:
-                # The fallback names the **run**, never a worker number. It used to be
-                # `f"{character}#{slot + 1}"`, and that put an invented name into the
-                # workers' own namespace: real workers are 0-indexed (`wid =
-                # f"hypothesis#{i}"`, `src/memstara/pipeline/board.py:1403`), so a
-                # three-worker run drew `hypothesis#0`, `hypothesis#2`, `hypothesis#3` in
-                # the seconds before the third worker reached its `claim_question` — one
-                # id naming a worker that does not exist, and `hypothesis#1` nowhere,
-                # while `hypothesis#1` was in fact running. Seen on a live run on
-                # 2026-09-08. A worker has no name here only until it makes its first
-                # call; the run id is what genuinely tells these apart in the meantime,
-                # and it cannot be mistaken for something the board wrote.
                 ids.append(workers.get(run_id or "") or f"{character}:run{run_id}")
         # Two runs can genuinely report the same worker name: `data#1` is what the first
         # worker of every wave is called, so a task reclaimed after a stall is claimed by
@@ -906,12 +767,6 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
             # where "no standard" is the true answer.
             ran_as = agent_by_run.get(run_id or "") or agents_at.get(character, (None, ""))[1]
 
-            # `name` is the agent that produced the state just settled, not the
-            # character's own — so replaying a pre-2026-09-07 run, the merged character
-            # says `memstara-board-curator` while that agent is the one running, and
-            # which of the two is working stays readable from the card. It is the same
-            # for every worker of one stage, which is exactly why it cannot be what the
-            # figures are told apart by.
             agents.append({
                 "id": ids[slot],
                 # The station this figure stands at, and the key for everything indexed
@@ -934,14 +789,6 @@ def _build_scene(core: dict[str, Any], core_up: bool) -> dict[str, Any]:
                 # a badge only when it is more than one, which is exactly the case the
                 # fold would otherwise have made invisible.
                 "running": stands_for[slot],
-                # The agent this run actually ran as, **including its playbook suffix**,
-                # falling back to the stage's canonical name for a figure with no run
-                # behind it. It used to be the canonical name always, and that was a
-                # silent mismatch as soon as `A-32` made the name open-ended: the cost
-                # table lists a suffixed agent under its own name (`reported_as` keeps the
-                # suffix on purpose), and `AgentsTab` highlights the row where
-                # `selected === r.name`, so clicking a figure running under a standard
-                # highlighted nothing at all — no error, just a table that did not react.
                 "name": (ran_as
                          or stores.BOARD_AGENT_NAMES_ANY.get(run_stage or character,
                                                              character)),

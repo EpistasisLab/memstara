@@ -108,9 +108,6 @@ def describe_dataset() -> str:
         # agent as "the tool is broken".
         return json.dumps({"error": str(e)})
 
-    # The outcome column is never exposed to the agent.
-    # Selecting it as a feature would put the answer into the input — data leakage.
-    # Same blocking-at-the-source approach as reviewer's build_catalog.py.
     outcome_col = os.environ.get("MEMSTARA_OUTCOME_COLUMN", "").strip()
     feature_cols = [c for c in df.columns if c != outcome_col] if outcome_col else list(df.columns)
 

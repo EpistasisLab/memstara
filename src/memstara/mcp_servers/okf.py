@@ -1,109 +1,5 @@
 #!/usr/bin/env python3
-"""Core's OKF server, plus a reading surface that suits a real literature bundle.
-
-Registered in place of `python -m motoro.mcp_servers.okf`. Core's tools are run
-unchanged — nothing here reimplements them, and nothing here removes them. Two things
-are added on top:
-
-1. One PyYAML behaviour is turned off so `list_concepts` stops failing (below).
-2. Three reading tools — `okf_list_domains`, `okf_search`, `okf_read` — that read the
-   same bundle the way a consumer of it needs to. See "The reading surface" further
-   down for what core's three read tools do to a 142-paper bundle.
-
-The defect
-----------
-`list_concepts` fails on any bundle core did not write itself::
-
-    Error executing tool list_concepts: Object of type datetime is not JSON serializable
-
-Three steps get there:
-
-1. A concept file carries a timestamp, unquoted, which is ordinary YAML::
-
-       generated:
-         at: 2026-08-10T00:00:00Z
-
-2. YAML has a timestamp type, so `safe_load` returns a `datetime` — not a string.
-3. `list_concepts` copies `generated`, `verified` and `status` straight out of the
-   frontmatter (okf.py:271-272) and hands the result to `json.dumps` (okf.py:276).
-   JSON has no date type and no `default=` was given, so it raises.
-
-`search_concepts` returns only id/type/title/tags (okf.py:305-312), which is why search
-works and only the listing breaks — the contrast is what identified the cause.
-
-Core never hits this on its own output: it writes `datetime.now(UTC).isoformat()`, a
-*string* (okf.py:373), and `yaml.safe_dump` quotes it (okf.py:136), so it round-trips as
-a string. The failure needs a bundle written by somebody else — which is every bundle
-that matters here. Measured on the sample bundle: 29 of 31 files carry such a timestamp,
-and one is enough, because `json.dumps` serialises the whole result at once.
-
-The fix here
-------------
-Remove PyYAML's implicit resolver for timestamps, so an unquoted ISO date loads as the
-string it was written as. That removes the `datetime` at the source rather than patching
-each tool that trips over one, so no core logic is copied and every tool benefits.
-
-Nothing else changes: integers, booleans and quoted strings resolve exactly as before,
-and JSON has no date type anyway, so a consumer could not have received one.
-
-Report upstream regardless — `json.dumps(..., default=str)` at okf.py:276 would fix it
-for everyone. This only fixes it for us.
-
-==============================================================================
- How to read this file
-==============================================================================
-
- This is the **knowledge-source (OKF) tool server**. It leaves core's own OKF
- server running as it is and lays three reading tools on top. It is the window
- through which a literature bundle (a set of markdown files) is listed, searched,
- and opened one paper at a time.
-
- The main functions and classes
- ------------------------------
- disable_yaml_timestamps()  Turns off YAML's habit of converting dates into
-                            datetimes. Removes at the root what was killing
-                            core's `list_concepts`.
- _Doc                       One document: path, domain, address, frontmatter,
-                            body, and the tokens used for search.
- _text / _tag_list          Coerce a frontmatter value into a safe string / a
-                            list of tags.
- _tokens                    Split text into search "words". Not substrings.
- _sections                  Split a body into sections at each `# heading`.
- _signature                 A cheap stamp (file mtimes) for telling whether the
-                            bundle changed.
- _load(root)                Read the whole bundle into a document list plus a
-                            list of files that were skipped.
- _idf                       Per-word weight. A word present in every document
-                            scores low.
- _index                     Every label one document answers to (address, PMID,
-                            filename).
- _split                     Split on commas and strip whitespace.
- okf_list_domains()  [tool]  The domains and how many documents each holds.
-                             The first thing to call.
- okf_search()        [tool]  Search title, tags, description and journal.
-                             The body is not looked at.
- okf_read()          [tool]  Open a document whole, or one section of it.
-
- Easy things to miss
- -------------------
- 1. Listing walks **only inside the domain folders**. It does not glob the root
-    wholesale. That is why reviewer's hiv-suppression bundle comes out as 142 papers
-    rather than 152 — the ten that drop out are shelf labels such as `index.md`,
-    not evidence documents.
- 2. But **flat bundles** exist too (no domain folders, just .md files sitting in
-    the root). This project's synthetic bundle and the NHANES bundle are both
-    like that. Under a folders-only rule they come out as **zero** documents, and
-    no error is raised — they are just silently empty. So a branch was added
-    later that reads the root as a single domain when the folders yield nothing
-    (`_load`).
- 3. Search **does not index the body.** It looks only at title 3.0 · tags 2.0 ·
-    description 1.0 · journal 1.0 — meaning it trusts only the fields an author
-    filled in on purpose.
- 4. `export_safe` is written in the bundle as a quoted `"false"`. In Python a
-    non-empty string is **truthy**, so `if export_safe:` always passes. This file
-    therefore makes no judgement about it and returns **the string exactly as
-    written**.
-"""
+"""Core's OKF server, plus a reading surface that suits a real literature bundle."""
 
 from __future__ import annotations
 
@@ -130,19 +26,7 @@ _TIMESTAMP_TAG = "tag:yaml.org,2002:timestamp"
 
 
 def disable_yaml_timestamps() -> int:
-    """Stop `yaml.safe_load` from turning ISO dates into datetimes. Returns the count.
-
-    An unquoted date (`2026-08-10T00:00:00Z`) is left as **the string it was
-    written as** instead of becoming a Python `datetime`. The number of rules
-    removed is returned (usually 2 — a date can begin with several different
-    characters, so the rule is registered in several slots).
-
-    PyYAML keeps a table of "first character -> the list of type rules a value
-    starting with that character could match". This walks that table slot by slot
-    and swaps in a new list with the date rule left out. A new list is built
-    rather than the original edited in place, so that nothing being iterated over
-    is modified while the loop is running.
-    """
+    """Stop `yaml.safe_load` from turning ISO dates into datetimes. Returns the count."""
     removed = 0
     # Taken as a list(...) snapshot first — the original table is modified while
     # the loop runs.
@@ -187,33 +71,6 @@ from motoro.mcp_servers.okf import (  # noqa: E402
     mcp,
 )
 
-# --------------------------------------------------------------------------- #
-#  The reading surface
-# --------------------------------------------------------------------------- #
-#
-# Core's read tools were written against bundles core itself writes. Measured against
-# `shared/hiv-suppression/okf` — 142 papers in 8 domain folders, produced by OKF
-# Loremaster — three of them do the wrong thing:
-#
-#   * `list_concepts` enumerates with `root.rglob("*.md")`, so it reports 152 documents.
-#     The extra ten are structure: eight per-domain `index.md`, plus `predictors.md` and
-#     `search.md` at the root. The agent reads a shelf label as if it were evidence.
-#   * `search_concepts` matches a substring against title + description + **body**. On
-#     this bundle `"art"` matches 132 of 142 papers, because of `heart`, `start` and
-#     `particular`. `"ai"` and `"n"` match all 142. A search that returns everything has
-#     not searched.
-#   * `get_concept` returns the whole body. Median body here is 6,678 characters and the
-#     longest is 37,933; the 142 bodies together are roughly 271,000 tokens. Opening a
-#     handful fills the window with paper text when what was wanted was a conclusion.
-#
-# The three tools below are the same three afc-forge binds for its `basic` agency
-# profile. That set is adopted rather than invented: it is already the minimum that
-# works, and matching it means a bundle behaves the same on both sides.
-#
-# afc-forge is deliberately NOT imported. Its own reader says why, about its own
-# situation: the bundle is a contract between two programs that must be able to change
-# independently, and borrowing the other side's parser can only ever prove that the
-# bundle agrees with itself. The approach is taken; the code is written here.
 
 #: Filenames inside a domain folder that are not counted as documents. Such a file
 #: is a cover sheet saying what the folder contains, not an evidence document.
@@ -396,34 +253,7 @@ _CACHE: dict[str, Any] = {}
 
 
 def _load(root: pathlib.Path) -> tuple[list[_Doc], list[dict[str, str]]]:
-    """Every evidence document in the bundle, and every file passed over, by name.
-
-    Enumeration is one level of domain folders — never a glob from the root. A producer
-    that drops a root-level sidecar (`predictors.md`, `search.md`) would otherwise be
-    read as a document with no domain, and a bundle that is entirely correct would come
-    back ten documents too large.
-
-    What was NOT read is returned alongside what was. Silently skipping a malformed file
-    is how a bundle comes back short while looking healthy — the caller sees fewer
-    documents and no reason to doubt the number. So what was skipped is handed back
-    by name, with the reason attached.
-
-    Both layouts are read
-    ---------------------
-    A bundle that has domain folders (reviewer's `hiv-suppression`, for one) is read by
-    the rule above.
-
-    But **the bundles this project produces are flat** — `.md` files sit in the root
-    with no domain folder, and there is no `domain` field either. Both the synthetic
-    bundle (31 documents) and the NHANES one (21) are like this. Under a folders-only
-    rule such a bundle comes back as **0 documents**, and it does so quietly. We
-    actually built them that way and did not notice for a while.
-
-    So when nothing at all is found in the folders, **the root is read as a single
-    domain.** Only in that case is `domain` dropped from the required fields — with
-    no folders there is no name to match it against. `title` is still required. It is
-    most of the search surface.
-    """
+    """Every evidence document in the bundle, and every file passed over, by name."""
     key = str(root)
     sig = _signature(root)
     cached = _CACHE.get(key)
@@ -433,7 +263,6 @@ def _load(root: pathlib.Path) -> tuple[list[_Doc], list[dict[str, str]]]:
     docs: list[_Doc] = []                  # the documents accepted as evidence
     skipped: list[dict[str, str]] = []     # files that could not be read, or broke a rule
 
-    # --- Branch 1: bundles with domain folders (reviewer's hiv-suppression, for one) ---
     for folder in sorted(p for p in root.iterdir() if p.is_dir()):
         if folder.name.startswith((".", "_")):
             continue
@@ -450,8 +279,6 @@ def _load(root: pathlib.Path) -> tuple[list[_Doc], list[dict[str, str]]]:
                 skipped.append({"path": rel, "why": str(exc)})
                 continue
             title = _text(fields.get("title"))
-            # domain: with no such field, the top-level folder name is used as the domain
-            # (reviewer's OKF writes mechanism_family: instead of a domain: field)
             domain = folder.name
             if not title:
                 skipped.append({"path": rel, "why": "no `title` — required field"})

@@ -107,12 +107,7 @@ export function ChainNode({ data }: NodeProps) {
       <Handle type="target" position={Position.Left} className="!bg-transparent !border-0" />
       <Handle type="source" position={Position.Right} className="!bg-transparent !border-0" />
 
-      {/* Takes back a slot the form asked for and nothing has started. The counterpart of
-          the `+` below the column: between them the stack is grown and shrunk where it is
-          drawn, which is what the `expansion slot` in the meeting's figure is
 
-          the left rail still does both and is still the only way to shrink past the
-          observed figures. */}
       {onRemove && (
         <button
           type="button"
@@ -184,35 +179,13 @@ export function ChainNode({ data }: NodeProps) {
         {elapsed && <span className="ml-auto shrink-0 font-mono font-normal">{elapsed}</span>}
       </div>
 
-      {/* The behavioural standard this figure is running under.
 
-          **Always on a hypothesis card, even when there is none.** The meeting's own figure
-          labels each hypothesis with its skill, and several hypothesis agents running to
-          several standards is the comparison this column exists to make readable
-
-          be ambiguous between "the prompt as written" and "the standard never reached the
-          screen", and the second of those was a real bug one level down.
-
-          On the other four it appears only when there is one to show, because a row of
-          cards each saying "no standard" is four lines of nothing. `data` is on that side
-          of the line deliberately: attaching a skill to the data agent was not among the
-          roles the meeting listed (`:157`). */}
       {(editable || agent.playbook || agent.stage === "hypothesis") && (
         <div className="mt-1.5 flex items-center gap-1 text-xs leading-tight">
           <BookMarked className="h-3 w-3 shrink-0"
                       style={{ color: (editable ? choice : agent.playbook) ? color : "#9c9a94" }}
                       strokeWidth={1.8} />
           {editable ? (
-            // **The requirement's own figure**: each hypothesis box carries its skill, and
-            // several agents running to several standards is what the stacked column exists
-            // to make comparable (`:111-139`). Until 2026-09-09 that choice lived only in a
-            // collapsed disclosure in the left rail, so the picture showed the skills and
-            // could not set them — which `:151` names as the separate half of the work.
-            //
-            // `nodrag nopan` and the stopped mousedown are not styling. React Flow treats a
-            // press inside a node as the start of a drag, and this panel's `onNodeClick`
-            // navigates to the agents view: without both, opening this select leaves the
-            // page instead.
             <button type="button" onClick={e => { e.stopPropagation(); onConfigure(); }}
               className="nodrag nopan min-w-0 flex-1 break-words rounded border border-dashed border-paper-line px-2 py-1.5 text-left text-xs font-bold"
               style={{ color }} title="Read or change this agent's skill">

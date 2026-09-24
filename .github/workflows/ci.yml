@@ -17,7 +17,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev]" build
 
       - name: Lint
         run: ruff check src/
@@ -25,8 +25,11 @@ jobs:
       - name: Test
         run: pytest -q -ra
 
-      - name: Citations
-        run: python scripts/check_citations.py
+      - name: Public tree
+        run: python scripts/check_public_tree.py
 
       - name: Markdown links
         run: python scripts/check_markdown.py
+
+      - name: Build distributions
+        run: python -m build

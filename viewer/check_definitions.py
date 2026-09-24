@@ -151,12 +151,6 @@ def main() -> int:
 
     # `real` is rebound by the loop above; name the table we actually mean.
     stages = set(BOARD_TOOLS)
-    # Retired stages count as known here. The pipeline has not named `curator` since
-    # 2026-09-07, but the viewer still has to draw and label the runs recorded against
-    # it, so `stores.LEGACY_BOARD_AGENT_NAMES` keeps the key alive on this side alone.
-    # Leaving it out of `known` would make the checks below reject exactly the mapping
-    # that keeps those runs on screen — a checker refusing the thing it exists to
-    # protect.
     known = stages | set(stores.LEGACY_BOARD_AGENT_NAMES)
     # A stage does not need a place of its own — it needs to be **drawn**, and
     # `stores.DRAWN_AS` lets one character stand for two stages (the retired curator is
@@ -180,12 +174,6 @@ def main() -> int:
         drawn = f"{len(known)} stages drawn as {len(stores.HOME)} characters"
         print(f"  {'scene places':20} match — {drawn}, every one with a place and a name")
 
-    # `SPLITTABLE` names the stations that may show more than one figure. A name in it
-    # that is not a station is not a harmless spare entry — `_build_scene` tests
-    # `character not in stores.SPLITTABLE`, so a typo there silently folds the stage it
-    # meant to split, which is the failure that made A-24 need reopening in the first
-    # place. It reads as working: five characters on the floor, one per stage, exactly
-    # what a default run looks like anyway.
     unknown_split = stores.SPLITTABLE - set(stores.HOME)
     if unknown_split:
         bad = True

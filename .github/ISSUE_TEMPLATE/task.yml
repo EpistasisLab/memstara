@@ -82,7 +82,7 @@ body:
     id: size
     attributes:
       label: Size
-      description: Same vocabulary as the ASAREE Roadmap board, so the two boards read the same way.
+      description: Estimated scope of the change.
       options:
         - XS
         - S

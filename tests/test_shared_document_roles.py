@@ -7,7 +7,10 @@ from memstara.pipeline.prompts import load_prompt
 
 @pytest.fixture
 def shared(monkeypatch, tmp_path):
-    monkeypatch.setattr(catalog, 'SHARED_ROOT_SKILLS_DIR', tmp_path)
+    monkeypatch.setenv('MEMSTARA_SHARED_SKILLS_DIR', str(tmp_path))
+    monkeypatch.delenv('MEMSTARA_RESULTS_SKILL_PATH', raising=False)
+    monkeypatch.delenv('MEMSTARA_ML_REFERENCE_PATH', raising=False)
+    monkeypatch.setenv('MEMSTARA_SKILL_ALIASES_PATH', str(tmp_path / 'aliases.json'))
     monkeypatch.setattr(catalog, 'user_dir', lambda: tmp_path / 'user')
     monkeypatch.setattr('memstara.evaluation.active_plan', lambda: None)
     (tmp_path / 'ml-results.md').write_text('---\nname: ml-skill\n---\n# ML Results Presenter\nPresent results.')
@@ -53,3 +56,13 @@ def test_missing_optional_reference(shared):
     (shared / 'ml-reference.md').unlink()
     assert catalog.reference_knowledge() == []
     assert 'ML tool reference knowledge' not in load_prompt('board/ml')['system_prompt']
+
+
+def test_deployment_alias_resolves_without_changing_saved_prompt(shared, monkeypatch):
+    (shared / 'aliases.json').write_text('{"legacy-results": "shared-ml-results"}')
+    assert catalog.resolve('legacy-results')['id'] == 'shared-ml-results'
+    assert 'Present results.' in load_prompt('board/report', 'legacy-results')['system_prompt']
+    frozen = {'goal': 'original', 'system_prompt': 'historical text'}
+    monkeypatch.setattr('memstara.evaluation.active_plan', lambda: {
+        'prompts': {'board/report:legacy-results': frozen}})
+    assert load_prompt('board/report', 'legacy-results') == frozen

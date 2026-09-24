@@ -76,10 +76,6 @@ from memstara.pipeline.prompts import accepts_playbook
 from memstara.paths import REPO_ROOT, RUNS_DIR
 from memstara.control.recovery import identity, recover, save_record
 
-#: The two front matter fields a skill is built from. `terminus_kind` is what the
-#: document is about at the end of the chain, `mechanism_family` is how it gets there;
-#: every branch is one of those or one of each. Measured on 2026-09-02: 3 + 7 values,
-
 _SKILL_FIELDS = ("terminus_kind", "mechanism_family")
 
 #: Hostnames this service will answer to. A page on the open web can make a browser

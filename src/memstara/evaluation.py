@@ -332,7 +332,7 @@ def _explain(best, X, y, train, test, numeric, plan, runs):
                    'operating_point': runs[-1]['operating_point'],
                    'scope': 'Explanation of the final replicate; AUC summary spans all replicates.',
                    'clinical_threshold': None,
-                   'review_status': 'reviewer original required — provisional implementation, not reviewed by reviewer',
+                   'review_status': 'Review required — provisional implementation, not independently reviewed',
                    'actionability': 'Exploratory model associations only. Clinical thresholds and interventions '
                                     'require domain review and independent validation.'}
     explanation['exploratory_transitions'] = [

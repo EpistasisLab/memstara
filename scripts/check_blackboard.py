@@ -376,14 +376,6 @@ async def main() -> int:
                       f"candidate records {len(res.get('match_trace') or [])} · "
                       f"importances {len(res.get('feature_importance') or {})}"))
 
-    # ---- did the scale of those importances survive the copy -------------
-    #
-    # An importance number without the engine that produced it is not a weaker record, it
-    # is an unreadable one: impurity/gain from random_forest and the permutation drop in
-    # AUC that sklearn_hgb falls back to are different quantities. The 81 results stored
-    # before 2026-09-08 have no engine on them and cannot get one. So this checks the
-    # copy specifically — the column existing on the board is not the same as it arriving
-    # on the table that outlives the run.
     results.append(ok(res.get("model") == "random_forest",
                       "the results table records which engine produced the importances",
                       f"model={res.get('model')!r} (expected 'random_forest')"))
@@ -483,17 +475,6 @@ async def main() -> int:
                       f"bank {'present' if bank_after else 'absent'} · "
                       f"results question_id={after.get('question_id')}"))
 
-    # ---- ⭐ THE GATE: does a used-up question retire --------------------
-    #
-    # The `status` field and its two values ('open' | 'exhausted') were in the schema from
-    # the day the bank was built, and until 2026-08-30 **not one line of code ever wrote
-    # 'exhausted'.** So the open list only grew, and a question tried three times kept
-    # coming back in front of the curator wearing the same face as one nobody had asked
-    # yet.
-    #
-    # The board was deleted wholesale above, so two new ones are made here and walked to
-    # the end. QID already has one result, so this makes three, and at that moment it has
-    # to retire.
     for i in range(N, N + 2):
         await bb.create_task(RUN_TAG, i, f"perspective {i}", f"hypothesis {i}",
                              COLUMNS, "HIV_DETECTABLE",
@@ -532,21 +513,6 @@ async def main() -> int:
                       "a retired question blocks rewords too",
                       f"added {len(p4.get('added', []))} · blocked {len(p4.get('skipped', []))}"))
 
-    # ---- (7) do runs avoid claiming each other's work --------------------
-    #
-    # `claim_task` did not look at run_tag for a long time. It took the oldest waiting row
-    # on the whole board with `ORDER BY task_id`, so **a task left by a dead run was the
-    # first thing the next run claimed**. That run's money does somebody else's work, and
-    # the result is filed under the dead run's tag. run_lock() cannot stop this — it only
-    # looks at the same tag.
-    #
-    # This is not imagined. On 2026-08-31, while the ml-stage check above had no tag, this
-    # check claimed a task left by a `dry-stop` run and wrote the check's fake numbers
-    # (auc 0.71, "supported") into that run's results table.
-    #
-    # Two tags are made and **the later one** is named when claiming. Without the
-    # narrowing the older A would come out, so this check fails the moment the condition
-    # goes missing.
     other_tag = f"{RUN_TAG}_other"
     await bb.create_task(other_tag, 90, "perspective A", "hypothesis A", COLUMNS, "HIV_DETECTABLE")
     await bb.create_task(RUN_TAG, 91, "perspective B", "hypothesis B", COLUMNS, "HIV_DETECTABLE")

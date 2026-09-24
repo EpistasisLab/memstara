@@ -1,5 +1,5 @@
 # SOURCE: PORTED FROM afc-forge — NOT sandbox-authored code.
-#   upstream: shared/afc-forge/ade_forge/tools/impl/matcher.py (490 lines)
+#   upstream: afc-forge/ade_forge/tools/impl/matcher.py (490 lines)
 # --- PORT NOTE (memstara) -------------------------------------
 # This file is a port of afc-forge `ade_forge/tools/impl/matcher.py` (490 lines)
 # and is byte-identical to upstream apart from the three edits listed below.
@@ -87,17 +87,6 @@ from memstara.matcher.embedder import (
 EXACT_CODE_SCORE = 1.0
 PREFIX_CODE_SCORE = 0.9
 
-#: Ceiling on what one call returns once a one-hot family has expanded. A BLOWUP
-#: GUARD, not a dial: it exists so a pathological source column cannot return
-#: thousands of levels, not to choose how many levels to show. Read as
-#: `max(top_k, FAMILY_CAP)`, so raising `top_k` past it never truncates.
-#:
-#: A shipped constant since 2026-08-24, and config before that. It never bound on
-#: either FE_Demo2 cohort — the widest family measured 34 levels — which is what a
-#: guard is supposed to do, and nobody ever had a catalog that needed it moved. A
-#: site with a genuinely wider family raises this here; the alternative is that
-#: family arriving cut in rank order rather than judged whole (§6.7.1: levels are
-#: never collapsed in code).
 FAMILY_CAP = 40
 
 

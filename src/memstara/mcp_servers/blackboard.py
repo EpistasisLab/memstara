@@ -1,69 +1,5 @@
 #!/usr/bin/env python3
-"""MCP server — the only way an agent touches the shared work board.
-
-The 2026-08-12 alignment was explicit about this one:
-
-    "we don't want the agents to start querying a table on another database —
-     that would break that pattern and it just wouldn't become a foundation anymore."
-
-So the board is a table, and this is the window. Agents never see the database.
-
-Six tools, not the four the design document first listed.
-
-**Creating a row and updating one are different acts** — the hypothesis stage makes new
-work, everyone else picks up work that exists — so those are separate. And the board
-and the results table are separate stores, so reading them is two tools, not one; the
-report is written from finished results.
-
-    create_task     hypothesis makes a new row
-    claim_task      data / ml / interpret take one that is waiting
-    submit_result   whoever holds a task writes what they produced
-    count_waiting   how many are queued (the driving script, not an agent)
-    read_board      the whole board, unfinished work included
-    read_results    what has actually been produced (the reporting stage)
-
-Core launches this file as a stdio subprocess, same shape as src/memstara/mcp_servers/data.py.
-
-The board lives in **Memstara's own database**, not core's — see ``compose.yml``.
-
-Environment::
-
-    MEMSTARA_DATABASE_URL    must be on `mcp_allowed_env_vars` in src/memstara/config.py —
-                           core does not hand credentials to a subprocess by default.
-                           Unset falls back to the compose container on :5463.
-
-
-==============================================================================
- How to read this file
-==============================================================================
-
- The **only window** onto the board. Agents never look at the database directly.
-
- There are two tables. That distinction is the heart of this file.
-
-   memstara_blackboard   the workbench. Work still in motion sits here.
-                         Clear it and it is gone
-   memstara_results      the record. Only finished work. Survives clearing the board
-
- The path one task travels:
-
-   create_task      the hypothesis stage makes a new row   status=ready · type=data
-        |
-   claim_task       the data stage picks it up             status=in_progress
-        |
-   submit_result    writes its result and passes it on     status=ready · type=ml
-        |           (the same thing repeats for ml -> interpret)
-        |
-   submit_result    when the last stage finishes           status=done
-                    **that is when one row is copied to the results table**
-
- Three tools for reading:
-   count_waiting    how many are queued (for the pipeline, not for an agent)
-   read_board       the whole board — unfinished work included
-   read_results     finished work only — this is what the reporting stage reads
-
- To call it by hand: `python -m memstara.debug_harness board`
-"""
+"""MCP server — the only way an agent touches the shared work board."""
 
 from __future__ import annotations
 
@@ -416,43 +352,7 @@ async def submit_result(task_id: int, subset_path: str = "",
                         columns_missing: list[str] | None = None, auc: float | None = None,
                         feature_importance: str = "", model: str = "",
                         interpretation: str = "", error: str = "", *, worker: str) -> str:
-    """Write what you produced and hand the task to the next stage.
-
-    Pass only the fields your stage produces; leave the rest out.
-
-    Args:
-        task_id: the id claim_task gave you.
-        subset_path: data stage — path of the sub-dataset produced.
-        columns_used: data stage — a JSON list of the columns actually extracted. Copy
-            them from what slice_columns returned; many contain a comma inside the
-            name, so a comma-joined string cannot be split back apart.
-        columns_missing: data stage — a JSON list of the columns that were absent. An
-            empty list records "none were missing"; omitting it leaves the field alone.
-        auc: ml stage — the test AUC.
-        feature_importance: ml stage — JSON object of column to importance.
-        model: ml stage — **the `model` field train_and_score returned, copied through
-            unchanged.** Not optional in practice: the engine decides what the numbers in
-            feature_importance are. `random_forest` and `xgboost` return impurity/gain,
-            non-negative and summing to about 1; `sklearn_hgb` returned a drop in AUC,
-            which is a different unit and can be negative. Leave it out and the row
-            records importances nobody can later say the scale of — which is what every
-            result stored before 2026-09-08 does. Since that date `xgboost` is the only
-            value a new row can carry, and copying it through unchanged is still the
-            instruction: an agent that decides what the engine "should" be is guessing at
-            something the tool already told it, and the first day the answer changes is
-            the day the guess goes unnoticed.
-        error: explicit failure reason without patient values; requires the current worker.
-        interpretation: interpretation stage — the write-up.
-        worker: who you are — **the same string you passed to claim_task.** If the task
-            is now held by somebody else this is refused and nothing is written, which
-            is what stops a late result from landing on work that was handed on while
-            you were still busy. This is a required field; copy the assigned name exactly.
-
-    Returns:
-        JSON with the task's new status and whose turn it is now. After the
-        interpretation stage the task is done and a row is added to the results table.
-        On a refusal, JSON with ``error`` and nothing written.
-    """
+    """Write what you produced and hand the task to the next stage."""
     if isinstance(columns_used, str) or isinstance(columns_missing, str):
         return json.dumps(
             {
@@ -866,46 +766,7 @@ async def read_board(run_tag: str = "") -> str:
 
 @mcp.tool()
 async def read_results(run_tag: str = "", include_match_trace: bool = False) -> str:
-    """Every finished result of a run. The reporting stage reads this.
-
-    This is the results table, not the board. The board holds work that is still
-    moving; this holds what the interpretation stage produced and is done with. The
-    report is written from finished results, so this is what it reads.
-
-    Args:
-        run_tag: which run; "" reads everything.
-        include_match_trace: whether to return the matcher's candidate lists in full.
-            Off by default because they are large — hundreds of candidates with scores
-            per trial — and this tool's output goes straight into an agent's prompt.
-            Off, each result carries ``match_trace_calls`` (how many calls were kept)
-            so a reader knows the record exists and can ask for it. The data is stored
-            either way; this only decides what gets read back.
-
-    Returns:
-        JSON list of results — the hypothesis, the columns that were used, the outcome
-        they predicted (``y_column``), the AUC and the write-up, one entry per trial that
-        made it all the way through. The outcome is here so a report can say what its
-        numbers are numbers *of*.
-
-        Each entry also carries the evidence behind it, which is what makes this
-        readable as feedback rather than only as a report: ``okf_concept_ids`` (the
-        corpus documents the hypothesis came from), ``match_trace`` (what the matcher
-        offered, chosen and rejected alike) and ``feature_importance`` (which columns
-        actually carried the AUC). A later trial can use the last of these to avoid
-        columns that contributed nothing.
-
-        ``model`` says which engine produced the importances, and it has to be read
-        before they are compared: impurity/gain from ``random_forest`` and ``xgboost``
-        is not the same quantity as the permutation drop in AUC ``sklearn_hgb``
-        fell back to. Two results with different ``model`` values have importances on
-        different scales. ``''`` means the engine was not recorded — do not guess it.
-
-        **This matters more since 2026-09-08, not less.** ``xgboost`` became the only
-        engine that day, so every new row is on one scale — and the rows this tool
-        returns are not all new. The mixed-scale case is now invisible from the code
-        alone and reachable only through the data, which is precisely when a reader
-        stops checking.
-    """
+    """Every finished result of a run. The reporting stage reads this."""
     scope = _pipeline_run()
     if scope:
         if run_tag and run_tag != scope:
@@ -959,16 +820,6 @@ def _question_key(text: str) -> str:
     return key
 
 
-#: How similar two questions may be before the second is treated as a reword of the
-#: first rather than a new question. The key above only catches a literal repeat: it
-#: sees "Does naltrexone raise transaminases?" twice, and does not see that "Is
-#: naltrexone associated with elevated liver enzymes?" buys the same trial. Until
-#: 2026-08-30 nothing else did either — the curator was merely *asked* not to reword,
-#: which is a request and not a check.
-#:
-#: 0.75 was set by hand against the questions already banked. It is deliberately not a
-#: tunable knob: a threshold a person can read, argue with, and reproduce is worth more
-#: here than a better one they cannot.
 _NEAR_DUPLICATE_RATIO = 0.75
 
 
@@ -1385,32 +1236,7 @@ async def propose_questions(questions: list[QuestionProposal] | str, origin_run:
 
 @mcp.tool()
 async def record_question_outcomes(run_tag: str, retire_after: int = 3) -> str:
-    """Fold a finished run's scores back into the question bank, and retire used-up ones.
-
-    The driver calls this, not an agent — it is bookkeeping about a wave that has ended,
-    and no agent is in a position to know a wave has ended. It is also why the bank can
-    say anything about which questions were worth asking: without this the bank is a
-    list of what was asked and never a record of what came of it.
-
-    Safe to call twice for the same run: ``times_used`` is recomputed from the results
-    table rather than incremented, so a repeat lands on the same number.
-
-    This is also where ``status`` finally gets written. The column and its two values
-    have been in the schema since the bank was built, and until 2026-08-30 nothing ever
-    set ``'exhausted'`` — so the open list only ever grew, and a question that had been
-    tried three times came back to the curator looking exactly as untouched as one
-    nobody had asked yet.
-
-    Args:
-        run_tag: the run whose results should be folded in.
-        retire_after: how many results a question may accumulate before it is retired
-            out of the open list. Pass 0 to retire nothing. Retiring is not deletion —
-            ``read_questions(status="exhausted")`` still returns it, and it still blocks
-            a reword in ``propose_questions``.
-
-    Returns:
-        ``{"ok": true, "questions_updated": N, "questions_retired": M}``.
-    """
+    """Fold a finished run's scores back into the question bank, and retire used-up ones."""
     scope = _pipeline_run()
     if scope:
         if run_tag and run_tag != scope:

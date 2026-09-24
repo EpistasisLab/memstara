@@ -14,7 +14,7 @@ Do not select only favorable results or imply that a demo is a validation study.
 Mention recorded duration, cost and tokens only if available, with their scope
 and completeness; unknown cost is not zero. End with a concrete research decision
 for the team. Do not fabricate delivery dates, implementation status or approval
-from reviewer, reviewer, reviewer or other team members.
+from team members.
 
 ## Reporting contract
 
@@ -34,7 +34,7 @@ independent validation, using actual records rather than requested settings.
 
 Report missing, failed and unfavorable evidence. Do not invent features, effect
 directions, metrics, thresholds, citations, patient details or clinical approval.
-Preserve recorded provisional/reviewer-pending notices. Distinguish an exploratory
+Preserve recorded provisional/review-pending notices. Distinguish an exploratory
 association from causation and research priority from clinical readiness. An
 interesting follow-up may merit study without being clinically actionable; never
 inflate the evidence to justify that recommendation. Mark previous-result-informed

@@ -1,45 +1,4 @@
-"""Narrow a set of OKF documents by what their front matter says they are.
-
-Why this is a module and not four lines inside `okf.py`
--------------------------------------------------------
-`okf.py` imports `motoro.mcp_servers.okf` and `yaml`. CI has neither — there is no
-`../motoro` checkout on a runner, and PyYAML is deliberately undeclared in
-`pyproject.toml`. A test that imported `okf.py` would therefore fail on the runner and
-nowhere else. This module imports the standard library and nothing else, so the rule it
-enforces can actually be tested. `src/memstara/pipeline/prompts.py` was split out of
-`core.py` for the same reason and is the pattern being followed.
-
-Why a field and not a tag
--------------------------
-The corpus files every branch twice: once as a structured field (`terminus_kind:`,
-`mechanism_family:`) and again inside `tags:`. Those two do not agree. Measured
-2026-09-02 over the 312 documents `_load` returns for
-`../shared/Memstara/OKF_Corpus/okf` (333 `.md` files there, 0 skipped):
-
-    mechanism_family  seven values, tag count == field count for all seven
-    terminus_kind     psychiatric  field 212, tag  81
-                      sud          field  52, tag  48
-                      dual-diagnosis     4,        4
-
-So a tag filter shows **81 of the 212** documents of the largest branch, silently. The
-field is what the corpus actually asserts; the tag is a label that was not always
-
-were the only handle available and proposed an `all`/`any` tag mode on that basis. The
-measurement above is why that is not what was built.
-
-An intersection needs no special mode here. `treatment-toxicity × sud` is two field
-equalities, which is the same code path as one.
-
-The filter expression
----------------------
-``"terminus_kind=sud,mechanism_family=treatment-toxicity"`` — comma between constraints,
-`=` inside each. Splitting on a comma is safe for the same reason it is safe everywhere
-else in `okf.py`: no field value in this bundle contains one.
-
-**One constraint per key.** The expression is a mapping, so `"tags=a,tags=b"` cannot be
-written; the second silently replaces the first, and that is reported as an error rather
-than allowed. Several values of one key is what the `tags` argument already does.
-"""
+"""Narrow a set of OKF documents by what their front matter says they are."""
 
 from __future__ import annotations
 

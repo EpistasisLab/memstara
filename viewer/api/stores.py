@@ -1,64 +1,4 @@
-"""Which store each tool touches, and where things sit on the scene.
-
-The mapping is derived from `memstara.pipeline.core.BOARD_TOOLS` / `BOARD_SERVERS`
-rather than
-copied. Copying a table means the pipeline can change and only the picture goes stale —
-and a picture that is quietly wrong is worse than no picture. (A written-out fallback
-does live in the function below, for the case where the import fails; that copy is
-watched by `check_definitions.py`.)
-
-The subtle part: **one server can point at two different stores.** The board server
-carries `create_task`/`claim_task`/`submit_result`, which touch the board, and
-`read_results`, which touches the results table. Those are separate stores on purpose
-(the board holds what is moving, the results table what was found), so mapping by
-server alone would draw them as one place. That is why `TOOL_STORE` below is keyed by
-tool, not by server.
-
-==============================================================================
- HOW TO READ THIS FILE
-==============================================================================
-
- What it is
-   Pure tables. No database, no async. It defines agent name <-> stage, tool <->
-   store, and the scene's coordinates. `scene.py` reads these to build what the
-   screen draws.
-
- The tables, top to bottom
-   _pipeline_definitions()  import the real definitions; fall back to a written copy
-   BOARD_TOOLS / BOARD_SERVERS / BOARD_AGENT_NAMES   per-stage tools, servers, names
-   AGENT_BY_NAME            agent name -> stage (board path only)
-   SUPERVISOR_AGENT_NAMES   the older supervisor path's four agents
-   AGENT_BY_NAME_ANY        BOTH paths merged  <- the access map uses this one
-   AGENT_PATH               agent name -> "board" or "supervisor"
-   PLACES / HOME            scene coordinates (the SVG's own 1000x560 space)
-   DRAWN_AS / drawn_as()    stage -> the character it is drawn as  <- display only
-   reported_as()            agent name -> the name every screen reports it under
-   label_of()               agent name -> what the screen calls it, after the fold
-   AGENT_LABELS             stage -> the name shown on screen
-   TOOL_STORE / store_of()  tool -> store
-   normalise_server()       fold the old `ecoxai-*` server names into the current ones
-   BOARD_WINDOWS            the eight windows the board server opens, and whose they are
-
- Easy to miss
-   1. **Keyed by tool, not by server.** By server, the board and the results table
-      collapse into one place.
-   2. **There are two paths.** The board path (BOARD_*) and the older supervisor path
-      (SUPERVISOR_*). The supervisor path has far more runs (159 against 48), so
-      dropping it understates the access map roughly fivefold. The scene draws only
-      the board characters; `path` is what separates the two everywhere else.
-   3. The coordinates live in the **backend**. The frontend invents no positions, so a
-      place can be moved without touching a component.
-   4. `read_board` and `count_waiting` showing zero calls is **the correct picture,
-      not a bug** — the first belongs to the driving script, the second to nobody.
-   5. **Five stages, five agents on screen — and a sixth name still in the database.**
-      The pipeline had a `curator` agent until 2026-09-07; writing the wave's questions
-      is the hypothesis agent's other job now. `LEGACY_BOARD_AGENT_NAMES` keeps the old
-      agent name and `DRAWN_AS` folds it into the hypothesis stage, so every run it made
-      still counts. The rows are **added together**, not dropped: totals are the same
-      with the fold and without it. Deleting the fold would silently subtract hundreds
-      of runs of real spend from the cost table.
-==============================================================================
-"""
+"""Which store each tool touches, and where things sit on the scene."""
 
 from __future__ import annotations
 
@@ -136,20 +76,6 @@ def _pipeline_definitions() -> tuple[
 
 BOARD_TOOLS, BOARD_SERVERS, BOARD_AGENT_NAMES, QUESTION_TOOLS = _pipeline_definitions()
 
-# Agents that are not in the pipeline any more but are in the database. **The viewer has
-# to keep knowing their names or it stops counting their runs.**
-#
-# `memstara-board-curator` was the board path's sixth agent until 2026-09-07, when
-# writing the wave's questions became the hypothesis agent's other job rather than a
-# second agent (`src/memstara/pipeline/core.py:345-371`). The pipeline no longer names
-# it, so it no longer arrives through `BOARD_AGENT_NAMES` — but motoro still holds every
-# run it ever made, and `scene._access` drops any row whose agent name is not in
-# `AGENT_BY_NAME_ANY`. Forget the name and hundreds of runs of real spend leave the cost
-# total with nothing on any screen to say so.
-#
-# It maps to the `curator` stage key, which `DRAWN_AS` below folds into `hypothesis` —
-# so those historical rows land where they always have, under the agent that does that
-# work now. That is the fold doing what it was built for, one version later.
 LEGACY_BOARD_AGENT_NAMES = {"curator": "memstara-board-curator"}
 
 # Live stages plus retired ones — **every board stage the viewer can be asked to draw**,
@@ -159,15 +85,6 @@ LEGACY_BOARD_AGENT_NAMES = {"curator": "memstara-board-curator"}
 # `idle` while that agent is the one working.
 BOARD_AGENT_NAMES_ANY = {**BOARD_AGENT_NAMES, **LEGACY_BOARD_AGENT_NAMES}
 
-# Every window a stage can open, across **all** of its jobs. `BOARD_TOOLS` is per call
-# and this is per agent, and since 2026-09-07 those are two different questions: the
-# hypothesis agent is handed `QUESTION_TOOLS` when it writes the wave's questions and
-# `BOARD_TOOLS["hypothesis"]` when it answers one, and it really can open both sets —
-# just never in the same call. The scene reads this so its window list keeps saying
-# what the agent can do rather than what one call can do.
-#
-# `curator` is the retired stage, and QUESTION_TOOLS is exactly the grant it used to
-# hold — so a run replayed from before the merge shows the same windows it always did.
 STAGE_WINDOWS: dict[str, set[str]] = {
     **{stage: set(tools) for stage, tools in BOARD_TOOLS.items()},
     "curator": set(QUESTION_TOOLS),
@@ -238,98 +155,8 @@ HOME: dict[str, dict[str, int]] = {
     "report":      {"x": 860, "y": 470},
 }
 
-# The stations that may show more than one figure at once. **Everything not named here
-# is drawn as exactly one character however many workers are running behind it.**
-#
-# This is the meeting's decision of 2026-08-26, not an implementation detail: the backend
-# may run N of any stage in parallel, and the screen shows the hypothesis stage split
-# because that is the parallelism the user is choosing, while the data agent stays a
-# single figure — the user does not need to know that it is internally run more than once.
-#
-# **`interpreter` was added here on 2026-09-08 and taken out again the same day**, and the
-# reason is worth keeping because the argument for adding it was persuasive and wrong.
-
-# interpretation agents → reporting*, so interpretation belonged beside hypothesis. The
-# record says the opposite twice over: the V1 role table is *hypothesis 1–2 (the screen
-# extensible to 3), data · ML · interpreter · report one each*, and combinatorial
-# interpretation — one hypothesis read by several interpreters — was **rejected** for the
-
-# `:97`). The same page states the rule this line implements almost word for word: the
-# internal execution count of a non-hypothesis role is deliberately not shown to the user
-# as a duplicated role.
-#
-# So `data`, `ml` and `interpreter` are alike here, and they are alike for a reason that is
-# about the design rather than about them all running N workers by the same mechanism
-# (`board.py:1680-1725`) — which they do, and which is not why.
-#
-# It is declared here rather than in `scene.py` for the same reason `HOME` and `DRAWN_AS`
-# are: the definition lives in one file and `scene.py` consumes it, which is the shape
-# `check_definitions.py` can read. A name here that is not a key of `HOME` is a station
-# that does not exist; that file is what says so, because this module has no import-time
-# guards and adding the first one here would hide the check where nobody runs it.
-#
-# **This was shipped backwards once.** Until 2026-09-08 `_build_scene` split every key of
-# `HOME` by worker, so `--data-agents 2` drew `data#1` and `data#2` — the exact thing the
-
-# asked for. Every check passed, because all three of them had been written from the
-# implementation instead of from the item.
-#
-# **The floor plan is not what decides this, and A-33 assumed it was.** That item deferred
-# adding a second station on the expectation that the row could not hold it. It can, at any
-# station: figures are 128 wide, stand at `home.x - 64`, and step `+22, -62` per slot
-# (`viewer/web/src/panels/ScenePanel.tsx:76`), so a stack of three spans 172 against a row
-# spaced 175 apart and clears the next station's column by 3px. The same 3px everywhere,
-# because it is the same 175. `tests/test_scene_layout.py` derives that from `HOME` rather
-# than asserting it, so moving a station makes it a pixel question again loudly.
-#
-# The arithmetic is kept here although the station it was worked out for is gone, because
-# it is what establishes that this set is settled by the design and by nothing else. A
-# future stage arriving here needs an argument from the record, not from the canvas.
-#
-# **Three is the ceiling, and it is not enforced here.** A fourth figure would land across
-# the next station's column. The limit belongs to the drawing, so it is written where the
-# drawing's requests are checked — `_MAX_HYPOTHESIS_AGENTS`
-# (`src/memstara/control/request.py:63`), which caps a browser-started run and says in its
-# own comment why the driver is deliberately left uncapped. A cap in *this* file would
-# silently hide a running worker, which is the exact failure `folded` was written to avoid.
 SPLITTABLE: frozenset[str] = frozenset({"hypothesis", "interpreter"})
 
-# Which character a stage is *drawn* as. **This is now a compatibility layer**, and it
-# is the reason a run from before 2026-09-07 still shows up on every screen.
-#
-# It was written when the pipeline had six agents, to draw the curator and the
-# hypothesis stage as one: the floor plan shows which store a character stands in front
-# of, and for most of a run those two stood in front of the same one. Measured on the
-# three-trial run of 2026-09-05 (`outputs/runs/2026-09-05T184303_board_3trials/trace/`):
-# the curator made 13 tool calls and 11 went to the OKF shelf — everything except
-# `read_questions` and `propose_questions` — and the hypothesis workers spent 8 of 12,
-# 9 of 13 and 6 of 10 calls in the same place. Two characters at one shelf, and the
-# drawing distinguishing nothing.
-#
-# **The pipeline has since agreed.** Writing the wave's questions is the hypothesis
-# agent's other job now, not a second agent (`src/memstara/pipeline/core.py:345-371`),
-# and the reasoning the fold used to argue against — that the two are genuinely
-# different work — is preserved one layer down, in the tool list each *call* is handed
-# (`core.py:448-466`). So for a run made today this table has nothing to do.
-#
-# **Do not delete it.** motoro holds hundreds of runs recorded against
-# `memstara-board-curator`, `LEGACY_BOARD_AGENT_NAMES` above resolves that name to the
-# `curator` stage, and this line is what carries it onto a screen. Without it those rows
-# reach `AGENT_LABELS` with a stage no character has, and the shortest way to make that
-# stop being an error is to drop them — which takes real spend off the cost total with
-# nothing anywhere to say so.
-#
-# Two properties of the fold, both still true and neither hidden:
-#
-#   - **The numbers are added, never dropped.** `_agent_totals` sums the folded rows and
-#     `_access` re-aggregates them, so total cost, tokens and call counts are identical
-#     with the fold and without it.
-#   - **You cannot ask the viewer what the curator alone cost.** That question needs the
-#     database, or `verify.py`, which reads it unfolded.
-#
-# The Log panel still prints `curator0` for a run made before the merge, because that
-# panel tails the pipeline's stdout and rewriting a console is falsifying a record. A run
-# made after it prints `question0` (`src/memstara/pipeline/board.py:1019-1022`).
 DRAWN_AS: dict[str, str] = {"curator": "hypothesis"}
 
 
@@ -339,31 +166,7 @@ def drawn_as(stage: str) -> str:
 
 
 def base_agent_name(name: str) -> str:
-    """An agent name with its playbook suffix taken off, if it has one.
-
-    `memstara-board-hypothesis-cardiometabolic` -> `memstara-board-hypothesis`. Every
-    other name comes back exactly as it arrived, including one this file has never heard
-    of — the viewer's rule everywhere is that an unrecognised name is passed through, not
-    guessed at.
-
-    **Why this exists.** Until 2026-09-08 an agent name was one of nine fixed strings and
-    `AGENT_BY_NAME` could be a dict. `A-32` made the hypothesis stage provision one agent
-    per behavioural standard, named for the standard it carries, so the set is now open —
-    it grows with `src/memstara/playbooks/`. Every lookup in `scene.py` filters on
-    membership of that dict, so without this a run under a standard is dropped at the
-    door: no figure on the scene, no row in the cost table, and no error anywhere,
-    because being absent from a dict is not a failure.
-
-    **Matched by prefix rather than by reading the playbook directory.** The directory is
-    the authority on which standards exist, but the viewer runs in a container that may
-    not have it — `_pipeline_definitions` already falls back for exactly that reason —
-    and a name that arrived from the database is evidence the agent existed whatever the
-    directory says today. A prefix is also the one form that cannot go stale.
-
-    The prefix has to be a *whole* segment: `-` is required after the base name, so
-    `memstara-board-ml` is never read as a suffixed `memstara-board-m`. Only board names
-    are stripped; the supervisor path has no playbooks.
-    """
+    """An agent name with its playbook suffix taken off, if it has one."""
     for base in BOARD_AGENT_NAMES_ANY.values():
         if name.startswith(f"{base}-"):
             return base
@@ -406,28 +209,7 @@ def playbook_of(name: str) -> str:
 
 
 def reported_as(name: str) -> str:
-    """The agent name a row is *shown under*. Identity unless the stage folds.
-
-    The fold is display-wide, not scene-only: the cost table, the access map and the feed
-    all report the retired curator's runs under the hypothesis agent, which is the agent
-    that does that work now. Only historical rows reach it — nothing made since
-    2026-09-07 is recorded under a folded name.
-
-    **The numbers must survive it.** Callers do not just relabel — they add the folded
-    rows together, so the cost, the token counts and the call counts are the same before
-    and after. A fold that quietly dropped a row would take that spend off the total,
-    which is the one failure here that would be invisible on screen.
-
-    The fold stays inside one path. The board path had a curator; the supervisor path
-    never did, so there is nothing there to fold, and `AGENT_PATH` keeps the two apart
-    the way it always has.
-
-    **A playbook-suffixed name reports under itself, and that is the decision here.** Two
-    hypothesis agents running to two standards are two agents; folding their rows together
-    would make the one question the split exists to answer — did the standard change what
-    the agent did, and what did each cost — unaskable from the screen. The suffix is
-    resolved for the *stage* lookup and kept in the name.
-    """
+    """The agent name a row is *shown under*. Identity unless the stage folds."""
     stage = stage_of_agent_any(name)
     if stage is None:
         return name  # An agent the viewer cannot name is left exactly as it arrived.
@@ -521,12 +303,7 @@ def store_of(tool: str) -> str:
 
 
 def normalise_server(server: str | None) -> str:
-    """Fold the pre-rename server names into the current ones.
-
-    Rows written before 2026-08-18 say `ecoxai-data`; the same server is now
-    `memstara-data`. Leaving both means the access map shows one server twice. The
-    same fold happens on the SQL side, in `queries.FLAT_CALLS`.
-    """
+    """Fold the pre-rename server names into the current ones."""
     if not server:
         return ""
     return server.replace("ecoxai-", "memstara-")

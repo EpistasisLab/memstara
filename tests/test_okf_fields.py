@@ -1,16 +1,4 @@
-"""The `fields=` filter that lets one branch of the OKF bundle be asked for.
-
-Dictionaries only — no bundle is read and `memstara.mcp_servers.okf` is never imported.
-That module imports `yaml` and `motoro.mcp_servers.okf`, neither of which exists on a CI
-
-there and nowhere else. `frontmatter.py` imports the standard library and nothing else,
-which is the whole reason it is a separate file; `tests/test_prompts.py` is the same move
-made for the same reason.
-
-What is **not** covered here: that `okf_search` calls this on the right list at the right
-moment. That is one line in an unimportable module, and it is a `Verified:` line on the
-commit instead — counts taken against the real 333-document bundle.
-"""
+"""The `fields=` filter that lets one branch of the OKF bundle be asked for."""
 
 from __future__ import annotations
 

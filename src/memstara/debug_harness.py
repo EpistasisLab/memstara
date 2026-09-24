@@ -1,33 +1,5 @@
 #!/usr/bin/env python3
-"""A debugging harness — call the tools directly, in one process.
-
-Why this is needed
-------------------
-In a normal run the five modules in `memstara/mcp_servers/` are **child processes**
-started by `src/memstara/pipeline/board.py:119 setup_tools()`. Attaching a debugger to the pipeline
-therefore **never** hits a breakpoint in the tool code.
-
-This file pulls the same functions **into this process** and calls them. Breakpoints
-then fire the ordinary way, and since no LLM is ever called it costs neither money
-nor time. It is exactly the method used for today's verification.
-
-`@mcp.tool()` returns the function unchanged rather than wrapping it, so a registered
-tool can be called as a plain Python function — no adapter, no JSON-RPC.
-
-Usage
------
-    python -m memstara.debug_harness okf
-    python -m memstara.debug_harness data
-    python -m memstara.debug_harness ml
-    python -m memstara.debug_harness board
-
-These used to be `uv run --no-sync --project ../motoro python -m memstara.debug_harness okf`.
-The `--no-sync` mattered: without it uv tried to rebuild litellm from source and
-failed. None of that is needed now — the conda environment has both this package and
-motoro installed editable, so the plain interpreter is enough.
-
-In VS Code, press F5 on the "1. tool harness" configuration.
-"""
+"""A debugging harness — call the tools directly, in one process."""
 
 from __future__ import annotations
 
@@ -48,22 +20,23 @@ from pathlib import Path
 # share no key names at all, so nothing actually changed hands.)
 from memstara.env import load_env  # noqa: E402
 
-from memstara.paths import DEFAULT_OUTPUT_DIR, SHARED_ROOT  # noqa: E402
+from memstara.paths import DEFAULT_OUTPUT_DIR  # noqa: E402
 from memstara.servers import BY_NAME  # noqa: E402
 
 load_env()
 
-# Which bundle and which data to look at — overridden for this run only, without
-# touching `.env`.
-BUNDLE = SHARED_ROOT / "hiv-suppression" / "okf"
-DATASET = DEFAULT_OUTPUT_DIR / "hiv_cohort.csv"
-Y = "HIV_DETECTABLE"
-
-if BUNDLE.is_dir():
-    os.environ["AGENTIC_OKF_BUNDLE_DIR"] = str(BUNDLE.resolve())
-if DATASET.is_file():
-    os.environ["MEMSTARA_DATASET_PATH"] = str(DATASET.resolve())
+# Explicit environment values take precedence over the synthetic sample defaults.
+os.environ.setdefault("AGENTIC_OKF_BUNDLE_DIR", str(DEFAULT_OUTPUT_DIR / "okf_synthetic_sample"))
+os.environ.setdefault("MEMSTARA_DATASET_PATH", str(DEFAULT_OUTPUT_DIR / "dataset.csv"))
 os.environ.setdefault("MEMSTARA_OUTPUT_DIR", str(DEFAULT_OUTPUT_DIR))
+Y = os.environ.get("MEMSTARA_TARGET_COLUMN", "Y")
+
+
+def feature_columns() -> list[str]:
+    """Read sample feature columns from the configured dataset header."""
+    import csv
+    with Path(os.environ["MEMSTARA_DATASET_PATH"]).open(newline="") as stream:
+        return [name for name in next(csv.reader(stream)) if name != Y][:5]
 
 
 def load(name: str):
@@ -102,9 +75,13 @@ def do_okf() -> None:
 
     show("okf_list_domains", okf.okf_list_domains())
     show("okf_search('adherence')", okf.okf_search("adherence", k=3))
-    show("okf_search('art')  ← this used to match 132 papers", okf.okf_search("art", k=3))
+    show("okf_search('glucose')", okf.okf_search("glucose", k=3))
 
-    first = json.loads(okf.okf_search("adherence", k=1))["results"][0]["hits"][0]["id"]
+    results = json.loads(okf.okf_search("glucose", k=1))["results"]
+    hits = results[0].get("hits", []) if results else []
+    if not hits:
+        return
+    first = hits[0]["id"]
     whole = json.loads(okf.okf_read(first))["documents"][0]
     part = json.loads(okf.okf_read(first, section="Bottom line"))["documents"][0]
     print("\n── reading a section ──────────────────────────────────")
@@ -123,8 +100,8 @@ def do_data() -> None:
     # outright (see its docstring: 158 of this cohort's columns have a comma inside
     # the name), so this mode had been returning an error payload and reporting
     # "0 files made" ever since the signature changed under it.
-    a = ["CURRENT_AGE", "SEX", "TOBACCO_LAST_STATUS", "n_diagnoses"]
-    b = ["CURRENT_AGE", "SEX", "RACE_1", "MARITAL_STATUS"]
+    a = feature_columns()[:3]
+    b = feature_columns()
     # Same tag, different columns — this used to overwrite a single file twice.
     show("slice_columns(A, tag='dbg')", data.slice_columns(a, Y, "dbg"))
     show("slice_columns(B, tag='dbg')  ← same tag", data.slice_columns(b, Y, "dbg"))
@@ -134,11 +111,10 @@ def do_data() -> None:
 
 
 def do_ml() -> None:
-    """Training. Put breakpoints on get_dummies at src/memstara/mcp_servers/ml.py
-# Historical source at commit 0990ec5, lines 148) and features at :174."""
+    """Training. Put breakpoints on get_dummies at src/memstara/mcp_servers/ml.py"""
     data, ml = load_server("memstara-data"), load_server("memstara-ml")
 
-    cols = ["CURRENT_AGE", "SEX", "RACE_1", "MARITAL_STATUS", "n_diagnoses"]
+    cols = feature_columns()
     sliced = json.loads(data.slice_columns(cols, Y, "dbgml"))
     print(f"\n   subset: {Path(sliced['path']).name}")
 

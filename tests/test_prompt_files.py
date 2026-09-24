@@ -20,12 +20,6 @@ import pytest
 from memstara.paths import PLAYBOOKS_DIR, PROMPTS_DIR
 from memstara.pipeline.prompts import load_prompt, playbook_names
 
-#: Every agent, by the path `provision_all` and `provision_board_agents` pass to
-#: `_ensure_agent_from_file`. Four on the 02 (supervisor) path, five on the 03 (board) one.
-#: `board/curator` was here until 2026-09-07. It is gone because the agent is: writing the
-#: wave's questions is the hypothesis agent's other job now, and its text lives in the
-#: second half of `board/hypothesis.md`. There is no sixth file, which is the whole of what
-#: `test_no_file_is_unaccounted_for` below then has to agree with.
 AGENTS = [
     "mvp/hypothesis", "mvp/data", "mvp/ml", "mvp/interpreter",
     "board/hypothesis", "board/data", "board/ml", "board/interpreter",
@@ -175,7 +169,7 @@ def test_optional_local_rules_do_not_change_prompt_inventory(tmp_path, monkeypat
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("test prompt", encoding="utf-8")
     if local_rules:
-
+        (tmp_path / "CLAUDE.md").write_text("local instructions", encoding="utf-8")
     test_no_file_is_unaccounted_for()
     unexpected = tmp_path / "obsolete.md"
     unexpected.write_text("obsolete prompt", encoding="utf-8")

@@ -1,39 +1,4 @@
-"""The five MCP tool servers, named once.
-
-Why this file exists
---------------------
-.. repair-citations: off
-
-The same five servers were spelled out in five places. **Those are the
-pre-restructure paths** — the record of what this file replaced, previously attributed to
-`2ff414d`, which is no longer available in this checkout. These are historical names
-and line numbers, not resolvable current-file citations. Nothing sits at them now::
-
-    02_mvp_pipeline.py (former lines 313-319)    the launch table for the supervised pipeline
-    03_board_pipeline.py (former lines 438-447)  the launch table for the board pipeline
-    preflight.py (former lines 213)             the names it starts to prove they start
-    debug_harness.py (former lines 85-134)      the modules it pulls into one process
-    bootstrap.py (former lines 139)             the sources it scrapes for env-var reads
-
-.. repair-citations: on
-
-Four of the five built a command string out of an absolute path. The fifth used a
-glob, which is how it came to be able to report success having read nothing (see
-`SCANNED_MODULES` below).
-
-The command strings are the worst of it, because they do not stay in the source.
-`register_server` **writes them into motoro's database**, and `update_server` only
-runs when the freshly built string differs from the stored one. A path that has
-gone stale therefore survives in a row nobody is looking at until something
-launches it and fails.
-
-What is here and what is not
-----------------------------
-This file owns **how a server is launched**: its registered name, its module, and
-the command. It does not own **which pipeline stage may talk to which server** —
-that is `memstara.pipeline.core.BOARD_SERVERS`, a different question with a different
-answer, kept under its own guard by `viewer/check_definitions.py`.
-"""
+"""Shared MCP server names and launch configuration."""
 
 from __future__ import annotations
 

@@ -1,20 +1,4 @@
-"""`stores`'s agent-name resolution — the thing that broke when agent names stopped
-being a fixed set.
-
-Until 2026-09-08 a board agent was one of nine strings and every lookup in the viewer
-was a dict access or a membership test. `A-32` made the hypothesis stage provision one
-agent per behavioural standard, named for the standard it carries, so the set is open:
-it grows with `src/memstara/playbooks/`.
-
-**The failure that motivated these tests is silent.** A name missing from a dict is not
-an error — the run is filtered out at the door and the screen shows a stage resting
-while its agent is the one working, with nothing anywhere saying a row was dropped. So
-what is asserted below is mostly that the *unsuffixed* names still resolve exactly as
-they did, and that an unknown name is still passed through rather than guessed at.
-
-The viewer is not a package and is not on the import path, so `viewer/api` is put there
-the same way `tests/test_trace_groups.py` does it.
-"""
+"""`stores`'s agent-name resolution — the thing that broke when agent names stopped"""
 
 from __future__ import annotations
 

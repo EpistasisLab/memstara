@@ -76,7 +76,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         "comparison_policy": {"version": "paired_groups_v1", "baseline_columns": baseline},
         "input_contract": "clean single dataset; column selection only; fixed binary target",
         "missing_value_policy": "native_xgboost" if evaluation["engine"] == "xgboost" else "reject",
-        "explainability_review": "reviewer original required; provisional specification",
+        "explainability_review": "Review required; provisional specification",
         "dataset_sha256": digest.hexdigest(),
         **({"feature_context": freeze_feature_context(dataset, args.y_column)}
            if not getattr(args, "report_only", False) else {}),

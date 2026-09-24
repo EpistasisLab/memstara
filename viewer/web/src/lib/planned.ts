@@ -26,17 +26,7 @@ export function asSlots(value: string, agents: number): string[] {
  *  list to keep in step with `stores.SPLITTABLE` on the other side of the API. */
 const PLANNABLE = "hypothesis" as const;
 
-/** Slots back to the field — the other half of `asSlots`, and here for the same reason.
- *
- *  All-empty collapses to `""`, the prompt as written, which is what every run before
- *  playbooks was and what `build_argv` reads as *no flag at all*. A partly-filled set is
- *  joined as it stands, empties included, so the service sees the mismatch it is going to
- *  refuse and says so in words. Quietly dropping the empties would turn "two of three
- *  chosen" into a request for two agents, which is not what the form said.
- *
- *  It was in `StartRun.tsx` until 2026-09-09, when the pipeline cards became writers of the
- *  form too (`A-44`). Two functions joining one field the same way is how the two stop
- *  agreeing. */
+
 export function fromSlots(slots: string[]): string {
   return slots.some((s) => s) ? slots.join(",") : "";
 }

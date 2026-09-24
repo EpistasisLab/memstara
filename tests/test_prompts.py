@@ -1,12 +1,4 @@
-"""The prompt loader.
-
-Fixtures only — no repository file is read here and `memstara.pipeline.core` is never
-imported. That is not fastidiousness: CI has no `../motoro` checkout and no litellm
-
-on the runner and nowhere else. `memstara.pipeline.prompts` imports `re`, `pathlib`
-and `memstara.paths`, and `memstara/__init__.py` imports only `os`, so this module is
-importable anywhere.
-"""
+"""The prompt loader."""
 
 from __future__ import annotations
 

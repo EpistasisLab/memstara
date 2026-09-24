@@ -1,64 +1,4 @@
-"""The SQL. Kept in one file so the three record shapes are handled in exactly one place.
-
-`run_steps.tool_call` comes in three shapes, and getting this wrong produces numbers
-that look plausible and are not:
-
-1. The column is `json`, and many rows hold the JSON literal `null` rather than SQL
-   NULL. `tool_call IS NOT NULL` is therefore true for 424 rows that contain no call at
-   all. Filter on `json_typeof(tool_call) = 'object'`, which also excludes anything that
-   is not a call-shaped document. `::text <> 'null'` admits the same rows and is the
-   obvious way to write it, but it serialises the whole value to compare it with four
-   characters; see the note above `_FLAT_SELECT` for what that cost.
-2. A step may hold **one** call `{server,tool,arguments,result}` or a **batch**
-   `{"calls":[…]}`. Reading only the first shape reports `search_concepts` as 0 calls
-   when the real figure is 458 — the knowledge-source searches all arrive batched.
-3. Rows written before the 2026-08-18 rename carry `ecoxai-*` server names. Left alone,
-   the access map lists one server twice.
-
-`llm_call` has the same JSON-null problem: 1,622 rows are `IS NOT NULL`, only 700 hold
-a value.
-
-==============================================================================
- How to read this file
-==============================================================================
-
- What this file does
-   Almost nothing here executes. It is all **string constants (SQL).** scene.py feeds
-   these constants to conn.fetch(). The top three are for the Memstara DB (the board
-   and the results table), the rest for the core DB (agents and run history).
-
- The constants
-   _FLAT_SELECT  ★ flattens the two call shapes into one relation. The foundation of
-                 the five queries below it
-   FLAT_TEMP_TABLE  that SELECT as a temp table, built once per connection by
-                 `_core_facts` (`scene.py:230`)
-   FLAT_CALLS    now empty. It stays as a name so each of the five still says at its own
-                 site that it depends on `flat`
-   --- Memstara DB ---
-   RUNS          per run (run_tag): task count, done count, first/last time
-   BOARD         every task row of one board
-   RESULTS       the results table
-   --- core DB ---
-   AGENT_TOTALS  per agent: runs, tokens, cost
-   OPEN_RUNS     ★ the runs actually going right now (by heartbeat)
-   ACCESS        calls per agent × tool = the access map
-   TASK_TOUCHES  ★ the bridge tying the board to the runs
-   LAST_CALL     the most recent call per agent = where the character is standing
-   LAST_ROSTER   ★ the workers of the most recent run, however long ago it was
-   RECENT_CALLS  calls within the last few seconds = the flashing lines
-   FEED          the newest calls regardless of age = the feed panel's rows
-
- Easy things to miss
-   1. Everything that counts tool calls is built **on top of `flat`.** That is so the
-      three traps are handled once. Build any new aggregate on it too — and if you do,
-      it must run on the connection `_core_facts` built the table on.
-   2. `$1` is asyncpg's positional argument. The window value arrives from the Python
-      side (scene.py) as a string and is turned into an `::interval`.
-   3. `WHERE ($1 = '' OR run_tag = $1)` means "an empty string means everything".
-   4. verify.py recomputes the same numbers with **SQL written separately from this**
-      and compares them. If this file regresses, that is what catches it.
-==============================================================================
-"""
+"""The SQL. Kept in one file so the three record shapes are handled in exactly one place."""
 
 # Materialize the requested run IDs before ANY JSON inspection. Without this
 # boundary PostgreSQL can evaluate a JSON predicate on unrelated run_steps before
@@ -177,38 +117,6 @@ WHERE ($1 = '' OR run_tag = $1)
 ORDER BY task_id
 """
 
-# RESULTS — the results table. That it is **a different table** from the board matters.
-#   The board holds *what is moving*, the results table *what was found*. So the scene
-#   draws them in different places too (see TOOL_STORE in stores.py).
-#   **The explanation is selected from here, not from the board.** `feature_importance`,
-#   `columns_missing` and `okf_concept_ids` live on both tables, and reading them off the
-#   board loses them the moment the board row is cleaned away: `memstara_results.task_id`
-#   is `ON DELETE SET NULL`, so a finished result outlives the row it came from. Taking
-#   them from the result means "which columns went in, what each contributed, and which
-#   OKF concepts justified them" survives for as long as the result does.
-#
-#   `columns_missing` is selected rather than derived from `columns` minus `columns_used`,
-#   because the two are not the same claim. The subtraction says "asked for and not in the
-#   final model", which a run that stopped before the ML stage satisfies for every column
-#   it asked for — the three `curator-smoke` results have 91, 78 and 14 columns, no used
-#   columns at all, and exactly one genuinely missing column each. `columns_missing` is
-#   what the data stage reported as absent from the cohort, which is the thing worth
-#   showing, and it is why `columns` itself is not selected: nothing draws it.
-#
-#   `match_trace` is deliberately **not** here either, for a measured reason. It is the
-#   concept-to-column matching with every rejected candidate, and it is 598 kB across the
-#   81 results now stored against 89 kB for the explanation columns above — one row
-#   reaches 23.6 kB on its own. The snapshot is polled every two seconds and nothing draws
-#   a trace yet, so it belongs to a per-result endpoint, not to this one.
-#
-#   `model` is selected because `feature_importance` is **not one quantity**. The two
-#   engines this project runs produce numbers on different scales — gain for the boosted
-#   trees, mean AUC drop for permutation — so a bar chart of contributions with no engine
-#   beside it invites a comparison that is not there to make. The column is
-#   `TEXT NOT NULL DEFAULT ''` and the empty string means *not recorded*: the 81 results
-#   stored before 2026-09-08 take it and cannot be backfilled, because the engine was an
-#   environment variable read inside the call and was never written down
-#   (`src/memstara/mcp_servers/ml.py (at commit 0990ec5, lines 194)`). Three states reach the screen, not two.
 RESULTS = """
 SELECT result_id, task_id, run_tag, trial, perspective, hypothesis,
        columns_used, columns_missing, feature_importance, okf_concept_ids,
@@ -326,27 +234,6 @@ GROUP BY a.name, f.server, f.tool
 ORDER BY a.name, count(*) DESC, f.server, f.tool
 """
 
-# The board-to-run bridge. The board carries no run id, but claim_task's *result* does
-# carry the task id, and submit_result's *arguments* do. Parsing these is the only way
-# to say which agent run handled which task.
-#
-# `coalesce(the result side, the arguments side)` merges those two places into one
-# column. `ORDER BY f.started_at` puts it in time order, so scene._carrying can replay
-# this list as it stands and reconstruct "who is holding what right now" — it does not
-# have to sort again.
-#
-# The window is not an optimisation, it is a correctness bound, and it is the same
-# argument as OPEN_RUNS above. `_carrying` replays claims against releases and reports
-# whoever is left holding something. An interrupted run leaves a `claim_task` with no
-# matching `submit_result`, and over an unbounded history that orphan never expires:
-# the agent is pinned as `moving` on every screen, under every run tag, permanently.
-# There is no such orphan right now, so this is a trap rather than a live fault — but
-# it is armed by any run that is killed part way, which is an ordinary thing to do.
-# Without the bound the replay also grows without limit; it is at 578 rows reaching
-# back to 2026-08-10, re-read on every 2s poll.
-#
-# ($1 is scene.py's RUN_ALIVE_SECONDS, as a string, exactly as OPEN_RUNS takes it. A
-# claim older than the longest a run may live cannot belong to a run still holding it.)
 TASK_TOUCHES = FLAT_CALLS + f"""
 SELECT a.name,
        f.run_id,
@@ -381,24 +268,6 @@ TASK_HISTORY = TASK_TOUCHES.replace(
 )
 
 
-# The most recent tool call per agent **run**, for "where is this character standing".
-#
-# `DISTINCT ON (a.name, f.run_id)` is PostgreSQL-only syntax: paired with the leading
-# part of the ORDER BY, it keeps only "the first row per name and run". That is what
-# makes `ORDER BY a.name, f.run_id, f.started_at DESC` mean "the most recent one per
-# run". Change the order and the wrong row is kept, silently.
-#
-# It was `DISTINCT ON (a.name)` until 2026-09-08, and that is what made the viewer draw
-# one character however many workers were running. `--hypothesis-agents 3` starts three
-# `call_agent`s against **one** agent (`src/memstara/pipeline/board.py:1412`), so the
-# three are three `agent_runs` rows sharing a name: keyed by name, two of the three were
-# dropped here before scene.py ever saw them. `run_id` is the axis that separates them,
-# and it is the axis `OPEN_RUNS` was already keyed by, which is why that query needed no
-# change at all.
-#
-# This returns one row per run rather than per live worker, so it holds finished runs
-# too. That is not waste — scene.py looks each run up by id, and a character whose run
-# has ended still has to say what it last did.
 LAST_CALL = FLAT_CALLS + """
 SELECT DISTINCT ON (a.name, f.run_id)
        a.name, f.server, f.tool, f.started_at, f.run_id, r.status AS run_status

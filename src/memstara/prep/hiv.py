@@ -1,61 +1,13 @@
 #!/usr/bin/env python3
-"""Flatten the shared HIV cohort into a table the pipeline can actually slice.
+"""Flatten pipe-delimited HIV cohort columns into counts and indicator features.
 
-The cohort as shared is not a feature matrix. Of its 18 columns, seven hold a whole
-list crammed into one cell, pipe-delimited, and the length differs per patient —
-diagnoses run from 1 to 1,143 with a median of 53. A model needs one value per patient
-per column, and `slice_columns` only *picks* existing columns; it does not unpack
-anything. So the unpacking happens here, once, before the pipeline ever runs.
-
-What comes out:
-
-    9   as-is        age · BMI · sex · ethnicity · race · marital · tobacco · drug · alcohol
-    4   counts       how many diagnoses / medications / surgeries / lab components
-    16  flags        the 8 most prevalent diagnoses and 8 most prevalent medications
-    1   outcome      HIV_DETECTABLE
-
-Counts and flags are deliberately the *simplest* things derivable from the lists.
-Anything more is feature construction, which is a different project — the MVP fixed on
-2026-08-06 is a feature **selection** operator, and this file exists only to give it
-something to select from.
-
-The source directory is **read only**. Output goes to this sandbox's outputs/.
+The source CSV must contain the columns in FLAT, LISTS and OUTCOME. It is read
+without modification; generated features are written to the output directory.
 
 Usage::
 
-    python -m memstara.prep.hiv
-    python -m memstara.prep.hiv --top 12 --out outputs/hiv_cohort.csv
-
-
-==============================================================================
- How to read this file
-==============================================================================
-
- It flattens **the HIV cohort Shared document** into a single CSV the pipeline can
- use. The file as received holds a whole list inside one cell (diagnosis names
- joined by a pipe `|`, from 1 to 1,143 of them per patient), which cannot be
- trained on as it stands. The outcome is `HIV_DETECTABLE` — whether the virus is
- detectable.
-
- There are four functions.
-
-   items(cell)                 splits one pipe-joined cell into a **duplicate-free list**
-   column_name(prefix, label)  turns a long name like a diagnosis into a column name
-   build(source, top)          the whole flattening. **The body of this file**
-   main()                      reads, calls build, saves, and prints what came out
-
- What comes out: 9 columns as-is + 4 counts + 16 present/absent flags + 1 outcome.
-
- Easy to miss:
-
-   · **The counts and the flags are deliberately the simplest thing derivable**
-     from the lists. Anything beyond them is feature construction, and the scope
-     this project fixed is **selecting** among features that already exist. This
-     file only lays out something to select from.
-   · The source directory is **read only.** Output goes to this repository's outputs/.
-   · Making the column names readable by a person matters. What has to connect a
-     knowledge-source concept to a data column is **an LLM reading both**, and it
-     cannot get from `dx_f329` to "depression".
+    python -m memstara.prep.hiv --source /path/to/cohort.csv
+    python -m memstara.prep.hiv --source /path/to/cohort.csv --top 12
 """
 
 from __future__ import annotations
@@ -68,9 +20,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from memstara.paths import DEFAULT_OUTPUT_DIR, SHARED_ROOT
+from memstara.paths import DEFAULT_OUTPUT_DIR
 
-SOURCE = SHARED_ROOT / "Agentic-Clinical-Feature-Construction-Demo" / "cohort_v1_latest_no_PHI.csv"
 DEFAULT_OUT = DEFAULT_OUTPUT_DIR / "hiv_cohort.csv"
 
 OUTCOME = "HIV_DETECTABLE"   # what we are trying to predict — is the virus detectable
@@ -182,7 +133,7 @@ def build(source: Path, top: int) -> tuple[pd.DataFrame, dict[str, list[tuple[st
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--source", default=str(SOURCE))
+    ap.add_argument("--source", required=True, help="Path to the source cohort CSV")
     ap.add_argument("--out", default=str(DEFAULT_OUT))
     ap.add_argument("--top", type=int, default=8, help="how many diagnoses / medications to flag")
     args = ap.parse_args()

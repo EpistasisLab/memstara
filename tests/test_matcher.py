@@ -1,5 +1,5 @@
 # SOURCE: PORTED FROM afc-forge — NOT sandbox-authored code.
-#   upstream: shared/afc-forge/tests/test_matcher.py (495 lines)
+#   upstream: afc-forge/tests/test_matcher.py (495 lines)
 #   Only the import paths differ. These 21 tests are the evidence that this
 #   matcher behaves as afc-forge's does; see the PORT NOTE below.
 """The matcher — PICK-THE-GROUP, the adaptive family window, and code injection.
@@ -262,18 +262,7 @@ def test_the_family_anchor_is_the_top_categorical_not_rank_one(fake_encoder) -> 
 def test_the_family_windows_blowup_guard_does_not_bind_by_default(
     fake_encoder, monkeypatch
 ) -> None:
-    """40 guards against a pathological column; it does not choose how many to show.
-
-    So on an ordinary family it must be invisible — an 11-level family comes back
-    whole — and it may only ever cut a family genuinely wider than itself, because
-    a family cut in rank order is a family the agent never judged whole (§6.7.1:
-    levels are never collapsed in code).
-
-    A shipped constant since 2026-08-24 and config before that. It never bound on
-    either cohort measured, the widest family there being 34 levels, and nobody
-    ever had a catalog that needed it moved. A site with a wider family raises
-    `FAMILY_CAP` itself, which is what the monkeypatch below stands in for.
-    """
+    """40 guards against a pathological column; it does not choose how many to show."""
     default = _matcher(DEMO_ENTRIES, fake_encoder, top_k=2)
     assert len(_names(default.match("race"))) == len(RACE_LEVELS)
 

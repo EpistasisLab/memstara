@@ -31,25 +31,7 @@ class _Base(BaseModel):
 
 
 class MatcherConfig(_Base):
-    """Values taken from afc-forge `config.py:98-114`.
-
-    sim_threshold 0.88 was re-confirmed by measurement over EcoXAI's 1,393
-    columns (scripts/calibrate_threshold.py, 2026-08-25). 21 concepts this cohort
-    carries bottom out at top-1 0.918; 8 it does not carry top out at 0.915. The
-    distributions overlap, so no floor separates present from absent — which is
-    the finding, and the reason the agent contract is PICK-THE-GROUP rather than
-    "take the top match above the threshold".
-
-    0.88 is the highest floor that loses no real concept AND truncates no
-    categorical family. Two independent walls sit just above it:
-      * 0.90 cuts CAT__ALCOHOL_STATUS, whose weakest level scores 0.895. A
-        truncated family is the one failure an agent cannot reword its way out
-        of — it sees a family with a level missing and cannot tell.
-      * 0.92 drops "low density lipoprotein cholesterol" and "antiretroviral
-        therapy" outright.
-    Going lower buys nothing: 0.86 lets in one more absent concept and takes the
-    median group from 12 candidates to 65.
-    """
+    """Values taken from afc-forge `config.py:98-114`."""
 
     sim_threshold: float = Field(default=0.88, ge=0.0, le=1.0)
     top_k: int = Field(default=8, ge=1)

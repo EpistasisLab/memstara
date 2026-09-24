@@ -1,5 +1,5 @@
 # SOURCE: PORTED FROM afc-forge — NOT sandbox-authored code.
-#   upstream: shared/afc-forge/tests/test_vocab.py (153 lines)
+#   upstream: afc-forge/tests/test_vocab.py (153 lines)
 #   Only the import paths differ. See the PORT NOTE below.
 """The declared vocabularies — recognizers, normalizers, and the root relation.
 

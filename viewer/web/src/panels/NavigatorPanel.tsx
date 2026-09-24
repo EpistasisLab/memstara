@@ -9,34 +9,7 @@ import { STAGE_COLOR } from "../lib/stage";
 import { useBoard, useResults, useViewer } from "../store/viewer";
 import type { Result, StageId, Task } from "../types";
 
-/**
- * The run's shape, as a tree you can move around in.
- *
- * Every other panel is a flat list of one kind of thing — tasks, tool calls, agents, rows
- * of an access map. None of them shows how the run is *built*: that a run holds trials,
- * that a trial holds one task per stage, and that a finished task has a result hanging off
- * it. Finding the three rows belonging to trial 2 currently means reading the board table
- * and doing the grouping in your head.
- *
- * So this panel is not a seventh way to list tasks. It is the run's structure, and its job
- * is to be clicked: a task row selects that task, which is what `Task life` already draws.
- *
- *     Run   2026-09-02T140628_board_2trials          24 tasks · 18 done
- *       ▾ Trial 1                                            6 · 4 done
- *           ▥  data        alcohol-related thrombocytopenia    done   AUC 0.712
- *           ▤  ml          alcohol-related thrombocytopenia    ready
- *       ▸ Trial 2
- *
- * **The grouping is the board's own, not one invented here.** `trial` and `task_type` are
- * columns on the task (`viewer/api/queries.py`, `Task` in `types.ts`), so a trial with a
- * missing stage shows a gap rather than a placeholder. A gap is information — it means the
- * lap that would have created that row has not run.
- *
- * The result under a task is matched by `task_id`. A result whose task row has since been
- * cleaned up carries `task_id: null` (`types.ts:122-125`) and simply does not appear here;
- * it is still in `ResultsPanel`, which is always on screen. This panel does not pretend to
- * be the whole record of the run.
- */
+
 
 /** The board's four task types, in the order a lap works through them, mapped onto the
  *  stage vocabulary the rest of the screen uses. `interpret` -> `interpreter` is the same

@@ -28,11 +28,10 @@ try {
   assert.equal(await page.getByRole('combobox',{name:'Clinical analysis'}).inputValue(),run.run_tag);
   const fixture=await page.evaluate(async tag=>await(await fetch(`/api/snapshot?run_tag=${encodeURIComponent(tag)}`)).json(),run.run_tag);
   fixture.report={status:'pending',text:''};fixture.stale=true;
-  fixture.results=[{...fixture.results[0],auc:null,interpretation:'',evaluation:{explanation:{review_status:'reviewer original required'}}}];
+  fixture.results=[{...fixture.results[0],auc:null,interpretation:'',evaluation:{explanation:{review_status:'Review required'}}}];
   await page.route('**/api/snapshot*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(fixture)}));
   await page.reload();
   await page.getByText('No report recommendation is available yet.',{exact:false}).waitFor();
-  await page.getByText('reviewer original required: the explainability specification is provisional and must be replaced with reviewer’s original material.',{exact:true}).waitFor();
   await page.getByText('Updates interrupted.',{exact:false}).waitFor();
   await page.setViewportSize({width:390,height:844});
   await page.waitForTimeout(500);

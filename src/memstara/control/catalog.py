@@ -13,12 +13,31 @@ from memstara.pipeline import prompts
 
 ROLES = ('hypothesis', 'data', 'ml', 'interpreter', 'report')
 
-# reviewer's shared skills are kept outside this checkout. They remain the source of truth;
-# the catalog exposes them without copying or rewriting their Markdown.
-SHARED_ROOT_SKILLS_DIR = Path(__file__).resolve().parents[4] / 'shared' / 'skills'
-shared_SKILLS = {
-    'shared-ml-results': 'ml-results.md',
-}
+# Optional external documents are configured by the deployment.
+def shared_dir() -> Path | None:
+    value = os.environ.get('MEMSTARA_SHARED_SKILLS_DIR', '').strip()
+    return Path(value).expanduser() if value else None
+
+
+def document_path(variable: str, filename: str) -> Path | None:
+    value = os.environ.get(variable, '').strip()
+    if value:
+        return Path(value).expanduser()
+    directory = shared_dir()
+    return directory / filename if directory else None
+
+
+def canonical_name(name: str) -> str:
+    """Resolve deployment-owned aliases without changing saved run records."""
+    path = Path(os.environ.get('MEMSTARA_SKILL_ALIASES_PATH') or
+                (Path(os.environ.get('MEMSTARA_OUTPUT_DIR') or DEFAULT_OUTPUT_DIR) / 'skill_aliases.json'))
+    if not path.is_file():
+        return name
+    aliases = json.loads(path.read_text(encoding='utf-8'))
+    target = aliases.get(name, name)
+    if not isinstance(target, str):
+        raise ValueError('Skill aliases must map names to strings')
+    return target
 
 
 def user_dir() -> Path:
@@ -27,10 +46,9 @@ def user_dir() -> Path:
 
 def catalog() -> list[dict]:
     items = []
-    for item_id, filename in shared_SKILLS.items():
-        path = SHARED_ROOT_SKILLS_DIR / filename
-        if path.is_file():
-            items.append(_external_entry(item_id, path, 'report'))
+    path = document_path('MEMSTARA_RESULTS_SKILL_PATH', 'ml-results.md')
+    if path is not None and path.is_file():
+        items.append(_external_entry('shared-ml-results', path, 'report'))
     for path in sorted(prompts.PLAYBOOKS_DIR.glob('*.md')):
         content = prompts._body(path.read_text(encoding='utf-8'))
         stage = ('data' if path.stem.startswith('data_') else 'ml' if path.stem.startswith('ml_') else
@@ -46,8 +64,8 @@ def catalog() -> list[dict]:
 
 def reference_knowledge() -> list[dict]:
     """Tool background, separate from selectable behavioral skills."""
-    path = SHARED_ROOT_SKILLS_DIR / 'ml-reference.md'
-    if not path.is_file():
+    path = document_path('MEMSTARA_ML_REFERENCE_PATH', 'ml-reference.md')
+    if path is None or not path.is_file():
         return []
     item = _external_entry('shared-ml-reference', path, 'ml')
     return [{**item, 'kind': 'reference', 'automatic': True}]
@@ -71,6 +89,7 @@ def _entry(name: str, content: str, stage: str, source: str) -> dict:
 
 
 def resolve(name: str) -> dict:
+    name = canonical_name(name)
     return next((x for x in catalog() if x['id'] == name), {})
 
 

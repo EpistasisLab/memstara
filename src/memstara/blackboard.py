@@ -1,89 +1,5 @@
 #!/usr/bin/env python3
-"""The shared work board — table definitions and creation.
-
-The 2026-08-12 alignment settled that this is a **table**, living in **Memstara's own
-database** — its own Postgres server, its own volume, its own account. See
-``compose.yml`` next to this file; nothing here touches core's database.
-
-That independence is the point, and it is worth being blunt about why. These tables
-first lived inside core's `motoro` database, separated only by an `memstara_` name
-prefix. Everything worked, but the arrangement was wrong: Memstara is meant to be an
-application that owns its store, not a guest in core's. Sharing a server means core's
-container going down takes Memstara's results with it, a `docker volume rm` aimed at
-core destroys data that has nothing to do with core, and backing up one backs up the
-other. A prefix is a naming convention, not a boundary. So the server, the volume and the
-account were separated outright.
-
-**core's migrations are not touched** — they cannot be, since they run against a
-different server entirely.
-
-Two tables, deliberately separate:
-
-- ``memstara_blackboard`` — work that is not finished yet, and its state. Changes
-  constantly while a run is going.
-- ``memstara_results``   — what the interpretation stage produced. Only accumulates.
-
-Keeping them apart means "what is left to do" never gets mixed with "what we have
-found", which is what that separation was for.
-
-    memstara_blackboard  the **work surface**, holding work that is not finished and
-                         its state. It changes constantly while a run is going, and
-                         it may be cleared away once it has served its purpose.
-    memstara_results     the **record** the interpretation stage produced. It only
-                         accumulates, never shrinks.
-
-Usage::
-
-    python -m memstara.blackboard --create      # idempotent
-    python -m memstara.blackboard --show
-    python -m memstara.blackboard --drop        # asks first
-    python -m memstara.blackboard --drop-questions   # the bank, which --drop leaves alone
-
- The three below deal with **one run only**, not the whole board. They are for
- clearing away tasks left on the board by a run that was interrupted or died.
-
-    python -m memstara.blackboard --orphans   which run left how many unfinished tasks
-    python -m memstara.blackboard --reclaim TAG
-                                     put that run's 'in progress' back in the queue
-    python -m memstara.blackboard --close TAG close that run's unfinished tasks as failed.
-                                     **The rows are not deleted** — they record why
-                                     there is no result.
-
-==============================================================================
- How to read this file
-==============================================================================
-
- This file is **the blueprint for the board and the results table.** It writes down
- which columns the tables get (in SQL), settles the address the database is reached
- at, and makes creating, viewing and dropping them possible from the command line.
- No work actually happens here — it only lays out the place where work happens.
-
- The main names
- --------------
- STATUSES / TASK_TYPES  the four task states and three queued processing stages.
- SCHEMA                 the full definition (SQL) of the tables. Written to be safe
-                        to run more than once.
- dsn()                  the address of Memstara's own database. Not core's.
- BoardBusy              the exception raised when another run already holds this run_tag.
- run_lock(run_tag)      one run at a time per run_tag — a Postgres advisory lock.
- create / drop / show   create the tables / drop them / see what state things are in.
- orphans()              counts, per tag, the tasks left unfinished on the board. Reads only.
- reclaim / close_run    reverse or close one run only. Other tags are untouched.
- main()                 reads the command-line arguments and calls one of the above.
-
- Easy things to miss
- -------------------
- 1. There are two tables. `memstara_blackboard` is a work surface, so **it is fine
-    for it to disappear when cleared**; `memstara_results` is a record, so **it has
-    to stay.**
- 2. The link from the results table to the board is `ON DELETE SET NULL`. That is,
-    **dropping the board does not delete the results** — only the link is broken.
-    Back when it was CASCADE, cleaning the board took the results with it, which
-    removes the point of having two tables.
- 3. `run_lock` is a PostgreSQL advisory lock, so **it is tied to the connection.**
-    Even a `kill -9` closes the connection and releases the lock with it. Had it been
-    a pid file, the file a dead process left behind would have blocked every later run.
-"""
+"""The shared work board — table definitions and creation."""
 
 from __future__ import annotations
 
@@ -182,31 +98,7 @@ CREATE TABLE IF NOT EXISTS memstara_blackboard (
     auc                DOUBLE PRECISION,
     feature_importance JSONB       NOT NULL DEFAULT '{{}}'::jsonb,
 
-    -- Which engine produced the two numbers above. It is not decoration: the engine
-    -- decides what feature_importance *is*. `random_forest` and `xgboost` carry
-    -- `feature_importances_`, so the numbers are impurity/gain — non-negative and
-    -- summing to about 1. `sklearn_hgb` does not, so `_importance` fell back to
-    -- permutation importance and the numbers are a drop in AUC — a different unit, on a
-    -- different scale, and legitimately negative. Measured on the same four
-    -- sub-datasets: random_forest sums to exactly 1.0000, sklearn_hgb to 0.0819 and
-    -- 0.2572 with a minimum of -0.0131.
-    --
-    -- **All three names are still described here although only `xgboost` can be written
-    -- now.** The other two were removed from the tool server on 2026-09-08, and rows
-    -- carrying them did not go anywhere. A schema comment documents what is *in* the
-    -- column, not what the current code can put there, and a reader holding a row that
-    -- says `sklearn_hgb` needs to learn from this comment that its numbers are AUC
-    -- drops. Trimming the list to match today's tool would delete exactly the
-    -- explanation that only old rows need.
-    --
-    -- So a row without this column records a quantity whose meaning cannot be recovered,
-    -- and every comparison across rows is unsound. The tool has always returned the
-    -- engine (`mcp_servers/ml.py (at commit 0990ec5, lines 335)`); until 2026-09-08 nothing stored it, and the 81
-    -- results already in the table are on an unrecorded scale for good — the engine was
-    -- an environment variable read inside the call and written down nowhere else.
-    --
-    -- '' means "not recorded", which is what those older rows say, and it is a different
-    -- claim from any engine name. Do not backfill it by guessing.
+    -- The engine column records which learner produced the result.
     model              TEXT        NOT NULL DEFAULT '',
 
     -- Filled by the interpretation stage: the numbers put into human words.
@@ -486,29 +378,7 @@ class BoardBusy(RuntimeError):
 
 @contextlib.asynccontextmanager
 async def run_lock(run_tag: str, *, on_lost=None) -> AsyncIterator[None]:
-    """Hold an exclusive claim on *run_tag* for as long as this block runs.
-
-    Only one driver may work a given run_tag at a time. The board itself is safe
-    under concurrency — `claim_task` uses FOR UPDATE SKIP LOCKED, so two claimers
-    never take the same row — but the *driver* is not. It decides "nothing is
-    waiting for me, so anything still in_progress must be abandoned" and returns
-    those tasks to the queue. That inference is only sound if it is the only driver.
-    With two, one sees an empty queue merely because the other took the work, and
-    then reclaims tasks that are actively being worked on.
-
-    This happened, on 2026-08-17: a run believed dead was still alive, and a second
-    was started 39 seconds later against the same tag. Nothing broke — the row-level
-    locking held — but four interpretation agents and two explanation agents ran, and
-    the numbers were unusable.
-
-    A Postgres advisory lock rather than a pid file, because it is tied to the
-    connection: kill the process and the lock is gone with it. A pid file left by a
-    killed process blocks every later run until someone deletes it by hand.
-
-    Raises:
-        BoardBusy: another driver holds this run_tag. It is raised immediately rather
-            than waited on.
-    """
+    """Hold an exclusive claim on *run_tag* for as long as this block runs."""
     # crc32 gives a stable 32-bit key from the tag. hashtext() would also work but is
     # an internal function with no compatibility promise across versions.
     # An advisory lock is taken on a **number**, not on a name.

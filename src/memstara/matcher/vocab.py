@@ -1,5 +1,5 @@
 # SOURCE: PORTED FROM afc-forge — NOT sandbox-authored code.
-#   upstream: shared/afc-forge/ade_forge/tools/impl/vocab.py (260 lines)
+#   upstream: afc-forge/ade_forge/tools/impl/vocab.py (260 lines)
 #   The only edit is at line ~43: one import is replaced by the four-line
 #   function it named, inlined with its table. That block carries its own
 #   PORT NOTE. Everything else is byte-identical to upstream.
@@ -7,40 +7,7 @@
 #   The docstring below is UPSTREAM'S OWN TEXT, kept verbatim — "FE_Demo2" and
 #   the "§6.x" citations are afc-forge's references to its own predecessor and
 #   design notes, not this sandbox's.
-"""Coding vocabularies — one recognizer, normalizer and root relation per system.
-
-FE_Demo2 gated its whole code path on a single hard-coded ICD-10 pattern over a
-single ICD-10 index. That is a tuned literal in the §6.7.5 sense: it works on one
-cohort and fails silently everywhere else. This module is the generalization —
-what a vocabulary *is* declared once, and both the matcher's injection path and
-(Phase 2) the family expander read it from the cohort's declared `coding_system`.
-
-Three properties, each a measured FE_Demo2 defect:
-
-1. **Normalize; never pattern-match one written form.** `E11.9` was recognized and
-   `E119` — the same code, dot-stripped, which is how the catalog stores its key —
-   was not, so it fell through to cosine and returned `Z3A.19`, `R11.10`,
-   `H15.009`, all above the floor and all wrong. Query and catalog key go through
-   the *same* normalizer, so both spellings land on one entry.
-2. **A code that resolves nowhere is empty, never a text query.** `J05AR` (ATC)
-   handed to an ICD-10 catalog returned `J00`, `J03.90`, `J06.0` — matched on the
-   leading letter. `recognize()` therefore answers over *every* known vocabulary,
-   not just the declared ones, so a token that is code-shaped somewhere can be
-   refused rather than quietly re-ranked.
-3. **A ROOT is DECLARED, never inferred from the string** (§6.7.5, 2026-08-05).
-   ICD-10's string *is* its hierarchy — `E11.22` → `E11.2` → `E11`, each a real
-   clinical parent. That is a property of ICD-10, not of codes. LOINC's is a
-   sequence number plus a check digit, so truncating `2160-0` names nothing.
-   `root_len is None` means **no families from this vocabulary** — every hit comes
-   back atomic. Prefix-rooting an unhierarchical vocabulary is the worse of the two
-   available failures: it fabricates confident, clinically meaningless families out
-   of adjacent integers, and nothing downstream can tell them from real ones.
-
-The same `root_len is None` gate governs **prefix injection**: an exact code lookup
-is always safe, but `startswith` is only a parent-of relation where the string
-carries the hierarchy. A LOINC-declared catalog is therefore exact-match-only, and
-that is a complete, honest capability rather than a degraded one.
-"""
+"""Coding vocabularies — one recognizer, normalizer and root relation per system."""
 
 from __future__ import annotations
 
@@ -137,28 +104,7 @@ class Vocabulary:
         return norm[:n] if len(norm) > n else norm
 
     def sibling_root(self, code: str) -> str | None:
-        """One level BELOW `root()` — the finest grouping whose members are one idea.
-
-        `root()` names the category (`Z16.33` -> `Z16`, antimicrobial resistance in
-        general). This names the subdivision (`Z16.3`, resistance to *antiviral*
-        drugs), whose members `Z16.30`/`.33`/`.35`/`.39` are the same clinical
-        statement written at four grains. That distinction is what a retrieval layer
-        needs: cosine reaches whichever member the site happened to describe most
-        like the query, and the rest are the same fact under a spelling nobody
-        searched for (§6.3.2 Layer 2c — measured on `hiv_v1` 2026-08-12: 18/21 of the
-        hand-curated columns retrieved, 21/21 after this sweep).
-
-        Why not `root()`. Same measurement, same 21/21, and 840 columns on the review
-        screen instead of 350: `Z16` also pulls resistance to antibiotics and
-        antifungals, which in an HIV cohort are ordinary comorbidity signal. The
-        category is the right unit for *expanding a curated seed* (Layer 1, where a
-        human already said the concept is bad) and too broad for *following a
-        retrieval hit*, where nobody has said anything yet.
-
-        `None` where the code is already at or above that level — `B20` has no finer
-        subdivision, and its siblings `B21`-`B24` are a published BLOCK, which is
-        Layer 1's relation and not this one.
-        """
+        """One level BELOW `root()` — the finest grouping whose members are one idea."""
         if self.root_len is None:
             return None
         norm = self.normalize(code)

@@ -1,91 +1,5 @@
 #!/usr/bin/env python3
-"""Memstara MVP — hypothesis -> data -> ML -> interpreter, repeated N times.
-
-An executable example of the four-stage pipeline fixed in the 2026-08-06 meeting. It
-runs over synthetic data and a sample OKF bundle, and reads feature importance out of
-the overlap in column selections across trials. The idea is that a column picked again
-and again across trials that changed perspective is more trustworthy than one trial
-that happened to guess well.
-
-Setup::
-
-    cp .env.example .env && docker compose up -d
-    uv sync --frozen --group dev          # or: uv pip install -e .
-    uv pip install pandas scikit-learn
-
-    SB=../memstara                 # this folder, outside the repo
-    python -m memstara.prep.sample             # installed with -e, so -m works from here
-
-    set -a && . ./.env && set +a
-    export AGENTIC_OKF_BUNDLE_DIR="$PWD/$SB/outputs/okf_synthetic_sample"
-    export MEMSTARA_DATASET_PATH="$PWD/$SB/outputs/dataset.csv"
-    export MEMSTARA_OUTPUT_DIR="$PWD/$SB/outputs"
-
-Run::
-
-    python -m memstara.pipeline.mvp --trials 3      # smoke
-    python -m memstara.pipeline.mvp --trials 20     # full
-
-Point AGENTIC_OKF_BUNDLE_DIR at a different bundle folder to swap knowledge
-sources — the server reads exactly one bundle; several cannot be loaded at once. See
-outputs/README.md.
-
-Every invocation writes one directory under ``outputs/runs/``::
-
-    2026-08-13T142530_mvp_3trials/
-      REPORT.md        did it go normally, and if not, what was wrong — read this first
-      run.jsonl        structured, DEBUG, every record tagged with trial and stage
-      console.log      what the terminal showed, colour codes stripped
-      manifest.json    arguments, paths, timing, result
-      trace/           one file per trial: every step, tool arguments, tool results
-      todo_rows.json   this run's rows and summary (outputs/ keeps only the latest)
-      summary.json
-
-Nothing appends to a previous run, so a folder is always exactly one invocation. It does
-not get mixed up with yesterday's, so opening one later leaves no doubt about what is
-being looked at.
-
-==============================================================================
- How to read this file
-==============================================================================
-
- This file is the **supervisor-style** pipeline. A Python function calls the four
- stages (hypothesis -> data -> machine learning -> interpretation) itself in a fixed
- order, holding each stage's result in a variable and handing it to the next. What
- decides the order is Python code, not an LLM. That is repeated as many times as there
- are trials, and then the columns the trials picked are gathered and aggregated.
-
- The main functions (top to bottom, in the order they run)
-   main()             — reads the two .env files, takes the arguments, makes the run
-                        directory, turns on the console record, then calls run_pipeline
-   run_pipeline()     — leaves the actual work to _run_pipeline, but guarantees that
-                        manifest.json is written whether it succeeds or dies
-   _run_pipeline()    — check the environment -> prepare the agents -> connect the
-                        tools -> N trials -> aggregate -> save files -> build the
-                        report -> print
-   check_environment()— check **before anything starts**, all at once, that every
-                        environment variable needed is there
-   setup_tools()      — register the four MCP servers and connect them
-   dataset_columns()  — read only the CSV's first line to get the column names
-   write_manifest()   — record in a file what this run was
-   print_summary()    — print the aggregate to the terminal in readable form
-
- Easy things to miss
-   1. **This file is the comparison held up beside 03 (the board style).** 03 does the
-      same work with a different structure — the agents each write onto a shared
-      blackboard. If the two give different answers, that fact is itself information.
-      For that the yardstick must not move, so **this file is left alone.** New ideas
-      go into 03.
-   2. **This is not an LLM supervisor.** The word "supervisor" invites the
-      misunderstanding, but what supervises here is ordinary Python code inside
-      `_run_pipeline`. No LLM decides "what to do next".
-   3. **There are two `.env` files.** That is why both are read at the very top of
-      main(). The reason is written out in the comment inside main().
-   4. **`dump_all` writes a trace file per trial.** The database holds every tool call
-      with its arguments and result, but none of it is visible until someone goes and
-      gets it, so it is pulled out to files when the run ends. 03 records this a
-      different way.
-"""
+"""Memstara MVP — hypothesis -> data -> ML -> interpreter, repeated N times."""
 
 from __future__ import annotations
 
@@ -349,11 +263,7 @@ def print_summary(summary: dict) -> None:
     if summary["mean_auc"] is not None:
         print(f"AUC: mean {summary['mean_auc']}  best {summary['best_auc']} (trial #{summary['best_trial']})")
 
-    print("\nColumn selection frequency — the meeting's 'overlap'")
-    # **How many times a column was selected.** This is the 'overlap' the meeting meant.
-    # If trials with different perspectives kept picking the same column, that column is
-    # likely something the data is actually pushing rather than one perspective's taste.
-    # The `#` bar only makes the count visible. Only the top 12 are printed.
+    print("\nColumn selection frequency")
     for col, n in summary["selection_frequency"][:12]:
         bar = "#" * n
         print(f"  {col:16} {n:2}  {bar}")
