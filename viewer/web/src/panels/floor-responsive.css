@@ -1,0 +1,87 @@
+/* Reserve the drawing area before allocating optional controls. */
+.floor-observatory .floor-toolbar { padding:8px 12px; gap:8px; min-height:46px; }
+.floor-observatory .floor-title { display:flex; align-items:center; gap:8px; }
+.floor-observatory .floor-title strong { font-size:14px; }
+.floor-observatory .floor-actions { flex-wrap:wrap; }
+.floor-execution-strip { flex-shrink:0; padding:0 12px 8px; }
+.floor-execution-strip .master-run-controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.floor-execution-strip .master-start-group { display:contents; }
+.floor-execution-strip .master-run-controls button { min-height:36px; padding:7px 12px; font-size:12px; }
+.floor-execution-strip .master-run-error,.floor-execution-strip .batch-start-results { flex-basis:100%; max-height:52px; overflow:auto; }
+.floor-observatory .pipeline-explorer-layout { min-height:340px; }
+.floor-observatory .pipeline-browser { flex-basis:250px; width:250px; }
+.floor-observatory .pipeline-browser.is-closed { flex-basis:42px; width:42px; }
+.floor-observatory .pipeline-detail-workspace { display:flex !important; min-height:300px; }
+.floor-observatory .pipeline-detail-workspace > .floor-canvas { min-height:260px; }
+.floor-observatory .floor-detail-links { padding:2px 6px; gap:4px; }
+.floor-observatory .floor-detail-links button { padding:5px 8px; min-height:30px; }
+.floor-observatory .floor-view-controls > summary { padding:5px 8px; min-height:28px; }
+.floor-observatory .pipeline-selected-controls { max-height:180px; overflow:auto; flex-shrink:0; }
+@container(max-width:900px) {
+ .floor-observatory .pipeline-explorer-layout { flex-direction:column; position:relative; }
+ .floor-observatory .pipeline-browser, .floor-observatory .pipeline-browser.is-closed { width:100%; flex:0 0 auto; max-height:160px; }
+ .floor-observatory .pipeline-browser:not(.is-closed) { overflow:auto; }
+ .floor-observatory .pipeline-browser.is-closed { max-height:36px; }
+ .floor-observatory .pipeline-browser-toggle span { display:inline; }
+ .floor-observatory #pipeline-browser-content:not([hidden]) { overflow:visible; }
+ .floor-observatory .pipeline-browser-list { overflow:visible; flex:none; }
+ .floor-observatory .pipeline-selected-controls { max-height:none; }
+ .floor-observatory .pipeline-detail-workspace { flex:1; width:100%; }
+ .floor-observatory .floor-title { display:none; }
+ .floor-observatory .floor-toolbar { justify-content:flex-end; }
+}
+@container(max-width:900px) {
+ .floor-observatory .pipeline-browser, .floor-observatory .pipeline-browser:not(.is-closed) { flex:0 0 36px; height:36px; max-height:36px; overflow:visible; border:0; background:transparent; }
+ .floor-observatory #pipeline-browser-content:not([hidden]) { position:absolute; top:38px; left:0; z-index:25; width:min(350px,100%); max-height:300px; overflow:auto; padding:12px; border:1px solid rgb(var(--line)); border-radius:10px; background:rgb(var(--panel)); box-shadow:0 8px 24px rgb(var(--ink) / .14); }
+}
+.floor-observatory .floor-visible-controls { padding:4px 6px; gap:4px; border:0; }
+.floor-observatory .floor-visible-controls .pipeline-toolbar { flex:1; }
+.floor-observatory .floor-visible-controls .react-flow__panel:not(.pipeline-toolbar) { display:none; }
+.floor-observatory .floor-visible-controls .pipeline-toolbar button { min-height:30px; }
+@container(max-width:600px) {
+ .floor-observatory .floor-visible-controls select { max-width:100%; min-width:160px; }
+
+}
+/* Give the list a stable reading area; long execution details belong in a dialog. */
+.floor-observatory .pipeline-selected-controls {
+  flex:0 0 auto; max-height:none; overflow:visible; padding:10px;
+  border-top:1px solid rgb(var(--line)); background:rgb(var(--panel));
+}
+.floor-observatory .pipeline-selected-controls > strong { display:block; font-size:12px; line-height:1.4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:7px; }
+.pipeline-row-actions.is-compact { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px; margin:0; padding:0; border:0; }
+.pipeline-row-actions.is-compact .pipeline-row-primary { grid-column:1/-1; min-height:36px; }
+.pipeline-row-actions.is-compact > button { margin:0; min-height:32px; padding:6px 8px; font-size:12px; }
+.pipeline-row-actions.is-compact .pipeline-management-launch svg:last-child { display:none; }
+.floor-observatory .pipeline-browser-row .pipeline-card-select { padding:10px; gap:5px; }
+.floor-observatory .pipeline-browser-row .pipeline-card-name { font-size:13px; line-height:1.4; }
+.floor-observatory .pipeline-browser-row .pipeline-card-position { padding:0; }
+.floor-observatory .pipeline-browser-row:not(.is-selected) .pipeline-card-stage { display:none; }
+.floor-observatory .pipeline-browser-row .pipeline-card-compare { padding:5px 10px; margin:0; font-size:11px; }
+.floor-observatory .pipeline-browser-heading { padding-inline:4px; }
+.floor-observatory .pipeline-browser-search-tools > summary { padding-block:5px; }
+.floor-observatory .pipeline-browser-list { scroll-padding-block:6px; }
+.floor-compact-actions { display:none; }
+@container(max-width:900px) {
+ .floor-observatory .pipeline-browser .pipeline-selected-controls { display:none; }
+ .floor-compact-actions { display:block; flex-shrink:0; padding:8px; border:1px solid rgb(var(--line)); border-radius:8px; background:rgb(var(--panel)); margin-bottom:6px; }
+ .floor-compact-actions > strong { display:block; font-size:12px; margin-bottom:5px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+ .floor-compact-actions .pipeline-row-actions.is-compact { grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr); }
+ .floor-compact-actions .pipeline-row-actions.is-compact .pipeline-row-primary { grid-column:auto; }
+}
+.floor-observatory .pipeline-selected-controls .pipeline-row-actions.is-compact {
+ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+ flex-direction:initial; max-height:none; overflow:visible; margin:0; gap:6px;
+}
+.floor-observatory .pipeline-selected-controls .pipeline-row-actions.is-compact .pipeline-row-primary { position:static; order:initial; }
+.floor-observatory .pipeline-browser-heading { flex-wrap:nowrap; align-items:center; }
+.floor-observatory .pipeline-browser-heading h3 { flex:1; }
+.floor-observatory .pipeline-browser-heading > span { white-space:nowrap; }
+/* Exceptional long status messages must remain reachable, never clip the diagram. */
+.floor-observatory { overflow-y:auto; overscroll-behavior:contain; }
+.floor-observatory > p[role=alert] { flex-shrink:0; max-height:56px; overflow:auto; }
+.floor-observatory .pipeline-detail-workspace.has-combination-studio > .floor-detail-links,
+.floor-observatory .pipeline-detail-workspace.has-combination-studio > .floor-visible-controls { display:none; }
+.floor-observatory .pipeline-detail-workspace.has-combination-studio { min-height:0; }
+.floor-observatory .has-combination-studio .combination-studio { padding:16px; }
+.floor-comparison-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid rgb(var(--line));background:rgb(var(--panel));font-size:13px;flex-shrink:0}.floor-comparison-heading span{font-size:12px;color:rgb(var(--ink-soft));flex:1;min-width:180px}
+.floor-comparison-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:14px;padding:14px;overflow:auto;min-height:0;flex:1;align-content:start;overscroll-behavior:contain}.floor-comparison-pane{height:690px;min-width:0;display:flex;flex-direction:column;border:1px solid rgb(var(--line));border-radius:14px;overflow:hidden;background:rgb(var(--panel))}.floor-comparison-pane-heading{display:flex;flex-direction:column;gap:4px;padding:12px 16px;border-bottom:1px solid rgb(var(--line));flex-shrink:0}.floor-comparison-pane-heading strong{font-size:14px;overflow-wrap:anywhere}.floor-comparison-pane-heading span{font-size:12px;color:rgb(var(--ink-soft))}.floor-comparison-standard{flex:1;min-height:300px}.floor-comparison-pane .combination-studio{padding:12px!important}.floor-comparison-standard .react-flow__controls-button{background:rgb(var(--panel));color:rgb(var(--ink));border-color:rgb(var(--line))}.floor-comparison-standard .react-flow__controls-button svg{fill:currentColor}

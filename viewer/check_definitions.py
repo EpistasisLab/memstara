@@ -27,12 +27,13 @@ Run with the *core* interpreter, which can import both sides::
    main()               compares the three tables, then goes on to check the scene
                         places and the tool mapping
 
- The four things checked
+ The five things checked
    1. BOARD_TOOLS       which tools each stage uses
    2. BOARD_SERVERS     which MCP server each stage connects to
    3. BOARD_AGENT_NAMES stage -> the name in the agents table
    4. scene places / tool->store   does every stage have a HOME and a label, and does
                                    every tool have a store
+   5. SPLITTABLE        does every station allowed to show several figures exist
 
  Easy things to miss
    ★ Why `_copy_from_stores` uses **ast parsing instead of an import.** On an import
@@ -75,8 +76,8 @@ def _copy_from_stores() -> dict[str, object]:
     # clause's **stand-in table.**
     # `literal_eval` evaluates only literals such as dict/set/str, so there is no risk
     # of code being run.
-    tools, servers, names = ast.literal_eval(ret.value)
-    return {"tools": tools, "servers": servers, "names": names}
+    tools, servers, names, question = ast.literal_eval(ret.value)
+    return {"tools": tools, "servers": servers, "names": names, "question": question}
 
 
 def main() -> int:
@@ -87,7 +88,12 @@ def main() -> int:
     # (= "the check could not be made"), not with 1 (= "they do not line up"). Mix the
     # two and picking the wrong interpreter looks like broken definitions.
     try:
-        from memstara.pipeline.core import BOARD_AGENT_NAMES, BOARD_SERVERS, BOARD_TOOLS
+        from memstara.pipeline.core import (
+            BOARD_AGENT_NAMES,
+            BOARD_SERVERS,
+            BOARD_TOOLS,
+            QUESTION_TOOLS,
+        )
     except Exception as e:  # noqa: BLE001
         print(f"  could not read memstara.pipeline.core — "
               f"run it with the core interpreter: {e}")
@@ -102,6 +108,11 @@ def main() -> int:
         ("BOARD_TOOLS", dict(BOARD_TOOLS), copy["tools"]),
         ("BOARD_SERVERS", dict(BOARD_SERVERS), copy["servers"]),
         ("BOARD_AGENT_NAMES", dict(BOARD_AGENT_NAMES), copy["names"]),
+        # Not a stage table — the tools the hypothesis agent holds when it writes the
+        # wave's questions instead of answering one. Checked here for the same reason as
+        # the three above: the viewer copies it, and a copy nobody compares is how the
+        # screen comes to disagree with the pipeline quietly.
+        ("QUESTION_TOOLS", set(QUESTION_TOOLS), copy["question"]),
     ]
 
     bad = False
@@ -113,6 +124,13 @@ def main() -> int:
             continue
         bad = True
         print(f"  {label:20} ⛔ mismatch")
+        if not isinstance(real, dict):
+            # QUESTION_TOOLS is a flat set, not a stage table. Printing which side each
+            # difference is on says the same thing the per-key loop below says, and a set
+            # has no .get() for that loop to call.
+            print(f"     only in the pipeline: {sorted(set(real) - set(mirror))}")
+            print(f"     only in the viewer:   {sorted(set(mirror) - set(real))}")
+            continue
         for key in sorted(set(real) | set(mirror)):
             if real.get(key) != mirror.get(key):
                 # The union is walked and compared with get() so that a key present on
@@ -132,19 +150,62 @@ def main() -> int:
 
     # `real` is rebound by the loop above; name the table we actually mean.
     stages = set(BOARD_TOOLS)
-    missing_home = stages - set(stores.HOME)
-    missing_label = stages - set(stores.AGENT_LABELS)
-    if missing_home or missing_label:
+    # Retired stages count as known here. The pipeline has not named `curator` since
+    # 2026-09-07, but the viewer still has to draw and label the runs recorded against
+    # it, so `stores.LEGACY_BOARD_AGENT_NAMES` keeps the key alive on this side alone.
+    # Leaving it out of `known` would make the checks below reject exactly the mapping
+    # that keeps those runs on screen — a checker refusing the thing it exists to
+    # protect.
+    known = stages | set(stores.LEGACY_BOARD_AGENT_NAMES)
+    # A stage does not need a place of its own — it needs to be **drawn**, and
+    # `stores.DRAWN_AS` lets one character stand for two stages (the retired curator is
+    # drawn as the hypothesis stage). So the question is whether the character it
+    # resolves to has a place, not whether the stage does. Every stage still needs its
+    # own label: `AGENT_LABELS` is what names an agent in the cost table, the access map
+    # and the feed.
+    missing_home = {stores.drawn_as(s) for s in known} - set(stores.HOME)
+    missing_label = known - set(stores.AGENT_LABELS)
+    # `DRAWN_AS` is checked from both ends, or the grouping becomes a way to lose a
+    # stage quietly: a key naming a stage nothing knows about folds nothing, and a value
+    # naming a character with no place folds a real stage into thin air.
+    unknown_source = set(stores.DRAWN_AS) - known
+    unknown_target = set(stores.DRAWN_AS.values()) - set(stores.HOME)
+    if missing_home or missing_label or unknown_source or unknown_target:
         bad = True
         print(f"  {'scene places':20} ⛔ missing stages home={missing_home} label={missing_label}")
+        if unknown_source or unknown_target:
+            print(f"  {'':20}    DRAWN_AS bad keys={unknown_source} bad targets={unknown_target}")
     else:
-        print(f"  {'scene places':20} match — all {len(stores.HOME)} stages have a place and a name")
+        drawn = f"{len(known)} stages drawn as {len(stores.HOME)} characters"
+        print(f"  {'scene places':20} match — {drawn}, every one with a place and a name")
 
-    every_tool = {t for ts in BOARD_TOOLS.values() for t in ts} | {"read_board", "count_waiting"}
-    # Every tool the stages use, plus the two that belong to no stage.
-    # `read_board` is the driving script's business and `count_waiting` is used by
-    # nobody, but they still have to have a store mapping — because they have to appear
-    # in the "windows" list on screen.
+    # `SPLITTABLE` names the stations that may show more than one figure. A name in it
+    # that is not a station is not a harmless spare entry — `_build_scene` tests
+    # `character not in stores.SPLITTABLE`, so a typo there silently folds the stage it
+    # meant to split, which is the failure that made A-24 need reopening in the first
+    # place. It reads as working: five characters on the floor, one per stage, exactly
+    # what a default run looks like anyway.
+    unknown_split = stores.SPLITTABLE - set(stores.HOME)
+    if unknown_split:
+        bad = True
+        print(f"  {'splittable':20} ⛔ not stations: {sorted(unknown_split)}")
+    else:
+        folded = sorted(set(stores.HOME) - stores.SPLITTABLE)
+        print(f"  {'splittable':20} match — {sorted(stores.SPLITTABLE)} split by worker, "
+              f"{len(folded)} folded to one figure")
+
+    every_tool = ({t for ts in BOARD_TOOLS.values() for t in ts}
+                  | set(QUESTION_TOOLS)
+                  | {"read_board", "count_waiting"})
+    # Every tool the stages use, plus the question step's — that is the hypothesis
+    # agent's other job, so its tools are in `QUESTION_TOOLS` and in no entry of
+    # `BOARD_TOOLS`. Without the union `read_questions` and `propose_questions` would go
+    # unchecked here while still being listed in `BOARD_WINDOWS`, which is the one
+    # combination that puts a tool on screen with no place to light up.
+    #
+    # Plus the two that belong to no stage: `read_board` is the driving script's business
+    # and `count_waiting` is used by nobody, but they still have to have a store mapping —
+    # because they have to appear in the "windows" list on screen.
     unmapped = {t for t in every_tool if stores.store_of(t) == "unknown"}
     # If `store_of` returns "unknown", that tool call **lights up no place at all** on
     # screen. Rather than have it vanish quietly, it is caught here.

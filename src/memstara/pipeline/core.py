@@ -40,8 +40,12 @@ a dataclass is enough.
                         is what makes it "different angles converged on one place"
 
    (2) Agent definitions  provision_all (the 4 for 02), provision_board_agents
-                        (the 6 for 03). Every prompt is in here. **The most
-                        important part of this file.**
+                        (the 6 for 03). What each agent is told is **not** in
+                        here — it is one .md file per agent under
+                        src/memstara/prompts/, read by memstara.pipeline.prompts.
+                        These two functions name the files and pass the model
+                        configuration; the prose they used to hold is the thing
+                        most often edited, and it is edited there now
 
    (3) Execution and aggregation  run_one_trial (02's supervisor), aggregate,
                         tools_for
@@ -56,7 +60,7 @@ from __future__ import annotations
 import json      # agent output (a JSON string) into Python values
 import uuid      # run ids
 from collections import Counter   # for counting how often each column was chosen
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -72,6 +76,9 @@ from motoro.runner import (
     update_agent,
 )
 from motoro.schemas.agent import LLMProvider, ModelConfig
+
+from memstara.pipeline.scientific_policy import PRIMARY_QUESTION_TOOLS
+from memstara.pipeline.prompts import load_prompt
 
 # --------------------------------------------------------------------------- #
 #  Diversity — what makes 20 repetitions mean anything
@@ -229,9 +236,9 @@ async def _ensure_agent(name: str, **kwargs: Any) -> Any:
     """Idempotent by name, but refresh the definition when it has drifted.
 
     Returning the existing agent untouched makes the --provider / --model flags
-    silently ineffective, and it also means an edited prompt in this file never
-    reaches the running agent: an agent is a durable resource and its configuration
-    was frozen at creation time.
+    silently ineffective, and it also means an edited file under `src/memstara/prompts/`
+    never reaches the running agent: an agent is a durable resource and its
+    configuration was frozen at creation time. See `_ensure_agent_from_file` below.
 
     An agent's identity is its role (its name), not its model or its wording, so the
     right move is to keep the name and update what changed.
@@ -263,191 +270,65 @@ async def _ensure_agent(name: str, **kwargs: Any) -> Any:
     return existing
 
 
+async def _ensure_agent_from_file(
+    name: str, prompt: str, playbook: str = "", **kwargs: Any
+) -> Any:
+    """`_ensure_agent`, with `goal` and `system_prompt` read from a prompt file.
+
+    Args:
+        name: The agent's name, from `AGENT_NAMES` or `BOARD_AGENT_NAMES`.
+        prompt: Path under `PROMPTS_DIR` without the suffix — "board/hypothesis".
+        playbook: A behavioural standard to splice into that prompt, or "" for the
+            prompt as written. Nothing below here needs to know: `_ensure_agent`
+            compares the `system_prompt` it is handed against the stored one and
+            updates it, so a run that attaches a playbook and one that does not
+            reprovision the same agent in the same way.
+        **kwargs: Passed straight through; `model_config` and `pattern_config` in
+            practice.
+
+    Returns:
+        The agent, created or refreshed. `load_prompt` raises rather than handing
+        back an empty prompt, so a mis-named or malformed file fails here, loudly,
+        before any model is called.
+    """
+    return await _ensure_agent(name, **load_prompt(prompt, playbook), **kwargs)
+
+
 async def provision_all(
-    *, provider: str = "azure_foundry", model: str = "claude-sonnet-4-6"
+    *, provider: str = "", model: str = ""
 ) -> dict[str, uuid.UUID]:
     """Create the four agents (or find the existing ones) and return their ids.
+
+    The mvp path. Its four prompts are one file each under
+    `src/memstara/prompts/mvp/`, named for their key in `AGENT_NAMES`, on the same
+    rule as the board's — see `provision_board_agents`. They are kept separate from
+    `board/` rather than shared: the two pipelines exist to be compared, and a
+    prompt one of them edits must not silently change the other.
 
     No api_key is passed: ModelConfig.api_key is exclude=True, so it does not survive
     being persisted with the agent. Credentials resolve at call time instead.
     """
-    mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096)
+    from memstara.env import configured_llm, configured_api_base
+    provider, model = configured_llm(provider, model)
+    mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096,
+                     api_base=configured_api_base(provider))
     react = {"execution_pattern": "reason_act"}
 
-    hypothesis = await _ensure_agent(
-        AGENT_NAMES["hypothesis"],
-        goal="Choose the set of columns that will predict the given outcome, grounded in the OKF knowledge source.",
-        system_prompt=(
-            "You are a hypothesis agent. Decide which columns to pull from the dataset in "
-            "order to predict the outcome.\n\n"
-            "The knowledge source (OKF) tells you WHICH PHENOMENA matter for this outcome "
-            "and how strong the evidence is. The dataset tells you WHICH COLUMNS EXIST. "
-            "Neither one alone is enough, and nothing connects them for you — making that "
-            "connection is your job.\n\n"
-            "Do NOT assume the knowledge source states column names. Different bundles are "
-            "written by different people to different conventions; some name variables "
-            "explicitly, some only describe a phenomenon in prose, and a field naming "
-            "columns may not exist at all. Read what is actually there.\n\n"
-            "Work in this order:\n"
-            "1) Call describe_dataset FIRST. Read the column names and note "
-            "   'missing_pct' — a column can exist and still be almost entirely blank, "
-            "   and choosing such a column is close to choosing nothing.\n"
-            "2) Call okf_list_domains to see what the knowledge source actually covers. It "
-            "   is the cheapest possible picture of the bundle and costs one call.\n"
-            "3) Search it with okf_search — on ideas, not on column names. It searches what "
-            "   the authors said each document is ABOUT (title, tags, description, journal), "
-            "   never the bodies, so a hit means the bundle says this document is about your "
-            "   query. Pass several wordings at once, comma-separated.\n"
-            "4) Open the promising ones with okf_read. Ask for section=\"Bottom line\" first — "
-            "   it is the conclusion, and it is a tenth the length of the whole paper. Read "
-            "   further sections only when the bottom line leaves you undecided. Several "
-            "   references can go in one call, comma-separated.\n"
-            "5) Call match_concepts with every concept at once. It returns a GROUP, not "
-            "   an answer. The top-ranked candidate is frequently a false friend: for "
-            "   'hypertension' it returns DX__I11.0__Hypertensive heart disease first "
-            "   while the column you want, DX__I10__Essential hypertension, is third; for "
-            "   'chronic kidney disease' a diabetes-complication code outranks DX__N18.3; "
-            "   for 'hemoglobin a1c' the plain LAB__HEMOGLOBIN — a different analyte — "
-            "   outranks real A1c columns. Read the whole group and pick the clinically "
-            "   correct column by name. Never take rank 1 on faith. If nothing fits, "
-            "   reword and call again. If a result is empty, read its 'note': "
-            "   'nothing was close enough' means reword; 'a code this cohort does not "
-            "   carry' means rewording will not help — name it in clinical English. "
-            "   Codes work best INSIDE English: 'essential hypertension (I10)'.\n"
-            "6) CAT__ columns are 0/1 indicators for one level of a family, and the "
-            "   matcher returns the whole family. A family with fewer levels than you "
-            "   expect has a dropped reference level — CAT__SEX__Male is the only sex "
-            "   column, and 0 there means not male. Choose only column names spelled "
-            "   exactly as describe_dataset or the matcher spelled them, and never the "
-            "   outcome itself.\n\n"
-            "Not every described variable is worth taking. The knowledge source covers far "
-            "more phenomena than you may select, and it states how strong the evidence is "
-            "for each. Judge, do not enumerate. If the knowledge source points at something "
-            "this dataset does not measure, say so rather than substituting a weak proxy.\n\n"
-            "Choose as many columns as the OKF evidence justifies — no fixed limit. "
-            "More is not better: each column must map to a specific OKF path with a "
-            "clear clinical rationale. Prefer fewer high-confidence matches over many "
-            "weak ones. At minimum, choose 1 column.\n\n"
-            "Your final answer MUST state, explicitly:\n"
-            "- the list of chosen column names, spelled exactly as the dataset spells them\n"
-            "- one sentence on why that combination should predict the outcome\n"
-            "- the list of knowledge-source concept ids you relied on\n"
-            "If you omit these, the downstream stages cannot read your decision."
-        ),
-        model_config=mc,
-        pattern_config=react,
-        output_contract={
-            "name": "Hypothesis",
-            "fields": [
-                {
-                    "name": "columns",
-                    "type": "list",
-                    "default": [],
-                    "description": "The column names chosen, spelled exactly as the dataset spells them.",
-                },
-                {
-                    "name": "hypothesis",
-                    "type": "str",
-                    "default": "",
-                    "description": "One sentence on why these columns should predict the outcome.",
-                },
-                {
-                    "name": "okf_concept_ids",
-                    "type": "list",
-                    "default": [],
-                    "description": "Ids of the knowledge-source concepts relied on.",
-                },
-            ],
-        },
+    hypothesis = await _ensure_agent_from_file(
+        AGENT_NAMES["hypothesis"], "mvp/hypothesis",
+        model_config=mc, pattern_config=react,
     )
-
-    data = await _ensure_agent(
-        AGENT_NAMES["data"],
-        goal="Extract only the specified columns and the outcome from the source dataset into a sub-dataset.",
-        system_prompt=(
-            "You are a data extraction agent. Use the slice_columns tool to cut out the "
-            "given column list plus the outcome.\n\n"
-            "Do not exercise judgement:\n"
-            "- Do not add columns. 'This one looks relevant too' is not your call.\n"
-            "- Do not drop columns. 'This one looks mostly missing' is not your call either.\n"
-            "- Do not preprocess.\n"
-            "- Do not retype or reformat a column name. You are given a JSON list; "
-            "slice_columns takes a JSON list. Pass it through unchanged. Many names "
-            "contain a comma ('LAB__HDL CHOLESTEROL, DIRECT') and that comma is part "
-            "of the name, not a separator — splitting one produces two names that "
-            "exist nowhere.\n\n"
-            "If a requested column is absent from the dataset, REPORT THAT FACT in your "
-            "final answer. Hiding it makes the next stage mistake a wrong result for a "
-            "right one.\n\n"
-            "State the file path produced, the row count, the columns actually used, and "
-            "the columns that were missing."
-        ),
-        model_config=mc,
-        pattern_config=react,
-        output_contract={
-            "name": "SubDataset",
-            "fields": [
-                {"name": "path", "type": "str", "description": "Path of the sub-dataset file produced."},
-                {"name": "n_rows", "type": "int", "description": "Row count."},
-                {
-                    "name": "columns_used",
-                    "type": "list",
-                    "default": [],
-                    "description": "Columns actually extracted, including the outcome.",
-                },
-                {
-                    "name": "columns_missing",
-                    "type": "list",
-                    "default": [],
-                    "description": "Columns requested but absent from the dataset.",
-                },
-            ],
-        },
+    data = await _ensure_agent_from_file(
+        AGENT_NAMES["data"], "mvp/data",
+        model_config=mc, pattern_config=react,
     )
-
-    ml = await _ensure_agent(
-        AGENT_NAMES["ml"],
-        goal="Train a classifier on the sub-dataset and report AUC and feature importance.",
-        system_prompt=(
-            "You are an ML execution agent. Call train_and_score with the given path and "
-            "report the returned numbers EXACTLY as they came back.\n\n"
-            "- Do not perform feature selection. Train on the columns you were given.\n"
-            "- Do not round or embellish the numbers.\n"
-            "- If the tool returns an error, report that error verbatim.\n\n"
-            "State the AUC, the per-column feature importance, the training row count, and "
-            "the model name used."
-        ),
-        model_config=mc,
-        pattern_config=react,
-        output_contract={
-            "name": "MLResult",
-            "fields": [
-                {"name": "auc", "type": "float", "description": "Test AUC."},
-                {
-                    "name": "feature_importance",
-                    "type": "dict",
-                    "default": {},
-                    "description": "Column name to importance value.",
-                },
-                {"name": "n_train", "type": "int", "description": "Training row count."},
-                {"name": "model", "type": "str", "default": "", "description": "Name of the model used."},
-            ],
-        },
+    ml = await _ensure_agent_from_file(
+        AGENT_NAMES["ml"], "mvp/ml",
+        model_config=mc, pattern_config=react,
     )
-
-    interpreter = await _ensure_agent(
-        AGENT_NAMES["interpreter"],
-        goal="Interpret the ML result against the original hypothesis.",
-        system_prompt=(
-            "You are an interpretation agent. Given the hypothesis, the chosen columns, the "
-            "AUC and the feature importance, argue whether the hypothesis was supported.\n\n"
-            "- Do not claim anything the data does not say.\n"
-            "- If the hypothesis was rejected, say so. Do not paper over it.\n"
-            "- Treat an AUC of 0.5 as equivalent to chance.\n\n"
-            "Three to five sentences."
-        ),
-        model_config=mc,
-        pattern_config=react,  # even with no tools, reason_act finishes in one call and costs less
+    interpreter = await _ensure_agent_from_file(
+        AGENT_NAMES["interpreter"], "mvp/interpreter",
+        model_config=mc, pattern_config=react,
     )
 
     return {
@@ -472,17 +353,34 @@ async def provision_all(
 # word — the data and ml stages are no more free to think for themselves than before.
 # Only the fetching and the writing are new.
 
-# The **six** agents of the board path. Two more than the 02 path — `report`, which
-# reads the results table at the end and writes the account, and `curator`, which
-# stands at the very front and **decides what gets asked.** Why the curator is first:
-# the questions used to be the 20 PERSPECTIVES hardcoded above, and that list did not
-# line up with the subjects the knowledge-source corpus actually holds.
+# The **five** agents of the board path. One more than the 02 path — `report`, which
+# reads the results table at the end and writes the account.
+#
+# **Writing the questions is the hypothesis agent's other job, not a sixth agent.**
+# There used to be a `curator` here, standing at the very front and deciding what gets
+# asked. Deciding what to ask and then answering it are two moments of one person's
+# work, and splitting them into two agents bought nothing that separate *calls* do not
+# buy already: `call_agent` takes the agent id and the tool list as separate arguments
+# (`src/memstara/pipeline/board.py:486-494`), so the same agent is handed
+# QUESTION_TOOLS below when it writes and BOARD_TOOLS["hypothesis"] when it answers,
+# and a tool absent from a call cannot be reached however the prompt is worded. What
+# the two stages were separating is still separated, mechanically, one layer down.
+#
+# What did NOT move: the reason the questions are grounded in the corpus at all. They
+# used to be the 20 PERSPECTIVES hardcoded above, and that list did not line up with
+# the subjects the knowledge-source corpus actually holds.
+#
+# **The `memstara-board-curator` agent record in motoro is left where it is.** It is
+# not in this dict any more, so nothing provisions or calls it, but hundreds of past
+# runs are recorded against it and `_ensure_agent` finds an agent by *name* (:234-269).
+# Renaming or deleting it would cut those runs loose from the agent that did them, and
+# `viewer/api/stores.py` keeps the name explicitly so the viewer's cost totals still
+# include them.
 #
 # The names are prefixed with `board-` to keep them apart from the 02 path's. Under the
 # same names the two paths would share one agent, and editing one path's prompt would
 # quietly change the other.
 BOARD_AGENT_NAMES = {
-    "curator": "memstara-board-curator",
     "hypothesis": "memstara-board-hypothesis",
     "data": "memstara-board-data",
     "ml": "memstara-board-ml",
@@ -509,311 +407,186 @@ BOARD_TOOLS = {
     # agent (see run_one_trial). `describe_matcher` is deliberately not here: it
     # reports cache paths and versions, which is a fact about this machine and not
     # about the cohort.
-    # The curator writes the questions the hypothesis stage is then asked. It gets
-    # `read_results` and the hypothesis stage does not: that is the whole feedback
-    # path, and putting it here rather than there keeps the hypothesis stage's contract
-    # intact (one perspective in, one hypothesis out) while still letting a wave learn
-    # from the one before it. `record_question_outcomes` is deliberately absent — it is
-    # bookkeeping about a wave having ended, which the driver knows and no agent does.
-    "curator": {"okf_list_domains", "okf_search", "okf_read",
-                "read_questions", "read_results", "propose_questions"},
     # `claim_question` is the one thing this stage takes rather than makes. It is not a
     # softening of the rule below — the stage still claims no *task*, and it is still the
     # only stage that puts work on the board. What it claims is the question it sets out
     # from, which stops two hypothesis workers of one wave both investigating the newest
-    # question in the bank. `read_questions` stays with the curator: this stage is handed
-    # one question, and a stage that can read the whole bank is a stage that can pick a
-    # second one for itself.
+    # question in the bank.
+    #
+    # Question writing and feature mapping have separate tool lists. Neither may
+    # read ML results. Only the outcome-free question catalog is exposed to writing;
+    # mapping receives the assigned question without scores or historical rationale.
     "hypothesis": {"okf_list_domains", "okf_search", "okf_read", "describe_dataset",
                    "match_concepts", "match_concept", "claim_question", "create_task"},
     "data": {"describe_dataset", "slice_columns", "claim_task", "submit_result"},
     "ml": {"train_and_score", "claim_task", "submit_result"},
     "interpreter": {"claim_task", "submit_result"},
-    "report": {"read_results"},
+    # This is the stage `spec/components/05_agents_implementation_plan_KR.md:121` calls the
+    # insight agent: a finished board in, a report out. It is given the corpus so that a claim in the
+    # report can be grounded in the branch the run was confined to, rather than in the
+    # model's memory of the literature. `read_results` stays what it works from; the two
+    # okf tools are for checking a number against what the branch actually says.
+    #
+    # `okf_list_domains` is deliberately not here. It is the tool for finding your way
+    # around a bundle before searching it, and this stage arrives with results in hand —
+    # it has something to look up, not a shelf to browse.
+    #
+    # This contradicts that same spec file's allow-list at :135, which gives insight no
+    # knowledge tools at all. The spec is a plan and this is the decision that supersedes
+
+    # diffing.
+    "report": {"read_results", "okf_search", "okf_read"},
 }
 
 # Which servers may be reached **at all.** Together with BOARD_TOOLS above this filters
 # in two layers: narrowed once by server, then narrowed again by tool name within it.
 BOARD_SERVERS = {
-    "curator": {"okf", "memstara-blackboard"},
     "hypothesis": {"okf", "memstara-data", "memstara-blackboard", "semantic-matcher"},
     "data": {"memstara-data", "memstara-blackboard"},
     "ml": {"memstara-ml", "memstara-blackboard"},
     "interpreter": {"memstara-blackboard"},
-    "report": {"memstara-blackboard"},
+    "report": {"okf", "memstara-blackboard"},
 }
 
-# The text prefixed to the prompts of the three stages that **take** work from the
-# board (data, ml, interpreter).
+# The hypothesis agent's **other job**: writing the wave's questions before anybody
+# answers them. This is not a stage. There is no agent of this name, nothing is drawn
+# for it, and no run is recorded against it — it exists as its own pair of constants
+# only because the permission is per *call* rather than per agent, and one agent that
+# does two jobs therefore needs two tool lists.
 #
-# It is not prefixed to the hypothesis stage — that stage does not take work, it
-# **creates** it.
+# It is deliberately kept out of BOARD_TOOLS / BOARD_SERVERS rather than added as a
+# sixth key. Those two tables are read as "one entry per agent" by everything that
+# consumes them — `board.py`'s `by_stage` loop, and `viewer/check_definitions.py:139`,
+# which takes their key set to *be* the set of stages and reports anything else as an
+# error. A sixth key would make that checker call a job an agent.
 #
-# The most important sentence is number 2: when there is nothing to take, **stop.**
-# Without it written down, an agent invents work that does not exist or takes a task
-# of somebody else's type.
-_CLAIM_PREAMBLE = (
-    "Your work comes from a shared board, not from this message.\n\n"
-    "1) Call claim_task with your own type, **the run_tag you were given in this "
-    "   message**, and **the worker name you were given in this message**. It hands you "
-    "   one task from that run and marks it taken, under your name, so nobody else picks "
-    "   it up. Passing the run_tag matters: without it you may be handed a task left "
-    "   behind by an unrelated run, and the work you do will be filed under that run "
-    "   instead of this one.\n"
-    "2) If it answers with a null task_id, there is nothing for you. **Stop there.** Do "
-    "   not invent work, and do not claim a task of another type — that is somebody "
-    "   else's job and taking it breaks the arrangement.\n"
-    "3) Do your part on the task you were handed.\n"
-    "4) Call submit_result with what you produced, **and with the same worker name**. "
-    "   That records it and passes the task to whoever comes next.\n\n"
-    "There may be several of you working the same board at the same time, which is why "
-    "the name in step 1 and the name in step 4 must be the same one. If a task of yours "
-    "sat untouched long enough to be presumed abandoned, it is returned to the queue and "
-    "somebody else may already be doing it. The name is how submit_result can tell you "
-    "that instead of letting you write over their work. Give no name and it cannot tell "
-    "you anything.\n\n"
-)
+# Raw result tools remain excluded. Iterative runs receive scoped feedback from the driver.
+# The catalog is a restricted, current-run duplicate-avoidance view.
+QUESTION_TOOLS = set(PRIMARY_QUESTION_TOOLS)
+QUESTION_SERVERS = {"okf", "memstara-blackboard"}
+
+
+def hypothesis_agent_names(playbooks: Sequence[str]) -> list[str]:
+    """One durable identity per skill, including single-hypothesis configurations.
+
+    The legacy unsuffixed name remains for an empty skill. A nonempty skill must
+    keep the same identity when another hypothesis is added or removed.
+    """
+    base = BOARD_AGENT_NAMES["hypothesis"]
+    return [f"{base}-{book}" if book else base for book in (playbooks or [""])]
+
+
+def _sole(books: dict[str, list[str]], stage: str) -> str:
+    """The one playbook a single-agent stage was given, or "" for none.
+
+    Only `hypothesis` runs an agent per standard. Every other stage takes at most
+    one, which `board.main` refuses at argument-parsing time rather than here — this
+    reads the first and would rather be given a list of one.
+    """
+    return (books.get(stage) or [""])[0]
+
+
+def board_workers(playbooks: dict[str, list[str]] | None = None, namespace: str = "") -> dict[str, tuple[str, str]]:
+    """Worker key -> (agent name, the playbook that worker carries).
+
+    **The one place that decides what the workers of a run are.** `provision_board_agents`
+    builds its agents from this and `board.run` writes `prompts.json` from it, so the
+    record and the agents cannot describe different runs — which they would the moment
+    two functions each derived the key format from the same rule in their own words.
+
+    The keys are worker keys: the stage name for the first agent of each stage, and
+    `hypothesis#2`, `hypothesis#3`, … for the further hypothesis agents a run with
+    several standards has. Use `stage_of` to get back to something `BOARD_TOOLS` can be
+    keyed by.
+
+    Args:
+        playbooks: Stage -> the standards it was given, in worker order. Only
+            `hypothesis` may hold more than one; `board.main` refuses the others.
+
+    Returns:
+        An ordered mapping, hypothesis workers first. `""` as a playbook means the
+        prompt as written.
+    """
+    books = playbooks or {}
+    hypothesis_books = books.get("hypothesis") or [""]
+    out = {
+        ("hypothesis" if k == 0 else f"hypothesis#{k + 1}"): (name, book)
+        for k, (name, book) in enumerate(
+            zip(hypothesis_agent_names(hypothesis_books), hypothesis_books, strict=True)
+        )
+    }
+    for stage in ("data", "ml", "interpreter", "report"):
+        choices = (books.get(stage) or [""]) if stage == "interpreter" else [_sole(books, stage)]
+        for k, book in enumerate(choices):
+            key = stage if k == 0 else f"{stage}#{k + 1}"
+            name = BOARD_AGENT_NAMES[stage]
+            if stage == "interpreter" and book:
+                name += f"-{book}"
+            out[key] = (name, book)
+    return {key: (f"{name}-{namespace}" if namespace else name, book) for key, (name, book) in out.items()}
 
 
 async def provision_board_agents(
-    *, provider: str = "azure_foundry", model: str = "claude-sonnet-4-6"
+    *, provider: str = "", model: str = "",
+    playbooks: dict[str, list[str]] | None = None,
+    namespace: str = "",
 ) -> dict[str, uuid.UUID]:
-    """Create the six board-driven agents (or find the existing ones).
+    """Create the board-driven agents (or find the existing ones).
 
-    **The most important function in this file.** What each stage is, and what it must
-    do first, is written out here as a prompt and nowhere else. Changing the pipeline's
-    behaviour usually means editing this prose rather than the code.
+    What each stage is, and what it must do first, is one file per stage under
+    `src/memstara/prompts/board/`, named for its key in `BOARD_AGENT_NAMES`.
+    Changing the pipeline's behaviour usually means editing that prose rather than
+    this code, which is the whole reason the prose is no longer in here.
 
-    It goes through `_ensure_agent`, so editing the prose here **updates the existing
-    agents** on the next run — the names stay and only the contents change.
+    It goes through `_ensure_agent`, so editing a prompt file **updates the existing
+    agent** on the next run — the name stays and only the contents change.
+
+    **There are five agents unless the hypothesis stage was given more than one
+    standard**, which is the 2026-08-26 meeting's "several hypothesis agents with
+    different skills". Then there is one hypothesis agent per standard and the
+    returned mapping grows keys `hypothesis#2`, `hypothesis#3`, … beside the
+    unsuffixed `hypothesis`, which is always the first. The four other stages take at
+    most one standard each and are unaffected.
+
+    Args:
+        provider: The LLM provider.
+        model: The model id.
+        playbooks: Stage key -> the standards that stage was given, in worker order.
+            Absent, empty, and `[""]` all mean the prompt as written. The four keys
+            the meeting named are `hypothesis`, `ml`, `interpreter` and `report`;
+            `data` takes one too, because refusing it would be a rule in the code that
+            nobody decided. Only `hypothesis` may hold more than one.
+
+    Returns:
+        Key -> agent id. The key is the stage for the first agent of each stage, and
+        `stage#N` (N from 2) for a further hypothesis agent. **It is a worker key, not
+        a stage key** — `BOARD_TOOLS[key]` is wrong for `hypothesis#2` and
+        `stage_of(key)` is what turns one into the other.
     """
-    mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096)
+    from memstara.env import configured_llm, configured_api_base
+    provider, model = configured_llm(provider, model)
+    mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096,
+                     api_base=configured_api_base(provider))
     react = {"execution_pattern": "reason_act"}
-    hypothesis = await _ensure_agent(
-        BOARD_AGENT_NAMES["hypothesis"],
-        goal="Choose predictive columns from the knowledge source and put the work on the board.",
-        system_prompt=(
-            "You are a hypothesis agent. Decide which columns to pull from the dataset in "
-            "order to predict the outcome, then put that decision on the shared board as a "
-            "new task.\n\n"
-            "You are the only stage that creates work. You take nothing off the board — "
-            "there is nothing on it for you.\n\n"
-            "The one thing you do claim is the QUESTION you set out from. There may be "
-            "another hypothesis agent working the same wave beside you, and a question is "
-            "worth investigating once, not twice. So if your instructions do not already "
-            "contain your question, call claim_question with the run_tag and the worker "
-            "name you were given, and work on what it hands back. It marks that question "
-            "as yours, so the other agent is given a different one. If it answers with a "
-            "null question_id there is nothing left to ask: stop there, and do not invent "
-            "a question or re-use one you were not handed.\n\n"
-            "The knowledge source (OKF) tells you WHICH PHENOMENA matter for this outcome "
-            "and how strong the evidence is. The dataset tells you WHICH COLUMNS EXIST. "
-            "Neither one alone is enough, and nothing connects them for you — making that "
-            "connection is your job.\n\n"
-            "Do NOT assume the knowledge source states column names. Different bundles are "
-            "written by different people to different conventions; a field naming columns "
-            "may not exist at all. Read what is actually there.\n\n"
-            "Work in this order:\n"
-            "1) Call describe_dataset FIRST. Read the column names and note 'missing_pct' — "
-            "   a column can exist and still be almost entirely blank.\n"
-            "2) Call okf_list_domains to see what the knowledge source covers.\n"
-            "3) Search it with okf_search — on ideas, not column names. It searches what the "
-            "   authors said each document is ABOUT, never the bodies, so a hit means the "
-            "   bundle says this document is about your query. Several wordings in one call, "
-            "   comma-separated.\n"
-            "4) Open the promising ones with okf_read, section=\"Bottom line\" first — the "
-            "   conclusion, a tenth the length of the paper. Go deeper only if undecided.\n"
-            "5) Call match_concepts with every concept at once. It returns a GROUP, not "
-            "   an answer. The top-ranked candidate is frequently a false friend: for "
-            "   'hypertension' it returns DX__I11.0__Hypertensive heart disease first "
-            "   while the column you want, DX__I10__Essential hypertension, is third; for "
-            "   'chronic kidney disease' a diabetes-complication code outranks DX__N18.3; "
-            "   for 'hemoglobin a1c' the plain LAB__HEMOGLOBIN — a different analyte — "
-            "   outranks real A1c columns. Read the whole group and pick the clinically "
-            "   correct column by name. Never take rank 1 on faith. If nothing fits, "
-            "   reword and call again. If a result is empty, read its 'note': "
-            "   'nothing was close enough' means reword; 'a code this cohort does not "
-            "   carry' means rewording will not help — name it in clinical English. "
-            "   Codes work best INSIDE English: 'essential hypertension (I10)'.\n"
-            "6) CAT__ columns are 0/1 indicators for one level of a family, and the "
-            "   matcher returns the whole family. A family with fewer levels than you "
-            "   expect has a dropped reference level — CAT__SEX__Male is the only sex "
-            "   column, and 0 there means not male.\n"
-            "7) Choose as many columns as the OKF evidence justifies — no fixed limit. "
-            "   Each column must map to a specific OKF path. Prefer fewer high-confidence "
-            "   matches over many weak ones, and never include the outcome itself.\n"
-            "8) Call create_task with the columns you chose, the outcome column you were "
-            "   given, one sentence on why that combination should predict it, and the "
-            "   concept ids you relied on. The outcome goes on the task because every "
-            "   later stage reads it from there — nobody will tell them separately.\n\n"
-            "create_task takes `columns` as a JSON list, and the matcher already gave "
-            "you the names exactly. Copy them across — do not retype or reformat one. "
-            "Many contain a comma ('LAB__HDL CHOLESTEROL, DIRECT') and that comma is "
-            "part of the name, not a separator; a name split there exists nowhere and "
-            "the data stage will report it missing.\n\n"
-            "Judge, do not enumerate. If the knowledge source points at something this "
-            "dataset does not measure, say so rather than substituting a weak proxy.\n\n"
-            "Your final answer must state the task_id create_task returned."
-        ),
-        model_config=mc,
-        pattern_config=react,
-    )
 
-    data = await _ensure_agent(
-        BOARD_AGENT_NAMES["data"],
-        goal="Take a data task from the board, cut the requested columns, and record the result.",
-        system_prompt=(
-            "You are a data extraction agent.\n\n"
-            + _CLAIM_PREAMBLE
-            + 'Your type is "data".\n\n'
-            "The task you claim carries a list of columns and, in `y_column`, the outcome "
-            "they are meant to predict. Use slice_columns to cut out exactly those columns "
-            "plus that outcome. Both come from the task — not from this message.\n\n"
-            "Do not exercise judgement:\n"
-            "- Do not add columns. 'This one looks relevant too' is not your call.\n"
-            "- Do not drop columns. 'This one looks mostly missing' is not your call either.\n"
-            "- Do not preprocess.\n"
-            "- Do not retype or reformat a column name. You are given a JSON list; "
-            "slice_columns takes a JSON list. Pass it through unchanged. Many names "
-            "contain a comma ('LAB__HDL CHOLESTEROL, DIRECT') and that comma is part "
-            "of the name, not a separator — splitting one produces two names that "
-            "exist nowhere.\n\n"
-            "If a requested column is absent from the dataset, REPORT THAT FACT in "
-            "submit_result. Hiding it makes the next stage mistake a wrong result for a "
-            "right one.\n\n"
-            "Pass the file path produced, the columns actually used, and the columns that "
-            "were missing."
-        ),
-        model_config=mc,
-        pattern_config=react,
-    )
+    out: dict[str, uuid.UUID] = {}
+    for key, (name, book) in board_workers(playbooks, namespace).items():
+        agent = await _ensure_agent_from_file(
+            name, f"board/{stage_of(key)}", book, model_config=mc, pattern_config=react,
+        )
+        out[key] = agent.id
+    return out
 
-    ml = await _ensure_agent(
-        BOARD_AGENT_NAMES["ml"],
-        goal="Take an ml task from the board, train on its sub-dataset, and record the numbers.",
-        system_prompt=(
-            "You are an ML execution agent.\n\n"
-            + _CLAIM_PREAMBLE
-            + 'Your type is "ml".\n\n'
-            "The task you claim carries the path of a sub-dataset and, in `y_column`, the "
-            "outcome column. Call train_and_score with both and report the returned numbers "
-            "EXACTLY as they came back.\n\n"
-            "- Do not perform feature selection. Train on the columns you were given.\n"
-            "- Do not round or embellish the numbers.\n"
-            "- If the tool returns an error, report that error verbatim.\n\n"
-            "Pass the AUC and the per-column feature importance to submit_result."
-        ),
-        model_config=mc,
-        pattern_config=react,
-    )
 
-    interpreter = await _ensure_agent(
-        BOARD_AGENT_NAMES["interpreter"],
-        goal="Take an interpretation task from the board and say whether its hypothesis held.",
-        system_prompt=(
-            "You are an interpretation agent.\n\n"
-            + _CLAIM_PREAMBLE
-            + 'Your type is "interpret".\n\n'
-            "The task you claim carries everything the earlier stages left on it — the "
-            "hypothesis, the columns used and missing, the AUC, the feature importance. "
-            "Argue whether the hypothesis was supported.\n\n"
-            "- Do not claim anything the data does not say.\n"
-            "- If the hypothesis was rejected, say so. Do not paper over it.\n"
-            "- Treat an AUC of 0.5 as equivalent to chance.\n\n"
-            "Three to five sentences, passed to submit_result. That closes the task."
-        ),
-        model_config=mc,
-        pattern_config=react,
-    )
+def stage_of(worker_key: str) -> str:
+    """The stage a key from `provision_board_agents` belongs to.
 
-    report = await _ensure_agent(
-        BOARD_AGENT_NAMES["report"],
-        goal="Read every finished result and write the report for the whole run.",
-        system_prompt=(
-            "You are the reporting agent. You run once, after every other stage has "
-            "finished, and you write the account of the whole run.\n\n"
-            "Call read_results to get every trial that made it through — its hypothesis, "
-            "the columns used, the AUC and the interpretation.\n\n"
-            "Several hypothesis agents worked independently from different angles. What "
-            "matters is where they converged:\n"
-            "- Which columns were chosen by more than one, and which of those actually "
-            "  carried weight in the models. **Those are different questions** — a column "
-            "  can be popular and contribute nothing.\n"
-            "- Where the results disagree, and what that disagreement suggests.\n"
-            "- What the numbers do NOT support. An AUC near 0.5 is chance; say so.\n\n"
-            "Do not invent trials that are not in what you read. If a result looks missing, "
-            "say it is missing rather than filling the gap.\n\n"
-            "Write for someone who was not here: what was tried, what held up, what did not."
-        ),
-        model_config=mc,
-        pattern_config=react,
-    )
-
-    curator = await _ensure_agent(
-        BOARD_AGENT_NAMES["curator"],
-        goal="Write the questions this run will investigate, grounded in the knowledge source.",
-        system_prompt=(
-            "You are a question agent. You do not investigate anything. You decide WHAT "
-            "GETS ASKED, and a hypothesis agent answers it afterwards.\n\n"
-            "Each question is one short instruction phrase, handed to that agent word for "
-            "word. Write it the way it will be read: \"from a ... perspective\", \"using "
-            "only ...\". Not a sentence about a question — the question itself.\n\n"
-            "Two failures this stage exists to prevent:\n\n"
-            "1) ASKING WHAT THE KNOWLEDGE SOURCE CANNOT ANSWER. Before this stage existed "
-            "   the questions were a fixed list written without reference to the corpus, "
-            "   and they did not match it. The hypothesis agent was asked about metabolic "
-            "   pathways while the corpus held papers on something else entirely, so it "
-            "   cited whatever was there and chose columns on other grounds. It looked "
-            "   like fabricated evidence. It was a question nothing could answer.\n"
-            "   Therefore: every question you propose MUST carry okf_tags naming branches "
-            "   the corpus actually has. propose_questions rejects one that does not.\n\n"
-            "2) ASKING THE SAME THING TWICE. The bank spans runs, so a question answered "
-            "   last week is still answered. Rewording does not make it a new question, "
-            "   and propose_questions now checks for that as well as for exact repeats.\n\n"
-            "Work in this order:\n"
-            "1) Call okf_list_domains. This is the ground truth for what can be asked. "
-            "   Note the tags and how many documents sit under each — a branch with three "
-            "   papers supports one question, not five.\n"
-            "2) Call read_questions to see what has already been asked and how it did.\n"
-            "3) If read_results returns anything, read it before writing. This is the only "
-            "   place in the pipeline where one wave can learn from the last. Look at "
-            "   feature_importance: columns with negative importance made their model "
-            "   worse, so a question that keeps producing them is a direction to drop, not "
-            "   repeat. Look at which okf_concept_ids led to high AUC and ask a NEIGHBOURING "
-            "   question, not the same one again. On the first wave this returns nothing; "
-            "   that is expected, and you work from the corpus alone.\n"
-            "4) Use okf_search on a branch you are considering if you need to see what it "
-            "   actually claims before turning it into a question.\n"
-            "5) Call propose_questions ONCE with all of them. Give each a rationale saying "
-            "   what it is grounded in and, from wave two onward, which prior result "
-            "   prompted it. A person reading the bank later should be able to see why "
-            "   this question came after that one.\n\n"
-            "Write questions about PHENOMENA AND MECHANISMS, never about column names. "
-            "You cannot see the dataset and must not guess at it — finding the columns is "
-            "the next stage's job, and it has a matcher for exactly that.\n\n"
-            "Duplicates coming back from propose_questions are information, not failure: "
-            "they mean you converged on something the bank already had. So is 'skipped', "
-            "which means a question carried the same okf_tags as a banked one and said it "
-            "in different words; each entry names the question_id it collided with, so "
-            "read that question and move to a neighbouring mechanism instead of trying "
-            "another phrasing. Both are worth reporting plainly.\n\n"
-            "If everything you can think of comes back as a duplicate or a skip, SAY SO "
-            "and propose nothing rather than padding. The bank running dry is a real "
-            "finding about a finite corpus, and the run is built to notice it and stop — "
-            "but only if you do not disguise it with rewordings."
-        ),
-        model_config=mc,
-        pattern_config=react,
-    )
-
-    return {
-        "curator": curator.id,
-        "hypothesis": hypothesis.id,
-        "data": data.id,
-        "ml": ml.id,
-        "interpreter": interpreter.id,
-        "report": report.id,
-    }
+    `"hypothesis#2"` -> `"hypothesis"`; every other key is already its own stage.
+    Everything keyed by the five stages — `BOARD_TOOLS`, `BOARD_SERVERS`, the prompt
+    path — must go through this, because a second hypothesis agent is a second
+    **worker** and not a sixth stage.
+    """
+    return worker_key.split("#", 1)[0]
 
 
 # --------------------------------------------------------------------------- #

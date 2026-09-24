@@ -61,6 +61,6 @@ def test_create_task_refuses_a_joined_concept_id_string() -> None:
 def test_submit_result_refuses_joined_column_strings() -> None:
     """The data stage copies slice_columns' own arrays through; a string is a retype."""
     for kwargs in ({"columns_used": f"BMI,{COMMA}"}, {"columns_missing": f"BMI,{COMMA}"}):
-        result = json.loads(asyncio.run(submit_result(1, **kwargs)))
+        result = json.loads(asyncio.run(submit_result(1, worker="data", **kwargs)))
         assert "error" in result, kwargs
         assert "list" in result["error"], kwargs

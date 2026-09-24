@@ -1,5 +1,7 @@
+import { useLoopLabel } from '../lib/useLoopLabel';
 import { motion, AnimatePresence } from "framer-motion";
 import { RotateCcw, AlertCircle } from "lucide-react";
+import EmptyState from "../components/EmptyState";
 import { useBoard, useViewer } from "../store/viewer";
 import { STAGE_COLOR } from "../lib/stage";
 import type { Task } from "../types";
@@ -16,6 +18,7 @@ const NEXT_STAGE = { hypothesis: "Hypothesis", data: "Data", ml: "Train", interp
 const STAGE_OF = { data: "data", ml: "ml", interpret: "interpreter", hypothesis: "hypothesis" } as const;
 
 function Card({ task }: { task: Task }) {
+  const labelLoop = useLoopLabel();
   const select = useViewer((s) => s.selectTask);
   const color = STAGE_COLOR[STAGE_OF[task.task_type] as keyof typeof STAGE_COLOR];
 
@@ -36,26 +39,26 @@ function Card({ task }: { task: Task }) {
           <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
           <span className="font-mono text-sm font-bold">#{task.task_id}</span>
         </span>
-        <span className="text-xs text-ink-faint">Trial {task.trial}</span>
+        <span className="text-xs text-ink-faint">{labelLoop(task)}</span>
       </div>
 
       <div className="mt-1 flex items-center gap-2 text-xs text-ink-soft">
         <span>Next: {NEXT_STAGE[task.task_type]}</span>
         {task.y_column && (
-          <span className="font-mono text-[10px] text-ink-faint">→ {task.y_column}</span>
+          <span className="font-mono text-[12px] text-ink-faint">→ {task.y_column}</span>
         )}
       </div>
 
       <div className="mt-2 flex flex-wrap gap-1">
         {task.columns.slice(0, 4).map((c) => (
-          <span key={c} className="rounded bg-paper px-1.5 py-0.5 font-mono text-[10px] text-ink-soft">{c}</span>
+          <span key={c} className="rounded bg-paper px-1.5 py-0.5 font-mono text-[12px] text-ink-soft">{c}</span>
         ))}
         {task.columns.length > 4 && (
-          <span className="self-center text-[10px] text-ink-faint">+{task.columns.length - 4}</span>
+          <span className="self-center text-[12px] text-ink-faint">+{task.columns.length - 4}</span>
         )}
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
         {task.auc !== null && <span className="font-bold">AUC {task.auc.toFixed(4)}</span>}
         <span className="text-ink-faint">claimed {task.attempts}×</span>
         {/* attempts counts claims, so only extra claims are called a retry. */}
@@ -76,7 +79,7 @@ function Card({ task }: { task: Task }) {
 
 export default function BoardTab() {
   const board = useBoard();
-  if (!board) return <div className="p-8 text-ink-faint">Loading…</div>;
+  if (!board) return <EmptyState what="the board" />;
 
   return (
     <div className="grid grid-cols-3 gap-4 p-6">

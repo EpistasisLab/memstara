@@ -1,58 +1,57 @@
+import InterfaceHelp from './components/InterfaceHelp';
+import { pipelineLoopLabel } from "./lib/pipelineProgress";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { useEffect, type ComponentType } from "react";
+import { useEffect, lazy, Suspense, type ComponentType } from "react";
 import Panel from "./components/Panel";
+import WindowWorkspace from "./components/WindowWorkspace";
 import { VIEWS } from "./lib/views";
 import ControlPanel from "./panels/ControlPanel";
+import PipelineWorkspace, { PipelineStatus } from "./panels/PipelineWorkspace";
+const DiscoveryPanel = lazy(() => import("./panels/DiscoveryPanel"));
+import TelemetryPanel from "./panels/TelemetryPanel";
+import { usePipelines } from "./store/pipelines";
+import { useViewer, type ViewId } from "./store/viewer";
+import PipelineCreationDialog from "./panels/PipelineCreationDialog";
+import AgentConfigPanel from "./panels/AgentConfigPanel";
+import LogPanel from "./panels/LogPanel";
+import ClinicianPanel from "./panels/ClinicianPanel";
+import ReportPanel from "./panels/ReportPanel";
 import FeedPanel from "./panels/FeedPanel";
 import ResultsPanel from "./panels/ResultsPanel";
-import ScenePanel from "./panels/ScenePanel";
-import { useViewer, type ViewId } from "./store/viewer";
 import AccessTab from "./tabs/AccessTab";
-import AgentsTab from "./tabs/AgentsTab";
 import BoardTab from "./tabs/BoardTab";
 import TaskTab from "./tabs/TaskTab";
+import WorkspaceActions from "./components/WorkspaceActions";
+import { useLiveOutputs } from "./store/liveOutputs";
+import { useControl } from "./store/control";
 
 /**
- * The shell, and nothing else.
- *
- * Four regions in a fixed arrangement: the control panel down the left, agent state
- * top-right, and the feed and results side by side beneath it.
- *
- *   ┌──────────────┬──────────────────────────────────────────┐
- *   │              │   ScenePanel        (agent state)        │
- *   │ ControlPanel │                                          │
- *   │   (left)     ├──────────────────┬───────────────────────┤
- *   │              │   FeedPanel      │   ResultsPanel        │
- *   └──────────────┴──────────────────┴───────────────────────┘
- *
- * Only the top-right region swaps. The feed and the results are always on screen, which
- * is the point of the layout: the feed keeps running while you read the access map.
- *
- * This file owns three things and no UI logic: the grid, the tooltip provider, and the
- * poller's lifecycle. Every panel reads the store for itself, so there is nothing to
- * pass down.
+ * Preserve the existing resizable workspace and shared editors.
+ * reviewer's Floor Plan contains independently owned pipeline rows and their Status view.
+ * Reports follow the selected run; technical panels remain accessible in Telemetry.
  */
-
-/** The views that borrow the top-right slot. `scene` is absent because `ScenePanel`
- *  brings its own chrome; the rest are bodies that this file frames. */
-const SECONDARY: Record<Exclude<ViewId, "scene">, ComponentType> = {
+const SECONDARY: Record<Exclude<ViewId, "chain" | "scene" | "log" | "clinician">, ComponentType> = {
+  discovery: DiscoveryPanel,
+  report: ReportPanel,
   board: BoardTab,
   task: TaskTab,
-  agents: AgentsTab,
+  agents: TelemetryPanel,
   access: AccessTab,
 };
 
 function TopRegion() {
   const view = useViewer((s) => s.view);
-  const snapshot = useViewer((s) => s.snapshot);
 
-  if (view === "scene") return <ScenePanel />;
+  if (view === "clinician") return <ClinicianPanel />;
+  if (view === "chain") return <div className="h-full overflow-auto"><PipelineStatus /></div>;
+  if (view === "scene") return <PipelineWorkspace />;
+  if (view === "log") return <LogPanel />;
 
   const meta = VIEWS[view];
   const Body = SECONDARY[view];
   return (
-    <Panel icon={meta.icon} title={meta.label} count={snapshot ? meta.count?.(snapshot) : undefined}>
-      <Body />
+    <Panel icon={meta.icon} title={meta.label}>
+      <Suspense fallback={<p className="p-6 text-ink-soft">Loading view…</p>}><Body /></Suspense>
     </Panel>
   );
 }
@@ -60,40 +59,39 @@ function TopRegion() {
 export default function App() {
   const start = useViewer((s) => s.start);
   const stop = useViewer((s) => s.stop);
+  const view = useViewer((s) => s.view);
+  useEffect(() => {
+    void useLiveOutputs.getState().poll();
+    const timer = setInterval(() => { void useLiveOutputs.getState().poll(); }, 3000);
+    return () => clearInterval(timer);
+  }, []);
+  const pipeline = usePipelines(s => s.items.find(p => p.id === s.selected));
+
+  useEffect(() => {
+    const poll=()=>{if(!document.hidden)void useControl.getState().poll();};
+    poll();const timer=setInterval(poll,2000);return()=>clearInterval(timer);
+  },[]);
 
   useEffect(() => {
     start();
     return stop;
   }, [start, stop]);
 
-  return (
-    <Tooltip.Provider delayDuration={200}>
-      {/* Above `lg` the page itself never scrolls — each panel scrolls inside its own
-          body. Below it the regions stack and the page scrolls normally, because three
-          columns on a narrow screen is four unreadable slivers. */}
-      <div className="h-full overflow-y-auto lg:overflow-hidden">
-        <div className="grid min-h-full gap-3 p-3 lg:h-full lg:grid-cols-[auto_minmax(0,1fr)]">
-          <ControlPanel />
+  useEffect(() => {
+    const poll = () => { if (!document.hidden) void usePipelines.getState().poll(); };
+    poll(); const timer = setInterval(poll, 2500); return () => clearInterval(timer);
+  }, []);
 
-          <div className="grid min-h-0 min-w-0 gap-3 lg:grid-rows-[minmax(0,58fr)_minmax(0,42fr)]">
-            {/* The stacked layout has no row heights to divide up, so each region needs a
-                floor of its own — without one, ScenePanel's React Flow canvas measures
-                its container at zero and draws nothing at all. */}
-            <div className="grid min-h-[28rem] min-w-0 lg:min-h-0">
-              <TopRegion />
-            </div>
-
-            <div className="grid min-h-0 min-w-0 gap-3 xl:grid-cols-2">
-              <div className="grid min-h-[22rem] min-w-0 lg:min-h-0">
-                <FeedPanel />
-              </div>
-              <div className="grid min-h-[22rem] min-w-0 lg:min-h-0">
-                <ResultsPanel />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Tooltip.Provider>
-  );
+  return <Tooltip.Provider delayDuration={200}>
+    <InterfaceHelp />
+    <AgentConfigPanel />
+    <PipelineCreationDialog />
+    <WindowWorkspace toolbar={<WorkspaceActions only="history"/>} items={[
+      { id: "control", title: "Control", content: <ControlPanel /> },
+      { id: "pipeline", title: `${VIEWS[view].label}${pipeline ? ` · ${pipeline.name}${view === "agents" ? "" : ` · ${pipelineLoopLabel(pipeline)}`}` : ""}`, content: <TopRegion /> },
+      { id: "feed", title: "Activity feed", content: <FeedPanel /> },
+      { id: "results", title: "Results", content: <ResultsPanel /> },
+      { id: "report", title: `Final Report${pipeline ? ` · ${pipeline.name}` : ""}`, content: <ReportPanel /> },
+    ]} />
+  </Tooltip.Provider>;
 }

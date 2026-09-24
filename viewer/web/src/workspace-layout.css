@@ -1,0 +1,141 @@
+/* Long-content dialogs: persistent chrome, one flexible main scrolling region. */
+.workspace-dialog.floor-detail-dialog[open] {
+  display:flex; flex-direction:column; overflow:hidden;
+  max-height:calc(100dvh - 24px); padding:16px;
+}
+.workspace-dialog.floor-detail-dialog > header { flex:none; margin:0; padding:0 0 12px; }
+.workspace-dialog.floor-detail-dialog > .floor-detail-dialog-body {
+  min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable;
+  scroll-padding-block:12px;
+}
+.pipeline-creation-dialog[open] { width:min(60rem,calc(100vw - 24px)); max-width:calc(100vw - 24px); height:calc(100dvh - 32px); max-height:60rem; }
+.pipeline-creation-dialog .pipeline-creation-header { padding:14px 20px 6px; }
+.pipeline-creation-dialog .pipeline-creation-header p { margin-top:4px; font-size:13px; }
+.pipeline-creation-dialog .pipeline-creation-progress { padding:6px 20px 10px; }
+.pipeline-creation-dialog .pipeline-creation-progress li { flex-direction:row; justify-content:center; text-align:left; }
+.pipeline-creation-dialog .pipeline-creation-body { padding:16px 20px; scrollbar-gutter:stable; }
+.pipeline-creation-dialog .pipeline-creation-footer { padding:10px 20px; }
+.workspace-dialog.combination-dialog[open] { height:calc(100dvh - 24px); max-height:64rem; }
+.workspace-dialog.combination-dialog > .floor-detail-dialog-body { flex:1; overflow:hidden; padding:0; }
+.combination-dialog .comb-builder { height:100%; min-height:0; display:flex; flex-direction:column; gap:10px; }
+.combination-dialog .comb-intro { flex:none; gap:10px; padding:0; }
+.combination-dialog .comb-intro h3 { font-size:17px; }
+.combination-dialog .comb-intro p { margin:3px 0; font-size:13px; }
+.combination-dialog .comb-intro > .comb-symbol { display:none; }
+.combination-dialog .comb-steps { flex:none; margin:0; gap:6px; }
+.combination-dialog .comb-steps button { padding:8px; font-size:13px; }
+.combination-dialog .comb-budget { position:static; flex:none; padding:8px 12px; gap:8px; border-radius:9px; }
+.combination-dialog .comb-budget > div { flex-direction:row; align-items:baseline; gap:6px; }
+.combination-dialog .comb-budget strong { font-size:20px; }
+.combination-dialog .comb-step-content { flex:1; min-height:0; overflow:auto; padding:12px 8px 16px 0; overscroll-behavior:contain; scrollbar-gutter:stable; }
+.combination-dialog .comb-footer { position:static; flex:none; margin:0; padding:10px 0 0; background:rgb(var(--panel)); }
+.combination-dialog .comb-fields label { display:grid; grid-template-columns:minmax(6rem,1fr) minmax(0,1.3fr); align-items:center; gap:8px; }
+.combination-dialog .comb-fields input { margin:0; }
+.agent-settings-dialog:not(.pipeline-creation-dialog) { max-height:calc(100dvh - 24px); width:min(52rem,calc(100vw - 24px)); scroll-padding-bottom:90px; scrollbar-gutter:stable; }
+.agent-settings-dialog .agent-settings-footer { position:sticky; bottom:-20px; z-index:3; padding:12px 0; background:rgb(var(--panel)); border-top:1px solid rgb(var(--line)); }
+.pipeline-management .pipeline-management-buttons:last-child { position:sticky; bottom:-4px; padding:10px 0; background:rgb(var(--panel)); z-index:2; border-top:1px solid rgb(var(--line)); }
+/* Label and input stay together; descriptions remain readable below. */
+.compact-evaluation > .grid > label { display:grid; grid-template-columns:minmax(0,1fr) minmax(8rem,1fr); gap:6px 12px; align-items:center; }
+.compact-evaluation > .grid > label > input,.compact-evaluation > .grid > label > select { margin:0; }
+.compact-evaluation > .grid > label > span { grid-column:1 / -1; margin-top:0; }
+.hypothesis-skill-wizard .skill-assistant-body fieldset:first-of-type { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.hypothesis-skill-wizard .skill-assistant-body fieldset:first-of-type > p { grid-column:1/-1; }
+/* One execution-control instance, outside the scrollable pipeline list. */
+.pipeline-browser .pipeline-selected-controls { flex:none; min-width:0; border-top:1px solid rgb(var(--line)); padding:10px 8px 4px; background:rgb(var(--panel)); }
+.pipeline-browser .pipeline-selected-controls > strong { display:block; font-size:13px; overflow-wrap:anywhere; }
+.pipeline-selected-controls .pipeline-row-actions { display:flex; flex-direction:column; margin:6px 0 0; padding:0; border:0; max-height:32dvh; overflow:auto; overscroll-behavior:contain; }
+.pipeline-selected-controls .pipeline-row-primary { order:-1; position:sticky; top:0; z-index:2; flex-shrink:0; }
+.pipeline-selected-controls .pipeline-management-launch { flex-shrink:0; }
+@media(max-width:640px) {
+  .workspace-dialog.floor-detail-dialog[open] { max-height:calc(100dvh - 12px); padding:12px; }
+  .pipeline-creation-dialog[open] { width:calc(100vw - 12px); max-width:calc(100vw - 12px); height:calc(100dvh - 12px); }
+  .pipeline-creation-dialog .pipeline-creation-header { padding:12px 14px 4px; }
+  .pipeline-creation-dialog .pipeline-creation-progress { padding:4px 14px 8px; }
+  .pipeline-creation-dialog .pipeline-creation-body { padding:12px 14px; }
+  .pipeline-creation-dialog .pipeline-creation-footer { padding:10px 14px; }
+  .combination-dialog .comb-intro { display:none; }
+  .combination-dialog .comb-budget > div { flex-direction:column; gap:0; }
+  .combination-dialog .comb-budget span { font-size:11px; }
+  .combination-dialog .comb-footer { flex-direction:row; }
+  .combination-dialog .comb-footer > span { display:none; }
+  .combination-dialog .comb-footer > div { width:100%; }
+  .combination-dialog .comb-fields label { grid-template-columns:minmax(0,1fr); }
+  .hypothesis-skill-wizard .skill-assistant-body fieldset:first-of-type { grid-template-columns:minmax(0,1fr); }
+  .compact-evaluation > .grid > label { grid-template-columns:minmax(0,1fr) minmax(7rem,1fr); }
+}
+@media(max-height:550px) {
+  .pipeline-creation-dialog .pipeline-creation-header p { display:none; }
+  .combination-dialog .comb-intro { display:none; }
+  .combination-dialog .comb-steps button { padding:5px; }
+}
+@media(max-width:640px) {
+  .combination-dialog .comb-roles { display:flex; flex-direction:row; flex-wrap:nowrap; overflow-x:auto; gap:6px; padding:0 0 6px; }
+  .combination-dialog .comb-roles button { flex:0 0 auto; width:auto; max-width:180px; padding:8px 10px; }
+  .combination-dialog .comb-roles button > svg:last-child { display:none; }
+  .combination-dialog .comb-roles button small { font-size:10px; }
+  .combination-dialog .comb-steps button { flex-direction:row; align-items:center; gap:5px; font-size:12px; }
+}
+/* Workspace resilience and keyboard navigation. */
+.view-recovery { align-self:start; padding:24px; overflow:auto; }
+.view-recovery h2 { font-weight:650; font-size:18px; }
+.view-recovery p { margin:12px 0; }
+.view-recovery button { padding:10px 16px; border:1px solid rgb(var(--accent)); border-radius:8px; }
+.workspace-skip-link { position:fixed; left:12px; top:-100px; z-index:10000; padding:12px; background:rgb(var(--panel)); color:rgb(var(--ink)); border:2px solid rgb(var(--accent)); border-radius:6px; }
+.workspace-skip-link:focus { top:12px; }
+.floating-window:focus { outline:none; }
+:where(button,a,input,select,textarea,summary,[tabindex]):focus-visible { scroll-margin-block:80px; }
+@media(max-width:1023px) {
+  #workspace-control { order:-2; }
+  #workspace-control .window-titlebar { display:none; }
+  #workspace-control .window-content { max-height:none; }
+  #workspace-control [aria-label="View navigation"] nav { flex-direction:row; flex-wrap:wrap; gap:4px; padding:8px; }
+  #workspace-control [aria-label="View navigation"] nav > span:not([data-context-help-managed]) { display:none; }
+  #workspace-control [aria-label="View navigation"] button { width:auto; padding:8px 10px; min-height:44px; }
+  .workspace-toolbar { position:relative; top:auto; }
+}
+
+/* Keep state text legible independently of accent colors and selection tint. */
+.pipeline-browser-row .pipeline-state-badge {color:rgb(var(--ink));font-size:11px;}
+.pipeline-browser-row[data-state=running] .pipeline-state-badge,
+.pipeline-browser-row[data-state=completed] .pipeline-state-badge {color:rgb(var(--ink));}
+
+/* Reserve reading space for telemetry instead of allowing controls to consume it. */
+.telemetry-workspace {overflow:auto; container-type:inline-size;}
+.telemetry-scope-region {flex:0 1 auto; min-height:70px; max-height:40%; overflow:auto; overscroll-behavior:contain;}
+.telemetry-tab-body {min-height:160px; overscroll-behavior:contain;}
+.telemetry-workspace > nav {flex-wrap:nowrap; overflow-x:auto; min-height:48px;}
+.telemetry-workspace > nav button {white-space:nowrap; min-height:40px;}
+.telemetry-workspace > p {max-height:90px; overflow:auto;}
+.telemetry-loop-controls {gap:8px; padding:10px 12px;}
+.telemetry-loop-controls > p {flex-basis:100%; font-size:12px;}
+.telemetry-loop-controls select {min-width:0; width:100%;}
+@container (max-width:480px) {
+ .telemetry-scope-region .execution-context-row {flex-direction:column; align-items:stretch;}
+ .telemetry-scope-region .execution-context-row > * {min-width:0; max-width:100%;}
+ .telemetry-loop-controls label {flex:1 1 180px;}
+}
+
+[data-theme="dark"] .text-amber-800[role="status"],
+[data-theme="dark"] .text-amber-800[role="alert"] {color:#f6cb88;}
+[data-theme="dark"] a[target="_blank"] {color:rgb(var(--accent));}
+button[aria-label^="Help:"] {min-width:24px;min-height:24px;}
+
+.telemetry-scope-region {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:132px;max-height:45%;}
+.telemetry-scope-region .execution-context-row > div {display:none;}
+.telemetry-scope-region .execution-context-row > label {flex:1;min-width:0;}
+.telemetry-scope-region .execution-context {padding:10px 12px;}
+.telemetry-scope-region .telemetry-loop-controls {align-content:start;align-items:center;border-bottom:0;}
+@container (max-width:600px) {
+ .telemetry-scope-region {grid-template-columns:minmax(0,1fr);min-height:200px;}
+}
+
+.table-pagination {display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 0;font-size:13px;}
+.table-pagination label {display:flex;gap:6px;align-items:center;}
+.table-pagination button,.table-pagination select {border:1px solid rgb(var(--line));border-radius:6px;padding:6px 10px;background:rgb(var(--panel));}
+.table-pagination button:disabled {opacity:.45;}
+
+.table-pagination {position:sticky;top:0;z-index:3;background:rgb(var(--panel));}
+
+/* Keep the diagram provider attribution readable in both themes. */
+.react-flow__attribution {background:rgb(var(--panel)) !important;}
+.react-flow__attribution a {color:rgb(var(--ink)) !important;}

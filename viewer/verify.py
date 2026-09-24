@@ -33,8 +33,10 @@ be trusted about what actually happened.
    2  do the per-tool call counts match the DB + are the two windows nobody uses at 0
    3  are the three traps (JSON-null / batched calls) **really** being handled
    4  have the old `ecoxai-*` server names been normalised
-   5  do the board row count, the AUCs and the results row count match the DB
+   5  do the board row count, the AUCs, the results row count, the number of
+      importances per result and the engine each was measured by match the DB
    6  is a character holding a card really in_progress + does a dead run not look alive
+      + does only the hypothesis station show more than one figure
    7  does the feed hold the newest calls the DB holds — and is it non-empty at all
 
  Easy things to miss
@@ -59,6 +61,7 @@ import json
 import subprocess
 import sys
 import urllib.request
+from collections import Counter
 from datetime import datetime
 
 # 8070 is the web (nginx) side. nginx hands /api on to the API container at 8071, so
@@ -119,6 +122,35 @@ SELECT tool || '=' || n FROM (
 # "6 places" is written out. Change the limit on the API side and forget to say so here
 # and this fails, which is the point.
 FEED_LIMIT = 60
+
+# stores.DRAWN_AS: which stages the scene draws as one character. Written out for the
+# same reason as FEED_LIMIT — a referee that imports the player's answer sheet is not
+# refereeing. Fold the grouping on the API side without saying so here and check 7 fails.
+#
+# `curator` is a retired stage: the pipeline stopped naming it on 2026-09-07 and the
+# question step became the hypothesis agent's other job. The entry stays because the
+# databases this file reads still hold hundreds of runs recorded against it, and this
+# file's whole purpose is to be right about the databases. Check 7 below therefore asks
+# whether a name the feed used **arrives somewhere** on the floor, not whether the two
+# sets are equal.
+DRAWN_AS = {"curator": "hypothesis"}
+
+# stores.HOME's keys: the stations on the floor, one per stage the pipeline still runs.
+# Written out for the same reason as the two above.
+#
+# This is the number that stayed fixed when the character count stopped being fixed. The
+# scene draws one figure per **worker** at the hypothesis station, so
+# `--hypothesis-agents 3` puts seven figures on the floor and any check written as `== 5`
+# would fail on a run that was working perfectly. Five *stations* is still a promise the
+# viewer makes, and it is the one worth checking: every figure stands at one of these, and
+# every one of these has at least one figure, because a stage with nothing running still
+# puts its resting figure down. See check 6 below.
+#
+# `--data-agents 3` does **not** put three data figures down, and this paragraph said it
+# did between 2026-09-08 and the fix later the same day. That is the divergence itself,
+# written into the referee's own notes — which is how it went unnoticed. Check 6 now
+# tests it rather than describing it.
+STATIONS = {"hypothesis", "data", "ml", "interpreter", "report"}
 
 # The feed's rows, computed independently of api/queries.py. Same three traps, expressed
 # differently again: a CROSS JOIN LATERAL where FLAT_CALLS uses the comma form, and the
@@ -260,16 +292,57 @@ def main() -> int:
     # got shuffled would be missed.
     # (`string_agg(... ORDER BY task_id)` and the join on the screen side use the same
     # order.)
+    #
+    # **Both sides spell an unfinished task the same way, as the empty string.** A task
+    # that has been claimed but not scored has `auc IS NULL`, and the two sides used to
+    # disagree about what that looks like: `string_agg` drops NULL rows entirely, while
+    # the screen has a row for each and rendered it `str(None)` -> `"None"`. So a board
+    # of three claimed-and-unscored tasks compared `"None,None,None"` against `""` and
+    # this check failed, while a board where a *scored* AUC had gone missing compared
+    # short against short and could pass. `coalesce` on one side and an explicit empty
+    # string on the other make the two agree on the absent value without making the
+    # check blind to it — the commas stay, so a row that vanishes is still a mismatch.
     n = psql("memstara-postgres", "memstara", "memstara",
              f"SELECT count(*) FROM memstara_blackboard WHERE run_tag='{tag}'")
     chk("5 board row count", str(len(snap["board"]["tasks"])) == n, f"screen {len(snap['board']['tasks'])} / DB {n}")
     aucs = psql("memstara-postgres", "memstara", "memstara",
-                f"SELECT string_agg(auc::text, ',' ORDER BY task_id) FROM memstara_blackboard "
-                f"WHERE run_tag='{tag}'")
-    chk("5 AUC", ",".join(str(t["auc"]) for t in snap["board"]["tasks"]) == aucs, aucs)
+                f"SELECT string_agg(coalesce(auc::text, ''), ',' ORDER BY task_id) "
+                f"FROM memstara_blackboard WHERE run_tag='{tag}'")
+    screen_aucs = ",".join("" if t["auc"] is None else str(t["auc"]) for t in snap["board"]["tasks"])
+    chk("5 AUC", screen_aucs == aucs, f"screen {screen_aucs!r} / DB {aucs!r}")
     r = psql("memstara-postgres", "memstara", "memstara",
              f"SELECT count(*) FROM memstara_results WHERE run_tag='{tag}'")
     chk("5 results row count", str(len(snap["results"])) == r)
+
+    # The explanation has to arrive with the result, and a row count cannot see whether it
+    # did — every result could carry an empty importance map and the count above would
+    # still pass. So the same trick as the AUC check: the number of importances per
+    # result, strung together in result_id order and compared whole.
+    #
+    # This is the check that would have caught the panel reading importances off the
+    # **board** instead. `memstara_results.task_id` is `ON DELETE SET NULL`, so once a
+    # board row is cleaned away that lookup returns nothing while the AUC stays — the
+    # result keeps its score and loses the reason for it. Nothing on screen said so.
+    imps = psql("memstara-postgres", "memstara", "memstara",
+                f"SELECT string_agg(n::text, ',' ORDER BY result_id) FROM ("
+                f"SELECT result_id, (SELECT count(*) FROM jsonb_object_keys(feature_importance)) AS n "
+                f"FROM memstara_results WHERE run_tag='{tag}') t")
+    screen_imps = ",".join(str(len(res["importance"])) for res in snap["results"])
+    chk("5 importances per result", screen_imps == imps, f"screen {screen_imps} / DB {imps}")
+
+    # …and with the scale they are on. A contribution map is not a quantity on its own —
+    # gain and permutation are different units, so a screen drawing bars from either
+    # without naming the engine invites a comparison that cannot be made. Compared as the
+    # whole string in result_id order, empty strings included, because `''` is the load-
+    # bearing value here: it means *not recorded* and every result stored before
+    # 2026-09-08 has it. A check that skipped the empties would pass on a snapshot that
+    # had dropped a real engine name.
+    models = psql("memstara-postgres", "memstara", "memstara",
+                  f"SELECT string_agg(model, ',' ORDER BY result_id) "
+                  f"FROM memstara_results WHERE run_tag='{tag}'")
+    screen_models = ",".join(res["model"] for res in snap["results"])
+    chk("5 engine per result", screen_models == models,
+        f"screen {screen_models!r} / DB {models!r}")
 
     # 6 — a character holding a card must be holding a card the board agrees is held.
     # The scene's carrying is a value obtained by replaying the record of tool calls
@@ -304,14 +377,67 @@ def main() -> int:
     chk("6 dead run does not look alive", int(stale) > 0 and not working,
         f"{stale} old pending runs yet working {working}")
 
-    # The skeleton of the scene. 6 places and 6 characters must always come out. Add a
+    # The skeleton of the scene. 6 places and 5 stations must always come out. Add a
     # stage without making room for it in stores.PLACES/HOME and it is caught here.
     # Both numbers are written out rather than read from stores, so that adding a stage
     # to the viewer and forgetting to say so here still fails. (They were frozen at 5
     # while PLACES already held 6 and the pipeline already had six stages, so this line
     # was reporting a stale number rather than a real gap.)
+    #
+    # **The two numbers differ and both are right.** Six places, five stations: the
+    # pipeline has five board agents since 2026-09-07, and the sixth it used to have —
+    # the curator — is retired rather than deleted, so its runs are still in the database
+    # and still reach the floor through stores.DRAWN_AS. This file is the place that
+    # counts those runs under their own agent name, which is exactly why it reads the
+    # databases directly and never imports from `api/` — the checks below would be worth
+    # nothing if they asked the viewer whether the viewer was right.
+    #
+    # The character count was `== 5` here until 2026-09-08 and is not a constant any
+    # more; see STATIONS above for why, and what replaced it. The three checks below are
+    # what "5 characters" was actually protecting, said in the terms that survive
+    # parallelism: every figure belongs to a station, every station has a figure, and no
+    # two figures share an id. The last is not pedantry — React Flow keys its nodes by
+    # that string and draws two nodes sharing one id as a single node, silently, so a
+    # duplicate would look exactly like the collapse this all exists to stop.
+    #
+    # The leading digit in each label is the check group, not a count. Do not read
+    # "6 characters" as an expected six.
     chk("6 places", len(snap["scene"]["places"]) == 6, str(len(snap["scene"]["places"])))
-    chk("6 characters", len(snap["scene"]["agents"]) == 6, str(len(snap["scene"]["agents"])))
+    figures = snap["scene"]["agents"]
+    at_station = [a["stage"] for a in figures]
+    chk("6 characters stand at a station", set(at_station) <= STATIONS,
+        f"{sorted(set(at_station) - STATIONS)} stand nowhere")
+    chk("6 every station has a character", STATIONS <= set(at_station),
+        f"{sorted(STATIONS - set(at_station))} have none")
+    chk("6 character ids are unique", len({a["id"] for a in figures}) == len(figures),
+        f"{len(figures)} figures, {len({a['id'] for a in figures})} ids")
+
+    # **Only the hypothesis station may show more than one figure.** The meeting of
+    # 2026-08-26 decided this in the other direction from how it first shipped: the
+    # backend may run N of any stage, and the screen shows the hypothesis agents split
+    # because that is the parallelism the user chose, while the data agent stays one
+    # character — the user does not need to know it is internally run more than once.
+    #
+    # `"hypothesis"` is written out here rather than read from `stores.SPLITTABLE`, for
+    # the same reason this whole file reads the databases instead of the API: a check that
+    # asks the implementation what the rule is agrees with the implementation about
+    # everything, including what it has backwards. That is not a hypothetical — the first
+    # version of this split all five stations and three separate checks passed, because
+    # all three had been written from the code.
+    #
+    # It earned its keep a second time on 2026-09-08. `interpreter` was added to
+    # `SPLITTABLE` on a misreading of the design and taken out again the same day; had this
+    # line read the frozenset, it would have agreed with the mistake in both directions and
+    # said nothing either time.
+    per_station = Counter(a["stage"] for a in figures)
+    folded = {s: n for s, n in per_station.items() if s != "hypothesis" and n > 1}
+    chk("6 only the hypothesis station splits", not folded, f"{folded} drawn more than once")
+
+    # And the fold must not be a disappearance. A station drawn once while two workers run
+    # has to say two, or `--data-agents 2` and `--data-agents 1` are the same picture.
+    miscounted = [(a["id"], a["state"], a["running"]) for a in figures
+                  if (a["state"] in ("working", "moving")) != (a["running"] > 0)]
+    chk("6 a busy character counts its workers", not miscounted, f"{miscounted}")
     chk("both DBs answered", snap["health"]["memstara"]["up"] and snap["health"]["core"]["up"])
 
     # 7 — the feed.
@@ -353,9 +479,25 @@ def main() -> int:
             str(sorted({e["server"] for e in feed})))
 
         # A row the viewer cannot name keeps agent=null and is shown anyway. What must
-        # not happen is a *named* row naming a stage the scene does not have.
-        stages = {a["id"] for a in snap["scene"]["agents"]}
-        strays = {e["agent"] for e in feed if e["agent"] is not None} - stages
+        # not happen is a *named* row naming a stage that reaches no character on screen.
+        #
+        # The question is whether a name the feed used **arrives somewhere**, which is
+        # what folding through DRAWN_AS asks, rather than whether the two sets are equal.
+        #
+        # Since 2026-09-07 the API folds the feed itself, so `named` no longer holds
+        # `curator` and the fold below is an identity on everything it sees. It stays,
+        # and deliberately: this file's job is to be right about the databases whatever
+        # the API does with them, and the day the API stops folding is the day this line
+        # is the only thing standing between a historical curator call and a failed check
+        # that blames the wrong thing.
+        # `stage` and not `id`: a figure's id is its **worker** name when a stage runs
+        # more than one (`hypothesis#2`), and the feed names stages. Left as `id` this
+        # check would report every hypothesis call as a stray the moment
+        # `--hypothesis-agents 2` was passed — a failure describing the check rather than
+        # the data.
+        stages = {a["stage"] for a in snap["scene"]["agents"]}
+        named = {e["agent"] for e in feed if e["agent"] is not None}
+        strays = {DRAWN_AS.get(a, a) for a in named} - stages
         chk("7 feed stages are real stages", not strays, str(sorted(strays)))
 
     # Only the count for what passed; for what did not, the reason in full.

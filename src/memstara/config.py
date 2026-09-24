@@ -82,7 +82,7 @@ class Settings(CoreSettings):
     # Only this one server needs it; the other three never read it.
     #
     # Note what is NOT here: `MOTORO_DATABASE_URL`. The board has its own database now
-    # (docker-compose.yml), and core's credentials have no business reaching a server
+    # (compose.yml), and core's credentials have no business reaching a server
     # of ours. Passing them once is how the board ended up inside core's database.
     #
     # The last two are for debugging and carry no secret. A tool server runs as a child
@@ -97,9 +97,15 @@ class Settings(CoreSettings):
     # Unset means unchanged behaviour: the hook returns immediately and nothing is
     # imported. Verified — a normal run shows four servers connected and no mention of
     # debugpy anywhere.
+    #
+    # MEMSTARA_OKF_FIELDS is the branch of the knowledge bundle a run may read — the
+    # user's chosen skill, set by `--skill` on the driver and enforced inside the okf
+    # server (`src/memstara/mcp_servers/okf.py`). It is on this list for the reason the
+    # whole list exists: left off, the server reads no lock, every run silently sees the
+    # whole corpus, and the screen still says which skill was picked.
     mcp_allowed_env_vars: str = (
         "MEMSTARA_DATASET_PATH,MEMSTARA_OUTPUT_DIR,MEMSTARA_ML_ENGINE,MEMSTARA_DATABASE_URL,"
-        "MEMSTARA_OUTCOME_COLUMN,"
+        "MEMSTARA_OUTCOME_COLUMN,MEMSTARA_OKF_FIELDS,MEMSTARA_RUN_CONFIG,"
         "MEMSTARA_DEBUGPY,MEMSTARA_DEBUGPY_WAIT,"
         # debugpy runs its check and prints its warning **the moment** the child
         # Python starts. Switching it off from inside the code is already too late
@@ -118,7 +124,7 @@ class Settings(CoreSettings):
     # hook_timeout_seconds regardless of which timeout actually fired, which
     # points at the wrong knob.
     #
-    # README.md:153-159 says to keep hook_timeout_seconds "comfortably above"
+    # README.md:153-160 says to keep hook_timeout_seconds "comfortably above"
     # llm_call_timeout_seconds. The defaults contradict that. Observed here: at
     # concurrency 5 against Foundry, reason_act's pre_act hook exceeded 30s on
     # 5 of 8 trials.

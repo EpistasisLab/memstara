@@ -5,7 +5,10 @@ that look plausible and are not:
 
 1. The column is `json`, and many rows hold the JSON literal `null` rather than SQL
    NULL. `tool_call IS NOT NULL` is therefore true for 424 rows that contain no call at
-   all. Filter on `::text <> 'null'`.
+   all. Filter on `json_typeof(tool_call) = 'object'`, which also excludes anything that
+   is not a call-shaped document. `::text <> 'null'` admits the same rows and is the
+   obvious way to write it, but it serialises the whole value to compare it with four
+   characters; see the note above `_FLAT_SELECT` for what that cost.
 2. A step may hold **one** call `{server,tool,arguments,result}` or a **batch**
    `{"calls":[…]}`. Reading only the first shape reports `search_concepts` as 0 calls
    when the real figure is 458 — the knowledge-source searches all arrive batched.
@@ -25,8 +28,12 @@ a value.
    and the results table), the rest for the core DB (agents and run history).
 
  The constants
-   FLAT_CALLS    ★ the CTE that flattens the two call shapes into one relation. The
-                 foundation of the four queries below it
+   _FLAT_SELECT  ★ flattens the two call shapes into one relation. The foundation of
+                 the five queries below it
+   FLAT_TEMP_TABLE  that SELECT as a temp table, built once per connection by
+                 `_core_facts` (`scene.py:230`)
+   FLAT_CALLS    now empty. It stays as a name so each of the five still says at its own
+                 site that it depends on `flat`
    --- Memstara DB ---
    RUNS          per run (run_tag): task count, done count, first/last time
    BOARD         every task row of one board
@@ -37,12 +44,14 @@ a value.
    ACCESS        calls per agent × tool = the access map
    TASK_TOUCHES  ★ the bridge tying the board to the runs
    LAST_CALL     the most recent call per agent = where the character is standing
+   LAST_ROSTER   ★ the workers of the most recent run, however long ago it was
    RECENT_CALLS  calls within the last few seconds = the flashing lines
    FEED          the newest calls regardless of age = the feed panel's rows
 
  Easy things to miss
-   1. Everything that counts tool calls is built **on top of FLAT_CALLS.** That is so
-      the three traps are handled once. Build any new aggregate on it too.
+   1. Everything that counts tool calls is built **on top of `flat`.** That is so the
+      three traps are handled once. Build any new aggregate on it too — and if you do,
+      it must run on the connection `_core_facts` built the table on.
    2. `$1` is asyncpg's positional argument. The window value arrives from the Python
       side (scene.py) as a string and is turned into an `::interval`.
    3. `WHERE ($1 = '' OR run_tag = $1)` means "an empty string means everything".
@@ -51,45 +60,86 @@ a value.
 ==============================================================================
 """
 
-# Flatten both call shapes into one relation. Everything that counts tool calls builds
-# on this, so the three traps are dealt with once. ★ The heart of this file.
-#
-#   above the UNION ALL = a step holding **one** call (`tool_call->>'server'` is there)
-#   below the UNION ALL = a step holding **several** calls (the `tool_call->'calls'`
-#                         array is unpacked with `json_array_elements`)
-#
-#   Both sides **throw away the JSON literal null first**, with
-#   `s.tool_call::text <> 'null'`. `IS NOT NULL` does not filter it (trap 1).
-#   And `replace(..., 'ecoxai-', 'memstara-')` folds the old server name in (trap 3).
-#
-#   Every query that counts tool calls prepends this CTE (`FLAT_CALLS + """..."""`).
-#   That is what makes the three traps handled **once** and done with.
-FLAT_CALLS = """
-WITH flat AS (
-    SELECT s.run_id,
-           s.id                                              AS step_id,
-           s.started_at,
-           replace(s.tool_call->>'server', 'ecoxai-', 'memstara-') AS server,
-           s.tool_call->>'tool'                              AS tool,
-           s.tool_call->'arguments'                          AS arguments,
-           s.tool_call->>'result'                            AS result
-    FROM run_steps s
-    WHERE s.tool_call::text <> 'null'
-      AND s.tool_call->>'server' IS NOT NULL
-    UNION ALL
-    SELECT s.run_id,
-           s.id,
-           s.started_at,
-           replace(c->>'server', 'ecoxai-', 'memstara-'),
-           c->>'tool',
-           c->'arguments',
-           c->>'result'
-    FROM run_steps s,
-         json_array_elements(s.tool_call->'calls') c
-    WHERE s.tool_call::text <> 'null'
-      AND s.tool_call->'calls' IS NOT NULL
+# Materialize the requested run IDs before ANY JSON inspection. Without this
+# boundary PostgreSQL can evaluate a JSON predicate on unrelated run_steps before
+# joining selected_run_ids. On the affected execution this took over 11 seconds;
+# an explicit scoped source reduced the same 434 tool calls to 0.13–0.34 seconds.
+# json_to_record keeps large tool results as JSON and reads the outer shape once.
+# Only board arguments/results used for task attribution are converted to JSONB,
+# with the existing escaped-NUL protection. Both single and batched calls remain.
+# These payloads are used to associate actual calls with tasks and named workers.
+BOARD_TOOLS = ("create_task", "claim_task", "claim_question", "submit_result", "propose_questions")
+_TOOLS_SQL = "('" + "', '".join(BOARD_TOOLS) + "')"
+
+
+def _payload(prefix: str, expr: str) -> str:
+    """`expr` on `prefix`, but only for a board tool; NULL otherwise."""
+    return f"CASE WHEN {prefix}->>'tool' IN {_TOOLS_SQL} THEN {prefix}{expr} END"
+
+
+def telemetry_jsonb(expression: str) -> str:
+    r"""Render JSON safely without changing stored core history.
+
+    PostgreSQL JSON accepts escaped NUL, but JSONB/text rejects it. Replace only
+    an actual JSON NUL escape with U+FFFD; preserve literal backslash-u0000 text.
+    The paired-backslash capture keeps JSON escape parity intact.
+    """
+    cleaned = (
+        "regexp_replace(" + expression + "::text, "
+        + r"$nul$(?<!\\)((?:\\\\)*)\\u0000$nul$, $nul$\1\\ufffd$nul$, 'g')"
+    )
+    # Most payloads need no regex scan. In particular, ML outputs can be large.
+    return (f"(CASE WHEN strpos({expression}::text, " + r"$nul$\u0000$nul$"
+            + f") > 0 THEN {cleaned} ELSE {expression}::text END)::jsonb")
+
+
+
+# Keep large tool results as JSON. Convert only board payloads needed for task
+# attribution; converting every ML/result document to JSONB dominated cold reads.
+_FLAT_SELECT = f"""
+WITH scoped_steps AS MATERIALIZED (
+    SELECT s.run_id, s.id, s.started_at FROM run_steps s
 )
+SELECT s.run_id, s.id AS step_id, s.started_at,
+       replace(c.server, 'ecoxai-', 'memstara-') AS server, c.tool,
+       CASE WHEN c.tool IN {_TOOLS_SQL} THEN
+            {telemetry_jsonb("json_build_object('task_id', attrs.task_id, 'worker', attrs.worker, 'writer', attrs.writer, 'run_tag', attrs.run_tag, 'origin_run', attrs.origin_run)")}
+       END AS arguments,
+       CASE WHEN c.tool IN {_TOOLS_SQL}
+            THEN ({telemetry_jsonb("c.result")}) #>> '{{}}' END AS result
+FROM scoped_steps s
+JOIN run_steps raw ON raw.id=s.id
+CROSS JOIN LATERAL json_to_record(
+    CASE WHEN json_typeof(raw.tool_call) = 'object' THEN raw.tool_call ELSE '{{}}'::json END
+) AS doc(server text, tool text, arguments json, result json, calls json)
+CROSS JOIN LATERAL (
+    SELECT doc.server, doc.tool, doc.arguments, doc.result WHERE doc.server IS NOT NULL
+    UNION ALL
+    SELECT batch.server, batch.tool, batch.arguments, batch.result
+    FROM json_to_recordset(
+        CASE WHEN json_typeof(doc.calls) = 'array' THEN doc.calls ELSE '[]'::json END
+    ) AS batch(server text, tool text, arguments json, result json)
+) c
+CROSS JOIN LATERAL json_to_record(
+    CASE WHEN c.tool IN {_TOOLS_SQL} AND json_typeof(c.arguments) = 'object'
+         THEN c.arguments ELSE '{{}}'::json END
+) AS attrs(task_id json, worker json, writer json, run_tag json, origin_run json)
 """
+
+#: Run once, first thing, on the connection the five queries below will use. Dropped
+#: first because the connection is pooled and will already carry the table from the
+#: previous poll.
+FLAT_TEMP_TABLE = "DROP TABLE IF EXISTS flat; CREATE TEMP TABLE flat AS " + _FLAT_SELECT
+
+#: Kept as a name so the five queries still read `FLAT_CALLS + \"\"\"SELECT ...\"\"\"`, which
+#: is what says at each site that it depends on `flat` existing. It is empty because the
+#: table is now real rather than a CTE the query has to define for itself.
+SCOPED_FLAT_TEMP_TABLE = FLAT_TEMP_TABLE.replace(
+    "FROM run_steps s",
+    "FROM run_steps s JOIN selected_run_ids selected ON selected.id = s.run_id",
+)
+
+FLAT_CALLS = ""
 
 # --- Memstara's database ---------------------------------------------------- #
 
@@ -130,12 +180,66 @@ ORDER BY task_id
 # RESULTS — the results table. That it is **a different table** from the board matters.
 #   The board holds *what is moving*, the results table *what was found*. So the scene
 #   draws them in different places too (see TOOL_STORE in stores.py).
+#   **The explanation is selected from here, not from the board.** `feature_importance`,
+#   `columns_missing` and `okf_concept_ids` live on both tables, and reading them off the
+#   board loses them the moment the board row is cleaned away: `memstara_results.task_id`
+#   is `ON DELETE SET NULL`, so a finished result outlives the row it came from. Taking
+#   them from the result means "which columns went in, what each contributed, and which
+#   OKF concepts justified them" survives for as long as the result does.
+#
+#   `columns_missing` is selected rather than derived from `columns` minus `columns_used`,
+#   because the two are not the same claim. The subtraction says "asked for and not in the
+#   final model", which a run that stopped before the ML stage satisfies for every column
+#   it asked for — the three `curator-smoke` results have 91, 78 and 14 columns, no used
+#   columns at all, and exactly one genuinely missing column each. `columns_missing` is
+#   what the data stage reported as absent from the cohort, which is the thing worth
+#   showing, and it is why `columns` itself is not selected: nothing draws it.
+#
+#   `match_trace` is deliberately **not** here either, for a measured reason. It is the
+#   concept-to-column matching with every rejected candidate, and it is 598 kB across the
+#   81 results now stored against 89 kB for the explanation columns above — one row
+#   reaches 23.6 kB on its own. The snapshot is polled every two seconds and nothing draws
+#   a trace yet, so it belongs to a per-result endpoint, not to this one.
+#
+#   `model` is selected because `feature_importance` is **not one quantity**. The two
+#   engines this project runs produce numbers on different scales — gain for the boosted
+#   trees, mean AUC drop for permutation — so a bar chart of contributions with no engine
+#   beside it invites a comparison that is not there to make. The column is
+#   `TEXT NOT NULL DEFAULT ''` and the empty string means *not recorded*: the 81 results
+#   stored before 2026-09-08 take it and cannot be backfilled, because the engine was an
+#   environment variable read inside the call and was never written down
+#   (`src/memstara/mcp_servers/ml.py (at commit 0990ec5, lines 194)`). Three states reach the screen, not two.
 RESULTS = """
 SELECT result_id, task_id, run_tag, trial, perspective, hypothesis,
-       columns_used, y_column, auc, interpretation, created_at
+       columns_used, columns_missing, feature_importance, okf_concept_ids,
+       y_column, auc, model, interpretation, created_at,
+       COALESCE(to_jsonb(memstara_results)->'evaluation', '{}'::jsonb) AS evaluation,
+       COALESCE(to_jsonb(memstara_results)->>'hypothesis_id', '') AS hypothesis_id
 FROM memstara_results
 WHERE ($1 = '' OR run_tag = $1)
 ORDER BY result_id
+"""
+
+# RESULT_ONE — one result, and this is the only query that selects `match_trace`.
+#   It exists so the trace has somewhere to be read that is not the two-second poll. The
+#   size is the whole reason for the split: 598 kB across the 81 results stored, one row
+#   at 23.6 kB, against 89 kB for every explanation column in RESULTS put together. Sent
+#   with the snapshot that is a six-fold increase every two seconds for something nothing
+#   on screen was drawing; fetched here it is one request, made when a person opens one
+#   result.
+#
+#   `run_tag` is selected even though RESULTS does not: this endpoint is reached by
+#   result_id alone, so the row has to say which run it belongs to without a second read.
+#   No run filter — a result opens from a link whichever run produced it, the same
+#   reasoning as `/api/task/{task_id}` passing '' to BOARD.
+RESULT_ONE = """
+SELECT result_id, task_id, run_tag, trial, perspective, hypothesis,
+       columns, columns_used, columns_missing, feature_importance, okf_concept_ids,
+       match_trace, y_column, auc, model, interpretation, created_at,
+       COALESCE(to_jsonb(memstara_results)->'evaluation', '{}'::jsonb) AS evaluation,
+       COALESCE(to_jsonb(memstara_results)->>'hypothesis_id', '') AS hypothesis_id
+FROM memstara_results
+WHERE result_id = $1
 """
 
 # --- core's database -------------------------------------------------------- #
@@ -170,17 +274,21 @@ ORDER BY a.name
 
 # Who is mid-flight right now. This is what makes a character "working".
 #
-# `completed_at IS NULL` alone is not enough. Six runs sit in `pending` and never
-# finished — the oldest is seven days old — because the process that started them was
-# killed. Without a freshness bound the ml character stands there "working" forever,
-# which is the same trap `reclaim_stalled` fell into: no time condition makes a dead
-# thing look alive.
+# `completed_at IS NULL` alone is not enough. Nine runs sit in `pending` and never
+# finished — the oldest 26 days old — because the process that started them was killed.
+# Without a freshness bound the ml character stands there "working" forever, which is
+# the same trap `reclaim_stalled` fell into: no time condition makes a dead thing look
+# alive.
 #
-# The bound is on the heartbeat, falling back to creation time. Runs heartbeat every
-# few seconds (observed: 5s), and a stage takes 20-60s, so $1 seconds of silence means
-# the run is gone rather than slow.
+# The bound is on the heartbeat, falling back to creation time. It used to be justified
+# here by "runs heartbeat every few seconds (observed: 5s), and a stage takes 20-60s".
+# That is not what motoro does: `_update_heartbeat` is called inside the phase loop, so
+# a run heartbeats once per phase and a long phase is silent for its whole length —
+# measured up to 500.3s, in runs that completed normally. A window shorter than the
+# longest phase does not hide dead runs, it hides live ones. See the note on
+# RUN_ALIVE_SECONDS in scene.py for the measurement and the margins.
 #
-# ($1 is scene.py's RUN_ALIVE_SECONDS = 120, arriving here as a string.)
+# ($1 is scene.py's RUN_ALIVE_SECONDS = 900, arriving here as a string.)
 OPEN_RUNS = """
 SELECT r.id AS run_id, a.name, r.created_at,
        coalesce(r.last_heartbeat_at, r.created_at) AS alive_at
@@ -209,7 +317,13 @@ JOIN agent_runs r ON r.id = f.run_id
 JOIN agents a ON a.id = r.agent_id
 WHERE a.name LIKE 'memstara%'
 GROUP BY a.name, f.server, f.tool
-ORDER BY a.name, count(*) DESC
+-- `f.server, f.tool` is the tie-break, and it is not decoration. `a.name, count(*) DESC`
+-- alone leaves rows with equal counts in whatever order the plan happened to produce, so
+-- the access map re-shuffled its own rows between two polls that had found no new calls.
+-- Caught by diffing this query's output against the previous definition of `flat`: same
+-- 43 rows as a multiset, different order, and the only rows that moved were three tied
+-- at 18 calls each.
+ORDER BY a.name, count(*) DESC, f.server, f.tool
 """
 
 # The board-to-run bridge. The board carries no run id, but claim_task's *result* does
@@ -220,37 +334,130 @@ ORDER BY a.name, count(*) DESC
 # column. `ORDER BY f.started_at` puts it in time order, so scene._carrying can replay
 # this list as it stands and reconstruct "who is holding what right now" — it does not
 # have to sort again.
-TASK_TOUCHES = FLAT_CALLS + """
+#
+# The window is not an optimisation, it is a correctness bound, and it is the same
+# argument as OPEN_RUNS above. `_carrying` replays claims against releases and reports
+# whoever is left holding something. An interrupted run leaves a `claim_task` with no
+# matching `submit_result`, and over an unbounded history that orphan never expires:
+# the agent is pinned as `moving` on every screen, under every run tag, permanently.
+# There is no such orphan right now, so this is a trap rather than a live fault — but
+# it is armed by any run that is killed part way, which is an ordinary thing to do.
+# Without the bound the replay also grows without limit; it is at 578 rows reaching
+# back to 2026-08-10, re-read on every 2s poll.
+#
+# ($1 is scene.py's RUN_ALIVE_SECONDS, as a string, exactly as OPEN_RUNS takes it. A
+# claim older than the longest a run may live cannot belong to a run still holding it.)
+TASK_TOUCHES = FLAT_CALLS + f"""
 SELECT a.name,
        f.run_id,
        f.tool,
+       NOT (({telemetry_jsonb("f.result")}) ? 'error') AS succeeded,
        f.started_at,
        coalesce(
-           (f.result::json)->>'task_id',
+           ({telemetry_jsonb("f.result")})->>'task_id',
            f.arguments->>'task_id'
        ) AS task_id,
-       (f.result::json)->>'run_tag' AS run_tag
+       ({telemetry_jsonb("f.result")})->>'run_tag' AS run_tag,
+       -- Which of a stage's workers made this call. Only the arguments side has it:
+       -- the worker names itself when it asks for work, and no board row this query
+       -- reads is keyed by it.
+       --
+       -- NULL on every call the tool lets omit it, which is most of them: `create_task`
+       -- has no such argument at all, and `submit_result` defaults it to '' and treats
+       -- that as "no opinion" (`src/memstara/mcp_servers/blackboard.py:293`). So this is
+       -- read as "a name where there is one", never as "the name of this run" — one
+       -- named call anywhere in a run is enough, and no named call is not a failure.
+       f.arguments->>'worker' AS worker
 FROM flat f
 JOIN agent_runs r ON r.id = f.run_id
 JOIN agents a ON a.id = r.agent_id
-WHERE f.tool IN ('create_task', 'claim_task', 'submit_result')
+WHERE f.tool IN {_TOOLS_SQL}
+  AND f.started_at > now() - ($1::text || ' seconds')::interval
 ORDER BY f.started_at
 """
+# Historical task details must retain completed calls outside the live-agent window.
+TASK_HISTORY = TASK_TOUCHES.replace(
+    "  AND f.started_at > now() - ($1::text || ' seconds')::interval", ""
+)
 
-# The most recent tool call per agent, for "where is this character standing".
+
+# The most recent tool call per agent **run**, for "where is this character standing".
 #
-# `DISTINCT ON (a.name)` is PostgreSQL-only syntax: paired with the leading part of the
-# ORDER BY, it keeps only "the first row per name". That is what makes
-# `ORDER BY a.name, f.started_at DESC` mean "the most recent one per name". Change the
-# order and the wrong row is kept, silently.
+# `DISTINCT ON (a.name, f.run_id)` is PostgreSQL-only syntax: paired with the leading
+# part of the ORDER BY, it keeps only "the first row per name and run". That is what
+# makes `ORDER BY a.name, f.run_id, f.started_at DESC` mean "the most recent one per
+# run". Change the order and the wrong row is kept, silently.
+#
+# It was `DISTINCT ON (a.name)` until 2026-09-08, and that is what made the viewer draw
+# one character however many workers were running. `--hypothesis-agents 3` starts three
+# `call_agent`s against **one** agent (`src/memstara/pipeline/board.py:1412`), so the
+# three are three `agent_runs` rows sharing a name: keyed by name, two of the three were
+# dropped here before scene.py ever saw them. `run_id` is the axis that separates them,
+# and it is the axis `OPEN_RUNS` was already keyed by, which is why that query needed no
+# change at all.
+#
+# This returns one row per run rather than per live worker, so it holds finished runs
+# too. That is not waste — scene.py looks each run up by id, and a character whose run
+# has ended still has to say what it last did.
 LAST_CALL = FLAT_CALLS + """
-SELECT DISTINCT ON (a.name)
-       a.name, f.server, f.tool, f.started_at, f.run_id
+SELECT DISTINCT ON (a.name, f.run_id)
+       a.name, f.server, f.tool, f.started_at, f.run_id, r.status AS run_status
 FROM flat f
 JOIN agent_runs r ON r.id = f.run_id
 JOIN agents a ON a.id = r.agent_id
 WHERE a.name LIKE 'memstara%'
-ORDER BY a.name, f.started_at DESC
+ORDER BY a.name, f.run_id, f.started_at DESC
+"""
+
+# The workers of the most recent run, **however long ago that run was.**
+#
+# TASK_TOUCHES answers "who is working right now", and its window is anchored on `now()`
+# for that reason. This answers the different question of *how many workers the last run
+# had*, and anchoring that on `now()` is what made the viewer wrong: a quarter of an hour
+# after a three-worker run finished, the hypothesis column folded back to one card and the
+# screen said the pipeline had one hypothesis agent. The number of hypothesis agents is a
+# property of the **run**, chosen on the form before it started; it does not become one
+# because nobody has looked at the screen for fifteen minutes.
+#
+# So the window is kept — it is still what groups a cohort of workers and separates it from
+# the run before — and only its **anchor** moves, from `now()` to the newest named call
+# there is (`anchor`). Idle for a day, this returns exactly the workers of the last run.
+# Mid-run, `anchor` is a few seconds old and this returns exactly what TASK_TOUCHES does,
+# which is why turning it on changes nothing about a live screen.
+#
+# `worker` is the only column this is for. A call carries it when the worker names itself
+# asking for work, which is the one place a stage's workers are told apart
+# (`_worker_names`, `scene.py:446`), and a call without one says nothing about how many
+# workers there were — hence the `<> ''` rather than a coalesce to a placeholder.
+#
+# `DISTINCT ON (run_id)`: one row per worker run, keyed by the same axis OPEN_RUNS and
+# LAST_CALL use. `name` comes along so scene.py can place the run at a stage without
+# having to find it in another result set — a run this old may be in none of them.
+#
+# ($1 is scene.py's RUN_ALIVE_SECONDS, the same value TASK_TOUCHES takes, because it is
+# the same question about the same cohort asked from a different anchor.)
+LAST_ROSTER = FLAT_CALLS + f"""
+WITH named AS (
+    SELECT a.name, f.run_id, f.started_at,
+           coalesce(nullif(f.arguments->>'worker', ''), f.arguments->>'writer') AS worker,
+           coalesce(nullif(f.arguments->>'run_tag', ''),
+                    nullif(f.arguments->>'origin_run', ''),
+                    nullif(({telemetry_jsonb("f.result")})->>'run_tag', '')) AS pipeline_tag
+    FROM flat f
+    JOIN agent_runs r ON r.id = f.run_id
+    JOIN agents a ON a.id = r.agent_id
+    WHERE f.tool IN {_TOOLS_SQL}
+      AND coalesce(nullif(f.arguments->>'worker', ''), f.arguments->>'writer', '') <> ''
+),
+anchor AS (SELECT pipeline_tag, started_at AS newest FROM named ORDER BY started_at DESC LIMIT 1)
+SELECT DISTINCT ON (n.run_id)
+       n.name, n.run_id, n.worker, n.started_at
+FROM named n, anchor
+WHERE (anchor.pipeline_tag IS NOT NULL AND n.pipeline_tag = anchor.pipeline_tag)
+   OR (anchor.pipeline_tag IS NULL
+       AND n.started_at > anchor.newest - ($1::text || ' seconds')::interval)
+ORDER BY n.run_id, n.started_at
+
 """
 
 # Recent calls, for the flashing lines. Window is applied in Python so the value lives
@@ -261,8 +468,13 @@ ORDER BY a.name, f.started_at DESC
 # is **kept right next to the code that depends on it.**
 # `LIMIT 40` is a safeguard: even in a burst, only as much is drawn as the screen can
 # take.
+#
+# `f.run_id` is here so a flash can be attributed to the **worker** that made the call
+# and not merely to its stage. With N workers of one stage on the floor, a flash keyed by
+# stage names no character on screen and the line is simply not drawn (`ScenePanel.tsx`
+# builds each edge as `source: agent-${f.agent}`).
 RECENT_CALLS = FLAT_CALLS + """
-SELECT a.name, f.server, f.tool, f.started_at
+SELECT a.name, f.server, f.tool, f.started_at, f.run_id
 FROM flat f
 JOIN agent_runs r ON r.id = f.run_id
 JOIN agents a ON a.id = r.agent_id

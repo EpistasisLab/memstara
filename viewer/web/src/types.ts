@@ -1,8 +1,26 @@
 /** Shapes returned by the API. Written by hand rather than generated: the surface is
  *  small, and a hand-written type is where a field's meaning can be recorded. */
 
-export type AgentState = "idle" | "moving" | "working" | "unknown";
+/** What a figure is doing. Four of the five come from the API; `planned` never does.
+ *
+ *  **`planned` is the only state the browser invents**, and it is invented from something
+ *  the browser genuinely knows: the run form asks for N hypothesis agents and only M of
+ *  them exist yet, so the remaining N−M are drawn under this state (`lib/planned.ts`). It
+ *  is not a guess about the database — it is the form, quoted back.
+ *
+ *  It has to be its own state rather than an `idle` card with a flag, for the same reason
+ *  `unknown` is not a quiet `idle`: three tables are keyed exhaustively by this union
+ *  (`STATE_LABEL`, `STATE_ICON`, `STATE_TONE`), so a new member makes every drawing site
+ *  say what it looks like or fail to compile. Reusing `idle` would have drawn an agent
+ *  that has run and stopped, which is a different and false claim. */
+export type AgentState = "idle" | "moving" | "working" | "unknown" | "planned";
 export type StoreId = "okf" | "matcher" | "board" | "results" | "dataset" | "ml" | "unknown";
+/** The five stages the pipeline has, plus one it used to. `curator` was retired on
+ *  2026-09-07 — writing the wave's questions is the hypothesis agent's other job now —
+ *  and the API never sends it: `stores.reported_as` folds it into `hypothesis` on every
+ *  screen. It stays in the union because the databases still hold runs recorded against
+ *  it, and because a stage the API cannot name is better handled by a `Record` that has
+ *  a key for it than by an undefined lookup. */
 export type StageId = "curator" | "hypothesis" | "data" | "ml" | "interpreter" | "report";
 
 export interface Place {
@@ -14,9 +32,49 @@ export interface Place {
 }
 
 export interface SceneAgent {
-  id: StageId;
+  last_status?: string | null;
+  /** One **worker**, not one stage — so this is not a `StageId`.
+   *
+   *  A stage that runs a single worker keeps the stage's own id (`hypothesis`), which is
+   *  what makes a default run look exactly as it did before `--hypothesis-agents` could
+   *  put more than one figure on the floor. Run two or more and each gets the name it
+   *  called itself by on the board instead: `hypothesis#1`, `hypothesis#2`.
+   *
+   *  Unique across the scene, and React Flow depends on that — two nodes with one id
+   *  draw as one node, silently. Use `stage` for anything keyed by the five stages. */
+  id: string;
+  /** Which of the five stages this figure is one of. Every `Record<StageId, ...>` table
+   *  — the colours, the pictograms — is keyed by this and not by `id`. */
+  stage: StageId;
   label: string;
+  /** The name this worker called itself, or null when it never said. It is the same
+   *  string the board records in `claimed_by`, which is what makes a figure on the floor
+   *  traceable to a row in the task list. Null for a single-worker stage. */
+  worker: string | null;
+  /** Which of its stage's figures this is, from 0. The floor plan offsets by it so two
+   *  workers of one stage do not stand on the same spot. */
+  slot: number;
+  /** How many runs **this figure** stands for — 0 when it is resting.
+   *
+   *  Only `hypothesis` is drawn as one figure per worker (`stores.SPLITTABLE`), so there
+   *  this is 1 on each. The other four are one figure however many run behind them, which
+   *  is what the meeting of 2026-08-26 asked for, and there this is the whole count. That
+   *  is why folding them is not the same as hiding them: `--data-agents 2` draws one data
+   *  character with a 2 on it, not two characters and not a silent one. */
+  running: number;
   name: string;
+  /** The behavioural standard this worker runs under, or `""` for the prompt as written.
+   *
+   *  Separate from `label` because they belong to different things: `label` is the
+   *  station's and every figure standing at it shares it, while the standard is the
+   *  worker's. Since `A-32` a run may give three hypothesis agents three different
+   *  standards, and until this field existed all three drew figures reading `Hypothesis`
+   *  — the one comparison the stacked drawing exists to let a person read.
+   *
+   *  Drawn as *no standard* when empty rather than omitted: "the prompt as written" and
+   *  "the name lost its suffix somewhere" are the same blank on screen and need opposite
+   *  fixes. */
+  playbook: string;
   state: AgentState;
   /** Which place it is standing at, or null when resting at home. */
   at: StoreId | null;
@@ -31,7 +89,10 @@ export interface SceneAgent {
 }
 
 export interface Flash {
-  agent: StageId;
+  /** A `SceneAgent["id"]`, so a worker rather than a stage — the line has to land on the
+   *  figure that made the call, and with several workers at one station there is no
+   *  figure called `hypothesis` for a stage-keyed flash to reach. */
+  agent: string;
   place: StoreId;
   tool: string;
   server: string;
@@ -118,20 +179,122 @@ export interface Window {
   called_by_agent: boolean;
 }
 
+export interface QuestionContract {
+  version?: string; kind?: string; origin_wave?: number; parent_task_ids?: number[]; learning_goal?: string;
+}
+
+export interface ModelComparison {
+  status: string; baseline_configured: boolean; baseline_columns: string[]; scope: string; parameters_policy: string;
+  group_policy: string;
+  variants: {id:string; label:string; features:string[]; removed_features:string[]; status:string; auc?:number;
+    delta_from_full?:number; delta_from_baseline?:number; error_type?:string; reason?:string}[];
+}
 export interface Result {
+  run_tag?: string; pipeline_id?: string; pipeline_name?: string; iteration?: number | null;
+  hypothesis_id?: string;
+  evaluation?: {
+    comparison?: ModelComparison;
+    question_contract?: QuestionContract;
+    hypothesis_policy?: { version?: string; kind?: string; validation_status?: string };
+    interpretations_complete?: boolean;
+    interpretations?: { slot: number; worker: string; skill: string; status: string; text: string; error: string }[];
+    interpreter?: { worker: string; skill: string };
+    seed?: number; test_size?: number; auc_std?: number;
+    config_hash?: string;
+    data_quality?: { preprocessing?: string; missing_predictor_cells?: number; warnings?: string[] };
+    evaluation?: { plan?: Record<string, unknown>; duration_seconds?: number;
+      score_scope?: string; validation_reserve?: {status?: string};
+      replicates?: {seed: number; auc: number; split_id: string; cv_folds?: number}[];
+      reproducibility?: {status: string; method?: string; scope?: string; bundle_path?: string;
+        replicates?: {replicate: number; status: string}[] } };
+    explanation?: { method?: string; scope?: string; actionability?: string; review_status?: string;
+      operating_point?: { probability_cutoff: number; sensitivity: number; specificity: number; precision: number | null;
+        true_positive?: number; true_negative?: number; precision_reason?: string | null;
+        false_positive: number; false_negative: number; selection: string; status: string };
+      feature_effects?: { feature: string; range_start: number; range_end: number; probability_before: number;
+        probability_after: number; direction: string; validation_needed: string }[];
+      shap?: { method?: string; units?: string; status?: string; reason?: string; mean_absolute?: Record<string, number>; mean_signed?: Record<string, number> };
+      partial_dependence?: { feature: string; values: number[]; predicted_probability: number[] }[] };
+  };
   result_id: number;
   /** Null once the board row has been cleaned up. The result still describes itself —
-   *  run_tag, trial, perspective, hypothesis, columns_used, y_column and auc are here. */
+   *  everything below is on the result row, so none of it depends on the board. */
   task_id: number | null;
   trial: number;
   perspective: string;
   hypothesis: string;
+  /** What the data stage could actually cut from the cohort. */
   columns_used: string[];
+  /** What it could not. The data stage's own list — **not** the columns the hypothesis
+   *  agent asked for minus `columns_used`; see the RESULTS comment in api/queries.py for
+   *  the three rows that prove those are different claims. */
+  columns_missing: string[];
+  /** Column name -> contribution. Same name and meaning as `Task.importance`, but read
+   *  from the result, which outlives the board row. Can be negative. */
+  importance: Record<string, number>;
+  /** OKF document ids the hypothesis agent relied on to justify those columns. */
+  okf_concept_ids: string[];
   /** What the AUC is an AUC *of*. Carried over from the board. */
   y_column: string;
   auc: number | null;
+  /** The engine that produced `importance`, and therefore the **scale those numbers are
+   *  on**. `sklearn_hgb` reached the permutation route and its numbers are AUC deltas;
+   *  `random_forest` and `xgboost` carry `feature_importances_` and theirs are impurity
+   *  or gain, summing to about 1. Ranking one against the other is reading an AUC delta
+   *  against a fraction of impurity, which is why this field travels with the map.
+   *
+   *  Since 2026-09-08 `xgboost` is the only engine, so every *new* row is on one scale.
+   *  The field is not therefore redundant: this type describes rows read off the board,
+   *  and the board still holds rows from all three. A screen that assumed one scale
+   *  because the current code only produces one would be right about today's runs and
+   *  wrong about the 81 it renders alongside them.
+   *
+   *  `""` means **not recorded**, not "unknown engine" — the column is
+   *  `TEXT NOT NULL DEFAULT ''` and every result stored before 2026-09-08 takes it,
+   *  because the engine was read from the environment inside the call and never written
+   *  down. It cannot be backfilled and the screen says so rather than guessing. */
+  model: string;
   interpretation: string;
   created_at: string;
+}
+
+/** One candidate the matcher offered for a concept. */
+export interface TraceCandidate {
+  column: string;
+  feature_type: string;
+  /** Cosine similarity to the concept. Null only if the matcher omitted it. */
+  score: number | null;
+  /** The agent asked for this column. Judged against `columns` — what was asked for —
+   *  and not against `columns_used`, so a column the cohort turned out not to have is
+   *  still shown as chosen. See scene._trace_groups. */
+  chosen: boolean;
+  /** …and it also survived into the model. */
+  present: boolean;
+}
+
+/** What the matcher offered for one concept, chosen and rejected alike. */
+export interface TraceGroup {
+  tool: string;
+  concept: string;
+  /** The matcher's own reason for an empty group — "nothing was close enough" is worth
+   *  rewording for, "a code this cohort does not carry" is not. */
+  note: string;
+  candidates: TraceCandidate[];
+}
+
+/** `/api/result/{id}` — one result with the matcher record behind its columns.
+ *
+ *  Not part of `Snapshot`. `match_trace` is 598 kB across the stored results against
+ *  89 kB for every explanation column the snapshot carries, and the snapshot is polled
+ *  every two seconds, so this is fetched once when a person opens a result. */
+export interface ResultDetail extends Result {
+  run_tag: string;
+  /** What the hypothesis agent asked for, against `columns_used` which is what arrived. */
+  columns: string[];
+  match_trace: TraceGroup[];
+  /** Calls stored before flattening. A trace that unwraps to no groups still differs
+   *  from a task the matcher was never called for, and those need opposite fixes. */
+  match_trace_calls: number;
 }
 
 export interface RunSummary {
@@ -140,6 +303,12 @@ export interface RunSummary {
   done: number;
   first_seen: string;
   last_seen: string;
+  question?: string;
+  hypotheses?: number | null;
+  trials?: number | null;
+  waves?: number | null;
+  model?: string | null;
+  status?: string;
 }
 
 export interface Health {
@@ -147,9 +316,28 @@ export interface Health {
   core: { up: boolean; error: string };
 }
 
+export interface RunConfiguration {
+  pipeline_id?: string; pipeline_name?: string;
+  skill?: string | null;
+  interpretation_mode?: string;
+  interpreters?: number;
+  question?: string; y_column?: string; provider?: string; model?: string;
+  comparison_policy?: {baseline_columns: string[]};
+  hypotheses: number; books: Record<string, string[]>; evaluation: Record<string, number | string>;
+  trials: number; waves: number; continuous?: boolean;
+}
+
 export interface Snapshot {
+  run_configuration?: RunConfiguration | null;
+  scene_scope?: string;
+  report?: { status: string; text: string; error?: string | null } | null;
+  pipeline?: { status: string; report_completed?: boolean } | null;
   run_tag: string;
   runs: RunSummary[];
+  /** The API gave up waiting for a fresh computation and re-sent its previous answer.
+   *  A 200 whose contents are older than `generated_at` suggests — so a screen that
+   *  ignores this reports a stale picture as current. See api/scene.snapshot. */
+  stale: boolean;
   generated_at: string;
   health: Health;
   scene: { places: Place[]; agents: SceneAgent[]; flashes: Flash[] };

@@ -87,7 +87,6 @@ def _output_dir() -> Path:
     return out
 
 
-@mcp.tool()
 def describe_dataset() -> str:
     """Return the dataset's actual column names, row count, and how empty each column is.
 
@@ -132,7 +131,6 @@ def describe_dataset() -> str:
     )
 
 
-@mcp.tool()
 def slice_columns(columns: list[str], y_column: str, tag: str) -> str:
     """Extract the named columns plus the outcome into a sub-dataset CSV.
 
@@ -157,6 +155,10 @@ def slice_columns(columns: list[str], y_column: str, tag: str) -> str:
     dataset's" — a wrong diagnosis of a bug in this function. `match_concepts`
     already takes a list; the two tools now agree.
     """
+    from memstara.evaluation import active_plan
+    snapshot = active_plan()
+    if snapshot and y_column != snapshot["y_column"]:
+        return json.dumps({"error": "Extraction target differs from the run's fixed target"})
     try:
         df = pd.read_csv(_dataset_path())
         out_dir = _output_dir()
@@ -184,10 +186,14 @@ def slice_columns(columns: list[str], y_column: str, tag: str) -> str:
     # Surrounding whitespace is stripped and empty entries dropped; the name
     # itself, commas included, is left exactly as given.
     wanted = [str(c).strip() for c in columns if str(c).strip()]
+    if outcome_col and y_column != outcome_col:
+        return json.dumps({"error": "Target differs from the run's fixed target"})
     # If the outcome column is mixed into the feature list, drop it silently
     # (blocking leakage at the source).
     if outcome_col:
         wanted = [c for c in wanted if c != outcome_col]
+    baseline = (snapshot or {}).get("comparison_policy", {}).get("baseline_columns", [])
+    wanted = list(dict.fromkeys([c for c in wanted if c != y_column] + baseline))
     if not wanted:
         return json.dumps({"error": "columns is empty"})
 
@@ -260,6 +266,20 @@ def slice_columns(columns: list[str], y_column: str, tag: str) -> str:
             "columns_missing": missing,     # non-empty means a name did not match
         }
     )
+
+
+@mcp.tool(name="describe_dataset")
+async def describe_dataset_async() -> str:
+    """Describe the configured clean dataset without exposing the target as a feature."""
+    import asyncio
+    return await asyncio.to_thread(describe_dataset)
+
+
+@mcp.tool(name="slice_columns")
+async def slice_columns_async(columns: list[str], y_column: str, tag: str) -> str:
+    """Extract only the requested feature columns and fixed target; no data cleaning."""
+    import asyncio
+    return await asyncio.to_thread(slice_columns, columns, y_column, tag)
 
 
 if __name__ == "__main__":

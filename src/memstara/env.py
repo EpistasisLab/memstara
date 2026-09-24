@@ -150,3 +150,25 @@ def allowlist_gaps() -> list[str]:
     always = {"AGENTIC_OKF_BUNDLE_DIR", "PATH", "HOME", "PYDEVD_DISABLE_FILE_VALIDATION"}
 
     return sorted(name for name in read - allowed - always)
+
+
+def configured_llm(provider: str, model: str) -> tuple[str, str]:
+    """Deployment-wide selection from motoro/.env; overrides stale browser drafts."""
+    from memstara.control.request import configured_llm as deployment_llm
+    return deployment_llm()
+
+
+def configured_api_base(provider: str) -> str | None:
+    """Pass the configured endpoint to Motoro's existing ModelConfig."""
+    from urllib.parse import urlsplit
+    base = os.environ.get("MEMSTARA_LLM_API_BASE", "").strip()
+    if not base:
+        return None
+    selected = os.environ.get("MEMSTARA_LLM_PROVIDER", "").strip()
+    if selected and selected != provider:
+        return None
+    parsed = urlsplit(base)
+    if (parsed.scheme != "https" or not parsed.hostname or parsed.username
+            or parsed.password or parsed.query or parsed.fragment):
+        raise ValueError("MEMSTARA_LLM_API_BASE must be an HTTPS endpoint without credentials or query parameters")
+    return base

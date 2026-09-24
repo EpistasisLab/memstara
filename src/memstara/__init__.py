@@ -8,7 +8,7 @@ Why it holds a single `setdefault`
 
 litellm reads `LITELLM_LOG` **while it is being imported** (`litellm/_logging.py:80`).
 Set it any later and the request bodies go unlogged — silently, which is exactly how
-it first failed. `env.py` (`bootstrap.py:42-53` before the restructure) records the
+it first failed. `src/memstara/env.py` (formerly bootstrap.py, lines 42-53) records the
 rule that came out of that:
 
     every entry point must import the env module **before** anything that pulls in

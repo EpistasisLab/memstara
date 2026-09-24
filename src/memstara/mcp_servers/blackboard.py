@@ -24,7 +24,7 @@ report is written from finished results.
 
 Core launches this file as a stdio subprocess, same shape as src/memstara/mcp_servers/data.py.
 
-The board lives in **Memstara's own database**, not core's — see ``docker-compose.yml``.
+The board lives in **Memstara's own database**, not core's — see ``compose.yml``.
 
 Environment::
 
@@ -72,6 +72,8 @@ import json
 import os
 import re
 from typing import Any
+from memstara.combinations import task_books
+from memstara.pipeline.question_contract import QuestionProposal, FeatureMapping
 
 import asyncpg                            # PostgreSQL async driver
 from mcp.server.fastmcp import FastMCP
@@ -93,7 +95,7 @@ NEXT_STAGE = {"hypothesis": "data", "data": "ml", "ml": "interpret"}
 
 
 # The address used when the environment variable is unset. It points at the container
-# docker-compose.yml starts. Port 5463 — a **different database** from core's 5453.
+# compose.yml starts. Port 5463 — a **different database** from core's 5453.
 DEFAULT_DSN = "postgresql://memstara:memstara@localhost:5463/memstara"
 
 
@@ -118,11 +120,18 @@ def _err(e: Exception) -> str:
     return json.dumps({"error": f"{type(e).__name__}: {e}"})
 
 
+
+def _pipeline_run() -> str:
+    from memstara.evaluation import active_plan
+    config = active_plan() or {}
+    primary = config.get("hypothesis_policy", {}).get("version") in ("knowledge_only_v1", "iterative_discovery_v1")
+    return str(config.get("run_tag", "")) if config.get("pipeline_id") or primary else ""
+
 @mcp.tool()
 async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: str,
                       columns: list[str], y_column: str,
                       okf_concept_ids: list[str] | None = None,
-                      question_id: int = 0) -> str:
+                      question_id: int = 0, feature_mapping: list[FeatureMapping] | None = None) -> str:
     """Put a new task on the board. The hypothesis stage uses this.
 
     Args:
@@ -138,6 +147,9 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
             spells it. Recorded on the task so every later stage reads it from the board
             rather than being told separately.
         okf_concept_ids: a JSON list of the knowledge-source concept ids relied on.
+        feature_mapping: For each selected column, supply concept (exact assigned predictor),
+            column, source_id (one of okf_concept_ids), and clinical rationale.
+            Every assigned concept and selected column must be covered for new runs.
         question_id: which question bank row this trial came from, if the driver gave
             you one. 0 means none — the run used the built-in perspective list instead.
             Recorded so a finished result can be traced back to what was asked, not
@@ -146,10 +158,23 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
     Returns:
         JSON with the new task_id. The row starts as ready for the data stage.
     """
+    scope = _pipeline_run()
+    if scope:
+        if run_tag and run_tag != scope:
+            return json.dumps({"error": "This tool is scoped to its pipeline run"})
+        run_tag = scope
+    from memstara.pipeline.question_contract import enabled, validate_saved, hypothesis_text
     # A bare string is refused rather than iterated. Python would iterate it
     # character by character and store a JSON array of single letters — a task the
     # data stage then reports as 30-odd missing columns, which reads like a naming
     # problem and is not one.
+    from memstara.evaluation import active_plan
+    snapshot = active_plan()
+    if snapshot and (y_column != snapshot["y_column"] or run_tag != snapshot["run_tag"]):
+        return json.dumps({"error": "Task target or run differs from the immutable run configuration"})
+    if isinstance(columns, list) and (y_column in columns or (os.environ.get("MEMSTARA_OUTCOME_COLUMN")
+            and os.environ["MEMSTARA_OUTCOME_COLUMN"] in columns)):
+        return json.dumps({"error": "The target must not be included as a feature"})
     if isinstance(columns, str) or isinstance(okf_concept_ids, str):
         return json.dumps(
             {
@@ -164,24 +189,78 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
     # commas included, is left exactly as given.
     cols = [str(c).strip() for c in columns if str(c).strip()]
     ids = [str(c).strip() for c in (okf_concept_ids or []) if str(c).strip()]
+    from memstara.pipeline.question_contract import predictor_column_error
+    column_error = predictor_column_error(cols, snapshot)
+    if column_error:
+        return json.dumps(column_error)
     try:
         conn = await asyncpg.connect(_dsn())
         try:
-            # A new row always starts as status='ready', task_type='data' — ready
-            # for the data stage to pick up the moment it is created.
-            # Writing y_column here matters: every later stage reads that value off
-            # the board rather than being told it separately in a prompt.
-            task_id = await conn.fetchval(
-                """
-                INSERT INTO memstara_blackboard
-                    (run_tag, trial, perspective, status, task_type,
-                     hypothesis, columns, y_column, okf_concept_ids, question_id)
-                VALUES ($1, $2, $3, 'ready', 'data', $4, $5::jsonb, $6, $7::jsonb, $8)
-                RETURNING task_id
-                """,
-                run_tag, trial, perspective, hypothesis, json.dumps(cols), y_column,
-                json.dumps(ids), (int(question_id) or None),
-            )
+            async with conn.transaction():
+                # A new row always starts as status='ready', task_type='data' — ready
+                # for the data stage to pick up the moment it is created.
+                # Writing y_column here matters: every later stage reads that value off
+                # the board rather than being told it separately in a prompt.
+                contract = None
+                if enabled(snapshot):
+                    if not question_id:
+                        return json.dumps({"error": "A new fixed-target question is required before creating a task"})
+                    question = await conn.fetchrow(
+                        "SELECT text, question_contract, origin_run, claimed_run FROM memstara_questions "
+                        "WHERE question_id=$1",
+                        question_id)
+                    if not question or question["origin_run"] != run_tag or question["claimed_run"] != run_tag:
+                        return json.dumps({"error": "The question must belong to and be claimed by this run"})
+                    contract = question["question_contract"]
+                    if isinstance(contract, str):
+                        contract = json.loads(contract)
+                    try:
+                        validate_saved(contract, question["text"], snapshot)
+                        if 'origin_wave' in contract and (
+                            type(trial) is not int or trial < 0
+                            or trial // snapshot['trials'] != contract['origin_wave']
+                        ):
+                            raise ValueError('Task iteration does not match the assigned question')
+                        if perspective != question["text"] or hypothesis != hypothesis_text(contract):
+                            raise ValueError("Question and hypothesis must match the fixed-target contract exactly")
+                        if not cols or not ids:
+                            raise ValueError("Grounded feature columns and knowledge concept IDs are required")
+                    except ValueError as exc:
+                        return json.dumps({"error": str(exc)})
+                if snapshot and snapshot.get("recovery_policy", {}).get("version") == "artifact_checked_v1":
+                    from memstara.pipeline.question_contract import validate_mapping
+                    if contract:
+                        try:
+                            validate_mapping(feature_mapping, contract, cols, ids)
+                        except ValueError as exc:
+                            return json.dumps({"error": str(exc)})
+                    await conn.execute("SET LOCAL lock_timeout = '3s'")
+                    await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+                                       f"memstara:create:{run_tag}:{trial}")
+                    existing = await conn.fetchrow(
+                        "SELECT task_id, question_id, status, task_type FROM memstara_blackboard "
+                        "WHERE run_tag=$1 AND trial=$2 ORDER BY task_id LIMIT 1", run_tag, trial)
+                    if existing:
+                        if existing["question_id"] != (int(question_id) or None):
+                            return json.dumps({"error": "Trial already belongs to another question"})
+                        return json.dumps({**dict(existing), "reused": True})
+                task_id = await conn.fetchval(
+                    """
+                    INSERT INTO memstara_blackboard
+                        (run_tag, trial, perspective, status, task_type,
+                         hypothesis, columns, y_column, okf_concept_ids, question_id, evaluation, hypothesis_id)
+                    VALUES ($1, $2, $3, 'ready', 'data', $4, $5::jsonb, $6, $7::jsonb, $8, $9::jsonb,
+                        COALESCE((SELECT writer FROM memstara_questions WHERE question_id=$8), 'hypothesis'))
+                    RETURNING task_id
+                    """,
+                    run_tag, trial, perspective, hypothesis, json.dumps(cols), y_column,
+                    json.dumps(ids), (int(question_id) or None),
+                    json.dumps({"config_hash": snapshot.get("config_hash"), "plan": snapshot["evaluation"],
+                                "skills": task_books(snapshot, trial),
+                                "hypothesis_policy": {**snapshot.get("hypothesis_policy", {}),
+                                    **({"kind": contract["kind"]} if contract and "kind" in contract else {})},
+                                "question_contract": contract, "feature_mapping": feature_mapping} if snapshot else {}),
+                )
         finally:
             await conn.close()
     except Exception as e:  # noqa: BLE001 - the agent must see why
@@ -216,6 +295,11 @@ async def claim_task(task_type: str, run_tag: str = "", worker: str = "") -> str
         there is no work for you right now, so stop. Do not invent a task and do not
         take one of another type.
     """
+    scope = _pipeline_run()
+    if scope:
+        if run_tag and run_tag != scope:
+            return json.dumps({"error": "This tool is scoped to its pipeline run"})
+        run_tag = scope
     try:
         conn = await asyncpg.connect(_dsn())
         try:
@@ -253,13 +337,15 @@ async def claim_task(task_type: str, run_tag: str = "", worker: str = "") -> str
                           -- An empty string reads the whole board, as before
                           -- (backward compatible).
                           AND ($2 = '' OR run_tag = $2)
+                          AND (NOT (evaluation ? 'interpretation_branch')
+                               OR evaluation->'interpretation_branch'->>'worker' = $3)
                         ORDER BY task_id
                         FOR UPDATE SKIP LOCKED
                         LIMIT 1
                     )
                     RETURNING task_id, run_tag, trial, perspective, hypothesis,
                               columns, y_column, okf_concept_ids, subset_path,
-                              columns_used, auc, feature_importance, claimed_by
+                              columns_used, auc, feature_importance, model, claimed_by, evaluation, hypothesis_id
                     """,
                     task_type, run_tag, worker,
                 )
@@ -279,18 +365,57 @@ async def claim_task(task_type: str, run_tag: str = "", worker: str = "") -> str
     # values before being returned — left packed, the agent would have to parse JSON
     # out of a string a second time.
     # The empty default differs by field: [] for the lists, {} for the importances.
-    for k in ("columns", "okf_concept_ids", "columns_used", "feature_importance"):
+    for k in ("columns", "okf_concept_ids", "columns_used", "feature_importance", "evaluation"):
         out[k] = json.loads(out[k]) if out[k] else ([] if k != "feature_importance" else {})
     # default=str — JSON does not know values such as datetime, so they become strings.
     return json.dumps(out, ensure_ascii=False, default=str)
 
 
 @mcp.tool()
+async def recover_interpretation(task_id: int, worker: str) -> str:
+    """Controller-only recovery after a worker has returned; never replays data/ML.
+
+    Not granted to any agent role. One retry per task, scoped to its current owner
+    and run. No recovery of completed, failed, unowned or actively running calls.
+    The controller is responsible for verifying the agent call has returned.
+    """
+    scope = _pipeline_run()
+    if not scope or not worker:
+        return json.dumps({"error": "Run scope and worker are required"})
+    try:
+        conn = await asyncpg.connect(_dsn(), command_timeout=5)
+        try:
+            async with conn.transaction():
+                await conn.execute("SET LOCAL lock_timeout = '2s'")
+                row = await conn.fetchrow(
+                    "SELECT status, task_type, claimed_by, evaluation FROM memstara_blackboard "
+                    "WHERE task_id=$1 AND run_tag=$2 FOR UPDATE", task_id, scope)
+                if not row or row['status'] != 'in_progress' or row['task_type'] != 'interpret':
+                    return json.dumps({"ok": False, "reason": "No unfinished interpretation owned by this run"})
+                if row['claimed_by'] != worker:
+                    return json.dumps({"error": "Worker does not own this task"})
+                from memstara.interpretation_fanout import metadata
+                evaluation = metadata(row['evaluation'])
+                count = evaluation.get('interpretation_recovery_count', 0)
+                if count >= 1:
+                    return json.dumps({"ok": False, "reason": "Interpretation recovery limit reached"})
+                evaluation['interpretation_recovery_count'] = count + 1
+                await conn.execute(
+                    "UPDATE memstara_blackboard SET status='ready', claimed_by='', claimed_at=NULL, "
+                    "evaluation=$2::jsonb WHERE task_id=$1", task_id, json.dumps(evaluation))
+                return json.dumps({"ok": True, "status": "ready", "task_id": task_id})
+        finally:
+            await conn.close()
+    except Exception as exc:
+        return _err(exc)
+
+
+@mcp.tool()
 async def submit_result(task_id: int, subset_path: str = "",
                         columns_used: list[str] | None = None,
                         columns_missing: list[str] | None = None, auc: float | None = None,
-                        feature_importance: str = "", interpretation: str = "",
-                        worker: str = "") -> str:
+                        feature_importance: str = "", model: str = "",
+                        interpretation: str = "", error: str = "", *, worker: str) -> str:
     """Write what you produced and hand the task to the next stage.
 
     Pass only the fields your stage produces; leave the rest out.
@@ -305,11 +430,23 @@ async def submit_result(task_id: int, subset_path: str = "",
             empty list records "none were missing"; omitting it leaves the field alone.
         auc: ml stage — the test AUC.
         feature_importance: ml stage — JSON object of column to importance.
+        model: ml stage — **the `model` field train_and_score returned, copied through
+            unchanged.** Not optional in practice: the engine decides what the numbers in
+            feature_importance are. `random_forest` and `xgboost` return impurity/gain,
+            non-negative and summing to about 1; `sklearn_hgb` returned a drop in AUC,
+            which is a different unit and can be negative. Leave it out and the row
+            records importances nobody can later say the scale of — which is what every
+            result stored before 2026-09-08 does. Since that date `xgboost` is the only
+            value a new row can carry, and copying it through unchanged is still the
+            instruction: an agent that decides what the engine "should" be is guessing at
+            something the tool already told it, and the first day the answer changes is
+            the day the guess goes unnoticed.
+        error: explicit failure reason without patient values; requires the current worker.
         interpretation: interpretation stage — the write-up.
         worker: who you are — **the same string you passed to claim_task.** If the task
             is now held by somebody else this is refused and nothing is written, which
             is what stops a late result from landing on work that was handed on while
-            you were still busy. Leave it empty and that comparison cannot be made.
+            you were still busy. This is a required field; copy the assigned name exactly.
 
     Returns:
         JSON with the task's new status and whose turn it is now. After the
@@ -336,13 +473,26 @@ async def submit_result(task_id: int, subset_path: str = "",
         conn = await asyncpg.connect(_dsn())
         try:
             async with conn.transaction():
+                from memstara.interpretation_fanout import metadata, aggregate, expand
+                scope = _pipeline_run()
+                if scope and await conn.fetchval(
+                    'SELECT run_tag FROM memstara_blackboard WHERE task_id=$1', task_id
+                ) != scope:
+                    return json.dumps({"error": "Task belongs to another pipeline run"})
+                before = await conn.fetchval('SELECT evaluation FROM memstara_blackboard WHERE task_id=$1', task_id)
+                branch = metadata(before).get('interpretation_branch')
+                if branch:
+                    await conn.execute('SELECT pg_advisory_xact_lock(72331, $1::integer)', branch['source_task_id'])
                 cur = await conn.fetchrow(
-                    "SELECT task_type, status, claimed_by FROM memstara_blackboard "
+                    "SELECT task_type, status, claimed_by, subset_path, evaluation, y_column, "
+                    "perspective, hypothesis, columns, task_id, trial FROM memstara_blackboard "
                     "WHERE task_id = $1 FOR UPDATE",
                     task_id,
                 )
                 if cur is None:
                     return json.dumps({"error": f"no task {task_id}"})
+                if branch and (worker != branch['worker'] or worker != cur['claimed_by']):
+                    return json.dumps({"error": "Only the assigned interpreter may submit this branch."})
                 # Blocks writing a result to a task that was never claimed.
                 if cur["status"] != "in_progress":
                     return json.dumps(
@@ -365,7 +515,99 @@ async def submit_result(task_id: int, subset_path: str = "",
                                   f"Do not resubmit; claim a new task."}
                     )
 
+                if error:
+                    if not worker or worker != cur["claimed_by"]:
+                        return json.dumps({"error": "Reporting failure requires the current worker identity"})
+                    await conn.execute(
+                        "UPDATE memstara_blackboard SET status='failed', error=$2, claimed_by='', "
+                        "claimed_at=NULL, updated_at=now() WHERE task_id=$1", task_id, error[:2000])
+                    if branch:
+                        await aggregate(conn, branch['source_task_id'])
+                    return json.dumps({"ok": True, "task_id": task_id, "status": "failed",
+                                       "task_type": cur["task_type"], "reason": error[:2000]})
+
+                from memstara.evaluation import active_plan
+                from memstara.pipeline.question_contract import enabled, validate_saved, hypothesis_text
+                plan = active_plan()
+                if enabled(plan):
+                    try:
+                        payload = cur["evaluation"] or {}
+                        if isinstance(payload, str):
+                            payload = json.loads(payload)
+                        contract = validate_saved(payload.get("question_contract"), cur["perspective"], plan)
+                        if cur["y_column"] != contract["target"] or cur["hypothesis"] != hypothesis_text(contract):
+                            raise ValueError("Task no longer matches its fixed-target question")
+                    except (ValueError, TypeError, KeyError) as exc:
+                        return json.dumps({"error": f"Question contract rejected: {exc}"})
+
                 stage = cur["task_type"]          # the stage this task is at now
+                if stage == "data" and (plan or {}).get("comparison_policy"):
+                    from memstara.comparisons import write_context
+                    try:
+                        from pathlib import Path
+                        import shutil
+                        from memstara.paths import DEFAULT_OUTPUT_DIR
+                        source = Path(subset_path).resolve()
+                        root = Path(os.environ.get("MEMSTARA_OUTPUT_DIR") or DEFAULT_OUTPUT_DIR).resolve()
+                        source.relative_to(root)
+                        destination = source.with_name(f"task_{task_id}_{source.name}")
+                        if source != destination:
+                            shutil.copyfile(source, destination)
+                        subset_path = str(destination)
+                        write_context(subset_path, dict(cur), plan)
+                    except (ValueError, OSError) as exc:
+                        return json.dumps({"error": f"Comparison inputs rejected: {exc}"})
+                if stage == "interpret" and not interpretation.strip():
+                    return json.dumps({"error": "Interpretation must contain a nonempty evidence-based write-up"})
+                if stage == "interpret":
+                    # Store actual interpreter identity with the final result, so the
+                    # report can distinguish skill-dependent perspectives across trials.
+                    from pathlib import Path
+                    previous = cur["evaluation"] or {}
+                    if isinstance(previous, str):
+                        previous = json.loads(previous)
+                    identity = cur["claimed_by"] or worker
+                    config_path = os.environ.get("MEMSTARA_RUN_CONFIG")
+                    config = json.loads(Path(config_path).read_text()) if config_path else {}
+                    books = task_books(config, cur["trial"]).get("interpreter") or [""]
+                    suffix = identity.rsplit("#", 1)[-1]
+                    slot = int(suffix) - 1 if "#" in identity and suffix.isdigit() else 0
+                    skill = books[slot] if slot < len(books) else books[0]
+                    await conn.execute("UPDATE memstara_blackboard SET evaluation=$2::jsonb WHERE task_id=$1",
+                                       task_id, json.dumps({**previous, "interpreter": {
+                                           "worker": identity, "skill": skill}}))
+                if stage == "ml":
+                    from pathlib import Path
+                    from memstara.paths import DEFAULT_OUTPUT_DIR
+                    artifact = Path(cur["subset_path"]).resolve().with_suffix(".evaluation.json")
+                    root = Path(os.environ.get("MEMSTARA_OUTPUT_DIR") or DEFAULT_OUTPUT_DIR).resolve()
+                    try:
+                        artifact.relative_to(root)
+                        measured = json.loads(artifact.read_text())
+                    except (ValueError, OSError):
+                        return json.dumps({"error": "Train the claimed subset before submitting its ML result"})
+                    previous = cur["evaluation"]
+                    if isinstance(previous, str):
+                        previous = json.loads(previous)
+                    import hashlib
+                    if measured.get("y_column") != cur["y_column"]:
+                        return json.dumps({"error": "The measured target differs from the claimed task"})
+                    if previous and previous.get("config_hash") != measured.get("config_hash"):
+                        return json.dumps({"error": "The measured artifact belongs to another run configuration"})
+                    if measured["evaluation"]["dataset_sha256"] != hashlib.sha256(
+                            Path(cur["subset_path"]).read_bytes()).hexdigest():
+                        return json.dumps({"error": "The subset changed after training; evaluate it again"})
+                    if measured.get("status") == "failed":
+                        await conn.execute(
+                            "UPDATE memstara_blackboard SET status='failed', error=$2, "
+                            "evaluation=$3::jsonb, claimed_by='', claimed_at=NULL, updated_at=now() WHERE task_id=$1",
+                            task_id, measured["error"], json.dumps({**(previous or {}), **measured}))
+                        return json.dumps({"ok": True, "task_id": task_id, "status": "failed",
+                                           "task_type": "ml", "reason": measured["error"]})
+                    auc, model = measured["auc"], measured["model"]
+                    feature_importance = json.dumps(measured["feature_importance"])
+                    await conn.execute("UPDATE memstara_blackboard SET evaluation=$2::jsonb WHERE task_id=$1",
+                                       task_id, json.dumps({**(previous or {}), **measured}))
                 nxt = NEXT_STAGE.get(stage)       # the next stage (None = this was the last)
                 new_status = "ready" if nxt else "done"   # waiting again if there is a next
                 new_type = nxt or stage                   # on the last stage the type stays
@@ -385,6 +627,9 @@ async def submit_result(task_id: int, subset_path: str = "",
                         columns_missing    = CASE WHEN $4 <> '' THEN $4::jsonb ELSE columns_missing END,
                         auc                = COALESCE($5, auc),
                         feature_importance = CASE WHEN $6 <> '' THEN $6::jsonb ELSE feature_importance END,
+                        -- $10 is last rather than beside $6 because appending a
+                        -- parameter cannot renumber the nine that were already here.
+                        model              = COALESCE(NULLIF($10, ''), model),
                         interpretation     = COALESCE(NULLIF($7, ''), interpretation),
                         status             = $8,
                         task_type          = $9,
@@ -407,6 +652,7 @@ async def submit_result(task_id: int, subset_path: str = "",
                     interpretation,
                     new_status,
                     new_type,
+                    model,
                 )
 
                 # The results table is separate on purpose: the board holds what is
@@ -425,18 +671,24 @@ async def submit_result(task_id: int, subset_path: str = "",
                 #   *whether they earned their place* (feature_importance) stayed
                 #   behind on a table designed to be cleared, so the record that
                 #   outlived the run was exactly the part that could not be verified.
-                if new_status == "done":
+                if stage == "ml":
+                    config_path = os.environ.get("MEMSTARA_RUN_CONFIG")
+                    config = json.loads(Path(config_path).read_text()) if config_path else {}
+                    await expand(conn, task_id, config)
+                if new_status == "done" and branch:
+                    await aggregate(conn, branch['source_task_id'])
+                elif new_status == "done":
                     await conn.execute(
                         """
                         INSERT INTO memstara_results
                             (task_id, run_tag, trial, perspective, hypothesis,
                              columns, columns_used, columns_missing,
                              okf_concept_ids, match_trace, question_id,
-                             y_column, auc, feature_importance, interpretation)
+                             y_column, auc, feature_importance, model, interpretation, evaluation, hypothesis_id)
                         SELECT task_id, run_tag, trial, perspective, hypothesis,
                                columns, columns_used, columns_missing,
                                okf_concept_ids, match_trace, question_id,
-                               y_column, auc, feature_importance, interpretation
+                               y_column, auc, feature_importance, model, interpretation, evaluation, hypothesis_id
                         FROM memstara_blackboard WHERE task_id = $1
                         """,
                         task_id,
@@ -460,6 +712,11 @@ async def count_waiting(task_type: str = "", run_tag: str = "") -> str:
     Returns:
         JSON with counts per stage.
     """
+    scope = _pipeline_run()
+    if scope:
+        if run_tag and run_tag != scope:
+            return json.dumps({"error": "This tool is scoped to its pipeline run"})
+        run_tag = scope
     try:
         conn = await asyncpg.connect(_dsn())
         try:
@@ -557,6 +814,11 @@ async def read_board(run_tag: str = "") -> str:
         JSON list of tasks with what each stage left on them, including the ones that
         did not finish and why.
     """
+    scope = _pipeline_run()
+    if scope:
+        if run_tag and run_tag != scope:
+            return json.dumps({"error": "This tool is scoped to its pipeline run"})
+        run_tag = scope
     try:
         conn = await asyncpg.connect(_dsn())
         try:
@@ -572,7 +834,12 @@ async def read_board(run_tag: str = "") -> str:
                        -- of one type. A plain TEXT column, so it needs no unpacking
                        -- below.
                        claimed_by,
-                       auc, feature_importance, interpretation, attempts, error
+                       auc, feature_importance,
+                       -- Which engine produced those importances. '' means it was not
+                       -- recorded, which is a different claim from any engine name and
+                       -- is what every row written before 2026-09-08 says.
+                       model,
+                       interpretation, attempts, error, evaluation
                 FROM memstara_blackboard
                 WHERE ($1 = '' OR run_tag = $1)
                 ORDER BY trial, task_id
@@ -591,7 +858,7 @@ async def read_board(run_tag: str = "") -> str:
         # to the SELECT and forgotten here comes back as a string holding JSON, and the
         # caller has to parse it a second time to notice.
         for k in ("columns", "okf_concept_ids", "match_trace", "columns_used",
-                  "columns_missing", "feature_importance"):
+                  "columns_missing", "feature_importance", "evaluation"):
             d[k] = json.loads(d[k]) if d[k] else ([] if k != "feature_importance" else {})
         tasks.append(d)
     return json.dumps({"count": len(tasks), "tasks": tasks}, ensure_ascii=False, default=str)
@@ -626,7 +893,24 @@ async def read_results(run_tag: str = "", include_match_trace: bool = False) -> 
         offered, chosen and rejected alike) and ``feature_importance`` (which columns
         actually carried the AUC). A later trial can use the last of these to avoid
         columns that contributed nothing.
+
+        ``model`` says which engine produced the importances, and it has to be read
+        before they are compared: impurity/gain from ``random_forest`` and ``xgboost``
+        is not the same quantity as the permutation drop in AUC ``sklearn_hgb``
+        fell back to. Two results with different ``model`` values have importances on
+        different scales. ``''`` means the engine was not recorded — do not guess it.
+
+        **This matters more since 2026-09-08, not less.** ``xgboost`` became the only
+        engine that day, so every new row is on one scale — and the rows this tool
+        returns are not all new. The mixed-scale case is now invisible from the code
+        alone and reachable only through the data, which is precisely when a reader
+        stops checking.
     """
+    scope = _pipeline_run()
+    if scope:
+        if run_tag and run_tag != scope:
+            return json.dumps({"error": "This tool is scoped to its pipeline run"})
+        run_tag = scope
     try:
         conn = await asyncpg.connect(_dsn())
         try:
@@ -635,7 +919,7 @@ async def read_results(run_tag: str = "", include_match_trace: bool = False) -> 
                 SELECT result_id, task_id, run_tag, trial, perspective, hypothesis,
                        columns, columns_used, columns_missing,
                        okf_concept_ids, match_trace, question_id,
-                       y_column, auc, feature_importance, interpretation, created_at
+                       y_column, auc, feature_importance, model, interpretation, created_at, evaluation, hypothesis_id
                 FROM memstara_results
                 WHERE ($1 = '' OR run_tag = $1)
                 ORDER BY trial, result_id
@@ -651,7 +935,7 @@ async def read_results(run_tag: str = "", include_match_trace: bool = False) -> 
     for r in rows:
         d = dict(r)
         for k in ("columns", "columns_used", "columns_missing",
-                  "okf_concept_ids", "match_trace", "feature_importance"):
+                  "okf_concept_ids", "match_trace", "feature_importance", "evaluation"):
             d[k] = json.loads(d[k]) if d[k] else ([] if k != "feature_importance" else {})
         # Summarised rather than dropped: a caller that cannot see the field at all has
         # no way to learn the record is there to ask for.
@@ -667,7 +951,12 @@ async def read_results(run_tag: str = "", include_match_trace: bool = False) -> 
 #: cleverer is attempted, because a near-miss that gets through is a wasted trial while a
 #: false collision silently loses a question nobody can see was lost.
 def _question_key(text: str) -> str:
-    return " ".join(text.lower().split())
+    key = " ".join(text.lower().split())
+    canonical = re.fullmatch(r"do (.+) predict ([^?]+)\?", key)
+    if canonical:
+        concepts = sorted(c.strip() for c in canonical.group(1).split(";"))
+        return "do " + "; ".join(concepts) + " predict " + canonical.group(2) + "?"
+    return key
 
 
 #: How similar two questions may be before the second is treated as a reword of the
@@ -711,6 +1000,35 @@ def _near_duplicate(
 
 
 @mcp.tool()
+async def read_question_catalog(limit: int = 200) -> str:
+    """Duplicate avoidance for primary generation: current-run knowledge text only.
+
+    No performance, importance, prior rationale or historical mixed-policy questions
+    are exposed. Missing policy fails closed rather than reading the legacy bank.
+    """
+    from memstara.evaluation import active_plan
+    plan = active_plan() or {}
+    if plan.get("hypothesis_policy", {}).get("version") not in ("knowledge_only_v1", "iterative_discovery_v1"):
+        return json.dumps({"error": "A new knowledge-only run is required", "questions": []})
+    try:
+        conn = await asyncpg.connect(_dsn())
+        try:
+            rows = await conn.fetch(
+                "SELECT question_id, text, okf_tags FROM memstara_questions "
+                "WHERE origin_run=$1 ORDER BY question_id DESC LIMIT $2",
+                plan["run_tag"], max(1, min(200, int(limit))),
+            )
+        finally:
+            await conn.close()
+        return json.dumps({"questions": [
+            {"question_id": row["question_id"], "text": row["text"],
+             "okf_tags": json.loads(row["okf_tags"]) if isinstance(row["okf_tags"], str) else row["okf_tags"]}
+            for row in rows]}, ensure_ascii=False)
+    except Exception as exc:
+        return _err(exc)
+
+
+@mcp.tool()
 async def read_questions(status: str = "open", limit: int = 200) -> str:
     """What this project has already thought to ask. Read this before proposing more.
 
@@ -745,20 +1063,20 @@ async def read_questions(status: str = "open", limit: int = 200) -> str:
         try:
             rows = await conn.fetch(
                 """
-                SELECT question_id, text, okf_tags, rationale, origin_run, origin_wave,
-                       times_used, best_auc, status, created_at,
+                SELECT question_id, question_contract, text, okf_tags, rationale, origin_run, origin_wave,
+                       times_used, best_auc, status, created_at, writer,
                        -- Shown for the same reason claimed_by is shown on the board: a
                        -- claim nobody can see is a claim nobody trusts, and "who is
                        -- working this" is the question worth asking the moment there are
                        -- two hypothesis workers. Plain TEXT, so no unpacking below.
                        claimed_run, claimed_by
                 FROM memstara_questions
-                WHERE ($1 = '' OR status = $1)
+                WHERE ($1 = '' OR status = $1) AND ($3 = '' OR origin_run = $3)
                 ORDER BY question_id DESC
                 LIMIT $2
                 """,
                 status,
-                max(1, int(limit)),
+                max(1, int(limit)), _pipeline_run(),
             )
         finally:
             await conn.close()
@@ -768,13 +1086,15 @@ async def read_questions(status: str = "open", limit: int = 200) -> str:
     out = []
     for r in rows:
         d = dict(r)
+        if isinstance(d.get("question_contract"), str):
+            d["question_contract"] = json.loads(d["question_contract"])
         d["okf_tags"] = json.loads(d["okf_tags"]) if d["okf_tags"] else []
         out.append(d)
     return json.dumps({"count": len(out), "questions": out}, ensure_ascii=False, default=str)
 
 
 @mcp.tool()
-async def claim_question(run_tag: str = "", worker: str = "", stale_after: int = 600) -> str:
+async def claim_question(run_tag: str = "", worker: str = "", stale_after: int = 600, question_id: int = 0) -> str:
     """Take one open question out of the bank, so no other agent sets out from it.
 
     The hypothesis stage's equivalent of ``claim_task``. The other three stages take work
@@ -800,6 +1120,14 @@ async def claim_question(run_tag: str = "", worker: str = "", stale_after: int =
         nothing open left it returns ``{"question_id": null}``: there is nothing to ask,
         so stop. Do not invent a question, and do not re-use one you were not handed.
     """
+    from memstara.evaluation import active_plan
+    plan = active_plan() or {}
+    primary = plan.get("hypothesis_policy", {}).get("version") in ("knowledge_only_v1", "iterative_discovery_v1")
+    scope = plan.get("run_tag", "") if primary else _pipeline_run()
+    if scope:
+        if run_tag and run_tag != scope:
+            return json.dumps({"error": "This tool is scoped to its pipeline run"})
+        run_tag = scope
     try:
         conn = await asyncpg.connect(_dsn())
         try:
@@ -827,17 +1155,18 @@ async def claim_question(run_tag: str = "", worker: str = "", stale_after: int =
                         claimed_at  = now()
                     WHERE question_id = (
                         SELECT question_id FROM memstara_questions
-                        WHERE status = 'open'
+                        WHERE status = 'open' AND ($4 = 0 OR question_id = $4)
+                          AND ($5 = '' OR origin_run = $5)
                           AND (claimed_at IS NULL
+                               OR ($4 <> 0 AND claimed_run = $1 AND claimed_by = $2)
                                OR claimed_at < now() - make_interval(secs => $3))
                         ORDER BY question_id DESC
                         FOR UPDATE SKIP LOCKED
                         LIMIT 1
                     )
-                    RETURNING question_id, text, okf_tags, rationale,
-                              times_used, best_auc, claimed_run, claimed_by
+                    RETURNING question_id, text, okf_tags, claimed_run, claimed_by, question_contract
                     """,
-                    run_tag, worker, max(0, int(stale_after)),
+                    run_tag, worker, max(0, int(stale_after)), question_id, scope,
                 )
         finally:
             await conn.close()
@@ -851,11 +1180,28 @@ async def claim_question(run_tag: str = "", worker: str = "", stale_after: int =
 
     out: dict[str, Any] = dict(row)
     out["okf_tags"] = json.loads(out["okf_tags"]) if out["okf_tags"] else []
+    from memstara.evaluation import active_plan
+    from memstara.pipeline.question_contract import enabled, validate_saved, hypothesis_text
+    plan = active_plan()
+    if enabled(plan):
+        contract = out.get("question_contract")
+        if isinstance(contract, str):
+            contract = json.loads(contract)
+        try:
+            validate_saved(contract, out["text"], plan)
+        except ValueError as exc:
+            return json.dumps({"error": str(exc), "question_id": None})
+        out["required_hypothesis"] = hypothesis_text(contract)
+        # The mapping turn receives concepts/target, never a stored rationale.
+        out["question_contract"] = {k:v for k,v in contract.items() if k != "rationale"}
+    else:
+        out.pop("question_contract", None)
     return json.dumps(out, ensure_ascii=False, default=str)
 
 
 @mcp.tool()
-async def propose_questions(questions: str, origin_run: str = "", origin_wave: int = 0) -> str:
+async def propose_questions(questions: list[QuestionProposal] | str, origin_run: str = "",
+                            origin_wave: int = 0, writer: str = "") -> str:
     """Add questions to the bank. Duplicates are dropped, not rejected.
 
     Each question needs ``okf_tags``: which branches of the knowledge source it is
@@ -865,11 +1211,14 @@ async def propose_questions(questions: str, origin_run: str = "", origin_wave: i
     tag requirement is where that becomes impossible instead of merely discouraged.
 
     Args:
-        questions: JSON array of ``{"text", "okf_tags", "rationale"}``. ``text`` is the
-            phrase handed to the hypothesis agent verbatim, so write it as an
-            instruction ("from a ... perspective"), not as a sentence about one.
-            ``okf_tags`` must be tags the corpus actually carries — check with
-            ``okf_list_domains`` first.
+        questions: Array of objects (a JSON-encoded array is also accepted).
+            Supply predictor_concepts (concrete phenotype/measurement names),
+            source_ids (exact document IDs from okf_read), okf_tags (array of corpus tags), and rationale.
+            Omit text and target:
+            the server binds both to the fixed run outcome. For follow-up questions,
+            also supply parent_task_ids from the provided feedback and learning_goal
+            explaining what the new experiment tests. Never use graph edge types as
+            predictor concepts. Check available tags with okf_list_domains.
         origin_run: which run proposed these. The driver fills this in.
         origin_wave: which wave within that run.
 
@@ -882,101 +1231,156 @@ async def propose_questions(questions: str, origin_run: str = "", origin_wave: i
         both mean the generator converged on something already known, which is worth
         seeing. ``rejected`` is questions dropped for having no tags, with the reason.
     """
+    scope = _pipeline_run()
+    if scope:
+        if origin_run and origin_run != scope:
+            return json.dumps({"error": "This tool is scoped to its pipeline run"})
+        origin_run = scope
     try:
-        parsed = json.loads(questions or "[]")
+        parsed = json.loads(questions or "[]") if isinstance(questions, str) else questions
     except json.JSONDecodeError as e:
         return json.dumps({"error": f"questions is not valid JSON: {e}"})
     if not isinstance(parsed, list):
         return json.dumps({"error": "questions must be a JSON array"})
 
+    from memstara.evaluation import active_plan
+    from memstara.pipeline.question_contract import enabled, make_contract
+    from memstara.pipeline.question_repair import preflight_mapping, save_feedback
+    plan = active_plan() or {}
+    # Model/candidate work must finish BEFORE opening a database transaction.
+    prepared = []
+    preflight_rejected = []
+    for item in parsed:
+        if isinstance(item, dict) and enabled(plan):
+            try:
+                contract = make_contract({**item, "origin_wave": int(origin_wave)}, plan)
+                failure = await preflight_mapping(contract, plan)
+            except ValueError as exc:
+                failure = {"code": "invalid_question_contract", "why": str(exc)}
+            except Exception as exc:
+                # A cache/service failure is not evidence that a concept is absent.
+                failure = {"code": "mapping_preflight_unavailable", "why": type(exc).__name__,
+                           "action": "Retry when the mapping service is available; do not infer missing data."}
+            if failure:
+                preflight_rejected.append(failure)
+                continue
+        prepared.append(item)
+    parsed = prepared
+    if not parsed and preflight_rejected:
+        response = {"added": [], "duplicates": [], "skipped": [], "rejected": preflight_rejected}
+        save_feedback(plan, origin_wave, writer, response)
+        return json.dumps(response, ensure_ascii=False)
     added: list[dict] = []
     duplicates: list[str] = []
     skipped: list[dict] = []
-    rejected: list[dict] = []
+    rejected: list[dict] = preflight_rejected
     try:
         conn = await asyncpg.connect(_dsn())
         try:
-            # Retired questions are included on purpose. A reword of a question this
-            # project has already worked through and set aside is the same wasted trial
-            # as a reword of an open one.
-            banked: list[tuple[int, str, list[str]]] = [
-                (r["question_id"], r["text"],
-                 json.loads(r["okf_tags"]) if r["okf_tags"] else [])
-                for r in await conn.fetch(
-                    "SELECT question_id, text, okf_tags FROM memstara_questions")
-            ]
-            for item in parsed:
-                if not isinstance(item, dict):
-                    rejected.append({"item": str(item), "why": "not an object"})
-                    continue
-                text = str(item.get("text", "")).strip()
-                tags = [str(t).strip() for t in (item.get("okf_tags") or []) if str(t).strip()]
-                if not text:
-                    rejected.append({"text": text, "why": "empty text"})
-                    continue
-                if not tags:
-                    rejected.append({
-                        "text": text,
-                        "why": "no okf_tags — a question the corpus cannot answer forces "
-                               "the hypothesis stage to invent its citations",
-                    })
-                    continue
-                # The literal check runs first so that "duplicates" keeps meaning what
-                # it always meant — word-for-word repeat — and does not quietly turn
-                # into a subset of the reword check below. The unique index is still the
-                # backstop; this is only what decides which bucket the caller is told.
-                key = _question_key(text)
-                if any(_question_key(t) == key for _, t, _ in banked):
-                    duplicates.append(text)
-                    continue
-                # Checked before the insert, not after: the unique index below is a
-                # string comparison and would let this one through.
-                near = _near_duplicate(text, tags, banked)
-                if near is not None:
-                    near_qid, ratio = near
-                    skipped.append({
-                        "text": text,
-                        "duplicate_of": near_qid,
-                        "similarity": round(ratio, 3),
-                        "why": "same okf_tags and near-identical wording — this is a "
-                               "reword of a banked question, not a new one. Ask about "
-                               "a neighbouring mechanism instead.",
-                    })
-                    continue
-                # ON CONFLICT DO NOTHING returns no row, which is how a duplicate is
-                # told apart from an insert without a second query.
-                qid = await conn.fetchval(
-                    """
-                    INSERT INTO memstara_questions
-                        (text, text_key, okf_tags, rationale, origin_run, origin_wave)
-                    VALUES ($1, $2, $3::jsonb, $4, $5, $6)
-                    ON CONFLICT (text_key) DO NOTHING
-                    RETURNING question_id
-                    """,
-                    text,
-                    _question_key(text),
-                    json.dumps(tags, ensure_ascii=False),
-                    str(item.get("rationale", "")).strip(),
-                    origin_run,
-                    int(origin_wave),
-                )
-                if qid is None:
-                    duplicates.append(text)
-                else:
-                    added.append({"question_id": qid, "text": text, "okf_tags": tags})
-                    # So that two rewords of each other inside one batch cannot both
-                    # land — neither is in the table yet when the other is checked.
-                    banked.append((qid, text, tags))
+            async with conn.transaction(isolation="read_committed"):
+                # Serialise the read/compare/insert decision across every writer and
+                # run. The transaction lock releases on failure or disconnect.
+                # A finite wait must not recreate an unbounded DB queue.
+                await conn.execute("SET LOCAL lock_timeout = '3s'")
+                await conn.execute("SELECT pg_advisory_xact_lock(180947, 53)")
+                # Retired questions are included on purpose. A reword of a question this
+                # project has already worked through and set aside is the same wasted trial
+                # as a reword of an open one.
+                banked: list[tuple[int, str, list[str]]] = [
+                    (r["question_id"], r["text"],
+                     json.loads(r["okf_tags"]) if r["okf_tags"] else [])
+                    for r in await conn.fetch(
+                        "SELECT question_id, text, okf_tags FROM memstara_questions "
+                        "WHERE ($1 = '' OR origin_run = $1)", _pipeline_run())
+                ]
+                for item in parsed:
+                    if not isinstance(item, dict):
+                        rejected.append({"item": str(item), "why": "not an object"})
+                        continue
+                    from memstara.evaluation import active_plan
+                    from memstara.pipeline.question_contract import enabled, make_contract, question_text
+                    plan = active_plan()
+                    contract = {}
+                    if enabled(plan):
+                        try:
+                            contract = make_contract({**item, "origin_wave": int(origin_wave)}, plan)
+                        except ValueError as exc:
+                            rejected.append({"why": str(exc)})
+                            continue
+                    text = question_text(contract) if contract else str(item.get("text", "")).strip()
+                    raw_tags = item.get("okf_tags", [])
+                    if not isinstance(raw_tags, list) or any(not isinstance(t, str) for t in raw_tags):
+                        rejected.append({"text": text, "why": "okf_tags must be an array of strings"})
+                        continue
+                    tags = [t.strip() for t in raw_tags if t.strip()]
+                    if not text:
+                        rejected.append({"text": text, "why": "empty text"})
+                        continue
+                    if not tags:
+                        rejected.append({
+                            "text": text,
+                            "why": "no okf_tags — a question the corpus cannot answer forces "
+                                   "the hypothesis stage to invent its citations",
+                        })
+                        continue
+                    # The literal check runs first so that "duplicates" keeps meaning what
+                    # it always meant — word-for-word repeat — and does not quietly turn
+                    # into a subset of the reword check below. The unique index is still the
+                    # backstop; this is only what decides which bucket the caller is told.
+                    key = _question_key(text)
+                    if any(_question_key(t) == key for _, t, _ in banked):
+                        duplicates.append(text)
+                        continue
+                    # Checked before the insert, not after: the unique index below is a
+                    # string comparison and would let this one through.
+                    near = _near_duplicate(text, tags, banked)
+                    if near is not None and not contract.get("parent_task_ids"):
+                        near_qid, ratio = near
+                        skipped.append({
+                            "text": text,
+                            "duplicate_of": near_qid,
+                            "similarity": round(ratio, 3),
+                            "why": "same okf_tags and near-identical wording — this is a "
+                                   "reword of a banked question, not a new one. Ask about "
+                                   "a neighbouring mechanism instead.",
+                        })
+                        continue
+                    # ON CONFLICT DO NOTHING returns no row, which is how a duplicate is
+                    # told apart from an insert without a second query.
+                    qid = await conn.fetchval(
+                        """
+                        INSERT INTO memstara_questions
+                            (text, text_key, okf_tags, rationale, origin_run, origin_wave, writer, question_contract)
+                        VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8::jsonb)
+                        ON CONFLICT (text_key) DO NOTHING
+                        RETURNING question_id
+                        """,
+                        text,
+                        (f"{scope}::" if scope else "") + _question_key(text),
+                        json.dumps(tags, ensure_ascii=False),
+                        str(item.get("rationale", "")).strip(),
+                        origin_run,
+                        int(origin_wave), writer, json.dumps(contract),
+                    )
+                    if qid is None:
+                        duplicates.append(text)
+                    else:
+                        added.append({"question_id": qid, "text": text, "okf_tags": tags})
+                        # So that two rewords of each other inside one batch cannot both
+                        # land — neither is in the table yet when the other is checked.
+                        banked.append((qid, text, tags))
         finally:
             await conn.close()
     except Exception as e:  # noqa: BLE001
         return _err(e)
 
-    return json.dumps(
-        {"added": added, "duplicates": duplicates,
-         "skipped": skipped, "rejected": rejected},
-        ensure_ascii=False,
-    )
+    response = {"added": added, "duplicates": duplicates,
+                "skipped": skipped, "rejected": rejected}
+    if duplicates or skipped:
+        response["recovery_hint"] = ("Choose a different knowledge-supported predictor combination; "
+                                     "rewording the same question will not resolve a duplicate.")
+    save_feedback(plan, origin_wave, writer, response)
+    return json.dumps(response, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -1007,6 +1411,11 @@ async def record_question_outcomes(run_tag: str, retire_after: int = 3) -> str:
     Returns:
         ``{"ok": true, "questions_updated": N, "questions_retired": M}``.
     """
+    scope = _pipeline_run()
+    if scope:
+        if run_tag and run_tag != scope:
+            return json.dumps({"error": "This tool is scoped to its pipeline run"})
+        run_tag = scope
     try:
         conn = await asyncpg.connect(_dsn())
         try:

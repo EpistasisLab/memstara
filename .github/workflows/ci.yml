@@ -59,8 +59,11 @@ jobs:
       - name: Lint
         run: ruff check src/
 
+      # Motoro is deliberately absent here. Runtime-dependent tests report an
+      # explicit skip; the full suite is also run in the development environment.
+      # -ra keeps skip reasons visible so this is not mistaken for full coverage.
       - name: Test
-        run: pytest -q
+        run: pytest -q -ra
 
       # Last, because it is the only step that reads the whole tree.
       - name: Citations

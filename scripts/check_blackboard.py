@@ -334,7 +334,11 @@ async def main() -> int:
     # any numbers. What is confirmed is whether the status becomes "done" when the last
     # stage finishes.
     c = json.loads(await bb.claim_task("ml", RUN_TAG))
-    await bb.submit_result(c["task_id"], auc=0.71, feature_importance='{"CURRENT_AGE": 0.4}')
+    # `model` is passed here for the same reason the AUC is: it is one of the three things
+    # the ml stage produces, and without it the importance number below is on a scale
+    # nobody can name.
+    await bb.submit_result(c["task_id"], auc=0.71, feature_importance='{"CURRENT_AGE": 0.4}',
+                           model="random_forest")
     c = json.loads(await bb.claim_task("interpret", RUN_TAG))
     r3 = json.loads(await bb.submit_result(c["task_id"], interpretation="supported"))
     results.append(ok(r3.get("status") == "done", "once interpretation finishes it becomes done", str(r3.get("status"))))
@@ -371,6 +375,18 @@ async def main() -> int:
                       f"evidence {len(res.get('okf_concept_ids') or [])} · "
                       f"candidate records {len(res.get('match_trace') or [])} · "
                       f"importances {len(res.get('feature_importance') or {})}"))
+
+    # ---- did the scale of those importances survive the copy -------------
+    #
+    # An importance number without the engine that produced it is not a weaker record, it
+    # is an unreadable one: impurity/gain from random_forest and the permutation drop in
+    # AUC that sklearn_hgb falls back to are different quantities. The 81 results stored
+    # before 2026-09-08 have no engine on them and cannot get one. So this checks the
+    # copy specifically — the column existing on the board is not the same as it arriving
+    # on the table that outlives the run.
+    results.append(ok(res.get("model") == "random_forest",
+                      "the results table records which engine produced the importances",
+                      f"model={res.get('model')!r} (expected 'random_forest')"))
 
     # ---- did the result carry "what was asked" too ---------------------
     #
@@ -799,7 +815,7 @@ async def main() -> int:
     # the bank in between; and a question that has been spent has to stop being handed out.
     #
     # These four get tags of their own — `adherence` and `care-access`. `_near_duplicate`
-    # compares wording only within one tag set (`src/memstara/mcp_servers/blackboard.py:686`),
+    # compares wording only within one tag set (`src/memstara/mcp_servers/blackboard.py:708`),
     # so a branch nothing above uses puts every question in this item out of reach of the
     # reword block. That matters because a blocked proposal here would arrive as an empty
     # `added` list and read exactly like the wave logic failing.
@@ -826,7 +842,7 @@ async def main() -> int:
     # Wave 2's curator grounds two fresh questions and wave 2's workers claim. The
     # property: they get the **new** pair, not the pair wave 1 just gave back. Nothing
     # enforces that except `ORDER BY question_id DESC` in `claim_question`
-    # (`src/memstara/mcp_servers/blackboard.py:833`) — a released row is open and unclaimed
+    # (`src/memstara/mcp_servers/blackboard.py:855`) — a released row is open and unclaimed
     # again, every bit as available as a new one, and the only thing telling the two apart
     # is which is newer. Lose that ordering and a two-wave run spends its second wave
     # re-asking its first, with no error, no empty result and nothing in the trace that
@@ -879,7 +895,7 @@ async def main() -> int:
     await bb.submit_result(c["task_id"], interpretation="supported")
 
     # retire_after=1 rather than the driver's 3
-    # (`src/memstara/mcp_servers/blackboard.py:983`), because one trial is what this item
+    # (`src/memstara/mcp_servers/blackboard.py:1005`), because one trial is what this item
     # runs. What is under test is the mechanism, not the number — (8) is where 3 itself is
     # walked.
     fed3 = json.loads(await bb.record_question_outcomes(RUN_TAG, retire_after=1))

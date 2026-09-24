@@ -1,6 +1,9 @@
+import DetailPreview from "../components/DetailPreview";
 import { createColumnHelper } from "@tanstack/react-table";
 import { AlertTriangle, Coins, Repeat } from "lucide-react";
+import { agentDisplayName } from "../lib/telemetry";
 import DataTable from "../components/DataTable";
+import EmptyState from "../components/EmptyState";
 import { STAGE_COLOR } from "../lib/stage";
 import { useAgentTotals, useHealth, useScene, useViewer } from "../store/viewer";
 import type { AgentTotals, StageId } from "../types";
@@ -15,8 +18,8 @@ const COLUMNS = [
         <span className="h-2.5 w-2.5 rounded-full"
               style={{ backgroundColor: STAGE_COLOR[c.row.original.id as StageId] ?? "#c9c7c1" }} />
         <div>
-          <div className="font-bold">{c.getValue()}</div>
-          <div className="font-mono text-[11px] text-ink-faint">{c.row.original.name}</div>
+          <div className="font-bold">{agentDisplayName(c.getValue())}</div>
+          <details className="mt-1 text-xs text-ink-faint"><DetailPreview title="Agent identifier" text={c.row.original.name}><summary className="cursor-pointer">Full agent identifier</summary></DetailPreview><code className="break-all">{c.row.original.name}</code></details>
         </div>
       </div>
     ),
@@ -24,16 +27,16 @@ const COLUMNS = [
   col.accessor("path", {
     header: "Path",
     cell: (c) => (
-      <span className={`rounded px-1.5 py-0.5 text-[11px] font-bold ${
+      <span className={`rounded px-1.5 py-0.5 text-[12px] font-bold ${
         c.getValue() === "board" ? "bg-emerald-100 text-emerald-800" : "bg-paper text-ink-soft"}`}>
         {c.getValue() === "board" ? "Board" : "Supervisor"}
       </span>
     ),
   }),
-  col.accessor("runs", { header: "Runs", meta: { align: "right" } }),
+  col.accessor("runs", { header: "Agent calls", meta: { align: "right" } }),
   col.accessor("completed", { header: "Completed", meta: { align: "right" } }),
   col.accessor("avg_iterations", {
-    header: "Avg iterations", meta: { align: "right" },
+    header: "Avg reasoning steps", meta: { align: "right" },
     cell: (c) => c.getValue() ?? "—",
   }),
   col.accessor((r) => r.tokens.prompt + r.tokens.completion, {
@@ -58,25 +61,26 @@ export default function AgentsTab() {
     return (
       <div className="m-6 rounded-lg border border-amber-300 bg-amber-50 p-6">
         <div className="flex items-center gap-2 font-bold text-amber-900">
-          <AlertTriangle className="h-5 w-5" /> Cannot reach the core database
+          <AlertTriangle className="h-5 w-5" /> Agent history is temporarily unavailable
         </div>
         <p className="mt-2 text-sm text-amber-900/80">
-          Agent run history lives in core. The Board and Results tabs still work.
+          The agent history query could not be completed. The Board and Results tabs are available separately.
         </p>
         <p className="mt-2 font-mono text-xs text-amber-900/60">{health.core.error}</p>
       </div>
     );
-  if (!totals) return <div className="p-8 text-ink-faint">Loading…</div>;
+  if (!totals) return <EmptyState what="the agent totals" />;
 
   const cost = totals.reduce((n, a) => n + a.cost, 0);
   const runs = totals.reduce((n, a) => n + a.runs, 0);
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="grid grid-cols-3 gap-4">
+    <div className="space-y-4 p-4">
+      <details className="text-sm text-ink-soft"><summary className="cursor-pointer">How to read these numbers</summary><p className="mt-2">Agent calls are individual agent invocations. Reasoning steps are internal to a call; neither counts complete pipeline loops. Usage and estimated cost cover only the selected scope identified above. The workspace header combines multiple pipelines.</p></details>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { icon: Repeat, label: "Runs", value: runs.toLocaleString() },
-          { icon: Coins, label: "Total cost", value: `$${cost.toFixed(2)}` },
+          { icon: Repeat, label: "Agent calls", value: runs.toLocaleString() },
+          { icon: Coins, label: "Recorded cost", value: `$${cost.toFixed(2)}` },
           { icon: Repeat, label: "Agents", value: `${totals.length}` },
         ].map((s) => (
           <div key={s.label} className="rounded-lg border border-paper-line bg-white p-4">
@@ -96,21 +100,26 @@ export default function AgentsTab() {
       />
 
       <section>
-        <h2 className="mb-1 text-sm font-bold">The windows each stage is handed</h2>
+        <h2 className="mb-1 text-sm font-bold">Tools available to each stage</h2>
         <p className="mb-3 text-xs text-ink-soft">
           Tools are handed over <span className="font-bold">at run time</span>, not in the agent
           definition (<span className="font-mono">available_tools</span>).
         </p>
-        <div className="grid grid-cols-5 gap-3">
-          {scene?.agents.map((a) => (
+        {/* One card per **stage**, not per worker. The scene has one entry per worker
+            since 2026-09-08, so `--data-agents 3` would otherwise put three identical
+            cards here and break the five-column grid — and identically, because the
+            window list is a property of the stage and every worker of a stage is handed
+            the same one. `slot === 0` is the first figure of each stage. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+          {scene?.agents.filter((a) => a.slot === 0).map((a) => (
             <div key={a.id} className="rounded-lg border border-paper-line bg-white p-3">
               <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STAGE_COLOR[a.id] }} />
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STAGE_COLOR[a.stage] }} />
                 <span className="text-sm font-bold">{a.label}</span>
               </div>
               <ul className="mt-2 space-y-1">
                 {a.windows.map((w) => (
-                  <li key={w} className="font-mono text-[10px] text-ink-soft">{w}</li>
+                  <li key={w} className="font-mono text-[12px] text-ink-soft">{w}</li>
                 ))}
               </ul>
             </div>

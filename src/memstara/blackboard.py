@@ -3,7 +3,7 @@
 
 The 2026-08-12 alignment settled that this is a **table**, living in **Memstara's own
 database** — its own Postgres server, its own volume, its own account. See
-``docker-compose.yml`` next to this file; nothing here touches core's database.
+``compose.yml`` next to this file; nothing here touches core's database.
 
 That independence is the point, and it is worth being blunt about why. These tables
 first lived inside core's `motoro` database, separated only by an `memstara_` name
@@ -60,7 +60,7 @@ Usage::
 
  The main names
  --------------
- STATUSES / TASK_TYPES  the four states a task can be in and the four stages.
+ STATUSES / TASK_TYPES  the four task states and three queued processing stages.
  SCHEMA                 the full definition (SQL) of the tables. Written to be safe
                         to run more than once.
  dsn()                  the address of Memstara's own database. Not core's.
@@ -99,13 +99,10 @@ import asyncpg        # the async PostgreSQL driver
 
 # Every state a task can be in.
 #
-# `failed` and the `attempts` column below are present but **not yet used by any
-# policy**. What happens to a task whose agent claimed it and then died is still open
-# (see the 2026-08-17 blackboard design document, §2 "the five to decide") — it might be
-# returned to `ready` for another attempt, or closed as `failed`. Carrying both now
-# means whichever way that
-# lands, the table does not have to be rebuilt. **This is not a decision; it is leaving
-# both doors open.**
+# Claims increment `attempts`; the pipeline retries recoverable stage failures.
+# `--max-attempts` (default 5) bounds retries and closes exhausted tasks as failed.
+# `--max-attempts 0` permits unlimited retries. Claim count also includes successful
+# stage transitions, so it is not itself a count of failures.
 #
 #   ready        nobody has taken it yet — anyone may
 #   in_progress  somebody took it and is working on it now
@@ -113,10 +110,9 @@ import asyncpg        # the async PostgreSQL driver
 #   failed       closed as a failure
 STATUSES = ("ready", "in_progress", "done", "failed")
 
-# The four stages: form a hypothesis -> cut the data -> train -> interpret. A task
-# carries the stage that should pick it up next, which is how an agent answers "is this
-# mine?" without anyone telling it — it decides from the board alone.
-TASK_TYPES = ("hypothesis", "data", "ml", "interpret")
+# Hypothesis generation creates a data task; it is not a queued task state.
+# Only the three consumers below claim and advance blackboard tasks.
+TASK_TYPES = ("data", "ml", "interpret")
 
 # What follows is an f-string. The tuples settled above go straight into the {STATUSES}
 # and {TASK_TYPES} slots and become SQL IN lists. Writing the state names out separately
@@ -185,6 +181,33 @@ CREATE TABLE IF NOT EXISTS memstara_blackboard (
     -- here, they arrive in the real SQL singled, as an empty JSON object.
     auc                DOUBLE PRECISION,
     feature_importance JSONB       NOT NULL DEFAULT '{{}}'::jsonb,
+
+    -- Which engine produced the two numbers above. It is not decoration: the engine
+    -- decides what feature_importance *is*. `random_forest` and `xgboost` carry
+    -- `feature_importances_`, so the numbers are impurity/gain — non-negative and
+    -- summing to about 1. `sklearn_hgb` does not, so `_importance` fell back to
+    -- permutation importance and the numbers are a drop in AUC — a different unit, on a
+    -- different scale, and legitimately negative. Measured on the same four
+    -- sub-datasets: random_forest sums to exactly 1.0000, sklearn_hgb to 0.0819 and
+    -- 0.2572 with a minimum of -0.0131.
+    --
+    -- **All three names are still described here although only `xgboost` can be written
+    -- now.** The other two were removed from the tool server on 2026-09-08, and rows
+    -- carrying them did not go anywhere. A schema comment documents what is *in* the
+    -- column, not what the current code can put there, and a reader holding a row that
+    -- says `sklearn_hgb` needs to learn from this comment that its numbers are AUC
+    -- drops. Trimming the list to match today's tool would delete exactly the
+    -- explanation that only old rows need.
+    --
+    -- So a row without this column records a quantity whose meaning cannot be recovered,
+    -- and every comparison across rows is unsound. The tool has always returned the
+    -- engine (`mcp_servers/ml.py (at commit 0990ec5, lines 335)`); until 2026-09-08 nothing stored it, and the 81
+    -- results already in the table are on an unrecorded scale for good — the engine was
+    -- an environment variable read inside the call and written down nowhere else.
+    --
+    -- '' means "not recorded", which is what those older rows say, and it is a different
+    -- claim from any engine name. Do not backfill it by guessing.
+    model              TEXT        NOT NULL DEFAULT '',
 
     -- Filled by the interpretation stage: the numbers put into human words.
     interpretation     TEXT        NOT NULL DEFAULT '',
@@ -276,6 +299,14 @@ CREATE TABLE IF NOT EXISTS memstara_results (
     -- on the board, a hypothesis agent reading finished results could see that a trial
     -- scored 0.72 but not which of its columns contributed nothing.
     feature_importance JSONB   NOT NULL DEFAULT '{{}}'::jsonb,
+
+    -- And which engine produced them, copied over with them. This is the column the
+    -- whole of feature_importance depends on to mean anything — see the long note on
+    -- memstara_blackboard.model above. It matters more here than on the board, because
+    -- this is the table that outlives the run: an importance map whose scale is
+    -- unrecorded is not a weaker record, it is an uninterpretable one, and this is where
+    -- it is kept forever.
+    model          TEXT        NOT NULL DEFAULT '',
 
     interpretation TEXT        NOT NULL DEFAULT '',
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -370,6 +401,13 @@ ALTER TABLE memstara_results    ADD COLUMN IF NOT EXISTS feature_importance JSON
 ALTER TABLE memstara_results    ADD COLUMN IF NOT EXISTS columns JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE memstara_results    ADD COLUMN IF NOT EXISTS columns_missing JSONB NOT NULL DEFAULT '[]'::jsonb;
 
+-- Which engine produced the importances, added the same way. Every database this code
+-- has run against already has both tables, so without these two lines the column exists
+-- only on a database nobody has. The existing rows take the '' default, and that is the
+-- honest value for them: the engine was never written down while they were produced.
+ALTER TABLE memstara_blackboard ADD COLUMN IF NOT EXISTS model TEXT NOT NULL DEFAULT '';
+ALTER TABLE memstara_results    ADD COLUMN IF NOT EXISTS model TEXT NOT NULL DEFAULT '';
+
 -- Which bank question seeded this row. A plain INTEGER and deliberately not a foreign
 -- key: memstara_questions outlives the board and the results table, and a foreign key
 -- would point from the short-lived tables at the long-lived one, so dropping the bank
@@ -388,6 +426,13 @@ ALTER TABLE memstara_blackboard ADD COLUMN IF NOT EXISTS claimed_by TEXT NOT NUL
 -- The question bank's own claim, added the same way. The bank is the oldest table here
 -- and the one most certain to already exist, so of every ALTER in this block these are
 -- the three least safe to leave out.
+ALTER TABLE memstara_questions ADD COLUMN IF NOT EXISTS question_contract JSONB NOT NULL DEFAULT '{{}}'::jsonb;
+ALTER TABLE memstara_questions ADD COLUMN IF NOT EXISTS writer TEXT NOT NULL DEFAULT '';
+ALTER TABLE memstara_blackboard ADD COLUMN IF NOT EXISTS evaluation JSONB NOT NULL DEFAULT '{{}}';
+ALTER TABLE memstara_results ADD COLUMN IF NOT EXISTS evaluation JSONB NOT NULL DEFAULT '{{}}';
+ALTER TABLE memstara_blackboard ADD COLUMN IF NOT EXISTS hypothesis_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE memstara_results ADD COLUMN IF NOT EXISTS hypothesis_id TEXT NOT NULL DEFAULT '';
+
 ALTER TABLE memstara_questions ADD COLUMN IF NOT EXISTS claimed_run TEXT NOT NULL DEFAULT '';
 ALTER TABLE memstara_questions ADD COLUMN IF NOT EXISTS claimed_by  TEXT NOT NULL DEFAULT '';
 ALTER TABLE memstara_questions ADD COLUMN IF NOT EXISTS claimed_at  TIMESTAMPTZ;
@@ -409,7 +454,7 @@ TABLES = ("memstara_blackboard", "memstara_results")
 
 
 #: The address used when nothing has been configured. It points at the container the
-#: docker-compose.yml beside this file brings up. Port 5463 was chosen so as not to
+#: compose.yml beside this file brings up. Port 5463 was chosen so as not to
 #: collide with core's Postgres (5432 and the like).
 MEMSTARA_DATABASE_URL_DEFAULT = "postgresql://memstara:memstara@localhost:5463/memstara"
 
@@ -421,7 +466,7 @@ def dsn() -> str:
     board ended up inside core's database in the first place: the address was there, it
     worked, and nothing ever forced the question of whose store this is.
 
-    The default points at the container in ``docker-compose.yml``, so a fresh checkout
+    The default points at the container in ``compose.yml``, so a fresh checkout
     runs after ``docker compose up -d`` with nothing else set. Override with
     ``MEMSTARA_DATABASE_URL`` to point somewhere else.
 
@@ -440,7 +485,7 @@ class BoardBusy(RuntimeError):
 
 
 @contextlib.asynccontextmanager
-async def run_lock(run_tag: str) -> AsyncIterator[None]:
+async def run_lock(run_tag: str, *, on_lost=None) -> AsyncIterator[None]:
     """Hold an exclusive claim on *run_tag* for as long as this block runs.
 
     Only one driver may work a given run_tag at a time. The board itself is safe
@@ -453,7 +498,7 @@ async def run_lock(run_tag: str) -> AsyncIterator[None]:
 
     This happened, on 2026-08-17: a run believed dead was still alive, and a second
     was started 39 seconds later against the same tag. Nothing broke — the row-level
-    locking held — but four interpretation agents and two reporting agents ran, and
+    locking held — but four interpretation agents and two explanation agents ran, and
     the numbers were unusable.
 
     A Postgres advisory lock rather than a pid file, because it is tied to the
@@ -471,32 +516,69 @@ async def run_lock(run_tag: str) -> AsyncIterator[None]:
     # A connection dedicated to this lock. The lock is tied to the connection, so the
     # moment the block ends — or the process dies and the connection closes — the lock
     # is released with it.
-    conn = await asyncpg.connect(dsn())
+    from memstara.pipeline.run_ownership import (
+        RunLease, RunOwnershipLost, RunLockCleanupError, _current,
+    )
+    conn = await asyncpg.connect(dsn(), timeout=5, command_timeout=3)
+    lease = None
+    token = None
+    body_error = None
+    cleanup_error = None
+    acquired = False
     try:
-        # The try_ form, so it does not wait. If somebody already holds it, false at once.
         if not await conn.fetchval("SELECT pg_try_advisory_lock($1)", key):
-            raise BoardBusy(
-                f"run_tag '{run_tag}' is already being worked by another process.\n"
-                "  Two drivers on one tag reclaim each other's tasks — see run_lock().\n"
-                "  Use a different --run-tag, or wait for the other run to finish."
-            )
+            raise BoardBusy(f"run_tag '{run_tag}' is already being worked by another process.")
+        acquired = True
+        lease = RunLease(conn, on_lost=on_lost)
+        token = _current.set(lease)
+        lease.start()
         try:
-            # This is where the work inside the `with` block happens. The lock is held
-            # throughout.
+            lease.check()
             yield
-        finally:
-            # Whatever happens inside, the lock is released.
-            await conn.execute("SELECT pg_advisory_unlock($1)", key)
+            lease.check()
+        except asyncio.CancelledError:
+            if lease.lost:
+                raise RunOwnershipLost(
+                    "Database execution ownership was lost; saved work requires safe recovery."
+                ) from None
+            raise
+    except BaseException as exc:
+        body_error = exc
+        raise
     finally:
-        # The connection is always closed too. Even if it were not, losing the
-        # connection releases the lock anyway.
-        await conn.close()
+        if lease:
+            await lease.stop()
+        if token is not None:
+            _current.reset(token)
+        # Closing the owning session already releases its advisory lock. Never
+        # reconnect just to unlock: a new session cannot release the old lock.
+        try:
+            if acquired and not conn.is_closed():
+                await conn.execute("SELECT pg_advisory_unlock($1)", key, timeout=3)
+        except Exception as exc:
+            cleanup_error = exc
+        finally:
+            try:
+                await conn.close(timeout=3)
+            except Exception as exc:
+                conn.terminate()
+                cleanup_error = cleanup_error or exc
+        # Do not replace the original analysis/cancellation failure during cleanup.
+        if cleanup_error and body_error is None:
+            raise RunLockCleanupError(
+                "Execution ended, but database lock cleanup could not be verified."
+            ) from cleanup_error
 
 
 async def create() -> None:
     """Create the tables. Nothing happens if they already exist (safe to run repeatedly)."""
     conn = await asyncpg.connect(dsn())
     try:
+        # Schema maintenance must never queue behind a reader for an unbounded time.
+        # ALTER TABLE needs AccessExclusiveLock; without this bound one startup can sit
+        # in PostgreSQL's FIFO lock queue and block every viewer SELECT behind it.
+        await conn.execute("SET lock_timeout = '3s'")
+        await conn.execute("SET statement_timeout = '10s'")
         await conn.execute(SCHEMA)   # run the whole SCHEMA above
     finally:
         await conn.close()
@@ -652,7 +734,7 @@ async def release_questions(run_tag: str) -> int:
 
     The counterpart to `claim_question` in `src/memstara/mcp_servers/blackboard.py`, and the
     reason a question claim is safe to make at all. `memstara_questions` has no run_tag
-    (`src/memstara/blackboard.py:292-295`) — the bank spans runs so the project can answer
+    (`src/memstara/blackboard.py:319-322`) — the bank spans runs so the project can answer
     "what have we already asked". A claim left behind would therefore not expire with the
     run that made it; it would take that question out of circulation for every run after,
     and the bank would look exhausted while being full.

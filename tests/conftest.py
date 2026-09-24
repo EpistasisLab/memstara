@@ -18,6 +18,34 @@ import numpy as np
 import pytest
 
 # ---------------------------------------------------------------------------
+# This import is load-bearing and its position is the whole point.
+#
+# xgboost and torch each ship their own copy of the OpenMP runtime, and on macOS
+# whichever one loads first is the one both then use. torch's copy cannot run an
+# xgboost fit: the process aborts inside `XGBClassifier.fit` with
+#
+#     OMP: Error #179: Function pthread_mutex_init failed
+#     OMP: System error #22: Invalid argument
+#
+# which pytest reports as `Fatal Python error: Segmentation fault` and no test
+# name, because the process is gone before the report is written. xgboost's copy
+# runs both, so the fix is only to get there first.
+#
+# It could not be fixed inside `tests/test_ml_engines.py`. torch arrives during
+# `tests/test_matcher.py`, which exercises the offline-flag path that imports it
+# for its side effect (`src/memstara/matcher/embedder.py:154`) — and `matcher`
+# sorts before `ml_engines`. A conftest is imported before any test module, which
+# is what makes this the only position that works.
+#
+# **This is a test-suite problem and not a pipeline one.** Tool servers are child
+
+# pandas, scikit-learn and xgboost and nothing that reaches torch — verified by
+# importing it and finding `torch` absent from `sys.modules`. Only the test suite
+# puts the two in one process.
+# ---------------------------------------------------------------------------
+import xgboost  # noqa: F401  — imported first for its OpenMP runtime; see above
+
+# ---------------------------------------------------------------------------
 # The deterministic encoder.
 # ---------------------------------------------------------------------------
 _TOKEN = re.compile(r"[a-z0-9]+")

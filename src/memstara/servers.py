@@ -5,14 +5,15 @@ Why this file exists
 .. repair-citations: off
 
 The same five servers were spelled out in five places. **Those are the
-pre-restructure paths** — the record of what this file replaced, readable at
-`2ff414d`, the commit before the move. Nothing sits at them now::
+pre-restructure paths** — the record of what this file replaced, previously attributed to
+`2ff414d`, which is no longer available in this checkout. These are historical names
+and line numbers, not resolvable current-file citations. Nothing sits at them now::
 
-    02_mvp_pipeline.py:313-319    the launch table for the supervised pipeline
-    03_board_pipeline.py:438-447  the launch table for the board pipeline
-    preflight.py:213             the names it starts to prove they start
-    debug_harness.py:85-134      the modules it pulls into one process
-    bootstrap.py:139             the sources it scrapes for env-var reads
+    02_mvp_pipeline.py (former lines 313-319)    the launch table for the supervised pipeline
+    03_board_pipeline.py (former lines 438-447)  the launch table for the board pipeline
+    preflight.py (former lines 213)             the names it starts to prove they start
+    debug_harness.py (former lines 85-134)      the modules it pulls into one process
+    bootstrap.py (former lines 139)             the sources it scrapes for env-var reads
 
 .. repair-citations: on
 

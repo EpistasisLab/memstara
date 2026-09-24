@@ -110,11 +110,19 @@ from __future__ import annotations
 import dataclasses  # used to make _Doc a fixed box that only carries values
 import json         # every tool returns a JSON string
 import math         # the word weight (idf) uses a logarithm
+import os           # one variable is read: the branch a run is confined to
 import pathlib      # file paths. Used in place of os.path
 import re           # used for splitting words and for frontmatter patterns
 from typing import Any
 
 import yaml         # the frontmatter is YAML
+
+# The `fields=` predicate lives in its own module so it can be tested. This file cannot
+# be imported on a CI runner — `yaml` above and `motoro` below are both absent there —
+# and `frontmatter.py` imports the standard library and nothing else. Placed here, with
+# the imports, rather than beside the two `noqa: E402` imports further down: it has no
+# ordering requirement, so it should not sit among the ones that do.
+from memstara.mcp_servers.frontmatter import matches, merge_locked, parse_field_filter, values_for
 
 #: The name of the tag PyYAML attaches when it decides "this is a date". Below,
 #: only the rules that attach this tag are picked out and removed.
@@ -605,7 +613,10 @@ def okf_list_domains() -> str:
     try:
         root = _bundle_root()          # the bundle location the env var points at
         docs, skipped = _load(root)
-    except OKFError as e:
+        locked = _locked_filter()
+        if locked:
+            docs = [doc for doc in docs if matches(doc.fields, locked)]
+    except (OKFError, ValueError) as e:
         # The bundle is not configured, and the like. Reported as JSON rather than
         # dying on an exception.
         return json.dumps({"error": str(e)})
@@ -635,8 +646,51 @@ def okf_list_domains() -> str:
     return json.dumps(out)
 
 
+# --------------------------------------------------------------------------- #
+#  The branch a run is confined to
+# --------------------------------------------------------------------------- #
+
+#: Set by the driver (`src/memstara/pipeline/board.py`, `--skill`) and read here, in the
+#: server, once per call. **The enforcement is here on purpose.** A skill written into a
+#: prompt is an instruction, and an instruction is followed until the one call where it
+#: is not — at which point the run reads the whole corpus and looks exactly like a run
+#: that did as it was told. An agent cannot set this variable and cannot see it.
+#:
+#: It must also be on `mcp_allowed_env_vars` (`src/memstara/config.py:106`), or core
+#: never forwards it to this child and the lock silently does not exist. That is how
+#: `MEMSTARA_DEBUGPY` failed once already (`src/memstara/env.py:116-118`).
+#:
+#: Listing, search and read describe the same confined corpus. Domain counts
+#: include only accessible documents; empty domains disappear under a lock.
+_LOCK_VAR = "MEMSTARA_OKF_FIELDS"
+
+
+def _locked_filter() -> dict[str, str]:
+    """The branch this run may see, as a field filter. Empty when nothing is set.
+
+    Raises:
+        OKFError: the variable holds something that is not a filter expression. It is
+            refused rather than ignored — an unreadable lock that fell back to "no lock"
+            would open the whole bundle at the exact moment someone meant to close it.
+    """
+    raw = os.environ.get(_LOCK_VAR, "").strip()
+    if not raw:
+        return {}
+    try:
+        return parse_field_filter(raw)
+    except ValueError as e:
+        raise OKFError(f"{_LOCK_VAR}={raw!r} is not a filter: {e}") from e
+
+
+def _render(wanted: dict[str, str]) -> str:
+    """A filter mapping written back as the expression it was read from."""
+    return ",".join(f"{key}={value}" for key, value in wanted.items())
+
+
 @mcp.tool()
-def okf_search(queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = "") -> str:
+def okf_search(
+    queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = "", fields: str = ""
+) -> str:
     """Search the bundle by what its authors said each document is about.
 
     Titles, tags, descriptions and journals are searched. **Bodies are not.** A hit
@@ -654,6 +708,17 @@ def okf_search(queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = 
         k: results per query. Default 8, raised to at most 20.
         domain: restrict to one domain slug; "" = all. See okf_list_domains.
         tags: comma-separated; keep only documents carrying ANY of these tags.
+        fields: front matter equalities, `key=value` separated by commas — e.g.
+            "terminus_kind=sud" or "mechanism_family=treatment-toxicity,terminus_kind=sud".
+            **ALL of them must hold**, which is what names one branch of the bundle.
+            Use this and not `tags` to ask for a branch: this bundle's `terminus_kind`
+            field says `psychiatric` on 212 documents and only 81 of them carry the
+            matching tag, so the same question asked through `tags` quietly shows a
+            third of the answer. Which keys exist is a property of the bundle, not of
+            this tool; okf_list_domains and okf_read show what a document carries.
+            A run may be confined to one branch from outside, in which case this
+            argument may narrow further within it and an attempt to leave it is
+            answered with an error naming the branch.
 
     Returns:
         JSON with one entry per query: its hits as catalogue rows (id, title, domain,
@@ -678,7 +743,7 @@ def okf_search(queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = 
         # that this is not all of it.
         notes.append(f"k={k} was clamped to the ceiling {_MAX_K}.")
 
-    # Narrowing what gets searched — by domain, and by tags.
+    # Narrowing what gets searched — by domain, by tags, and by front matter field.
     pool = docs
     if domain:
         pool = [d for d in pool if d.domain == domain]
@@ -691,6 +756,40 @@ def okf_search(queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = 
     if keep_tags:
         # Kept when the intersection is not empty = ANY one tag in common passes (not AND).
         pool = [d for d in pool if keep_tags & {t.lower() for t in _tag_list(d.fields.get("tags"))}]
+
+    try:
+        locked = _locked_filter()
+        # The lock first, so a caller cannot overrule it by passing the same key.
+        wanted_fields = merge_locked(locked, parse_field_filter(fields))
+    except (OKFError, ValueError) as e:
+        # A malformed filter is not an empty one. Narrowing to nothing and reporting
+        # zero hits would look exactly like a question the bundle cannot answer.
+        return json.dumps({"error": str(e)})
+
+    if wanted_fields:
+        pool = [d for d in pool if matches(d.fields, wanted_fields)]
+        if locked:
+            # Said out loud for the same reason the clamped `k` is: a caller that is not
+            # told how much was withheld will read a small result as a small literature.
+            notes.append(
+                f"confined to {_render(locked)} for this run — "
+                f"{len(pool)} of the bundle's {len(docs)} documents."
+            )
+        if not pool:
+            # Same distinction the `no domain` branch above draws, for the same reason:
+            # "nothing matched your words" and "no document is filed that way" call for
+            # different next moves, and an agent told only "0" cannot tell which it got.
+            # The values are taken from `docs` — the whole bundle — so a key really is
+            # reported as absent only when the bundle never uses it.
+            return json.dumps(
+                {
+                    "error": f"no document matches {_render(wanted_fields)!r}",
+                    "values": {
+                        key: values_for((d.fields for d in docs), key)
+                        for key in wanted_fields
+                    },
+                }
+            )
 
     idf = _idf(docs)  # weights come from the whole bundle, not the filtered slice
                       # Taken from the filtered slice instead, the same word would be
@@ -722,20 +821,19 @@ def okf_search(queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = 
         )
 
     # searched = how many documents were actually swept this time (the count after
-    # narrowing by domain and tags).
+    # narrowing by domain, tags and fields).
     out: dict[str, Any] = {"results": results, "searched": len(pool)}
     if notes:
         out["notes"] = notes
     return json.dumps(out)
 
 
-@mcp.tool()
-def okf_read(refs: str, section: str = "", max_chars: int = 0) -> str:
+def _read_documents(refs: str, section: str = "", max_chars: int = 0) -> str:
     """Open one or several documents — whole, or one section of each.
 
-    Every document in a Loremaster bundle is written in the same sections. Ask for the
-    one you need instead of the whole paper: `section="Bottom line"` is usually what a
-    hypothesis is built from, and a full body here runs to several thousand characters.
+    Documents have different structures. section="auto" reads Instances for KG
+    metapaths or Bottom line for literature, falling back to the full body. Returned
+    section headings can be used verbatim for follow-up evidence reads.
 
     Args:
         refs: comma-separated. A document answers to its id, its PMID, its filename and
@@ -745,6 +843,10 @@ def okf_read(refs: str, section: str = "", max_chars: int = 0) -> str:
             call rather than a search.
         max_chars: truncate the returned text; 0 = no limit. Truncation is reported.
 
+    A run confined to one branch reads only that branch here too. Confining the search
+    and not the read would leave the whole bundle open to anything holding an id — an id
+    from an earlier run, from a report, or simply guessed.
+
     Returns:
         JSON with one entry per ref: its frontmatter fields, the text asked for, the
         available section headings, and export_safe as the STRING the bundle wrote.
@@ -752,6 +854,7 @@ def okf_read(refs: str, section: str = "", max_chars: int = 0) -> str:
     try:
         root = _bundle_root()
         docs, _ = _load(root)
+        locked = _locked_filter()
     except OKFError as e:
         return json.dumps({"error": str(e)})
 
@@ -776,12 +879,28 @@ def okf_read(refs: str, section: str = "", max_chars: int = 0) -> str:
             )
             continue
         doc = found[0]
+        if locked and not matches(doc.fields, locked):
+            # Refused by name rather than reported as missing: "that document is not in
+            # your branch" is a fact the caller can act on, while "no such document"
+            # would be a lie about a bundle it can see the rest of.
+            out.append(
+                {
+                    "ref": ref,
+                    "id": doc.address,
+                    "error": f"outside {_render(locked)}, which this run is confined to",
+                }
+            )
+            continue
         sections = _sections(doc.body)
         headings = [name for name, _ in sections]   # the section names this document has
 
-        if section:
+        selected_section = section
+        if section == "auto":
+            selected_section = next((h for h in headings if h.casefold() == "instances"), "")
+            selected_section = selected_section or next((h for h in headings if h.casefold() == "bottom line"), "")
+        if selected_section:
             # Look for an exactly equal section heading. None if there is none.
-            text = next((body for name, body in sections if name == section), None)
+            text = next((body for name, body in sections if name == selected_section), None)
             if text is None:
                 out.append(
                     {
@@ -802,7 +921,7 @@ def okf_read(refs: str, section: str = "", max_chars: int = 0) -> str:
         entry = {
             **doc.summary,           # the catalogue row (title, tags, journal, PMID ...) laid on as is
             "ref": ref,              # exactly the name the caller used — easy to pair an answer to its request
-            "section": section or None,
+            "section": selected_section or None,
             "text": text,
             "sections": headings,
             # As a STRING, on purpose. The bundle writes `export_safe: "false"` quoted,
@@ -820,6 +939,47 @@ def okf_read(refs: str, section: str = "", max_chars: int = 0) -> str:
     # default=str is the last safety net. Even with a value in the frontmatter that
     # JSON does not know, this turns it into text rather than blowing up wholesale.
     return json.dumps({"documents": out}, default=str)
+
+
+@mcp.tool()
+def okf_read(refs: str, section: str = "", max_chars: int = 0) -> str:
+    """Read OKF documents and persist failed references in this run's source audit.
+
+    refs: comma-separated document IDs or paths returned by search.
+    section: exact heading, empty for full text, or "auto" for KG Instances /
+        literature Bottom line (full text if neither exists). The response lists
+        actual headings; copy them exactly for subsequent evidence reads.
+    max_chars: 0 means no truncation. Truncation is explicitly marked.
+    A configured run records reference/status metadata only, never document bodies
+    or patient data. Relation labels describe graph edges, not clinical predictors.
+    """
+    result = _read_documents(refs, section, max_chars)
+    config = os.environ.get("MEMSTARA_RUN_CONFIG", "")
+    if not config:
+        return result
+    payload = json.loads(result)
+    records = payload.get("documents", [payload])
+    audit = {
+        "tool": "okf_read", "refs": refs, "section": section,
+        "results": [{"ref": row.get("ref", refs), "id": row.get("id"),
+                     "status": "failed" if "error" in row else "read",
+                     "error": row.get("error")} for row in records],
+    }
+    try:
+        # One append syscall per event avoids interleaving between MCP processes.
+        # No retry loop: an audit failure is visible in the tool response.
+        path = pathlib.Path(config).resolve().parent / "knowledge_reads.jsonl"
+        event = (json.dumps(audit, ensure_ascii=True) + "\n").encode()
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            if os.write(fd, event) != len(event):
+                raise OSError("incomplete audit write")
+        finally:
+            os.close(fd)
+    except OSError:
+        payload["audit_error"] = "Knowledge read audit could not be saved; source verification is incomplete."
+        return json.dumps(payload)
+    return result
 
 
 if __name__ == "__main__":

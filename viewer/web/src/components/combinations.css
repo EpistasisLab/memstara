@@ -1,0 +1,81 @@
+.combination-dialog { width:min(1080px,calc(100vw - 32px)); }
+.comb-builder { color:rgb(var(--ink)); font-size:14px; line-height:1.55; }
+.comb-builder h3 { font-size:20px; font-weight:650; letter-spacing:-.025em; margin:0; }
+.comb-builder p { color:rgb(var(--ink-soft)); margin:6px 0 16px; }
+.comb-intro { display:flex; align-items:center; gap:16px; padding:14px 0 20px; }
+.comb-intro p { margin:5px 0 0; }
+.comb-symbol { display:flex; align-items:center; justify-content:center; width:44px; height:44px; flex-shrink:0; border:1px solid rgb(var(--line)); border-radius:14px; background:rgb(var(--panel)); color:rgb(var(--accent)); }
+.comb-steps { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; padding-bottom:16px; }
+.comb-steps button { display:flex; align-items:center; gap:9px; border-radius:10px; padding:12px; font-weight:600; text-align:left; color:rgb(var(--ink-soft)); border:1px solid transparent; }
+.comb-steps button[aria-current] { background:rgb(var(--panel)); border-color:rgb(var(--line)); color:rgb(var(--ink)); }
+.comb-steps button>span { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:1px solid rgb(var(--line)); flex-shrink:0; font-size:12px; }
+.comb-budget { display:flex; align-items:center; justify-content:space-around; gap:12px; padding:20px; border:1px solid rgb(var(--line)); border-radius:14px; background:linear-gradient(115deg,rgb(var(--panel)),rgb(var(--paper))); }
+.comb-budget>div { display:flex; flex-direction:column; }
+.comb-budget strong { font-size:28px; line-height:1.25; letter-spacing:-.04em; font-variant-numeric:tabular-nums; }
+.comb-budget span { font-size:12px; color:rgb(var(--ink-soft)); }
+.comb-budget .comb-total strong { color:rgb(var(--accent)); }
+.comb-step-content { padding:24px 0; min-height:280px; }
+.comb-eyebrow { display:block; font-size:11px; font-weight:650; letter-spacing:.09em; text-transform:uppercase; color:rgb(var(--ink-soft)); margin-bottom:8px; }
+.comb-inputs { max-width:760px; margin:auto; }
+.comb-settings { margin-top:20px; padding:16px; border:1px solid rgb(var(--line)); border-radius:12px; }
+.comb-settings>summary { font-weight:600; cursor:pointer; }
+.comb-skill-layout { display:grid; grid-template-columns:215px minmax(0,1fr); gap:24px; }
+.comb-roles { display:flex; flex-direction:column; gap:8px; }
+.comb-roles button { display:flex; align-items:center; gap:10px; padding:13px 10px; border:1px solid transparent; border-radius:12px; text-align:left; }
+.comb-roles button[aria-pressed=true] { border-color:rgb(var(--accent)); background:rgb(var(--panel)); }
+.comb-roles button>span { flex:1; font-weight:600; }
+.comb-roles small { display:block; font-size:11px; font-weight:400; color:rgb(var(--ink-soft)); margin-top:2px; }
+.comb-library { min-width:0; }
+.comb-library>header { display:flex; gap:12px; align-items:flex-start; }
+.comb-library h3 { font-size:18px; }
+.comb-search { display:flex; align-items:center; gap:8px; border:1px solid rgb(var(--line)); border-radius:10px; padding:10px 12px; margin:0 0 14px; }
+.comb-search input { width:100%; min-width:0; background:transparent; outline:none; }
+.comb-skill-cards { display:grid; gap:10px; margin-bottom:18px; }
+.comb-skill-card { border:1px solid rgb(var(--line)); border-radius:12px; overflow:hidden; transition:border-color .15s,background .15s; }
+.comb-skill-card.is-selected { border-color:rgb(var(--accent)); background:rgb(var(--panel)); }
+.comb-skill-card label { display:flex; align-items:flex-start; gap:12px; padding:16px; cursor:pointer; }
+.comb-skill-card input,.comb-consent input { width:17px; height:17px; margin-top:3px; accent-color:rgb(var(--accent)); flex-shrink:0; }
+.comb-skill-card strong { display:block; font-size:14px; overflow-wrap:anywhere; }
+.comb-skill-card small { display:block; margin-top:4px; color:rgb(var(--ink-soft)); line-height:1.55; }
+.comb-skill-card details { padding:0 16px 12px 45px; font-size:12px; }
+.comb-skill-card summary { cursor:pointer; color:rgb(var(--ink-soft)); }
+.comb-skill-card pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:220px; overflow:auto; padding-top:10px; }
+.comb-review-roles { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; margin:16px 0 24px; }
+.comb-review-roles>div { border:1px solid rgb(var(--line)); border-radius:10px; padding:12px; min-width:0; }
+.comb-review-roles span { display:block; font-size:11px; color:rgb(var(--ink-soft)); }
+.comb-review-roles strong { display:block; margin:5px 0; }
+.comb-review-roles p { font-size:11px; margin:0; overflow-wrap:anywhere; }
+.comb-fields { display:grid; grid-template-columns:2fr 1fr; gap:16px; }
+.comb-fields label { font-weight:600; }
+.comb-fields input { display:block; width:100%; padding:11px 12px; border:1px solid rgb(var(--line)); border-radius:9px; background:rgb(var(--panel)); margin-top:7px; font-weight:400; }
+.comb-notice { padding:16px; background:rgb(var(--panel)); border-radius:12px; margin-top:18px!important; }
+.comb-consent { display:flex; align-items:flex-start; gap:12px; }
+.comb-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; border-top:1px solid rgb(var(--line)); padding:16px 0 2px; }
+.comb-footer>span { color:rgb(var(--ink-soft)); font-size:12px; }
+.comb-footer>div { display:flex; gap:8px; }
+.comb-footer button { display:flex; align-items:center; justify-content:center; gap:8px; padding:11px 16px; border:1px solid rgb(var(--line)); border-radius:10px; white-space:nowrap; font-weight:600; }
+.comb-builder .comb-primary { background:rgb(var(--accent)); color:rgb(var(--accent-contrast)); border-color:transparent; }
+.comb-builder button:disabled { opacity:.45; cursor:not-allowed; }
+.comb-builder :is(button,input,summary):focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:3px; }
+.combination-design { background:rgb(var(--paper)); }
+.combination-design>div:first-child { padding:16px; border:1px solid rgb(var(--line)); border-radius:14px; background:rgb(var(--panel)); }
+.combination-design th { font-size:12px; color:rgb(var(--ink-soft)); padding:12px 8px; }
+.combination-design td details { min-height:92px; box-shadow:0 2px 5px #00000005; }
+@media(max-width:640px) {
+ .combination-dialog { width:calc(100vw - 16px); padding:12px; }
+ .comb-intro { gap:10px; }.comb-intro h3 { font-size:18px; }
+ .comb-steps { gap:4px; }.comb-steps button { flex-direction:column; align-items:flex-start; padding:8px; font-size:11px; gap:6px; }
+ .comb-budget { gap:8px; padding:14px 10px; }.comb-budget strong { font-size:23px; }.comb-budget span { font-size:10px; }
+ .comb-skill-layout { grid-template-columns:minmax(0,1fr); gap:16px; }
+ .comb-roles { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px; }.comb-roles button { padding:9px; font-size:12px; }.comb-roles button>svg:last-child { display:none; }
+ .comb-review-roles { grid-template-columns:repeat(2,minmax(0,1fr)); }.comb-fields { grid-template-columns:minmax(0,1fr); }
+ .comb-footer { flex-direction:column; align-items:stretch; }.comb-footer>div { justify-content:flex-end; }.comb-footer button { flex:1; white-space:normal; }
+}
+/* Scope overrides to this wizard; shared dialogs retain their existing layout. */
+.workspace-dialog.combination-dialog { width:min(1080px,calc(100vw - 32px)); max-width:1080px; }
+.combination-dialog .comb-skill-card label { display:flex; margin:0; }
+.combination-dialog .comb-search { display:flex; margin:0 0 14px; }
+.combination-dialog .comb-consent { display:flex; }
+.combination-dialog .comb-footer { justify-content:space-between; position:sticky; bottom:-4px; background:rgb(var(--panel)); padding-bottom:12px; z-index:2; }
+.combination-dialog .comb-budget { position:sticky; top:0; z-index:2; }
+@media(max-width:640px) { .workspace-dialog.combination-dialog { width:calc(100vw - 16px); padding:12px; } }

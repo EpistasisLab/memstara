@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH});
+try {
+ const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('http://localhost:8070');
+ const win=name=>page.getByRole('region',{name:`${name} window`,exact:true});
+ await win('Results').waitFor();
+ const original=await win('Results').boundingBox(), other=await win('Activity feed').boundingBox();
+ const handle=page.getByRole('separator',{name:'Resize Results se',exact:true});const box=await handle.boundingBox();
+ await page.mouse.move(box.x+7,box.y+7);await page.mouse.down();await page.mouse.move(box.x-43,box.y-43,{steps:10});await page.mouse.up();
+ const resized=await win('Results').boundingBox();assert(resized.width<original.width-40);assert(resized.height<original.height-40);
+ assert.deepEqual(await win('Activity feed').boundingBox(),other,'Resizing must not change neighbors');
+ const bar=await win('Results').locator('.window-titlebar').boundingBox();await page.mouse.move(bar.x+40,bar.y+14);await page.mouse.down();await page.mouse.move(bar.x+15,bar.y-20,{steps:8});await page.mouse.up();
+ const moved=await win('Results').boundingBox();assert(moved.x<resized.x);assert(moved.y<resized.y);
+ await page.reload();await win('Results').waitFor();const restored=await win('Results').boundingBox();assert(Math.abs(restored.width-moved.width)<2);assert(Math.abs(restored.x-moved.x)<2);
+ await page.getByRole('button',{name:'Maximize Results window'}).click();assert((await win('Results').boundingBox()).width>1300);
+ await page.getByRole('button',{name:'Restore Results window'}).click();assert(Math.abs((await win('Results').boundingBox()).width-moved.width)<2);
+ if(await page.getByRole('button',{name:'Switch to light mode'}).count())await page.getByRole('button',{name:'Switch to light mode'}).click();
+ await page.getByRole('button',{name:'Switch to dark mode'}).click();assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
+ await page.reload();await win('Results').waitFor();assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
+ await page.screenshot({path:'/tmp/windows-dark.png'});
+ await page.getByRole('button',{name:'Switch to light mode'}).click();
+ const beforeReset=await win('Activity feed').boundingBox();
+ await page.getByRole('button',{name:'Reset Results window',exact:true}).click();
+ assert.deepEqual(await win('Activity feed').boundingBox(),beforeReset);
+ assert(Math.abs((await win('Results').boundingBox()).width-original.width)<2);
+ await page.screenshot({path:'/tmp/windows-light.png'});
+ await page.setViewportSize({width:390,height:844});await page.waitForTimeout(300);assert.equal(await page.locator('.window-edge:visible').count(),0);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ assert.deepEqual(errors,[]);console.log('PASS: independent corner resize, unchanged neighbors, window movement, persistence, maximize/restore/reset, dark/light persistence and mobile. No analysis started.');
+}finally{await browser.close();}

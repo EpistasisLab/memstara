@@ -1,0 +1,43 @@
+"""Verify environment-selected Azure routing without making model calls."""
+import asyncio
+from types import SimpleNamespace
+import pytest
+from memstara.env import configured_llm, configured_api_base
+
+
+def test_environment_overrides_old_draft(monkeypatch):
+    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
+    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'gpt-4o')
+    assert configured_llm('azure_foundry', 'claude-sonnet-4-6') == ('openai', 'gpt-4o')
+
+
+def test_missing_environment_rejects_saved_selection(monkeypatch):
+    monkeypatch.delenv('MEMSTARA_LLM_PROVIDER', raising=False)
+    monkeypatch.delenv('MEMSTARA_LLM_MODEL', raising=False)
+    with pytest.raises(ValueError, match='MEMSTARA_LLM_PROVIDER'):
+        configured_llm('anthropic', 'custom')
+
+
+def test_motoro_native_resolver_keeps_azure_endpoint(monkeypatch):
+    import pytest
+    pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
+    from motoro import config as core_config
+    from motoro.schemas.agent import ModelConfig, LLMProvider
+    from motoro.services.credentials import env_credential_resolver
+    base = 'https://example-resource.services.ai.azure.com/openai/v1/'
+    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
+    monkeypatch.setenv('MEMSTARA_LLM_API_BASE', base)
+    monkeypatch.setattr(core_config, 'settings', SimpleNamespace(openai_api_key='test-only-key'))
+    config = ModelConfig(provider=LLMProvider('openai'), model='gpt-4o', api_base=configured_api_base('openai'))
+    conn = asyncio.run(env_credential_resolver(config))
+    assert conn['api_base'] == base
+    assert conn['api_key'] == 'test-only-key'
+    assert config.model == 'gpt-4o'
+
+
+@pytest.mark.parametrize('base', ['http://example.com', 'https://secret@example.com', 'https://example.com/?api-key=secret'])
+def test_invalid_endpoint_rejected(monkeypatch, base):
+    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
+    monkeypatch.setenv('MEMSTARA_LLM_API_BASE', base)
+    with pytest.raises(ValueError):
+        configured_api_base('openai')

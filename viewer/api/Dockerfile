@@ -15,4 +15,6 @@ ENV MEMSTARA_VIEWER_DSN="postgresql://memstara_viewer:viewer@host.docker.interna
     VIEWER_CORS=""
 
 EXPOSE 8000
-CMD ["uvicorn", "main:app", "--app-dir", "api", "--host", "0.0.0.0", "--port", "8000"]
+# Snapshot assembly performs several independent database reads. Keep one slow read
+# from monopolising the only event loop and making every browser request time out.
+CMD ["uvicorn", "main:app", "--app-dir", "api", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

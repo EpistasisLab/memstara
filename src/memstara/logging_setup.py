@@ -110,6 +110,7 @@ _LLM_REQUEST_MARK = "POST Request Sent from LiteLLM"
 #: would grow the JSONL past usefulness. The text itself is appended by
 #: src/memstara/pipeline/board.py into `trace/NN_stage.txt`.
 _llm_requests: list[str] = []
+_llm_requests_by_run: dict[str, list[str]] = {}
 
 
 class _LLMRequestGate(logging.Filter):
@@ -148,17 +149,23 @@ class _LLMRequestGate(logging.Filter):
             return False
         if _LLM_REQUEST_MARK in msg:
             # Strip the colour codes, so it can be written to a file as it is.
-            _llm_requests.append(re.sub(r"\x1b\[[0-9;]*m", "", msg))
+            from memstara.pipeline.diagnostics import call_context
+            context = call_context.get()
+            destination = (_llm_requests_by_run.setdefault(context[1], [])
+                           if context else _llm_requests)
+            destination.append(re.sub(r"\x1b\[[0-9;]*m", "", msg))
         return False
 
 
-def drain_llm_requests() -> list[str]:
+def drain_llm_requests(run_id: str | None = None) -> list[str]:
     """Take out the collected requests and empty the list.
 
-    Called at the end of every agent call. Because taking them out empties the list, they
-    **do not get mixed in with the next one's requests** — only as many calls as that
-    agent made go into that agent's trace file.
+    Board calls use their run ID, captured from the task-local diagnostic context.
+    Concurrent calls therefore cannot consume each other's requests. Calls without
+    an ID drain only legacy unscoped records, never records owned by another call.
     """
+    if run_id is not None:
+        return _llm_requests_by_run.pop(run_id, [])
     out = list(_llm_requests)
     _llm_requests.clear()
     return out
@@ -383,7 +390,7 @@ class _Tee:
 
 
 @contextmanager
-def tee_console(path: Path | str) -> Iterator[Path]:
+def tee_console(path: Path | str, *, append: bool = False) -> Iterator[Path]:
     """Mirror stdout and stderr into *path* for the duration of the block.
 
     A logging handler would not do: the pipeline reports its results with `print`, so
@@ -398,7 +405,7 @@ def tee_console(path: Path | str) -> Iterator[Path]:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     saved_out, saved_err = sys.stdout, sys.stderr
-    with target.open("w", encoding="utf-8") as sink:
+    with target.open("a" if append else "w", encoding="utf-8") as sink:
         sys.stdout = _Tee(saved_out, sink)  # type: ignore[assignment]
         sys.stderr = _Tee(saved_err, sink)  # type: ignore[assignment]
         try:
