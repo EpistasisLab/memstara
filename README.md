@@ -6,9 +6,9 @@ what held. The agents coordinate through a shared board in Postgres, and every c
 they have is an MCP tool server — an agent can do exactly what it has been handed a tool
 for, and nothing else.
 
-**`memstara` is a working title, not the name.** The folder on disk and the
-repository on GitHub still carry it, which is why every path and link below reads that
-way — the project is Memstara.
+**`memstara` is the folder name; the GitHub remote is now `memstara`.** The
+folder on disk still carries the working title, which is why local paths below read that
+way, and GitHub redirects links written before the rename — the project is Memstara.
 
 It builds on **`motoro`** as a library: motoro supplies the agent runtime, the MCP client
 and persistence. Everything under `src/memstara/` is this project.
@@ -336,8 +336,8 @@ after a motoro module has started reading configuration raises `RuntimeError`. C
 > (`motoro/.env.example:6`), so changing it here puts this repository out of step with the
 > library it consumes.
 >
-> **The repository keeps the folder name `memstara`** — a working title the
-> folder and the remote still carry, so paths and links keep spelling it.
+> **The folder keeps the name `memstara`** — the remote was renamed to
+> `memstara` on 2026-09-23, and the folder and every local path still spell the old title.
 
 `environment.yml` and `.vscode/launch.json` point at `../motoro` by relative path, so
 renaming that folder means fixing both.
