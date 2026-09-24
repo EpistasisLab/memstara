@@ -15,7 +15,7 @@ def body():
                 constraints='Exclude causal claims', model='selected-deployment')
 
 
-@pytest.mark.parametrize('change', [dict(stage='ml'), dict(domain=''), dict(features='x'*4001),
+@pytest.mark.parametrize('change', [dict(stage='unknown'), dict(domain=''), dict(features='x'*4001),
                                     dict(model='https://bad?key=secret'), dict(population=None)])
 def test_invalid_requests_rejected(change):
     with pytest.raises(ValueError):
@@ -59,7 +59,8 @@ def test_job_capacity(monkeypatch):
         drafts.start(body())
 
 
-def test_motoro_receives_selected_model_and_no_tools(monkeypatch):
+@pytest.mark.parametrize('stage', ['hypothesis','data','ml','interpreter','report'])
+def test_motoro_receives_selected_model_and_no_tools(monkeypatch, stage):
     import pytest
     pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     import motoro
@@ -83,7 +84,11 @@ def test_motoro_receives_selected_model_and_no_tools(monkeypatch):
     monkeypatch.setattr(runner, 'create_agent', agent)
     monkeypatch.setattr(runner, 'create_run', run)
     monkeypatch.setattr(runner, 'execute_run', execute)
-    result = asyncio.run(generate(body()))
+    result = asyncio.run(generate(body() | {'stage':stage}))
+    assert result['stage'] == stage
+    assert stage in captured['name']
+    from memstara.control.skill_draft_worker import ROLE_NAMES
+    assert ROLE_NAMES[stage] in captured['system_prompt']
     assert captured['model_config'].model == 'selected-deployment'
     assert captured['input']['population'] == body()['population']
     assert result['content'] == '# Reviewed later'
@@ -110,3 +115,17 @@ def test_http_routes_accept_and_poll_without_pipeline_mutation(monkeypatch):
     handler.path = '/control/skill-drafts/expired'
     handler.do_GET()
     assert sent[-1][0] == 404
+
+
+@pytest.mark.parametrize('stage', ['hypothesis', 'data', 'ml', 'interpreter', 'report'])
+def test_role_survives_validation(stage):
+    assert drafts.validate(body() | {'stage': stage})['stage'] == stage
+
+
+def test_explanation_alias_and_role_boundaries():
+    from memstara.control.skill_draft_worker import system_prompt
+    assert drafts.validate(body() | {'stage': 'explanation'})['stage'] == 'report'
+    assert 'Avoid speculation, causal claims, recommendations' in system_prompt('interpreter')
+    assert 'further validation' in system_prompt('report')
+    assert 'Do not clean, impute' in system_prompt('data')
+    assert 'Preserve frozen splits' in system_prompt('ml')

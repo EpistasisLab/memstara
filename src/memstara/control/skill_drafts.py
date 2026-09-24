@@ -1,4 +1,4 @@
-"""Bounded, asynchronous Hypothesis skill drafting; never starts a pipeline."""
+"""Bounded, asynchronous role-specific skill drafting; never starts a pipeline."""
 from __future__ import annotations
 
 import json
@@ -16,9 +16,12 @@ _jobs: dict[str, dict] = {}
 
 
 def validate(body: dict) -> dict:
-    if body.get('stage', 'hypothesis') != 'hypothesis':
-        raise ValueError('AI skill drafting is available only for the Hypothesis Agent.')
-    data = {}
+    stage = body.get('stage', 'hypothesis')
+    if stage == 'explanation':
+        stage = 'report'
+    if not isinstance(stage, str) or stage not in ('hypothesis', 'data', 'ml', 'interpreter', 'report'):
+        raise ValueError('Choose a supported agent role.')
+    data = {'stage': stage}
     for field in FIELDS:
         value = body.get(field, '')
         if not isinstance(value, str) or not value.strip() or len(value) > 4000 or '\0' in value:
