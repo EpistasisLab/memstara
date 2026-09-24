@@ -1,5 +1,7 @@
 # SOURCE: SANDBOX-ORIGINAL — verification around the unchanged ported matcher.
 import json
+from pathlib import Path
+import runpy
 
 import numpy as np
 import pytest
@@ -52,8 +54,13 @@ def test_diagnosis_ranking_is_unchanged():
     ).match("hypertension")
 
 
-def test_original_five_queries_with_historical_positive_columns():
-    from scripts.check_medication_identity import check_results, QUERIES
+@pytest.fixture
+def medication_check():
+    return runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts/check_medication_identity.py"))
+
+
+def test_original_five_queries_with_historical_positive_columns(medication_check):
+    check_results, QUERIES = medication_check["check_results"], medication_check["QUERIES"]
     names = ["NALOXONE", "VALACYCLOVIR", "BUPRENORPHINE", "CITALOPRAM"]
     entries = [CatalogEntry(f"MED__{n}", "medication", n, "wide_passthrough", f"MED__{n}") for n in names]
     matcher = VerifiedMatcher.build(entries, encoder=lambda texts: np.ones((len(texts), 2)))
@@ -63,8 +70,8 @@ def test_original_five_queries_with_historical_positive_columns():
     assert not any(row["historical_membership_changed"] for row in rows)
 
 
-def test_replay_distinguishes_dataset_change_from_incorrect_match():
-    from scripts.check_medication_identity import check_results
+def test_replay_distinguishes_dataset_change_from_incorrect_match(medication_check):
+    check_results = medication_check["check_results"]
     entry = CatalogEntry("MED__CITALOPRAM", "medication", "CITALOPRAM", "wide_passthrough", "MED__CITALOPRAM")
     matcher = VerifiedMatcher.build([entry], encoder=lambda texts: np.ones((len(texts), 2)))
     rows = check_results(matcher, [entry.feature_name])
@@ -73,8 +80,8 @@ def test_replay_distinguishes_dataset_change_from_incorrect_match():
         check_results(matcher, [entry.feature_name, "MED__BUPRENORPHINE"])
 
 
-def test_buprenorphine_absent_is_not_replaced_and_naloxone_remains_valid():
-    from scripts.check_medication_identity import check_results
+def test_buprenorphine_absent_is_not_replaced_and_naloxone_remains_valid(medication_check):
+    check_results = medication_check["check_results"]
     names = ["NALOXONE", "CITALOPRAM"]
     entries = [CatalogEntry(f"MED__{n}", "medication", n, "wide_passthrough", f"MED__{n}") for n in names]
     matcher = VerifiedMatcher.build(entries, encoder=lambda texts: np.ones((len(texts), 2)))
