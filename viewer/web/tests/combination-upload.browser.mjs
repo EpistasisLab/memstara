@@ -15,10 +15,11 @@ try {
   if(r.request().method()==='POST')throw Error('Unexpected mutation '+path);
   return r.continue();
  });
- await page.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');await page.getByRole('button',{name:/Add Pipeline/}).click();await page.getByRole('button',{name:/All Combinations/}).click();
+ await page.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');await page.getByRole('button',{name:/Add pipeline/i}).click();await page.getByRole('button',{name:/All Combinations/}).click();
  const d=page.getByRole('dialog',{name:'All Combinations',exact:true});await d.getByRole('button',{name:'Choose skills'}).click();
  for(let i=0;i<5;i++){
   await d.getByRole('navigation',{name:'Agent roles'}).getByRole('button').nth(i).click();
+  await d.getByRole('button',{name:/^Upload or write/}).click();
   await d.getByLabel('Custom skill Markdown file').setInputFiles([
    {name:'alpha.md',mimeType:'text/markdown',buffer:Buffer.from('# Alpha skill')},
    {name:'bad.txt',mimeType:'text/plain',buffer:Buffer.from('Invalid')},
@@ -26,7 +27,7 @@ try {
    {name:'beta.md',mimeType:'text/markdown',buffer:Buffer.from('# Beta skill')},
   ]);
   await d.getByText(/beta.md · Uploaded/).waitFor();
-  if(!await d.getByRole('checkbox',{name:/alpha/}).isChecked()||!await d.getByRole('checkbox',{name:/beta/}).isChecked())throw Error('Successes not selected');
+  if(!await d.locator('.comb-selected-skills').getByRole('button',{name:'Remove alpha',exact:true}).isVisible()||!await d.locator('.comb-selected-skills').getByRole('button',{name:'Remove beta',exact:true}).isVisible())throw Error('Successes not selected');
   await d.getByRole('alert').filter({hasText:'Test upload rejected'}).waitFor();
  }
  if(uploads.length!==15||uploads.some(x=>x.name==='bad'))throw Error('Wrong upload validation');

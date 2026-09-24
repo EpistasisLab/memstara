@@ -33,3 +33,14 @@
 @media(min-width:760px) {
  .docked-workspace #workspace-control { position:sticky !important; top:0 !important; }
 }
+
+/* Minimized panels retain a visible title bar outside the scrolling canvas. */
+.workspace-minimized-panels { flex:0 0 auto; display:flex; flex-wrap:wrap; gap:8px; padding:8px 12px; border-top:1px solid rgb(var(--line)); background:rgb(var(--paper)); }
+.workspace-minimized-window { flex:1 1 220px; min-width:0; border:1px solid rgb(var(--line)); border-radius:8px; background:rgb(var(--panel)); }
+.workspace-minimized-window > button { display:flex; align-items:center; gap:10px; width:100%; min-height:40px; padding:8px 12px; text-align:left; color:rgb(var(--ink)); border-radius:8px; }
+.workspace-minimized-window strong { font-size:13px; overflow-wrap:anywhere; }
+.workspace-minimized-window span { margin-left:auto; font-size:11px; color:rgb(var(--ink-soft)); }
+.workspace-minimized-window svg { flex-shrink:0; }
+.workspace-minimized-window > button:hover { background:rgb(var(--accent)/.07); }
+.workspace-minimized-window > button:focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:-2px; }
+@media(max-width:759px) { .workspace-minimized-panels { gap:5px; padding:5px 8px; } .workspace-minimized-window > button { min-height:44px; } }

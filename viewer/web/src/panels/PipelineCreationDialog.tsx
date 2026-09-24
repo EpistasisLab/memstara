@@ -9,13 +9,14 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react';
 import { useControl, type RunRequest } from '../store/control';
 import { usePipelines } from '../store/pipelines';
-import { setupStages } from '../store/pipelineSetup';
+const setupStages = ['hypothesis', 'data', 'ml', 'interpreter', 'report'] as const;
 
 import KnowledgeSelect from '../components/KnowledgeSelect';
 import CustomSkillUpload from '../components/CustomSkillUpload';
 
-const labels = ['Knowledge sources', 'Hypothesis', 'Machine learning', 'Interpretation', 'Explanation', 'Name', 'Review'];
+const labels = ['Knowledge sources', 'Hypothesis', 'Data', 'Machine learning', 'Interpretation', 'Explanation', 'Name', 'Review'];
 const guidance = {
+  data: 'Choose how this agent maps requested features to available columns without cleaning the cohort.',
   hypothesis: 'Choose how this agent uses knowledge to generate hypotheses and select features.',
   ml: 'Choose the model and the skill that guides how experiments are evaluated.',
   interpreter: 'Choose how measured results are explained, including clinical meaning and limitations.',
@@ -75,14 +76,14 @@ function CreationWizard() {
     return () => { mounted = false; element?.close(); };
   }, []);
   useEffect(() => { if(step > 0) heading.current?.focus(); }, [step]);
-  const stage = step > 0 && step < 5 ? setupStages[step - 1] : null;
+  const stage = step > 0 && step < 6 ? setupStages[step - 1] : null;
   const skill = stage ? catalog.find(s => s.stage === stage && s.id === draft[`playbook_${stage === "report" ? "explanation" : stage}`]) : null;
   const complete = setupStages.every(s => catalog.some(c => c.stage === s && c.id === draft[`playbook_${s === "report" ? "explanation" : s}`]));
   const validName = Boolean(name.trim()) && name.length <= 80;
   const validModel = evaluationPlanError(draft.evaluation) === null;
   const validSource = sourceReviewed && (draft.skill === '' || sources.some(s => s.skill === draft.skill));
   const sourceLabel = draft.skill === '' ? 'All available knowledge' : sources.find(s => s.skill === draft.skill)?.label || 'Unavailable source';
-  const valid = step === 0 ? validSource : step === 5 ? validName : step === 6 ? validSource && validName && complete && validModel && Number.isInteger(draft.waves) && draft.waves >= 1 && draft.waves <= 10 : Boolean(skill) && (stage !== 'ml' || validModel);
+  const valid = step === 0 ? validSource : step === 6 ? validName : step === 7 ? validSource && validName && complete && validModel && Number.isInteger(draft.waves) && draft.waves >= 1 && draft.waves <= 10 : Boolean(skill) && (stage !== 'ml' || validModel);
   return <dialog ref={dialog} aria-labelledby="pipeline-create-title" aria-describedby="pipeline-create-description"
     onCancel={event => { event.preventDefault(); if (!busy && !uploading) closeCreation(); }}
     onKeyDown={event => {
@@ -107,7 +108,7 @@ function CreationWizard() {
       {labels.map((label, index) => <li key={label} aria-current={index === step ? 'step' : undefined} title={label}
         className={index <= step ? 'is-reached' : ''}><span className="pipeline-creation-step-number">{index < step ? <Check size={14} aria-label="Completed"/> : index + 1}</span><span>{label}</span></li>)}
     </ol>
-    <form className="pipeline-creation-form" onSubmit={async event => { event.preventDefault(); if(!valid || busy || loading || uploading)return; if(step < 6)setStep(step + 1); else await create(name.trim(), draft); }}>
+    <form className="pipeline-creation-form" onSubmit={async event => { event.preventDefault(); if(!valid || busy || loading || uploading)return; if(step < 7)setStep(step + 1); else await create(name.trim(), draft); }}>
       <div className="pipeline-creation-body space-y-4">
         <h3 ref={heading} tabIndex={-1} className="text-lg font-semibold">{step + 1}. {labels[step]} <span className="text-xs font-normal text-ink-muted">· Step {step + 1} of {labels.length}</span></h3>
         {step === 0 && <><p className="text-sm text-ink-muted">Choose the evidence this pipeline will explore to generate research questions and hypotheses. Agent skills are configured in the following steps.</p>
@@ -115,7 +116,7 @@ function CreationWizard() {
           <label className="flex items-start gap-3 rounded-lg border border-paper-line bg-paper-panel p-3 text-sm"><input type="checkbox" checked={sourceReviewed} onChange={e => setSourceReviewed(e.target.checked)} className="mt-1"/><span>Use {sourceLabel} for this pipeline.</span></label>
           {!loading && sources.length === 0 && <p className="text-sm text-ink-muted">No source filters are listed. You can use all available knowledge, or <button type="button" className="underline" onClick={() => void reload()}>reload sources</button>.</p>}
         </>}
-        {step === 5 && <><p className="text-sm text-ink-muted">Give this configured pipeline a recognizable name. Next, review the settings and create it.</p>
+        {step === 6 && <><p className="text-sm text-ink-muted">Give this configured pipeline a recognizable name. Next, review the settings and create it.</p>
           <label className="block space-y-2 text-sm font-medium">Pipeline name
             <input autoFocus required maxLength={80} className={field} placeholder="e.g. Treatment-related effects" value={name} onChange={e => setName(e.target.value)} /></label>
           <p className="text-xs text-ink-muted">Settings remain a draft until you choose Create pipeline.</p></>}
@@ -149,27 +150,27 @@ function CreationWizard() {
             <p className="text-xs text-ink-muted">Selecting another ML skill may apply its evaluation defaults. Review these settings after changing or uploading a skill.</p>
             <BaselineSettings value={draft.baseline_columns ?? []} onChange={value=>setDraft(d=>({...d, baseline_columns:value}))}/></>}
         </>}
-        {step === 6 && <><p className="text-sm text-ink-muted">Review your pipeline. Each loop builds on earlier results and interpretations. The first loop starts from knowledge. After creation, press Play when you are ready.</p>
+        {step === 7 && <><p className="text-sm text-ink-muted">Review your pipeline. Each loop builds on earlier results and interpretations. The first loop starts from knowledge. After creation, press Play when you are ready.</p>
           <div className="rounded-lg border border-paper-line bg-paper-panel p-3 text-sm" aria-label="ML settings review">
             <p className="font-semibold">ML evaluation settings</p>
             <p className="mt-1 text-ink-muted">Model: {draft.evaluation.engine} · seed: {draft.evaluation.seed} · hold-out: {Number((draft.evaluation.test_size*100).toFixed(8))}% · training CV: {draft.evaluation.folds || (draft.evaluation.search_trials > 1 ? 'automatic (3 folds requested)' : 'off')} · split evaluations: {draft.evaluation.replicates} · candidates: {draft.evaluation.search_trials}</p>
             {!validModel && <p role="alert">{evaluationPlanError(draft.evaluation)}</p>}
-            <button type="button" className="mt-2 underline" onClick={()=>setStep(2)}>Edit ML settings</button>
+            <button type="button" className="mt-2 underline" onClick={()=>setStep(3)}>Edit ML settings</button>
           </div>
           <LoopLimitSettings value={draft.waves} disabled={busy} onChange={value=>setDraft(d=>({...d,waves:value,continuous:false}))}/>
           <div className="divide-y divide-paper-line rounded-lg border border-paper-line px-4">
             <div className="flex items-start justify-between gap-3 py-3"><div><p className="text-xs text-ink-muted">Knowledge sources</p><p className="text-sm">{sourceLabel}</p></div><button type="button" className="text-sm underline" onClick={() => setStep(0)}>Edit</button></div>
             <div className="py-3"><p className="text-xs text-ink-muted">Pipeline name</p><p className="font-medium">{name.trim()}</p></div>
-            <p className="text-sm">Fixed clinical baseline: {draft.baseline_columns?.join(" · ") || "Not configured — prevalence reference only"}</p>
+            <p className="text-sm">Fixed clinical baseline: {draft.baseline_columns?.join(" · ") || "None — hypothesis-selected predictors only"}</p>
             {setupStages.map((s, index) => <div key={s} className="flex items-start justify-between gap-3 py-3"><div className="min-w-0"><p className="text-xs text-ink-muted">{labels[index + 1]}</p><p className="text-sm">{catalog.find(c => c.stage === s && c.id === draft[`playbook_${s === "report" ? "explanation" : s}`])?.title || 'Select a skill'}{s === 'ml' && ` · ${draft.evaluation.engine}`}</p></div><button type="button" className="shrink-0 text-sm underline" onClick={() => setStep(index + 1)}>Edit</button></div>)}
-          </div><p className="text-xs text-ink-muted">This pipeline uses the knowledge sources you confirmed above. Dataset settings are carried over from the current configuration. Data extraction uses the existing data agent settings. Each pipeline has one agent per stage.</p></>}
+          </div><p className="text-xs text-ink-muted">This pipeline uses the knowledge sources you confirmed above. Dataset settings are carried over from the current configuration. Data extraction uses the Data skill selected above. Each pipeline has one agent per stage.</p></>}
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
         {items.length >= 3 && <p role="alert" className="text-sm">Three pipelines already exist. Close setup and remove a pipeline before adding another.</p>}
       </div>
       <footer className="pipeline-creation-footer flex flex-wrap items-center justify-between gap-3 border-t border-paper-line">
         <button type="button" disabled={busy || uploading} onClick={closeCreation} className="rounded-lg px-3 py-2 text-sm disabled:opacity-40">Cancel</button>
         <div className="flex gap-2">{step > 0 && <button type="button" disabled={busy || uploading} onClick={() => setStep(step - 1)} className="flex items-center gap-1 rounded-lg border border-paper-line px-3 py-2 text-sm"><ArrowLeft size={16}/>Back</button>}
-          <button type="submit" disabled={!valid || busy || loading || uploading || items.length >= 3} className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-contrast disabled:opacity-40">{busy ? 'Creating…' : step === 6 ? 'Create pipeline' : 'Next'}{step === 6 ? <Check size={16}/> : <ArrowRight size={16}/>}</button></div>
+          <button type="submit" disabled={!valid || busy || loading || uploading || items.length >= 3} className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-contrast disabled:opacity-40">{busy ? 'Creating…' : step === 7 ? 'Create pipeline' : 'Next'}{step === 7 ? <Check size={16}/> : <ArrowRight size={16}/>}</button></div>
       </footer>
     </form>
   </dialog>;

@@ -1,6 +1,6 @@
-import {useMemo, useState, useEffect, type CSSProperties} from 'react';
-import {ReactFlow, Panel, useReactFlow, Background, BackgroundVariant, Controls, Handle, Position, MarkerType, type NodeProps, type Node} from '@xyflow/react';
-import {Sparkles, Database, BrainCircuit, ScanEye, FileText, ExternalLink, Route} from 'lucide-react';
+import {useMemo, useCallback, useState, useEffect, type CSSProperties} from 'react';
+import {ReactFlow, Panel, useReactFlow, useStore, getViewportForBounds, Background, BackgroundVariant, Controls, Handle, Position, MarkerType, type NodeProps, type Node} from '@xyflow/react';
+import {Sparkles, Database, BrainCircuit, ScanEye, FileText, ExternalLink} from 'lucide-react';
 import {PLAYBOOK_STAGES, type PlaybookStage} from '../store/control';
 import {STAGE_COLOR} from '../lib/stage';
 import '@xyflow/react/dist/style.css';
@@ -8,6 +8,7 @@ import './combination-floor.css';
 
 type Skill={id:string;title?:string;hash?:string;stage:PlaybookStage};
 type Call={stage:string;status:string;skill?:Skill};
+const EMPTY_CALLS:Call[]=[];
 const callRole=(c:Call)=>c.skill?.stage??(c.stage.startsWith('question')?'hypothesis':c.stage.startsWith('interpret')?'interpreter':PLAYBOOK_STAGES.find(s=>c.stage.startsWith(s)));
 const pending=(s?:string)=>s==='started'||s==='running';
 type RoomData={role:PlaybookStage;skills:Skill[];selected?:string;status?:string;recorded:boolean;onSelect:(id:string)=>void;inspect:(s:Skill)=>void};
@@ -31,18 +32,42 @@ function Room({data}:NodeProps<Node<RoomData>>){
  </div>;
 }
 const nodeTypes={room:Room};
-function Navigation({active}:{active?:PlaybookStage}){
- const flow=useReactFlow();
- useEffect(()=>{if(active){const i=PLAYBOOK_STAGES.indexOf(active);void flow.setCenter(i*340+135,240,{zoom:.9,duration:0});}},[active,flow]);
- return <Panel position="top-left" className="cf-navigation"><label>Go to agent <select aria-label="Focus floor plan agent" defaultValue="all" onChange={e=>{const index=PLAYBOOK_STAGES.indexOf(e.target.value as PlaybookStage);if(index<0)void flow.fitView({padding:.08,minZoom:.4,maxZoom:1});else void flow.setCenter(index*340+135,240,{zoom:1,duration:0});}}><option value="all">Overview</option>{PLAYBOOK_STAGES.map(s=><option key={s} value={s}>{labels[s]}</option>)}</select></label><span>Drag to explore · + / − to zoom</span></Panel>;
+const fitOptions={padding:{top:'80px',bottom:'48px',left:'24px',right:'24px'},minZoom:.05,maxZoom:1,duration:0} as const;
+function Navigation(){
+ const {getNodes,getNodesBounds,getViewport,setViewport}=useReactFlow();
+ const element=useStore(s=>s.domNode);
+ const geometry=useStore(s=>Array.from(s.nodeLookup.values()).map(n=>`${n.id}:${n.measured.width}:${n.measured.height}`).join('|'));
+ const [focus,setFocus]=useState('all');
+ const fit=useCallback((id:string)=>{
+  if(!element)return;
+  const {width,height}=element.getBoundingClientRect();
+  if(!width||!height)return;
+  const nodes=getNodes().filter(n=>id==='all'||n.id===id);
+  if(!nodes.length)return;
+  const next=getViewportForBounds(getNodesBounds(nodes),width,height,.05,1,fitOptions.padding);
+  const current=getViewport();
+  if(Math.abs(current.x-next.x)<.1&&Math.abs(current.y-next.y)<.1&&Math.abs(current.zoom-next.zoom)<.0001)return;
+  void setViewport(next,{duration:0});
+ },[element,getNodes,getNodesBounds,getViewport,setViewport]);
+ useEffect(()=>{
+  if(!element)return;
+  let frame=0;
+  const schedule=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>fit(focus));};
+  const observer=new ResizeObserver(schedule);
+  observer.observe(element);schedule();
+  return()=>{observer.disconnect();cancelAnimationFrame(frame);};
+ },[element,geometry,focus,fit]);
+ return <Panel position="top-left" className="cf-navigation"><label>Go to agent <select aria-label="Focus floor plan agent" value={focus} onChange={e=>setFocus(e.target.value)}><option value="all">Overview</option>{PLAYBOOK_STAGES.map(s=><option key={s} value={s}>{labels[s]}</option>)}</select></label><button onClick={()=>{setFocus('all');fit('all');}}>Fit all</button><span>Drag to explore · + / − to zoom</span></Panel>;
 }
-export default function CombinationFloor({skills,inspect,recorded=false,calls=[],activeSkills,live=false,paused=false,stale=false}:{skills:Skill[][];inspect:(s:Skill)=>void;recorded?:boolean;calls?:Call[];activeSkills?:Skill[];live?:boolean;paused?:boolean;stale?:boolean}){
+
+export default function CombinationFloor({skills,inspect,recorded=false,calls=EMPTY_CALLS,activeSkills,live=false,paused=false,stale=false}:{skills:Skill[][];inspect:(s:Skill)=>void;recorded?:boolean;calls?:Call[];activeSkills?:Skill[];live?:boolean;paused?:boolean;stale?:boolean}){
  const [selection,setSelection]=useState<Record<string,string>>({});
+ const contentKey=JSON.stringify(skills);
+ const callsKey=JSON.stringify(calls);
  const signature=skills.map(s=>s.map(a=>a.id).join('|')).join(';');
  useEffect(()=>setSelection({}),[signature,recorded]);
  const lastCalls=PLAYBOOK_STAGES.map(role=>calls.filter(c=>callRole(c)===role).at(-1));
  const chosen=skills.map((s,i)=>recorded?(lastCalls[i]?.skill?.id??activeSkills?.find(a=>a.stage===PLAYBOOK_STAGES[i])?.id??(activeSkills===undefined&&s.length===1?s[0]?.id:undefined)):(s.find(a=>a.id===selection[PLAYBOOK_STAGES[i]])?.id??s[0]?.id));
- const active=live?PLAYBOOK_STAGES.find((_,i)=>pending(lastCalls[i]?.status)):undefined;
  const {nodes,edges}=useMemo(()=>{
   const nodes:Node<RoomData>[]=PLAYBOOK_STAGES.map((role,i)=>({id:role,type:'room',position:{x:i*340,y:38},draggable:false,data:{role,skills:skills[i],selected:chosen[i],recorded,status:pending(lastCalls[i]?.status)?(stale?'Last recorded: running':paused?'Paused':live?'Running':'Last recorded: running'):(lastCalls[i]?.status==='completed'?'Completed':lastCalls[i]?.status??'Waiting · no call recorded'),onSelect:id=>setSelection(s=>({...s,[role]:id})),inspect}}));
   const edges=PLAYBOOK_STAGES.slice(0,-1).flatMap((role,i)=>{
@@ -51,14 +76,14 @@ export default function CombinationFloor({skills,inspect,recorded=false,calls=[]
    const observed=recorded&&!!lastCalls[i]&&!!lastCalls[i+1];
    return [{id:`${role}-route`,source:role,target:PLAYBOOK_STAGES[i+1],sourceHandle:`out-${from}`,targetHandle:`in-${to}`,type:'smoothstep',animated:observed&&live&&pending(lastCalls[i+1]?.status),className:observed?'cf-observed-edge':'cf-preview-edge',style:{stroke:STAGE_COLOR[role],strokeWidth:observed?3:2,strokeDasharray:observed?undefined:'6 5'},markerEnd:{type:MarkerType.ArrowClosed,color:STAGE_COLOR[role]},pathOptions:{borderRadius:20}}];
   });return {nodes,edges};
- },[signature,chosen.join('|'),recorded,calls,inspect,live,paused,stale]);
+ },[contentKey,chosen.join('|'),recorded,callsKey,inspect,live,paused,stale]);
  return <div className="cf-floor-shell">
-  <div className="cf-map-legend"><Route size={16}/><strong>{recorded?'Recorded Loop map':'Combination floor plan'}</strong><span>{recorded?'Solid links: calls recorded at both stages. Dashed links: planned only.':'Click a skill in each room to trace one possible combination. This does not change the execution plan.'}</span></div>
+
   <div className="cf-map" role="region" aria-label={recorded?'Recorded combination floor plan':'Interactive combination floor plan'}>
-   <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} defaultViewport={{x:28,y:70,zoom:.9}} minZoom={.4} maxZoom={1.4} nodesConnectable={false} nodesDraggable={false} elementsSelectable={false} panOnScroll zoomOnScroll={false} preventScrolling={false} proOptions={{hideAttribution:true}}>
-    <Navigation active={active}/><Background variant={BackgroundVariant.Lines} gap={32} color="var(--cf-grid)" size={.5}/><Controls showInteractive={false}/>
+   <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView fitViewOptions={fitOptions} minZoom={.05} maxZoom={1.4} nodesConnectable={false} nodesDraggable={false} elementsSelectable={false} panOnScroll zoomOnScroll={false} preventScrolling={false} proOptions={{hideAttribution:true}}>
+    <Navigation/><Background variant={BackgroundVariant.Lines} gap={32} color="var(--cf-grid)" size={.5}/><Controls showInteractive={false} fitViewOptions={fitOptions}/>
    </ReactFlow>
   </div>
-  <div className="cf-route-summary"><span>{recorded?'Loop path':'Preview path'}</span>{skills.map((list,i)=><span key={PLAYBOOK_STAGES[i]} style={{'--role-color':STAGE_COLOR[PLAYBOOK_STAGES[i]]} as CSSProperties}><i/>{list.find(s=>s.id===chosen[i])?.title??'No skill recorded'}</span>)}</div>
+
  </div>;
 }

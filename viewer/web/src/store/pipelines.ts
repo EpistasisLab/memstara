@@ -61,7 +61,13 @@ export const usePipelines = create<{
       if(!get().busy) {
         const firstLoad = !get().loaded;
         const previousTag=get().items.find(p=>p.id===get().selected)?.latest?.run_tag;
-        set({items:data.pipelines,loaded:true,error:null});
+        const previousItems=get().items;
+        const refreshedItems:PipelineDefinition[]=data.pipelines.map((item:PipelineDefinition)=>{
+          const previous=previousItems.find(p=>p.id===item.id);
+          return previous&&JSON.stringify(previous)===JSON.stringify(item)?previous:item;
+        });
+        const unchanged=refreshedItems.length===previousItems.length&&refreshedItems.every((item,i)=>item===previousItems[i]);
+        if(!unchanged||!get().loaded||get().error)set({items:unchanged?previousItems:refreshedItems,loaded:true,error:null});
         const restored = remembered();
         if(firstLoad && restored) get().select(restored);
         const refreshed=get().items.find(p=>p.id===get().selected);
@@ -70,7 +76,7 @@ export const usePipelines = create<{
           get().select(refreshed.id);
       }
       const selected=get().items.find(p=>p.id===get().selected);
-      if(selected) useControl.setState({running:selected.running});
+      if(selected&&JSON.stringify(useControl.getState().running)!==JSON.stringify(selected.running)) useControl.setState({running:selected.running});
     } catch(e){if(revision === workspaceRevision)set({error:String(e)});} finally{inFlight=false;}
   },
   select:id=>{

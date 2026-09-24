@@ -1,5 +1,6 @@
+import {createPortal} from "react-dom";
 import {useEffect,useState,useRef,lazy,Suspense,type CSSProperties} from 'react';
-import {Sparkles,Database,BrainCircuit,ScanEye,FileText,ArrowRight,ChevronLeft,ChevronRight,Layers3,Play,Check,Clock3,AlertCircle,Search,ExternalLink} from 'lucide-react';
+import {Sparkles,Database,BrainCircuit,ScanEye,FileText,ArrowRight,ChevronLeft,ChevronRight,Layers3,Network,History,Play,Check,Clock3,AlertCircle,Search,ExternalLink} from 'lucide-react';
 const SkillMarkdown=lazy(()=>import('./SkillMarkdown'));
 import {useControl,PLAYBOOK_STAGES,type PlaybookStage} from '../store/control';
 import {usePipelines,type PipelineDefinition} from '../store/pipelines';
@@ -20,12 +21,12 @@ type Call={run_id?:string;stage:string;status:string;skill?:Flavor};
 type Trace={calls:Call[];planned?:{combination:number;repetition:number;selection_policy?:string;start_combination?:number;agents:Flavor[]}|null;total_loops?:number;run_tag?:string;preparing?:boolean};
 const callRole=(c:Call):PlaybookStage|undefined=>c.skill?.stage ?? (c.stage.startsWith('question')?'hypothesis':PLAYBOOK_STAGES.find(s=>c.stage.startsWith(s)));
 const statusLabel=(s?:string)=>s==='completed'?'Completed':(s==='running'||s==='started')?'Running':s==='failed'?'Failed':s==='cancelled'?'Cancelled':s??'Not recorded';
-export default function CombinationDesign({pipeline:p}:{pipeline:PipelineDefinition}){
+export default function CombinationDesign({pipeline:p,headerHost}:{pipeline:PipelineDefinition;headerHost?:HTMLDivElement|null}){
  const catalog=useControl(s=>s.catalog),busy=usePipelines(s=>s.busy);
  const board=useRef<HTMLDivElement>(null);
  const [view,setView]=useState<'floor'|'design'|'loop'>('floor'),[role,setRole]=useState<PlaybookStage|'all'>('all');
  const [search,setSearch]=useState(''),[detail,setDetail]=useState<Flavor|null>(null);
- const [preview,setPreview]=useState(false);
+ const [preview,setPreview]=useState(false),[showGuide,setShowGuide]=useState(false);
  const [loop,setLoop]=useState(1),[retry,setRetry]=useState(0);
  const [response,setResponse]=useState<{key:string;data:Trace}|null>(null),[failure,setFailure]=useState<{key:string;message:string}|null>(null);
  useEffect(()=>{if(board.current)board.current.scrollLeft=0;},[role,search,view]);
@@ -48,8 +49,8 @@ export default function CombinationDesign({pipeline:p}:{pipeline:PipelineDefinit
     const r=await fetch(`/control/pipelines/${encodeURIComponent(p.id)}/combinations?loop=${requestedLoop}`,{signal:controller.signal});
     const data=await r.json();if(!r.ok)throw Error(data.error||'Could not read this Loop');
     if(data.run_tag&&runTag&&data.run_tag!==runTag)throw Error('Execution changed; waiting for matching records.');
-    if(active){setResponse({key,data});setFailure(null);}
-   }catch(e){if(active)setFailure({key,message:e instanceof Error&&e.name==='AbortError'?'The execution history did not respond in time.':String(e)});}
+    if(active){setResponse(previous=>previous?.key===key&&JSON.stringify(previous.data)===JSON.stringify(data)?previous:{key,data});setFailure(null);}
+   }catch(e){if(active)setFailure(previous=>{const message=e instanceof Error&&e.name==='AbortError'?'The execution history did not respond in time.':String(e);return previous?.key===key&&previous.message===message?previous:{key,message};});}
    finally{clearTimeout(deadline);if(active)timer=setTimeout(()=>void read(),3000);}
   };
   void read();return()=>{active=false;if(timer)clearTimeout(timer);controller?.abort();};
@@ -58,28 +59,31 @@ export default function CombinationDesign({pipeline:p}:{pipeline:PipelineDefinit
  const skillFor=(id:string)=>catalog.find(s=>s.id===id);
  const selectedContent=detail?skillFor(detail.id):undefined;
  const sameVersion=!!selectedContent&&(!!detail?.hash&&detail.hash===selectedContent.hash);
- return <section className="combination-studio" aria-label="Combination design">
-  <div className="cs-masthead"><header className="cs-header">
-   <div className="cs-identity"><span className="cs-mark"><Layers3 size={22}/></span><div><span className="cs-eyebrow">All Combinations</span><h3>{p.name}</h3><p>One skill per role. One complete path per Loop.</p></div></div>
-   {!p.latest&&!p.running&&<button className="cs-run" disabled={busy||!count} onClick={()=>void usePipelines.getState().play(p.id)}><Play size={16}/>Run combinations</button>}
-   {p.running&&<span className="cs-run-state"><Clock3 size={15}/>{p.running.execution_state==='paused'?'Paused':'Execution in progress'}</span>}
-  </header>
-  <div className="cs-budget" aria-label="Configured combination schedule">
-   <div><strong>{count.toLocaleString()}</strong><span>possible combinations</span></div><ArrowRight size={18} aria-hidden="true"/>
-   <div><strong>{p.configuration.combination_random_start?'Random Start':'Ordered start'}</strong><span>then fixed-order cycles</span></div><ArrowRight size={18} aria-hidden="true"/>
-   <div className="cs-total"><strong>{total.toLocaleString()}</strong><span>maximum Loops</span></div>
-  </div>
-  </div>
+ const header=(
+  <header className="cs-unified-header" aria-label="Combination workspace controls">
+   <div className="cs-heading-row">
+    <div className="cs-compact-identity"><h3 title={p.name}>{p.name}</h3><span>All Combinations</span></div>
+    <div className="cs-heading-actions">
+     {view==='floor'&&(p.running||p.latest)&&<span className="cs-loop-status" data-live={following&&!!p.running&&p.running.execution_state!=='paused'} title="Updates every 3 seconds · recorded skills and call status">{following?`Loop ${requestedLoop} / ${historyTotal} · ${p.running?(p.running.execution_state==='paused'?'Paused':'Live'):'Latest execution'}`:'Combination preview'}</span>}
+     {!p.latest&&!p.running&&<button className="cs-run" data-help="Run combinations" data-help-description="Start this pipeline using one skill from each agent role per Loop, up to its configured maximum Loops." disabled={busy||!count} onClick={()=>void usePipelines.getState().play(p.id)}><Play size={16}/>Run combinations</button>}
+     <button className="cs-info-button" aria-label="Combination schedule and map guide" data-help="Pipeline details" data-help-description="Review the combination count, maximum Loops, start policy and the meaning of connections in the diagram." onClick={()=>setShowGuide(true)}>Details</button>
+    </div>
+   </div>
   <div className="cs-control-row"><nav className="cs-tabs" aria-label="Combination views">
-   <button aria-pressed={view==='floor'} onClick={()=>setView('floor')}><Layers3 size={16}/>Floor plan</button>
-   <button aria-pressed={view==='design'} onClick={()=>setView('design')}><Layers3 size={16}/>Skill architecture</button>
-   <button aria-pressed={view==='loop'} onClick={()=>setView('loop')}><Play size={16}/>Loop explorer</button>
-  </nav>{view==="design"&&<div className="cs-filters">
-    <label className="cs-search"><Search size={16}/><input aria-label="Find a combination skill" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Find a skill…"/></label>
-    <label className="cs-role-filter">Role<select aria-label="Filter agent role" value={role} onChange={e=>setRole(e.target.value as PlaybookStage|'all')}><option value="all">All five roles</option>{PLAYBOOK_STAGES.map(s=><option key={s} value={s}>{roles[s].name}</option>)}</select></label>
-   </div>}</div>
+   <button data-help="Floor plan" data-help-description="See the selected skills and recorded stage status for the current Loop. Preview mode explores possible combinations without changing execution." aria-pressed={view==='floor'} onClick={()=>setView('floor')}><Layers3 size={16}/>Floor plan</button>
+   <button data-help="Skill architecture" data-help-description="Browse all configured skills by agent role. Search and read their instructions; this is the configuration, not the execution history." aria-pressed={view==='design'} onClick={()=>setView('design')}><Network size={16}/>Skill architecture</button>
+   <button data-help="Loop explorer" data-help-description="Select a Loop to compare its planned skills with the actual recorded agent calls, sequence and status." aria-pressed={view==='loop'} onClick={()=>setView('loop')}><History size={16}/>Loop explorer</button>
+  </nav>{view==='floor'&&(p.running||p.latest)&&<button className="cs-preview-toggle" data-help={preview?"Follow execution":"Preview combinations"} data-help-description={preview?"Return to the latest recorded Loop and refresh its agent activity every 3 seconds. This does not start or resume the pipeline.":"Explore possible skill combinations without running agents or changing pipeline settings."} aria-pressed={preview} onClick={()=>setPreview(v=>!v)}>{preview?'Follow execution':'Preview combinations'}</button>}</div>{view==="design"&&<div className="cs-filters" role="search" aria-label="Filter configured skills">
+    <label className="cs-search"><Search size={16} aria-hidden="true"/><input type="search" aria-label="Find a combination skill" data-help="Find a skill" data-help-description="Filter the configured skills by name or matching text. This only changes what is shown, not the pipeline configuration." value={search} onChange={e=>setSearch(e.target.value)} placeholder="Find a skill…"/></label>
+    <label className="cs-role-filter">Role<select aria-label="Filter agent role" data-help="Filter agent role" data-help-description="Show skills for one agent role, or choose All five roles to see the complete skill architecture." value={role} onChange={e=>setRole(e.target.value as PlaybookStage|'all')}><option value="all">All five roles</option>{PLAYBOOK_STAGES.map(s=><option key={s} value={s}>{roles[s].name}</option>)}</select></label>
+   </div>}
+  </header>
+ );
+ return <section className={`combination-studio ${view==='floor'?'cs-floor-view':''}`} aria-label="Combination design">
+  {headerHost?createPortal(header,headerHost):header}
+  {showGuide&&<FloorDetailDialog title="Combination schedule & map guide" close={()=>setShowGuide(false)}><dl className="cs-schedule-details"><dt>Possible combinations</dt><dd>{count.toLocaleString()}</dd><dt>Start policy</dt><dd>{p.configuration.combination_random_start?'Random Start':'Ordered start'} · then fixed-order cycles</dd><dt>Maximum Loops</dt><dd>{total.toLocaleString()}</dd><dt>Refresh interval</dt><dd>Every 3 seconds while viewing execution records.</dd></dl><p>One skill per role forms one complete path per Loop. Previewing does not change the execution plan.</p><p>Solid links indicate calls recorded at both stages. Dashed links indicate planned connections, not confirmed execution.</p></FloorDetailDialog>}
   {view==='floor'?<>
-   {(p.running||p.latest)&&<div className="cs-live-toolbar"><div><strong>{following?`Loop ${requestedLoop} of ${historyTotal} · ${p.running?(p.running.execution_state==='paused'?'Paused':'Following execution'):'Latest execution'}`:'Combination preview'}</strong><span>{following?'Updates every 3 seconds · recorded skills and call status':'Previewing does not change the running combination.'}</span></div><button aria-pressed={preview} onClick={()=>setPreview(v=>!v)}>{preview?'Follow execution':'Preview combinations'}</button></div>}
+
    {following&&error&&<div className="cs-error" role="alert"><AlertCircle size={16}/><span>{error} {trace?'Last available records; activity may have changed.':'Waiting for this Loop’s records.'}</span><button onClick={()=>setRetry(n=>n+1)}>Retry</button></div>}
    {following&&!trace?<p role="status" className="cs-empty">{error?'Execution records unavailable.':'Loading current Loop…'}</p>:<CombinationFloor
     skills={PLAYBOOK_STAGES.map((stage,i)=>{const configured=lists[i].map(id=>({stage,id,title:skillFor(id)?.title,hash:skillFor(id)?.hash}));const frozen=trace?.calls.filter(c=>callRole(c)===stage).at(-1)?.skill??trace?.planned?.agents.find(a=>a.stage===stage);return following&&frozen?[...configured.map(s=>s.id===frozen.id?frozen:s),...(!configured.some(s=>s.id===frozen.id)?[frozen]:[])]:configured;})}

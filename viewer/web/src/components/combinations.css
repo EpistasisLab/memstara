@@ -79,3 +79,70 @@
 .combination-dialog .comb-footer { justify-content:space-between; position:sticky; bottom:-4px; background:rgb(var(--panel)); padding-bottom:12px; z-index:2; }
 .combination-dialog .comb-budget { position:sticky; top:0; z-index:2; }
 @media(max-width:640px) { .workspace-dialog.combination-dialog { width:calc(100vw - 16px); padding:12px; } }
+
+/* Model configuration belongs to the Machine learning skill step. */
+.comb-library > .comb-settings { margin:12px 0 18px; padding:0; border:0; }
+.comb-library > .comb-settings > h4 { margin:0 0 10px; font-size:15px; font-weight:650; }
+.comb-library > .comb-settings > p { margin:8px 0 0; font-size:12px; line-height:1.5; color:rgb(var(--ink-soft)); }
+
+/* Search stays visible while a large skill library scrolls inside the picker. */
+.comb-skill-picker { min-width:0; margin:14px 0; border:1px solid rgb(var(--line)); border-radius:10px; background:rgb(var(--panel)); }
+.comb-skill-picker > summary { cursor:pointer; padding:12px; font-size:14px; color:rgb(var(--ink)); }
+.comb-skill-picker > summary strong { margin-left:10px; font-size:12px; font-weight:500; color:rgb(var(--accent)); white-space:nowrap; }
+.comb-picker-content { padding:0 10px 10px; min-width:0; }
+.comb-picker-content .comb-search { margin:0 0 10px; }
+.comb-picker-content .comb-skill-cards { max-height:min(340px,45dvh); overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; padding:2px 6px 2px 2px; }
+.comb-selected-skills { display:flex; flex-wrap:wrap; gap:6px; max-height:140px; overflow:auto; margin:0 0 12px; }
+.comb-selected-skills > span { display:inline-flex; align-items:center; gap:6px; max-width:100%; padding:5px 8px; border:1px solid rgb(var(--line)); border-radius:7px; font-size:12px; overflow-wrap:anywhere; background:rgb(var(--accent)/.06); }
+.comb-selected-skills button { flex-shrink:0; min-width:28px; min-height:28px; border-radius:5px; font-size:18px; }
+.comb-skill-picker > summary:focus-visible,.comb-selected-skills button:focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:2px; }
+
+/* Agent setup: a stable frame with one main scrolling region and visible actions. */
+.workspace-dialog.combination-dialog { height:min(920px,calc(100dvh - 32px)); max-height:calc(100dvh - 32px); display:flex; flex-direction:column; overflow:hidden; }
+.combination-dialog > header { flex:0 0 auto; }
+.combination-dialog .floor-detail-dialog-body { display:flex; flex:1; min-height:0; overflow:hidden; }
+.combination-dialog .comb-builder { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; }
+.combination-dialog .comb-intro { padding:8px 0 12px; gap:12px; }
+.combination-dialog .comb-intro h3 { font-size:17px; }.combination-dialog .comb-intro p { font-size:12px; }
+.combination-dialog .comb-steps { padding-bottom:10px; flex-shrink:0; }
+.combination-dialog .comb-steps button { padding:8px 10px; }
+.combination-dialog .comb-budget { position:static; flex-shrink:0; padding:10px 14px; border-radius:10px; justify-content:space-between; }
+.combination-dialog .comb-budget strong { font-size:20px; }.combination-dialog .comb-budget span { font-size:11px; }
+.combination-dialog .comb-step-content { flex:1; min-height:0; overflow:auto; padding:18px 4px 18px 0; scrollbar-gutter:stable; }
+.combination-dialog .comb-footer { position:static; flex:0 0 auto; padding:10px 0 0; }
+.combination-dialog .comb-skill-layout { grid-template-columns:190px minmax(0,1fr); gap:20px; align-items:start; }
+.combination-dialog .comb-roles { position:sticky; top:0; padding:8px; border:1px solid rgb(var(--line)); border-radius:12px; background:rgb(var(--paper)); gap:4px; }
+.comb-roles-caption { font-size:12px; font-weight:650; padding:6px 4px 10px; }.comb-roles-caption span { display:block; font-size:11px; color:rgb(var(--ink-soft)); font-weight:400; margin-top:4px; }
+.combination-dialog .comb-roles button { border-radius:8px; padding:10px 8px; gap:8px; font-size:13px; min-width:0; }
+.combination-dialog .comb-roles button[aria-pressed=true] { background:rgb(var(--accent)/.08); border-color:rgb(var(--accent)/.5); }
+.comb-selection-summary { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px; margin:12px 0 10px; background:rgb(var(--accent)/.055); border:1px solid rgb(var(--line)); border-radius:10px; }
+.comb-selection-summary strong { font-size:13px; }.comb-selection-summary div>span { display:block; font-size:12px; color:rgb(var(--ink-soft)); margin-top:4px; }
+.comb-ready { flex-shrink:0; white-space:nowrap; font-size:11px; color:rgb(var(--accent)); font-weight:650; }
+.comb-skill-methods { display:flex; flex-wrap:wrap; gap:6px; margin:16px 0 12px; }
+.comb-skill-methods button { flex:1 1 120px; padding:10px; border:1px solid rgb(var(--line)); border-radius:9px; font-size:13px; font-weight:600; text-align:left; }
+.comb-skill-methods button span { display:block; font-size:11px; font-weight:400; color:rgb(var(--ink-soft)); margin-top:4px; }
+.comb-skill-methods button[aria-pressed=true] { background:rgb(var(--accent)/.07); border-color:rgb(var(--accent)); }
+.combination-dialog .comb-search { padding:0 10px; min-height:42px; background:rgb(var(--paper)); }
+.combination-dialog .comb-search input { padding:8px 0; min-height:0; border:0; font-size:14px; }
+.comb-search button { flex-shrink:0; width:30px; height:30px; font-size:20px; }
+.comb-library-count { font-size:11px; margin:0 0 8px!important; }
+.combination-dialog .comb-skill-card label { padding:12px; }.combination-dialog .comb-skill-card.is-selected { background:rgb(var(--accent)/.06); }
+.combination-dialog .comb-ml-settings { margin:18px 0 0; padding:12px; border:1px solid rgb(var(--line)); border-radius:10px; }
+.comb-ml-settings > summary { display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; }
+.comb-ml-settings summary small { display:block; font-size:12px; font-weight:400; color:rgb(var(--ink-soft)); margin-top:4px; }
+.comb-ml-settings summary>span:last-child { font-size:12px; color:rgb(var(--accent)); white-space:nowrap; }
+.combination-dialog [aria-label="Upload a custom skill"] { background:rgb(var(--paper)); }
+.combination-dialog [aria-label="Upload a custom skill"] .bg-white { background:rgb(var(--panel)); color:rgb(var(--ink)); }
+.comb-ai-section .hypothesis-skill-wizard { margin:0; padding:12px; border:1px solid rgb(var(--line)); border-radius:10px; }
+.comb-ai-section .skill-assistant-trigger { width:100%; color:rgb(var(--accent)); }
+@media(max-width:640px) {
+ .combination-dialog .comb-skill-layout { grid-template-columns:minmax(0,1fr); gap:14px; }
+ .combination-dialog .comb-roles { display:grid; position:static; grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .comb-roles-caption { grid-column:1/-1; padding:0 4px 4px; }.comb-roles-caption span { display:inline; margin-left:8px; }
+ .combination-dialog .comb-intro { display:none; }.combination-dialog .comb-step-content { padding-top:12px; }
+ .combination-dialog .comb-footer>span { font-size:11px; }.combination-dialog .comb-footer { gap:6px; }
+ .combination-dialog .comb-steps button { font-size:11px; padding:7px; }
+ .combination-dialog .comb-ml-settings > summary { align-items:flex-start; flex-direction:column; gap:6px; }
+}
+
+.comb-selection-summary > div { min-width:0; }

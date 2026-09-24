@@ -20,15 +20,15 @@ try{
   return r.continue();
  });
  await page.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');
- await page.getByRole('button',{name:/Add Pipeline/}).click();
+ await page.getByRole('button',{name:/Add pipeline/i}).click();
  await page.getByRole('button',{name:/Selected Pipelines/}).click();
  await page.getByRole('combobox',{name:'Knowledge sources'}).waitFor();
  await page.getByRole('button',{name:'Cancel',exact:true}).click();
- await page.getByRole('button',{name:/Add Pipeline/}).click();
+ await page.getByRole('button',{name:/Add pipeline/i}).click();
  await page.getByRole('button',{name:/All Combinations/}).click();
  const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});
  await dialog.getByRole('button',{name:'Choose skills'}).click();
- for(const role of roles){ await dialog.getByRole('navigation',{name:'Agent roles'}).getByRole('button').nth(roles.indexOf(role)).click(); for(const s of skills.filter(s=>s.stage===role))await dialog.getByRole('checkbox',{name:new RegExp(s.title)}).check(); }
+ for(const role of roles){ await dialog.getByRole('navigation',{name:'Agent roles'}).getByRole('button').nth(roles.indexOf(role)).click(); await dialog.locator('.comb-skill-picker > summary').click(); for(const s of skills.filter(s=>s.stage===role))await dialog.getByRole('checkbox',{name:new RegExp(s.title)}).check(); }
  await dialog.locator('.floor-detail-dialog-body').evaluate(e=>e.scrollTop=0); await page.screenshot({path:'/tmp/combinations-light.png'});
  await page.evaluate(()=>document.documentElement.dataset.theme='dark');
  await page.waitForTimeout(400); await page.screenshot({path:'/tmp/combinations-dark.png'});
@@ -45,7 +45,7 @@ try{
  await grid.locator('.cf-room').first().waitFor();if(await grid.locator('.cf-room').count()!==5)throw Error('Missing agent role');if(await grid.locator('.cf-desk').count()!==10)throw Error('Missing skill variants');
  if(runPosts)throw Error('Creating unexpectedly started an execution');
  if(posted.configuration.combination_max_loops!==48)throw Error('Loop limit not saved');
- await grid.getByRole('button',{name:'Run combinations'}).waitFor();
- await grid.getByRole('button',{name:'Loop explorer',exact:true}).click();await grid.getByRole('spinbutton',{name:'Combination Loop',exact:true}).fill('48'); await grid.getByText('Combination 24 · cycle 2',{exact:true}).waitFor(); await grid.getByText(/Actual skill 48/).first().waitFor(); await grid.getByRole('spinbutton',{name:'Combination Loop',exact:true}).fill('1'); await grid.getByText(/Actual skill 1/).first().waitFor(); if(await grid.getByText(/Actual skill 48/).count())throw Error('Stale Loop content');
+ await page.getByRole('button',{name:'Run combinations'}).waitFor();
+ await page.getByRole('button',{name:'Loop explorer',exact:true}).click();await grid.getByRole('spinbutton',{name:'Combination Loop',exact:true}).fill('48'); await grid.getByText('Combination 24 · cycle 2',{exact:true}).waitFor(); await grid.getByText(/Actual skill 48/).first().waitFor(); await grid.getByRole('spinbutton',{name:'Combination Loop',exact:true}).fill('1'); await grid.getByText(/Actual skill 1/).first().waitFor(); if(await grid.getByText(/Actual skill 48/).count())throw Error('Stale Loop content');
  console.log('Frozen 48-Loop history selection verified; Selected workflow opens; 24 combinations/48 Loops/5 roles; narrow layout valid; create does not run; all writes mocked.');
 }finally{await browser.close();}

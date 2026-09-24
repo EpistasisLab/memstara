@@ -28,7 +28,7 @@ try {
   });
   await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Fixture'}}));
   await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
-  await page.getByRole('button',{name:/Add Pipeline/}).click();await page.getByRole('button',{name:/All Combinations/}).click();
+  await page.getByRole('button',{name:/Add pipeline/i}).click();await page.getByRole('button',{name:/All Combinations/}).click();
   const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});await dialog.getByRole('button',{name:'Choose skills'}).click();
   const labels=['Hypothesis','Data','Machine learning','Interpretation','Explanation'];
   for(const [i,role] of roles.entries()){
@@ -36,6 +36,7 @@ try {
    const forward=dialog.getByRole('button',{name:i===4?'Review plan':'Next: '+labels[i+1],exact:true});
    assert(await forward.isDisabled(),'Empty role must not advance');
    const choices=skills.filter(s=>s.stage===role);
+   await dialog.locator('.comb-skill-picker > summary').click();
    for(const skill of choices)await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).check();
    assert(!(await forward.isDisabled()),'Selected role must advance');
    for(const skill of choices)await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).uncheck();
@@ -44,6 +45,7 @@ try {
    if(i<4){
     await forward.click();await dialog.getByRole('heading',{name:labels[i+1]+' skills',exact:true}).waitFor();
     await dialog.getByRole('button',{name:'Back',exact:true}).click();
+    await dialog.locator('.comb-skill-picker > summary').click();
     for(const skill of choices)assert(await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).isChecked());
     await forward.click();
    }
@@ -58,8 +60,8 @@ try {
   await create.click();await dialog.waitFor({state:'hidden'});
   assert.equal(posted.configuration.combination_random_start,true);assert.equal(posted.configuration.combination_max_loops,10);assert.equal(posted.configuration.waves,10);assert.equal(posted.configuration.continuous,false);assert.equal(runPosts,0);
   rows[0].latest={run_tag:'frozen',exit_code:0,configuration:{waves:10}};await page.reload();
-  const studio=page.getByRole('region',{name:'Combination design',exact:true});await studio.waitFor();assert.equal(await studio.locator('.cs-total strong').innerText(),'10');
-  await studio.getByRole('button',{name:'Loop explorer',exact:true}).click();await studio.getByText('Combination 23 · cycle 1 · Random start: 23',{exact:true}).waitFor();
+  const studio=page.getByRole('region',{name:'Combination design',exact:true});await studio.waitFor();await page.getByRole('button',{name:'Combination schedule and map guide',exact:true}).click();assert.equal(await page.getByRole('dialog').locator('dt').filter({hasText:'Maximum Loops'}).locator('xpath=following-sibling::dd[1]').innerText(),'10');await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Loop explorer',exact:true}).click();await studio.getByText('Combination 23 · cycle 1 · Random start: 23',{exact:true}).waitFor();
   await studio.getByRole('button',{name:'Next combination Loop',exact:true}).click();await studio.getByText('Combination 24 · cycle 1 · Random start: 23',{exact:true}).waitFor();
   assert.equal(await studio.getByRole('spinbutton',{name:'Combination Loop',exact:true}).getAttribute('max'),'10');assert.deepEqual(errors,[]);assert.equal(runPosts,0);
   console.log(JSON.stringify({width,theme,limits:'pass',savedRandomStart:'pass',frozenHistory:'pass',noRunOnCreate:'pass'}));await page.close();

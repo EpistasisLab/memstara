@@ -180,3 +180,27 @@
 @keyframes cs-active { 50% { box-shadow:0 0 0 4px rgb(var(--accent) / .12); } }
 @media(prefers-reduced-motion:reduce) { .cs-path-stage.is-running .cs-role-icon { animation:none; } }
 .cs-stage-details{margin:14px 0}.cs-stage-details>summary{cursor:pointer;font-size:13px;font-weight:600;padding:10px 0}.cs-control-row .cs-tabs{flex-wrap:wrap}
+
+/* One compact header owns identity, navigation and the current execution. */
+.cs-unified-header { margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid rgb(var(--line)); }
+.cs-heading-row { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px 12px; }
+.cs-compact-identity { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 10px; min-width:0; flex:1 1 180px; }
+.cs-compact-identity h3 { min-width:0; max-width:100%; overflow-wrap:anywhere; font-size:15px; font-weight:650; line-height:1.4; margin:0; }
+.cs-compact-identity > span { color:rgb(var(--ink-soft)); font-size:11px; white-space:nowrap; }
+.cs-heading-actions { display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; min-width:0; }
+.cs-loop-status { font-size:12px; font-variant-numeric:tabular-nums; color:rgb(var(--ink-soft)); overflow-wrap:anywhere; }
+.cs-unified-header .cs-run { min-height:34px; padding:6px 10px; font-size:12px; }
+.cs-info-button,.cs-preview-toggle { min-height:34px; padding:6px 9px; font-size:12px; border:1px solid rgb(var(--line)); border-radius:7px; background:rgb(var(--panel)); }
+.cs-unified-header .cs-control-row { margin:6px 0 0; gap:6px; }
+.cs-unified-header .cs-tabs { width:auto; flex:0 1 auto; flex-wrap:wrap; padding:2px; gap:2px; border-radius:8px; }
+.cs-unified-header .cs-tabs button { min-height:34px; padding:6px 9px; gap:5px; font-size:12px; flex:0 1 auto; }
+.cs-preview-toggle { margin-left:auto; }
+.cs-schedule-details { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px 16px; margin-bottom:18px; }
+.cs-schedule-details dt { color:rgb(var(--ink-soft)); }
+.cs-schedule-details dd { margin:0; overflow-wrap:anywhere; }
+@container combination-studio (max-width:400px) {
+ .cs-heading-actions { width:100%; justify-content:space-between; }
+ .cs-unified-header .cs-tabs { width:100%; }
+ .cs-unified-header .cs-tabs button { flex:1 1 auto; }
+ .cs-preview-toggle { margin-left:0; }
+}

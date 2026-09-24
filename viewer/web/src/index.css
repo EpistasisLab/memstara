@@ -173,7 +173,7 @@ dialog::backdrop { backdrop-filter: blur(3px); }
 .pipeline-creation-dialog[open] { display:flex; flex-direction:column; }
 .pipeline-creation-dialog::backdrop { background:rgb(0 0 0 / .48); backdrop-filter:blur(4px); }
 .pipeline-creation-header { flex-shrink:0; padding:20px 24px 12px; }
-.pipeline-creation-progress { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; margin:0; padding:8px 24px 18px; border-bottom:1px solid rgb(var(--line)); flex-shrink:0; }
+.pipeline-creation-progress { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:6px; margin:0; padding:8px 24px 18px; border-bottom:1px solid rgb(var(--line)); flex-shrink:0; }
 .pipeline-creation-progress li { display:flex; align-items:center; flex-direction:column; gap:6px; text-align:center; font-size:11px; line-height:1.3; color:rgb(var(--ink-soft)); }
 .pipeline-creation-step-number { display:flex; align-items:center; justify-content:center; width:26px; height:26px; border:1px solid rgb(var(--line)); border-radius:50%; font-size:12px; }
 .pipeline-creation-progress .is-reached { color:rgb(var(--ink)); }

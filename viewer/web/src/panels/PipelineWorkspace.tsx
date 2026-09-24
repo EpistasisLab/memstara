@@ -1,3 +1,5 @@
+import {createPortal} from "react-dom";
+import {WorkspaceHeaderContext} from "../components/WorkspaceHeaderContext";
 import PipelineRowActions from "../components/PipelineRowActions";
 import MasterStop from "../components/MasterStop";
 import CombinationDesign from '../components/CombinationDesign';
@@ -6,9 +8,9 @@ import { floorCallDestination, floorCallCategory } from "../lib/floorCallDestina
 import FloorDatabaseNode from "../components/FloorDatabaseNode";
 import LoopUsage from "../components/LoopUsage";
 import { useTelemetryTotals } from "../components/TelemetryTotals";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useContext, useCallback, useEffect, useMemo, useState } from "react";
 import { ReactFlow, Controls, Background, BackgroundVariant, MarkerType, useNodesState, useReactFlow, useNodesInitialized, useStore as useFlowStore, getViewportForBounds, type NodeProps, type Node } from "@xyflow/react";
-import { Plus, Layers3, Activity, Sparkles, Settings2, X } from "lucide-react";
+import { Plus, Activity, Sparkles, Settings2, X } from "lucide-react";
 import { usePipelines, type PipelineDefinition } from "../store/pipelines";
 import { useControl, type PlaybookStage } from "../store/control";
 import { AgentNode, nodeTypes as floorNodeTypes } from "../components/nodes";
@@ -153,6 +155,8 @@ export default function PipelineWorkspace(){
   const [expanded,setExpanded]=useState(false);
   const [showResources,setShowResources]=useState(false);
   const [detail,setDetail]=useState<"progress"|"agent"|"tools"|null>(null);
+  const workspaceHeader=useContext(WorkspaceHeaderContext);
+  const [combinationHeader,setCombinationHeader]=useState<HTMLDivElement|null>(null);
   const [toolbarHost,setToolbarHost]=useState<HTMLDivElement|null>(null);
   const motion = true;
   const showTools = true;
@@ -236,17 +240,19 @@ export default function PipelineWorkspace(){
   const canvasNodes=showResources?nodes:nodes.filter(n=>visibleItems.some(p=>n.id===`zone-${p.id}`||n.id.startsWith(p.id+"-")));
   const canvasIds=new Set(canvasNodes.map(n=>n.id));
   const canvasEdges=edges.filter(e=>canvasIds.has(e.source)&&canvasIds.has(e.target));
+  const header=<div className="pipeline-unified-header" role="group" aria-label="Pipeline workspace header">
+    <div ref={setCombinationHeader} className="pipeline-context-header"/>
+    {!combinationPipeline&&<div className="pipeline-context-title"><strong>{comparison.length?'Compare pipelines':selectedPipeline?.name??'Research pipelines'}</strong><span>{comparison.length?`${comparison.length} selected`:'Floor plan'}</span></div>}
+    <div className="pipeline-global-actions" role="group" aria-label="Controls for all pipelines">
+      <span className="pipeline-running-count" data-help="Running pipelines" data-help-description="Number of pipelines currently executing. Paused pipelines are excluded; this is not the number of Loops or combinations." tabIndex={0} title="Pipelines currently executing; paused pipelines are excluded"><Activity size={13}/>{items.filter(p=>p.running&&p.running.execution_state!=='paused').length} running</span>
+      <MasterStop/>
+      <button className="pipeline-add-primary" data-help="Add pipeline" data-help-description={items.length>=3?"The maximum of 3 pipelines has been reached. Delete one before creating another.":"Open the setup wizard to choose knowledge sources, agent skills, execution limits and a pipeline name. Creating a pipeline does not start it."} disabled={!loaded||busy||items.length>=3} title={items.length>=3?'Maximum of 3 pipelines reached. Delete a pipeline to create another.':'Create a pipeline and choose its sources, agents and skills'} onClick={()=>void add()}><Plus size={17}/><span>Add pipeline</span></button>
+    </div>
+  </div>;
   return <div className={`floor-observatory flex h-full min-h-0 flex-col overflow-hidden bg-paper ${motion?"":"floor-still"} ${expanded?"fixed inset-3 z-50 rounded-xl border border-paper-line shadow-xl":""}`}>
     {settings&&<PipelineSettings key={settings.id+settings.section} id={settings.id} section={settings.section} close={()=>setSettings(null)}/>}
-    <header className="floor-toolbar">
-      <div className="floor-title"><Layers3 size={17}/><strong>Research pipelines</strong></div>
-      <div className="floor-actions">
-        <span className="floor-live" data-help="Active pipelines" tabIndex={0}><Activity size={12}/>{items.filter(p=>p.running&&p.running.execution_state!=='paused').length} running</span>
-        <button disabled={!loaded||busy||items.length>=3} onClick={()=>void add()}><Plus size={15}/>Add Pipeline {items.length}/3</button>
-      </div>
-    </header>
+    {workspaceHeader?createPortal(header,workspaceHeader):header}
     {error&&<p role="alert" className="m-3 rounded border border-red-300 p-2 text-sm text-red-700">{error}</p>}
-    <div className="floor-execution-strip" aria-label="All pipeline execution controls"><MasterStop/></div>
     <div className="pipeline-explorer-layout">
       <PipelineBrowser onSettings={id=>{select(id);setSettings({id,section:"runtime"});}} items={items} selected={selected} onSelect={id=>{if(comparison.length&&!comparison.includes(id))setComparison([]);usePipelines.getState().focus(id);}} compare={comparison} onCompare={ids=>{setComparison(ids);if(ids.length&&!ids.includes(selected??""))usePipelines.getState().focus(ids[0]);}}/>
       <div className={`pipeline-detail-workspace ${combinationPipeline||comparison.length?"has-combination-studio":""}`}>
@@ -261,17 +267,17 @@ export default function PipelineWorkspace(){
        {isCombination?<CombinationDesign pipeline={p}/>:<div className="floor-comparison-standard"><ReactFlow nodes={ownNodes} edges={ownEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView fitViewOptions={{padding:.12}} minZoom={.15} maxZoom={1.6} nodesDraggable={false} nodesConnectable={false} panOnScroll zoomOnScroll={false} onNodeClick={(_,node)=>{if(node.type==='station')configureStation(p.id,String(node.data.stage));}}><Background variant={BackgroundVariant.Lines} gap={32} color="rgb(var(--ink) / .05)"/><Controls showInteractive={false}/></ReactFlow></div>}
       </section>;
     })}</div>}
-    {combinationPipeline&&<CombinationDesign key={combinationPipeline.id} pipeline={combinationPipeline}/>}
+    {combinationPipeline&&<CombinationDesign key={combinationPipeline.id} pipeline={combinationPipeline} headerHost={combinationHeader}/>}
     <div className="floor-detail-links"><button aria-pressed={showResources} title="Show shared knowledge, data, tools and storage alongside the pipeline" onClick={()=>setShowResources(v=>!v)}>Shared resources</button><button onClick={()=>setDetail('tools')}>Recent tool calls</button><button onClick={()=>setDetail('progress')}>Pipeline progress</button>{focused&&inspected&&<button onClick={()=>setDetail('agent')}>Selected agent details</button>}</div>
     <div ref={setToolbarHost} className="floor-docked-controls floor-visible-controls" role="group" aria-label="Floor Plan view controls"/>
-    <div className="floor-canvas" style={combinationPipeline||comparison.length?{display:"none"}:undefined}>
+    {!combinationPipeline&&!comparison.length&&<div className="floor-canvas">
       <ReactFlow nodes={canvasNodes} onNodesChange={onNodesChange} edges={canvasEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
         defaultViewport={{x:16,y:60,zoom:1}} minZoom={.1} maxZoom={1.6} nodesDraggable={false} nodesConnectable={false}
         panOnScroll zoomOnScroll={false} onNodeClick={(_,node)=>{if(node.type==="station"){const p=node.data.pipeline as PipelineDefinition;configureStation(p.id,String(node.data.stage));}}} onPaneClick={()=>setInspected(null)}>
         <Background className="pipeline-background" variant={BackgroundVariant.Dots} gap={20} size={.65} color="#dfe6eb"/>
         <PipelineViewport entryId="resources-zone" leftGutter={96} dockInto={toolbarHost} expanded={expanded} toggle={()=>setExpanded(v=>!v)} allowExpand={false} topology={visibleItems.map(p=>p.id).join(",")+":"+showResources}/><PipelineFocus/>
       </ReactFlow>
-    </div>
+    </div>}
     {detail==='agent'&&<FloorDetailDialog title="Selected agent details" close={()=>setDetail(null)}><div className="floor-inspector" aria-live="polite">
       <div className="floor-inspector-icon"><Sparkles size={18}/></div>
       <div className="floor-inspector-copy">

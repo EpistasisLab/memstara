@@ -69,10 +69,6 @@
   .combination-dialog .comb-steps button { padding:5px; }
 }
 @media(max-width:640px) {
-  .combination-dialog .comb-roles { display:flex; flex-direction:row; flex-wrap:nowrap; overflow-x:auto; gap:6px; padding:0 0 6px; }
-  .combination-dialog .comb-roles button { flex:0 0 auto; width:auto; max-width:180px; padding:8px 10px; }
-  .combination-dialog .comb-roles button > svg:last-child { display:none; }
-  .combination-dialog .comb-roles button small { font-size:10px; }
   .combination-dialog .comb-steps button { flex-direction:row; align-items:center; gap:5px; font-size:12px; }
 }
 /* Workspace resilience and keyboard navigation. */

@@ -5,7 +5,7 @@ export default function MasterStart(){
   const {items,loaded,busy,startingAll,stoppingAll,startOutcomes,playAll}=usePipelines();
   const available=items.some(p=>(!p.running&&!p.latest)||p.running?.pause_requested||p.running?.execution_state==='paused');
   return <div className="master-start-group">
-    <button type="button" disabled={!loaded||busy||stoppingAll||!available}
+    <button type="button" data-help="Start all pipelines" data-help-description="Start pipelines that have not run yet and resume paused ones. Already running pipelines are left running. Finished pipelines require an additional Loop count from the pipeline list." disabled={!loaded||busy||stoppingAll||!available}
       className="flex items-center gap-2 rounded-lg border border-paper-line bg-accent px-3 py-2 text-sm font-medium text-accent-contrast disabled:opacity-40"
       title="Start pipelines that have not run yet, and resume paused ones. Finished pipelines require an explicit additional Loop count from the pipeline list."
       onClick={()=>void playAll()}><Play size={14}/>{startingAll?'Starting pipelines…':'Start all pipelines'}</button>

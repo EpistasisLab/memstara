@@ -34,3 +34,10 @@
 @keyframes cf-skill-orbit{to{transform:rotate(360deg)}}
 @keyframes cf-running-stream{to{transform:translateX(460%)}}
 @media(prefers-reduced-motion:reduce){.cf-room.cf-active-room:before,.cf-active-room .cf-desk.is-selected .cf-orbit:after,.cf-running-track>span{animation:none}.cf-running-track>span{transform:none;width:100%;opacity:.35}.cf-running-track>span:not(:first-child){display:none}}
+
+/* The overview fills the available workspace instead of a fixed-height viewport. */
+.combination-studio.cs-floor-view { display:flex; flex-direction:column; }
+.cs-floor-view > .cs-unified-header,.cs-floor-view > .cs-error { flex-shrink:0; }
+.cs-floor-view > .cf-floor-shell { flex:1 0 280px; display:flex; flex-direction:column; min-height:280px; }
+.cs-floor-view > .cf-floor-shell > .cf-map { flex:1; height:auto; min-height:280px; }
+.cf-navigation button { min-height:30px; padding:4px 8px; border:1px solid rgb(var(--line)); border-radius:6px; font-size:11px; background:rgb(var(--paper)); }

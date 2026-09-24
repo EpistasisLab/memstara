@@ -4,8 +4,10 @@ import { ChevronDown, ChevronUp, Settings2, X, HelpCircle, Maximize2, Minimize2,
 import { workspaceGeometry } from "../lib/workspaceGeometry";
 import "./workspace-docking.css";
 import HeaderStatus from "./HeaderStatus";
+import {WorkspaceHeaderContext} from "./WorkspaceHeaderContext";
 import WorkspaceActions from "./WorkspaceActions";
 import "./workspace-topbar.css";
+import "./pipeline-workspace-header.css";
 import ViewErrorBoundary from './ViewErrorBoundary';
 import ExplorationSummary from "./ExplorationSummary";
 import ThemeToggle from "./ThemeToggle";
@@ -20,6 +22,7 @@ const collapsible = ["navigation", ...secondary];
 const initiallyClosed: string[] = [];
 const edges = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 export default function WindowWorkspace({ items, toolbar }: { items: Item[]; toolbar?:ReactNode }) {
+  const [pipelineHeader,setPipelineHeader]=useState<HTMLDivElement|null>(null);
   const root = useRef<HTMLDivElement>(null);
   const overviewDialog = useRef<HTMLDialogElement>(null);
   const settingsDialog = useRef<HTMLDialogElement>(null);
@@ -114,7 +117,7 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
       <div className="workspace-surface" style={{height:layout.contentHeight}}>
       {!!opened.length && !maximized && <div className="workspace-evidence-bar" style={{left:layout.x,top:layout.panelY-42,width:layout.w}}>
         <div role="tablist" aria-label="Analysis panels">
-          {items.filter(item=>secondary.includes(item.id)).map(item=><button key={item.id} role="tab"
+          {opened.map(item=><button key={item.id} role="tab"
             aria-selected={layout.tabbed?active===item.id:!collapsed.includes(item.id)}
             onKeyDown={event=>{const tabs=Array.from(event.currentTarget.parentElement!.querySelectorAll<HTMLButtonElement>('[role="tab"]'));const index=tabs.indexOf(event.currentTarget);const next=event.key==="ArrowRight"?(index+1)%tabs.length:event.key==="ArrowLeft"?(index+tabs.length-1)%tabs.length:event.key==="Home"?0:event.key==="End"?tabs.length-1:-1;if(next>=0){event.preventDefault();tabs[next].focus();tabs[next].click();}}} aria-controls={`workspace-${item.id}`}
             onClick={()=>{if(collapsed.includes(item.id))toggle(item.id);setActivePanel(item.id);}}>
@@ -151,22 +154,23 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
             }
             setBoxes(prev => ({ ...prev, [item.id]: fit(b,item.id) }));
           }} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }} onLostPointerCapture={() => { drag.current = null; }}>
-          <div className="window-titlebar" onPointerDown={event => { if (!(event.target as HTMLElement).closest('button')) begin(event, "move"); }}>
+          <div className="window-titlebar" onPointerDown={event => { if (!(event.target as HTMLElement).closest('button,input,select,summary,a,[data-workspace-header]')) begin(event, "move"); }}>
             <span title={item.title}>{item.title}</span>
+            {item.id==="pipeline"&&<div data-workspace-header className="workspace-header-slot" ref={setPipelineHeader}/> }
             <div className="flex items-center gap-1">
             {collapsible.includes(item.id) && <button className="window-collapse" aria-label={`Collapse ${item.title}`} title="Collapse this window"
               onClick={() => toggle(item.id)}><ChevronDown size={13} /></button>}
-            <button aria-label={`Reset ${item.title} window`} title="Reset this window to its default size and position"
+            <button data-help="Reset window layout" data-help-description="Restore this window to its default size and position. Pipeline settings and results are not changed." aria-label={`Reset ${item.title} window`} title="Reset this window to its default size and position"
               onClick={() => {
                 setBoxes(previous => { const next = { ...previous }; delete next[item.id]; return next; });
                 if (maximized === item.id) setMaximized("");
               }}><RotateCcw size={13} /></button>
-            {item.id !== "control" && <button aria-label={`${maximized === item.id ? "Restore" : "Maximize"} ${item.title} window`} onClick={() => setMaximized(maximized === item.id ? "" : item.id)}>
+            {item.id !== "control" && <button data-help={maximized === item.id ? "Restore window" : "Maximize window"} data-help-description={maximized === item.id ? "Return this window to its previous workspace layout." : "Expand this window to use the available workspace. Click again to restore the layout."} aria-label={`${maximized === item.id ? "Restore" : "Maximize"} ${item.title} window`} onClick={() => setMaximized(maximized === item.id ? "" : item.id)}>
               {maximized === item.id ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
             </button>}
             </div>
           </div>
-          <div className="window-content"><ViewErrorBoundary key={item.id === "pipeline" ? item.title.split(" · ")[0] : item.id} name={item.title}>{item.content}</ViewErrorBoundary></div>
+          <div className="window-content"><ViewErrorBoundary key={item.id === "pipeline" ? item.title.split(" · ")[0] : item.id} name={item.title}><WorkspaceHeaderContext.Provider value={item.id==="pipeline"?pipelineHeader:null}>{item.content}</WorkspaceHeaderContext.Provider></ViewErrorBoundary></div>
           {item.id !== "control" && !maximized && edges.map(edge => <div key={edge} role={edge === "se" ? "separator" : undefined} tabIndex={edge === "se" ? 0 : -1}
             aria-valuenow={edge === "se" ? Math.round(normal.w) : undefined}
             aria-valuemin={edge === "se" ? Math.min(200, bounds.w) : undefined}
@@ -185,5 +189,14 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
       })}
       </div>
     </div>
+    {items.some(item=>secondary.includes(item.id)&&collapsed.includes(item.id))&&<div className="workspace-minimized-panels" role="group" aria-label="Minimized analysis panels">
+      {items.filter(item=>secondary.includes(item.id)&&collapsed.includes(item.id)).map(item=><section key={item.id} id={`workspace-${item.id}`} className="workspace-minimized-window" aria-label={`${item.title} minimized window`}>
+        <button type="button" aria-label={`Expand ${item.title}`} aria-expanded={false}
+          data-help={`Expand ${item.title}`} data-help-description="Reopen this panel in the analysis area. Minimizing a panel does not stop the pipeline or delete its results."
+          onClick={()=>{toggle(item.id);setActivePanel(item.id);}}>
+          <strong>{item.title}</strong><span>Minimized</span><ChevronUp size={16} aria-hidden="true"/>
+        </button>
+      </section>)}
+    </div>}
   </div>;
 }

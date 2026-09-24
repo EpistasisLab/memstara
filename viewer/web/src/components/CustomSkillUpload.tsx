@@ -8,12 +8,13 @@ type Props = {
   stage: 'hypothesis' | 'data' | 'ml' | 'interpreter' | 'report';
   disabled?: boolean;
   multiple?: boolean;
+  includeAssistant?: boolean;
   onSelect: (skill: SkillInfo) => void;
   onBusy: (busy: boolean) => void;
 };
 
 /** Register a role-scoped skill; the parent owns its uncommitted selection. */
-export default function CustomSkillUpload({ stage, disabled, multiple = false, onSelect, onBusy }: Props) {
+export default function CustomSkillUpload({ stage, disabled, multiple = false, includeAssistant = true, onSelect, onBusy }: Props) {
   const input = useRef<HTMLInputElement>(null);
   const [writing, setWriting] = useState(false);
   const [drafting, setDrafting] = useState(false);
@@ -73,7 +74,7 @@ export default function CustomSkillUpload({ stage, disabled, multiple = false, o
     </p>}</div>
     <p className="mt-2 text-xs text-ink-muted">The file is saved in your skill library. This pipeline is created only after you finish the review.</p>
     <CreateCustomSkill stage={stage} disabled={disabled || uploading || writing || drafting} onSelect={onSelect} onBusy={value=>{setWriting(value);onBusy(value);}} />
-    {stage === 'hypothesis' && <HypothesisSkillWizard disabled={disabled || uploading || writing} multiple={multiple} onSelect={onSelect} onBusy={value=>{setDrafting(value);onBusy(value);}} />}
+    {includeAssistant && <HypothesisSkillWizard key={stage} stage={stage} disabled={disabled || uploading || writing} multiple={multiple} onSelect={onSelect} onBusy={value=>{setDrafting(value);onBusy(value);}} />}
     {error && <p role="alert" className="mt-2 text-sm text-red-600">{error}</p>}
   </section>;
 }
