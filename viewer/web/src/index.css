@@ -354,7 +354,7 @@ dialog::backdrop { backdrop-filter: blur(3px); }
 .model-comparison strong, .model-comparison li { overflow-wrap: anywhere; }
 .baseline-settings textarea { resize: vertical; min-height: 6rem; }
 
-.interface-context-help { position:fixed; inset:auto; margin:0; padding:12px 15px; width:max-content; max-width:min(340px,calc(100vw - 24px)); max-height:min(280px,calc(100dvh - 24px)); overflow:auto; border:1px solid rgb(var(--accent) / .25); border-radius:12px; background:rgb(var(--panel)); color:rgb(var(--ink)); box-shadow:0 8px 32px rgb(0 0 0 / .18); z-index:2147483647; font:400 13px/1.6 system-ui,sans-serif; text-align:left; text-transform:none; letter-spacing:normal; overflow-wrap:anywhere; }
+.interface-context-help { pointer-events:none; position:fixed; inset:auto; margin:0; padding:12px 15px; width:max-content; max-width:min(340px,calc(100vw - 24px)); max-height:min(280px,calc(100dvh - 24px)); overflow:auto; border:1px solid rgb(var(--accent) / .25); border-radius:12px; background:rgb(var(--panel)); color:rgb(var(--ink)); box-shadow:0 8px 32px rgb(0 0 0 / .18); z-index:2147483647; font:400 13px/1.6 system-ui,sans-serif; text-align:left; text-transform:none; letter-spacing:normal; overflow-wrap:anywhere; }
 .interface-context-help strong { display:block; margin-bottom:4px; font-size:13px; font-weight:650; }
 .interface-context-help p { margin:0; color:rgb(var(--ink-soft)); }
 .interface-context-help::backdrop { background:transparent; pointer-events:none; }
