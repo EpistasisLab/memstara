@@ -1,139 +1,180 @@
-# Memstara Viewer
+# Memstara workspace
 
-A living scene in which the pipeline's agents exist as **characters** and the board,
-knowledge source, dataset, trainer and results table each have a **place**. Run the
-pipeline and you watch, in real time, a character walk to the board, pick up a row, carry
-it to their own place, work on it and put it back.
+The browser workspace configures pipelines and displays questions, agent activity,
+model results, and explanations. It has three services with distinct responsibilities:
 
-**Five characters, and one of them used to be two.** The pipeline has five stages
-(`viewer/api/stores.py:233-239`). It had six until 2026-09-07, when the `curator` was
-merged into the hypothesis agent — writing the wave's questions is that agent's other job
-now, done in a separate call with a separate set of tools.
+| Service | Local address | Responsibility |
+|---|---|---|
+| Web | <http://localhost:8070> | React application served by nginx |
+| Observation API | <http://localhost:8071> | Reads Memstara and Motoro records |
+| Host control | <http://127.0.0.1:8072> | Saves configurations and starts, pauses, resumes, or ends executions |
 
-**The viewer still knows the retired name, and must keep knowing it**
-(`viewer/api/stores.py:153`). Hundreds of runs in the database are recorded against
-`memstara-board-curator`, and `viewer/api/scene.py:784` drops any row whose agent name the
-viewer does not recognise. Forget the name and that spend leaves the cost total with
-nothing on any screen to say so. So `DRAWN_AS` (`viewer/api/stores.py:277`) is now a
-compatibility layer rather than a drawing choice: it folds those historical rows into the
-hypothesis agent, which is the agent that does that work today.
+The browser sends `/api/` requests to the observation API and `/control/` requests
+to the host control service. Only the observation database connections are
+read-only; the workspace as a whole includes explicit execution controls.
 
-**Their numbers are added, not dropped.** Runs, tokens, calls and cost are the same totals
-as before the fold; what you cannot ask the viewer is what the curator alone cost, and
-`verify.py` reads the databases unfolded, which is why the checks below still work. The
-Log panel prints `curator0` for a run made before the merge and `question0` for one made
-after, because that panel tails the pipeline's stdout and rewriting a console is
-falsifying a record.
+## Requirements
 
-```bash
-docker compose up -d --build     # → http://localhost:8070
-python3 verify.py                # every screen value, compared against the DBs
+Complete the [pipeline setup](../README.md#get-started) first. The viewer needs
+both databases, read-only database accounts, Docker Compose for container mode,
+and the `memstara` Python environment for the host control service. Local frontend
+development uses Node.js 22 and the committed `web/package-lock.json`.
+
+### Read-only database access
+
+The observation API reads `MEMSTARA_VIEWER_DSN` and `CORE_VIEWER_DSN`. Its local
+defaults use the `memstara_viewer` role, password `viewer`, and databases
+`memstara` on port 5463 and `motoro` on port 5453. These are development defaults,
+not automatically provisioned accounts. Docker uses `host.docker.internal`
+instead of `localhost`; see [docker-compose.yml](docker-compose.yml).
+
+For each database, connect as its administrator to create a dedicated login if
+one does not already exist, then set its password interactively:
+
+```sql
+CREATE ROLE memstara_viewer LOGIN;
+\password memstara_viewer
 ```
 
-`verify.py` prints its own tally at the end — read that rather than trusting a count
-written here, which goes stale the next time a check is added.
+On separate PostgreSQL servers, repeat role creation for each server. If both
+databases share one server, create the role once. In each target database, grant
+connection access (use that database's name) and read access to the schema:
 
-During development the two are started separately.
-
-```bash
-.venv/bin/uvicorn main:app --app-dir api --port 8071 --reload
-cd web && npm run dev            # → http://localhost:5173 (/api proxies to 8071)
+```sql
+-- In the Memstara database:
+GRANT CONNECT ON DATABASE memstara TO memstara_viewer;
+-- In the Motoro database, use this instead:
+-- GRANT CONNECT ON DATABASE motoro TO memstara_viewer;
+GRANT USAGE ON SCHEMA public TO memstara_viewer;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO memstara_viewer;
 ```
 
-## The screens
+Run the following as each role that creates the application tables, so future
+tables also become readable:
 
-| | What |
+```sql
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT ON TABLES TO memstara_viewer;
+```
+
+Use a dedicated non-owner, non-superuser account without write-role memberships.
+These grants do not revoke previously granted write access. Set the connection
+strings to match the actual credentials and schema. For containers, the DSNs
+are configured under the API service in the Compose file; exporting a host
+variable alone does not override those literal Compose values. Keep credential
+customizations local and never commit real credentials.
+
+## Start the workspace
+
+From the repository root:
+
+```bash
+docker compose -f viewer/docker-compose.yml up -d --build
+```
+
+In another terminal with the pipeline environment active:
+
+```bash
+conda activate memstara
+python -m memstara.control
+```
+
+Open <http://localhost:8070>. Creating a configuration does not run it; use its
+explicit Run action. Selected Pipelines configures individual pipelines;
+All Combinations executes a bounded schedule of skill combinations. AI skill
+drafting currently supports Hypothesis only. All roles support custom Markdown
+skills subject to their role's execution constraints.
+
+The control service binds to loopback and validates requests. The workspace has
+no application login or production authentication layer. The supplied Compose
+port mappings do not themselves restrict listening to loopback; use an appropriate
+host firewall or loopback-only mappings when restricting access to this machine.
+
+## Views
+
+| View | Purpose |
 |---|---|
-| **Scene** | Six places and five characters. Click the board or the results table for that tab, click a character for that agent |
-| **Board** | Waiting / in progress / done lanes. Cards carry `attempts` and how many times the row came back |
-| **Life of a row** | The trail of one row through the four stages, and the run id that handled each |
-| **Agents** | Runs, iterations, tokens, cost, and the tools each stage is given |
-| **Access map** | Who reached which store, through which tool, how many times |
-| **Results** | AUC · importances · interpretation |
+| Question universe | Generated questions and their hypotheses, evidence, and results |
+| Clinician view | Findings in clinical language with evidence and limitations |
+| Status | Pipeline stage, Loop, and completion state |
+| Floor plan | Agents, resources, and live activity across pipelines |
+| Run log | Execution messages and troubleshooting |
+| Final report | Saved explanations and research summaries |
+| Board | Waiting, active, completed, or failed tasks |
+| Task life | One task's progress through its stages |
+| Telemetry | Agent calls, tool activity, usage, and database records |
+| Access map | Tool access to stores |
+| Results panel | Recorded model evaluations and interpretation |
 
-## Read-only is a permission, not a habit
+The primary navigation exposes Floor plan, Status, Clinician view, Board,
+Telemetry, Final report, and Question universe. Logs and task/access detail are
+additional workspace panels rather than all being top-level navigation entries.
 
-The connecting account `memstara_viewer` holds `SELECT` and nothing else. It is read-only
-not because the code is careful but because **the database refuses** — `verify.py` checks
-on every run that an attempted `UPDATE` or `DELETE` is blocked. Changing the board is
-still the tools (MCP) and the driving script, and only those.
+The five visible roles are Hypothesis, Data, ML, Interpretation, and Explanation.
+The Explanation role retains the internal `report` stage for compatibility.
+Historical `curator` names are still recognized when reading older run records;
+they do not imply a sixth active role.
 
-## The Start button is a different service
+## Development
 
-The control panel can start a run, and **nothing above changes because of it.** The
-button does not talk to `/api/`; it talks to `/control/`, which nginx proxies to a
-separate process on the host (`python -m memstara.control`, 127.0.0.1:8072). That
-process is in the sandbox's own environment, which is the only place a pipeline can be
-launched from — this container has no `.venv`, no `../motoro` and no `.env`, and it is
-not going to get them.
-
-So the two failure modes stay apart. The viewer with no control service is the ordinary
-state: everything is drawn, the third health dot is red, and the panel says which command
-to run. The control service can also be up while a database is down, and the screen says
-that too.
-
-It binds the loopback interface and refuses a request that arrives under an unfamiliar
-host name, from an origin that is not this viewer, or without a JSON content type. It
-starts processes; those three are what keeps a page on the open web from starting one.
-Exposing it beyond localhost needs an answer about authentication first, and there isn't
-one.
-
-## ⚠️ The record comes in three shapes
-
-Read `run_steps.tool_call` naively and you get numbers that are **plausibly wrong**.
-
-| The trap | Read naively |
-|---|---|
-| Rows where the column is `json` and the value is the **JSON literal `null`** | Steps with no tool call get counted as calls |
-| Two shapes: single `{server,tool,…}` and **batched `{"calls":[…]}`** | `search_concepts` appears to run 0 times (really hundreds) |
-| The `ecoxai-*` server name on older rows | One server splits into two |
-
-All three are handled in one place, `FLAT_CALLS` in `api/queries.py`. `verify.py` goes as
-far as checking that **the naive aggregate and the correct one must differ** — if they
-happened to agree, the tests would still pass after the trap handling was deleted.
-
-## Why there is a backend
-
-A browser cannot connect to Postgres directly. And if six screens each interpreted
-`tool_call` themselves, they would draw the same run differently. A single
-`/api/snapshot` hands over the data for every screen **at once**, and the front end picks
-from it — one request every two seconds.
-
-Two endpoints stand outside that and are fetched per item, when a person opens one:
-`/api/task/{task_id}` and `/api/result/{result_id}`. The second is the one with a measured
-reason. `match_trace` — the matcher's candidates, chosen and rejected alike — is 598 kB
-across the 81 stored results against 89 kB for every explanation column the snapshot does
-carry, with one row at 23.6 kB. Polling that thirty times a minute to show something
-nobody has opened is what the split avoids, not a preference about shape.
-
-That trace is also the only place the **rejected** candidates exist. The board and the
-results table keep the columns that were chosen, so "it picked `DX__D64.9__Anemia,
-unspecified`" was already on screen and "it picked that over `DX__D50.9__Iron deficiency
-anemia` at 0.975" was nowhere. The Results panel's *Why these columns* section is what
-reads it.
-
-## The board is still visible when core is down
-
-The board (`memstara-postgres:5463`) and the agent records (`motoro-postgres:5453`) are
-different servers. If one dies, only that part shows a notice and the rest is drawn as
-usual — a character becomes **`unknown`**, not `idle`. So as not to claim to know
-something we do not.
-
-## The definitions come from the pipeline
-
-`api/stores.py` uses `pipeline_core.BOARD_TOOLS` / `BOARD_SERVERS`. When the viewer runs
-in its own virtualenv and the import fails, it falls back to a written-down copy — and
-once that copy goes stale, only the screen is wrong, quietly. Hence a separate
-cross-check.
+Run the API from the repository root in a separate viewer environment:
 
 ```bash
-# From viewer/. Needs an interpreter that can import both pipeline_core and motoro.
-../.venv/bin/python check_definitions.py
+python3 -m venv viewer/.venv
+viewer/.venv/bin/python -m pip install -r viewer/requirements.txt
+viewer/.venv/bin/python -m uvicorn main:app --app-dir viewer/api --port 8071 --reload
 ```
 
-## What it does not do
+In another terminal, from the repository root:
 
-- **Change anything it shows** — the databases refuse it. Starting a run is the one
-  exception and it goes through a different process; see above
-- Game engine, canvas, pixel assets — SVG and CSS transitions are enough
-- Authentication — localhost only
+```bash
+cd viewer/web
+npm ci
+npm run dev
+```
+
+Open <http://localhost:5173>. Vite proxies `/api` to 8071 and `/control` to 8072;
+the host control service still needs to run separately. Verify a production build
+with `npm run build` from `viewer/web`.
+
+## Data and verification
+
+The API maintains independent database pools. A failed source is reported as
+unavailable rather than interpreted as zero activity. Run records may contain
+JSON nulls, single tool calls, batched calls, and legacy server names.
+[api/queries.py](api/queries.py) normalizes those shapes for aggregation.
+The workspace uses snapshot data plus detail and control routes; a planned skill
+is not proof that a corresponding agent call ran.
+
+Tool grants originate in `memstara.pipeline.core`. The observation API includes
+fallback definitions when the pipeline package is unavailable. With the pipeline
+Python environment active, check the fallback definitions from the repository root:
+
+```bash
+python viewer/check_definitions.py
+```
+
+The live verification script requires running local containers and populated
+records. It compares selected API values with database queries and attempts
+writes that the read-only role must reject:
+
+```bash
+python viewer/verify.py
+```
+
+This is an operational check, not an offline test or a guarantee that every screen
+is correct. Its permission checks require a correctly restricted account. The
+script's container names and ports must match the deployment.
+
+## Everyday commands
+
+From the repository root:
+
+```bash
+docker compose -f viewer/docker-compose.yml logs -f api
+docker compose -f viewer/docker-compose.yml up -d --build web
+docker compose -f viewer/docker-compose.yml down
+```
+
+Stopping the viewer does not stop its databases or necessarily end a pipeline
+process. Use the pipeline controls to manage execution before maintenance.

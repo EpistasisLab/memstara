@@ -8,7 +8,7 @@ it is also what removes the reader who used to notice.
 `core.py` is not imported here, so the expected agent names are written out below rather
 than read from `AGENT_NAMES` and `BOARD_AGENT_NAMES`. That duplication is deliberate and
 it is not free: adding an agent means editing this list too. CI has no `../motoro`
-
+checkout and no litellm, so a test that imported
 `core.py` would fail on the runner and nowhere else — a duplicated list that fails loudly
 is worth more than an import that cannot run.
 """
@@ -35,10 +35,7 @@ AGENTS = [
 #: Files that are not agents. A fragment has no goal and is never loaded on its own.
 FRAGMENTS = ["board/_claim_preamble"]
 
-#: The directory's rules file, which is prose for people and never loaded as a prompt.
-#: Named here rather than filtered by a pattern, on the same principle as
-#: `scripts/check_citations.py:47-49`: an exemption a reader can see beats one that a
-#: glob happens to make.
+#: Optional local instructions, never a runtime prompt. Fresh clones omit them.
 NOT_A_PROMPT = ["CLAUDE"]
 
 
@@ -65,16 +62,16 @@ def test_no_file_is_unaccounted_for():
     keeps working, and the stale file goes on being edited by whoever finds it first.
     """
     on_disk = {p.relative_to(PROMPTS_DIR).with_suffix("").as_posix() for p in prompt_files()}
-    assert on_disk == set(AGENTS) | set(FRAGMENTS) | set(NOT_A_PROMPT)
+    assert on_disk - set(NOT_A_PROMPT) == set(AGENTS) | set(FRAGMENTS)
 
 
 @pytest.mark.parametrize("name", AGENTS)
 def test_the_outcome_column_is_never_named_to_an_agent(name):
-
+    """`HIV_DETECTABLE` is the target and is never a feature.
 
     A model that can see the label does not predict it, it reads it. Until the prompts
     were files this rule was enforced only at the tool servers
-
+    and was unenforceable in the prompt text.
     """
     prompt = load_prompt(name)
     assert "HIV_DETECTABLE" not in prompt["system_prompt"]
@@ -135,7 +132,7 @@ def test_every_playbook_loads_into_a_marked_prompt():
 def test_the_outcome_column_is_never_named_in_a_playbook():
     """Same rule as the prompts, same reason. A playbook reaches a model the same way a
     prompt does, and it is the newer of the two routes, so it is the one likely to be
-
+    written without knowledge of the fixed-target extraction contract."""
     for book in playbook_names():
         text = (PLAYBOOKS_DIR / f"{book}.md").read_text(encoding="utf-8")
         assert "HIV_DETECTABLE" not in text, book
@@ -167,3 +164,24 @@ def test_no_comment_survives_into_a_prompt():
         prompt = load_prompt(name)
         assert "<!--" not in prompt["system_prompt"], name
         assert "-->" not in prompt["system_prompt"], name
+
+
+@pytest.mark.parametrize("local_rules", [False, True])
+def test_optional_local_rules_do_not_change_prompt_inventory(tmp_path, monkeypatch, local_rules):
+    """Both a fresh clone and a developer checkout must detect missing/extra prompts."""
+    monkeypatch.setattr(__import__(__name__, fromlist=['PROMPTS_DIR']), 'PROMPTS_DIR', tmp_path)
+    for name in AGENTS + FRAGMENTS:
+        path = tmp_path / f"{name}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("test prompt", encoding="utf-8")
+    if local_rules:
+
+    test_no_file_is_unaccounted_for()
+    unexpected = tmp_path / "obsolete.md"
+    unexpected.write_text("obsolete prompt", encoding="utf-8")
+    with pytest.raises(AssertionError):
+        test_no_file_is_unaccounted_for()
+    unexpected.unlink()
+    (tmp_path / f"{AGENTS[0]}.md").unlink()
+    with pytest.raises(AssertionError):
+        test_no_file_is_unaccounted_for()

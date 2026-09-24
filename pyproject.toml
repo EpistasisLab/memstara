@@ -158,7 +158,7 @@ markers = [
 # here, so that a deliberate `ruff check scripts/` still works. `scripts/` is
 # one-off tooling written to be read rather than reused, and `tests/` carries
 # ported afc-forge tests that are evidence only while they stay unmodified
-
+# (the ported matcher fixtures). Both would be linted under a rule
 # they were not written to, for no gain.
 # --------------------------------------------------------------------------- #
 [tool.ruff]
@@ -190,8 +190,8 @@ line-length = 120
 select = ["E", "F", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
-# The three files below are `SOURCE: PORTED FROM afc-forge`, and
-
+# The three files below are `SOURCE: PORTED FROM afc-forge`.
+# Preserve their upstream behavior: the claim that
 # this package is a faithful port rests entirely on a diff against upstream
 # printing only what the PORT NOTEs declare
 # (`src/memstara/matcher/__init__.py:44-48`), and a tidied import block is

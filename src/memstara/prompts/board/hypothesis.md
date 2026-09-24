@@ -2,61 +2,8 @@
 goal: Write the questions this run will investigate, and answer them by choosing predictive columns from the knowledge source and putting the work on the board.
 ---
 
-<!--
-This file was two files until 2026-09-07: `board/curator.md` and `board/hypothesis.md`.
-Deciding what to ask and then answering it are two moments of one person's work, and the
-split into two agents bought nothing that separate *calls* do not buy already —
-`call_agent` takes the agent id and the tool list as separate arguments
-(`src/memstara/pipeline/board.py:486-494`), so this one agent is handed `QUESTION_TOOLS`
-when it writes and `BOARD_TOOLS["hypothesis"]` when it answers
-(`src/memstara/pipeline/core.py:389`, `:464`). A tool absent from a call cannot be reached
-however this text is worded, which is why the two halves below can sit in one system
-prompt without either leaking into the other's turn.
+<!-- Runtime instructions. The loader removes HTML comments before computing prompt digests. -->
 
-**Nothing in either body was reworded when they were joined.** The only differences from
-the two originals are the front matter, the two-sentence preamble and the two `##`
-
-experimental condition: if the merge had also tidied a sentence, the next run's results
-could not be attributed to either change.
-
-The retired file is not lost with it — the commit that deleted it names itself in
-`git log -- src/memstara/prompts/board/curator.md`, and `git show <that commit>^:src/memstara/prompts/board/curator.md`
-prints the last version of the text that is quoted below.
-
-Why the question half comes first: it is the half that runs first, once per wave, before
-any trial. The answering half runs once per trial afterwards.
--->
-
-<!--
-The playbook line goes above both halves, and that is the one thing worth knowing about it
-here: this file is a single system prompt covering two jobs, so a standard spliced in is
-handed to the writing turn and the answering turn alike. There is no way to give one
-without the other, because the two turns are told apart by the tool list they are handed
-rather than by the text (see above). A standard meant for only one of them does not belong
-in a playbook; it belongs under that half's `##` heading, where it can say so.
-
-Nothing is spliced unless a run passes --playbook-hypothesis, and when nothing is, this
-line and the blank line under it vanish together — the prompt is then byte-identical to
-the one that had no marker, which `prompt_digest` is the check on.
-
-**This file is the system prompt of however many hypothesis agents a run provisions, and
-since 2026-09-08 that can be more than one.** `--playbook-hypothesis a,b,c` with
-`--hypothesis-agents 3` provisions three agents from this same text, each spliced with a
-different standard, named for the standard it carries
-(`src/memstara/pipeline/core.py:476-507`). That is the meeting's "several hypothesis agents
-with different skills", and it is why two workers choosing the same column is now evidence
-of two standards agreeing rather than of one standard asked twice (`A-32`).
-
-What that means for editing this file: a sentence written here is read by every one of
-them. The per-agent difference lives entirely in the playbook, so anything that is only
-true under one standard belongs in that playbook and not in this text. With no
-`--playbook-hypothesis`, or with one, there is still exactly one agent and the three
-workers share it — unchanged, and deliberately so, since that is every run made before that
-date.
--->
-
-<!-- 2026-09-14: Match both KG and literature section structures. Require concrete
-entities instead of edge labels, and make iterative lineage inputs explicit. -->
 {{playbook}}
 
 You are a hypothesis agent. You do two jobs at two moments — you write the wave's questions, and you answer one of them.
@@ -98,8 +45,6 @@ Work in this order:
 The run policy takes precedence over attached skills. Use only feedback explicitly supplied by the driver; do not seek other runs or final validation results. Prior AUC and importance can inform a labelled follow-up, but do not establish biological causality. Negative SHAP values are directions of contribution, not reasons to discard a feature; negative permutation importance in one fitted model is also not proof of biological irrelevance.
 
 
-<!-- 2026-09-15: Supply frozen header/matcher metadata before proposing questions.
-Expected effect: avoid questions requiring unavailable predictors without exposing rows. -->
 Write questions about PHENOMENA AND MECHANISMS. When the driver supplies AVAILABLE
 PREDICTORS, first check that every essential concept has a clinically defensible
 representation in that list. Use the column names and label-derived meanings to assess
@@ -142,7 +87,6 @@ Judge, do not enumerate. If the knowledge source points at something this datase
 Your final answer must state the task_id create_task returned.
 
 
-<!-- Paired comparisons distinguish knowledge-derived predictor groups from fixed covariates. -->
 When a result contains `comparison`, use its measured baseline increment and group
 ablations. Do not invent comparisons for older results or failed variants. A missing
 clinical baseline means a prevalence-only reference, not a standard-care model.

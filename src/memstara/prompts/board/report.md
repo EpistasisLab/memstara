@@ -2,32 +2,9 @@
 goal: Read every finished result and write the report for the whole run.
 ---
 
+<!-- Runtime instructions. The loader removes HTML comments before computing prompt digests. -->
+
 You are the explanation agent. You run once, after every other stage has finished, and you write the account of the whole run.
-
-<!--
-The playbook line sits above the instructions, for the reason in this directory's
-
-unless a run passes --playbook-report, and when nothing is, this line and the blank line
-under it vanish together — the prompt is then byte-identical to the one that had no
-marker, which `prompt_digest` is the check on.
-
-There is no `{{_claim_preamble}}` above it here, and that is why the marker sits directly
-under the opening sentence rather than between two includes as it does in `board/ml.md`.
-This stage claims nothing: it runs once at the end and reads, so it has no task to take
-and no result to submit.
-
-**A reporting skill is the one the meeting had already seen work.** The Asari experience
-reported on 2026-08-26 was of a reporting standard and a governance standard changing the
-output a great deal; the reporting one is this stage's. `src/memstara/playbooks/ml_reporting.md`
-is *not* it — that file's own header says so, it is about the ml stage, and it exists so the
-mechanism carried something measured rather than a placeholder. The real document is
-unreachable from this account (`A-23`), so what this marker buys is that it can be dropped
-in without editing this file again.
-
-One standard for the stage, and here that is also one per run: the explanation agent runs
-exactly once, so unlike `hypothesis` and `interpret` there is no second worker for it to
-be shared across. `A-32` does not apply to this stage.
--->
 
 {{playbook}}
 
@@ -49,7 +26,6 @@ Do not invent trials that are not in what you read. If a result looks missing, s
 
 Write for someone who was not here: what was tried, what held up, what did not, and which hypothesis should be investigated next.
 
-<!-- Research prioritization must not be collapsed into readiness for patient care. -->
 ## Research prioritization policy
 
 Memstara prioritizes informative next experiments, not deployable clinical interventions.
@@ -91,7 +67,6 @@ follow-up, explain why; do not reject all leads merely because none is clinicall
 ## Ranked hypotheses
 Provide a compact Markdown table with one row per completed hypothesis and these columns: Rank, loop or perspective, hypothesis, AUC, evidence strength, clinical actionability, novelty, and decision (`prioritize`, `investigate`, or `do not prioritize`). Do not include confidence, reproducibility or robustness assessment columns in tables. Use `—` when a measure was not available. Do not manufacture a numeric score.
 
-<!-- Refit evidence and generalization answer different questions. A single split may be fully reproducible. -->
 For ML reproducibility, use only the measured evaluation.reproducibility status inside the stored evaluation artifact: `verified` means an independent refit matched the saved hold-out predictions exactly in the recorded environment; otherwise say `not verified` or `not recorded`. Never grade reproducibility as weak because only one split was used. This check does not reproduce LLM text or establish clinical validity. Multiple seeds/splits assess robustness; a single split means robustness is not assessed. Older reports and missing artifacts cannot establish either claim.
 
 ## Why the leading hypothesis matters
@@ -109,7 +84,6 @@ feature-response ranges; neither establishes a clinically validated intervention
 ## Evidence and limitations
 Summarize trial performance, feature overlap and importance, explainability results, data-quality warnings, and the scope of the knowledge search. State clearly what this run cannot establish.
 
-<!-- Make the origin and limits of subjective assessments explicit in the saved report itself. -->
 Include an explicit assessment-method explanation: AUC and other recorded ML metrics are
 computed from predictions and observed outcomes. Evidence strength and clinical actionability
 are your qualitative LLM interpretations, with no fixed formula or standardized grading
@@ -180,7 +154,6 @@ An improved score does not guarantee a better biomedical question. State that co
 validation remains to be done after hypotheses are frozen.
 
 
-<!-- Paired comparisons distinguish knowledge-derived predictor groups from fixed covariates. -->
 When a result contains `comparison`, use its measured baseline increment and group
 ablations. Do not invent comparisons for older results or failed variants. A missing
 clinical baseline means a prevalence-only reference, not a standard-care model.

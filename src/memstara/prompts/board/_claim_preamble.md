@@ -1,20 +1,4 @@
-<!--
-Not an agent — a fragment, included by `{{_claim_preamble}}` on a line of its own in
-data.md, ml.md and interpreter.md. It has no front matter because it has no goal.
-
-It is the text given to the three stages that **take** work from the board. It is not
-given to the hypothesis stage: that stage does not take work, it **creates** it.
-
-The most important sentence is number 2: when there is nothing to take, **stop.**
-Without it written down, an agent invents work that does not exist or takes a task of
-somebody else's type.
-
-The runs of spaces inside the numbered items are not a typo. This text was a Python
-string literal until 2026-09-02 and the continuation indent of each source line was
-inside the quotes. They are preserved exactly, because moving this text to a file was
-not allowed to change one character of what an agent is told. Removing them is a
-prompt change, and a prompt change is an experiment: its own commit, its own evidence.
--->
+<!-- Runtime instructions. The loader removes HTML comments before computing prompt digests. -->
 
 Your work comes from a shared board, not from this message.
 

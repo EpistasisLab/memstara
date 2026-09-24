@@ -1,49 +1,14 @@
-# ---------------------------------------------------------------------------
-# Secrets. Never tracked. `.env.example` is the template that IS tracked.
-# ---------------------------------------------------------------------------
+# Local files and generated artifacts. Rules are evaluated in order.
 .env
 .env.local
 *.pem
 *.key
-
-# ---------------------------------------------------------------------------
-# Patient data and everything derived from it.
-#
-# `outputs/` is a scratch directory: the cohort CSV, every sub-CSV the data
-# stage cuts from it, the matcher's column catalogue (all 1,394 names), and one
-# folder per run. None of it belongs in a repository, and all of it is
-# regenerable — see prep_hiv_dataset.py, make_sample_data.py, prep_nhanes.py and
-# scripts/build_matcher_cache.py.
-#
-# The two entries below are the exceptions: the README explaining the folder,
-# and the .gitkeep that keeps the empty folder present after a clone.
-# ---------------------------------------------------------------------------
 outputs/*
 !outputs/.gitkeep
 !outputs/README.md
-
-# ---------------------------------------------------------------------------
-# `kg/`. Knowledge-graph dumps. AlzKB and AddictionKB are published elsewhere;
-# these are 987MB of exports and their SQLite builds.
-#
-# Until 2026-09-23 this block ignored the payloads and kept the three scripts
-# that produce and read them — build_sqlite.py twice and kg_to_okf.py. As of
-# 2026-09-23, on explicit instruction, the whole folder is ignored and those
-# three left the index. They are untouched on disk and still run here; a clone
-# now has neither the payloads nor the code that builds them, so the path from
-# a published graph to an OKF bundle is not reconstructable from a clone.
-#
-# The two payload patterns below are kept rather than folded into `kg/`. They
-# are a separate decision — the payloads were never publishable, and if `kg/`
-# is ever narrowed again they must not quietly come back with it.
-# ---------------------------------------------------------------------------
 kg/
 kg/**/*.db
 kg/**/*.cypherl
-
-# ---------------------------------------------------------------------------
-# Reinstallable
-# ---------------------------------------------------------------------------
 .venv
 .venv/
 node_modules/
@@ -53,149 +18,21 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 
-# Local assistant instructions and internal work queues, at every directory level.
 
-
-
-# ---------------------------------------------------------------------------
-# The Korean editions. Local only, as of 2026-09-02.
-#
-# Every Korean file in this project carries `_KR` in its name — that is the
-
-# judgement about content, precisely so a pattern like this one can enforce it.
-# The pattern is `*_KR*`, unanchored and open at both ends, because the marker
-# lands in three different places: before the suffix (`BACKLOG_KR.md`), in the
-# middle of a compound name (`..._KR_expanded.tex`, `..._KR_fig1.png`), and
-# inside a versioned name (`EcoXAI_SRS_KR_v0.2_original.pdf`). Anchoring it to
-# `*_KR.*` would have caught 102 of the 108 and quietly let 6 through.
-#
-# **What this costs, stated once so nobody rediscovers it as a surprise.** All
-# 108 files stay on disk and leave the repository, so a clone does not have
-
-
-# to them from the English files still read correctly and resolve to nothing on
-# GitHub. `scripts/check_citations.py` reports citations into them as *not
-# verifiable here* rather than broken, by name (`KR_EDITION`).
-#
-# `outputs/` is ignored because its contents must not be published;
-# these are ignored because the user asked for a repository whose tracked
-# surface is English. The mechanism is the same, the reason is not.
-# ---------------------------------------------------------------------------
 *_KR*
-
-# ---------------------------------------------------------------------------
-# Three historical local-only paths, retained after English translation.
-#
-# On 2026-09-10 the user requested English content in every non-KR project
-# file, including ignored scripts. build_deck.py and memo.md were translated;
-# backlog_to_issues.py was already English. Language is no longer an exception.
-#
-# Original Korean copies are build_deck_KR.py and memo_original_KR.md and
-# remain excluded by the *_KR* rule. The English builder emits an EN deck.
-# These explicit ignore entries remain unchanged because publication was
-# not requested. scripts/check_citations.py retains the matching LOCAL_ONLY
-# paths, whose descriptions now reflect the current language.
-#
-
-# memo, not an executable task list or an active manifest source.
-# ---------------------------------------------------------------------------
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
 
 
 scripts/backlog_to_issues.py
 
-# ---------------------------------------------------------------------------
 
-# exception inside it — the whole folder leaves the repository.
-#
-# 36 files were tracked here and all 36 left the index that day. The other 121
-# on disk were already out under `*_KR*`. Nothing was deleted: the folder is
-# untouched on this machine, `./build_pdf.sh` still builds, and the documents
-# are still written and updated here. What changed is that a clone does not
-
-#
-# This is the same mechanism as `outputs/` and `*_KR*` above and a third,
-# separate reason. `outputs/` is ignored because its contents must not be
-# published. `*_KR*` is ignored to keep the tracked surface English. This is
-# neither; it is a decision about what this repository publishes, taken by the
-# user on 2026-09-23.
-#
-# **What it costs, stated once so nobody rediscovers it as a surprise.**
-#
-
-#   tracked; four are. The file still loads while editing, because the
-#   assistant reads the working tree and not the index — but a clone has no
-#   rules for writing a document, and CI never sees them.
-
-#   neither read a document nor rebuild one.
-
-
-#   scripts/check_citations.py:146 searches `git ls-files`, so an untracked
-#   document is not scanned at all. This is the same silence `*_KR*` already
-#   bought, now extended to the English half.
-#
-
-# scripts/check_citations.py:192-194 tests the file on disk, not the index. A
-# path here does not become a broken citation by being untracked.
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-
-#
-# Nothing moved in the index when this was added: all 14 files here were
-# already out, 12 under `*_KR*` and 2026-08-06_WHITEBOARD.HEIC under the HEIC
-# rule. The one file the `*_KR*` rule does not cover is 2026-09-23.md, which is
-# untracked and now stays that way by rule rather than by never having been
-# added.
-#
-
-
-# repository only because every filename so far happened to end in `_KR` is one
-# non-Korean entry away from being published by accident.
-#
-# scripts/check_citations.py:73-76 already exempts this directory by name
-# (`FROZEN`), so no citation stops being checked here — it never was. Citations
-
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# `papers/`. Local only, as of 2026-09-23, on explicit instruction.
-#
-# Four files left the index: two published PDFs (Orlenko 2025 on gene-drug
-# targets in Alzheimer's, McVeety 2026 introducing OKF), README.md, and
-# _INDEX.md. 5.5MB, and both PDFs are third-party papers obtained elsewhere.
-#
-# The cost is that _INDEX.md goes with them, so a clone has no record of which
-# papers this work rests on — not even their titles. No tracked file cites a
-# line inside `papers/`, so the citation checker is unaffected.
-# ---------------------------------------------------------------------------
 papers/
-
-# ---------------------------------------------------------------------------
-# macOS and Office leavings
-# ---------------------------------------------------------------------------
 .DS_Store
 ~$*
-
-# HEIC images (case-insensitive extension).
 *.[hH][eE][iI][cC]
 
 
 
 
+/spec/
+/.venv.README
+!/viewer/web/package-lock.json

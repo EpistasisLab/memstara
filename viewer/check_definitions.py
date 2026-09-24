@@ -3,23 +3,24 @@
 
 `viewer/api/stores.py` keeps a written-out copy of `BOARD_TOOLS`, `BOARD_SERVERS` and
 `BOARD_AGENT_NAMES` because the viewer runs in its own virtualenv and cannot import
-`pipeline_core` (that needs motoro). A copy is fine; a copy nobody checks is not —
+`memstara.pipeline.core` (that needs motoro). A copy is fine; a copy nobody checks is not —
 the pipeline would change and only the picture would go stale, which is exactly the kind
 of quietly-wrong output this project keeps having to dig out.
 
-Run with the *core* interpreter, which can import both sides::
+Run from the repository root with the pipeline environment, which can import both sides::
 
-    ../../motoro/.venv/bin/python check_definitions.py
+    conda activate memstara
+    python viewer/check_definitions.py
 
 ==============================================================================
  How to read this file
 ==============================================================================
 
  What this file does
-   It compares the pipeline's real definitions (`pipeline_core`) against the stand-in
+   It compares the pipeline's real definitions (`memstara.pipeline.core`) against the stand-in
    tables the viewer copied out (the fallback inside `_pipeline_definitions()` in
    `stores.py`). Anything that does not line up gives exit code 1; not being able to
-   read pipeline_core gives 2; everything matching gives 0.
+   read memstara.pipeline.core gives 2; everything matching gives 0.
 
  The main functions
    _copy_from_stores()  pulls out the copy alone by **parsing stores.py rather than
@@ -82,7 +83,7 @@ def _copy_from_stores() -> dict[str, object]:
 
 def main() -> int:
     # The exit code is the result: 0 everything matches / 1 something does not line up /
-    # 2 pipeline_core could not be read. The point is that CI or a shell can pick it up
+    # 2 memstara.pipeline.core could not be read. The point is that CI or a shell can pick it up
     # as a failure as it stands.
     # This is where the real pipeline definitions are fetched. On failure it ends with 2
     # (= "the check could not be made"), not with 1 (= "they do not line up"). Mix the

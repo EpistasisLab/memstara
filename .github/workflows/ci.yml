@@ -1,28 +1,3 @@
-# --------------------------------------------------------------------------- #
-# The only automated gate this repository has.
-#
-# It runs three cheap things. What it does NOT cover is written out below, in
-# the same words as the "What the machine checks, and what it does not" section
-
-#
-#   * The citation checker verifies that a cited line EXISTS, not that it still
-#     SAYS what the citing text claims. Its own docstring calls this "a floor,
-#     not a proof" (`scripts/check_citations.py:19-21`).
-#   * The sibling checkouts (`../motoro`, `../ASAREE`, `../shared/afc-forge`)
-#     are absent here, and so is litellm. The 243 citations that point into them
-#     are reported as NOT VERIFIABLE rather than passed
-#     (`scripts/check_citations.py:257`). An absent neighbour is not evidence,
-#     and a green run here must never be read as having checked them. Only the
-#     419 that name a file this repository owns are genuinely checked by this
-#     job; the other 243 are checked on a developer's machine and nowhere else.
-#   * Nothing here starts an MCP server, connects to Postgres, or calls an LLM.
-#     Every claim about those lives in a commit's `Verified:` line or nowhere.
-#   * There is no type checker, deliberately. The reason is in `pyproject.toml`,
-#     above `[tool.ruff]`.
-#
-# There are no service containers because there is nothing to serve: the test
-# suite is fully offline — no `DATABASE_URL`, no `localhost`, no model download.
-# --------------------------------------------------------------------------- #
 name: CI
 
 on:
@@ -35,36 +10,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # The citation checker falls back to `git show 2ff414d:<path>` and
-          # `git ls-tree -r 2ff414d` for citations written before the 2026-09-01
-          # restructure (`scripts/check_citations.py:309`,
-          # `scripts/check_citations.py:323`). A shallow clone has no 2ff414d, so
-          # every historical citation would be reported broken rather than
-          # historical.
           fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      # `../motoro` does not exist here, and cloning it is not the answer: it
-      # brings torch, about 489MB (`environment.yml:20-22`). This install is the
-      # reason `asyncpg` and `pydantic` are declared in `[project.dependencies]`
-      # instead of arriving by accident from the sibling.
       - name: Install
         run: pip install -e ".[dev]"
 
-      # Cheapest first. `src/` is the scope on purpose; see the note above
-      # `[tool.ruff]` in `pyproject.toml` for why `scripts/` and `tests/` are out.
       - name: Lint
         run: ruff check src/
 
-      # Motoro is deliberately absent here. Runtime-dependent tests report an
-      # explicit skip; the full suite is also run in the development environment.
-      # -ra keeps skip reasons visible so this is not mistaken for full coverage.
       - name: Test
         run: pytest -q -ra
 
-      # Last, because it is the only step that reads the whole tree.
       - name: Citations
         run: python scripts/check_citations.py
+
+      - name: Markdown links
+        run: python scripts/check_markdown.py

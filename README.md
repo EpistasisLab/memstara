@@ -42,7 +42,7 @@ it for a study; preserve run configuration, prompt snapshots, and data provenanc
 | **Agent pipeline** | Hypothesis, Data, ML, Interpretation, and Explanation roles |
 | **Coordination** | Durable task claims, retries, results, and execution records on a shared board |
 | **Evaluation** | Model scores, feature contributions, configured comparisons, and evidence views |
-| **Agent skills** | Role-specific instructions, Markdown upload, custom writing, and assisted drafting |
+| **Agent skills** | Role-specific instructions, Markdown upload, custom writing, and Hypothesis-only assisted drafting |
 | **Pipeline design** | Selected Pipelines and bounded All Combinations skill schedules |
 | **Browser workspace** | Live execution, clinician-facing findings, run controls, and saved configurations |
 | **Traceability** | Frozen settings and prompts, per-Loop skill provenance, and recorded actual calls |
@@ -174,8 +174,7 @@ python scripts/build_matcher_cache.py
 ```
 
 The matcher needs its catalogue and embeddings built for the selected cohort
-and outcome. Rebuild when the cohort header, matching configuration, embedding
-model, or approved exclusion rules change. The first build may need embedding
+and outcome. Rebuild when the cohort header, matching configuration, or embedding model changes. The first build may need embedding
 model downloads. The synthetic corpus includes absent-variable decoys and
 planted predictive signal for checking the literature-to-column mapping.
 
@@ -221,7 +220,8 @@ One path runs at a time within a design; different saved pipelines can run
 concurrently. These schedules are not independently randomized skill trials.
 
 Create or select a skill for each role, upload Markdown, or write a custom skill.
-Assisted drafting produces editable role-specific instructions. Review and save
+AI-assisted drafting is available for the Hypothesis Agent and produces editable
+instructions. Other roles support manual writing and Markdown upload. Review and save
 the result before applying the surrounding pipeline settings; drafting does not
 start a pipeline. Data instructions must preserve fixed-target, exact-column
 extraction. Creating a pipeline and starting it remain separate actions.
@@ -272,7 +272,6 @@ schema upgrades. A viewer rebuild does not apply Motoro database migrations.
 | `MEMSTARA_OUTCOME_COLUMN` | Target excluded from matcher and data feature lists |
 | `MEMSTARA_LLM_PROVIDER`, `MEMSTARA_LLM_MODEL` | Deployment-wide LLM selection |
 | `MEMSTARA_LLM_API_BASE` | Optional configured provider endpoint |
-| `MEMSTARA_LEAKAGE_RULES_PATH` | Optional approved exact-column exclusion rules |
 
 See [.env.example](.env.example), [config.py](src/memstara/config.py), and
 [request.py](src/memstara/control/request.py) for the configuration contract.
@@ -292,13 +291,15 @@ for the complete interface. `--skill` filters the knowledge corpus;
 ruff check src/
 python -m pytest -q -ra
 python scripts/check_citations.py
+python scripts/check_markdown.py
 
-# Frontend, from viewer/web:
+# Frontend (Node.js 22), in a separate terminal from the repository root:
+cd viewer/web
 npm ci
 npm run build
 ```
 
-Backend CI runs lint, pytest, and citation checks. Runtime-dependent tests can
+Backend CI runs lint, pytest, citation checks, and tracked Markdown link checks. Runtime-dependent tests can
 skip when Motoro is absent; read the skip reasons. These checks do not certify
 live database, MCP, or paid model execution. Citation checks verify that a cited
 location exists, not that it supports the claim. Read the current command output
