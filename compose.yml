@@ -19,9 +19,20 @@ services:
     image: postgres:16-alpine
     container_name: memstara-postgres
     restart: unless-stopped
+    # The password is read from the environment, with the historical local value
+    # as the default, so `docker compose up -d` on a fresh clone still works and
+    # `psql postgresql://memstara:memstara@localhost:5463/memstara` above still
+    # connects. What changes is only that the literal is no longer the sole
+    # source: set POSTGRES_PASSWORD in `.env` and the container follows.
+    #
+    # If you do set it, MEMSTARA_DATABASE_URL in the same `.env` has to carry the
+    # same password. Nothing derives one from the other — the container reads
+    # POSTGRES_PASSWORD, and every client reads the URL. A mismatch surfaces as
+    # a password-authentication failure on the first claim_task, which reads
+    # like a connection problem rather than a configuration one.
     environment:
       POSTGRES_USER: memstara
-      POSTGRES_PASSWORD: memstara
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-memstara}
       POSTGRES_DB: memstara
     ports:
       - "5463:5432"
