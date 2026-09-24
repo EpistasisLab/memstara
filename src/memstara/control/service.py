@@ -356,6 +356,8 @@ class _Runs:
 
 
 RUNS = _Runs()
+# Saved configurations can reference deployment-configured external skills.
+load_env()
 WORKSPACE = PipelineWorkspace(RUNS_DIR / "pipeline_workspace.json", _Runs)
 
 

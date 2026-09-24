@@ -46,7 +46,7 @@ class PipelineWorkspace:
             if not isinstance(data, list) or len(data) > 3:
                 raise ValueError("Invalid pipeline workspace; preserve the file and repair it")
             self.items = [{**item, "agent_labels": dict(AGENT_LABELS),
-                           "configuration": self.configuration(item.get("configuration", {}))}
+                           "configuration": self.read_configuration(item.get("configuration", {}))[0]}
                           for item in data]
             if self.items != data:
                 self._save()
@@ -89,7 +89,9 @@ class PipelineWorkspace:
                             "waves": frozen.get("waves"), "continuous": frozen.get("continuous", False)}}
                     except (OSError, ValueError):
                         pass
-                out.append({**copy.deepcopy(item), "configuration": self.configuration(item["configuration"]),
+                configuration, configuration_error = self.read_configuration(item["configuration"])
+                out.append({**copy.deepcopy(item), "configuration": configuration,
+                            "configuration_error": configuration_error,
                             "running": current, "latest": latest, "progress": progress,
                             "loop_totals": loop_totals(manager.history_records() if hasattr(manager, "history_records")
                                                        else [*history, *([current] if current else [])])})
@@ -134,6 +136,14 @@ class PipelineWorkspace:
                     raise ValueError("Unknown pipeline action")
             self._save()
             return copy.deepcopy(item)
+
+    @classmethod
+    def read_configuration(cls, value):
+        """Keep unavailable saved skills editable; validate strictly when starting."""
+        try:
+            return cls.configuration(value), None
+        except (ValueError, TypeError, KeyError) as error:
+            return copy.deepcopy(value), str(error)
 
     @staticmethod
     def configuration(value):
