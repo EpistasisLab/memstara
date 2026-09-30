@@ -1,3 +1,4 @@
+import { featureImportance, rankedContributions } from "../lib/featureImportance";
 import {useState} from 'react';
 import type {Result} from '../types';
 import {featureLabel} from './ResultExplorer';
@@ -10,11 +11,10 @@ export default function FeatureContributionChart({result:r}:{result:Result}) {
  const shap=e?.shap?.mean_absolute;
  const hasShap=!!shap&&Object.values(shap).some(v=>Number.isFinite(v)&&v>=0);
  const useShap=method==='shap'&&hasShap;
- const permutation=e?.method==='holdout_permutation_auc';
- const entries=Object.entries(useShap?shap!:r.importance??{})
-  .filter(([c,v])=>c!==r.y_column&&Number.isFinite(v)&&(!useShap||v>=0))
-  .sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
- const spread=(c:string)=>!useShap&&permutation?e?.permutation?.standard_deviation[c]:undefined;
+ const contributions=featureImportance(r.importance);
+ const permutation=(e?.method||contributions.method)==='holdout_permutation_auc';
+ const entries=rankedContributions(useShap?shap:contributions.values,r.y_column,useShap);
+ const spread=(c:string)=>!useShap&&permutation?e?.permutation?.standard_deviation?.[c]:undefined;
  const sd=(c:string)=>{const v=spread(c);return v!=null&&Number.isFinite(v)&&v>=0?v:undefined;};
  const lo=Math.min(0,...entries.map(([c,v])=>v-(sd(c)??0)));
  const hi=Math.max(0,...entries.map(([c,v])=>v+(sd(c)??0)));
@@ -36,6 +36,7 @@ export default function FeatureContributionChart({result:r}:{result:Result}) {
    <span>{e?.scope||'Evaluation scope was not recorded for this result.'}</span>
    {e?.evaluated_replicate!=null&&<span>Split evaluation {e.evaluated_replicate} of {e.total_replicates??'unknown'} · seed {e.evaluated_seed??'not recorded'} · {e.evaluation_rows??'unknown'} held-out rows. This is not a separate pipeline Loop.</span>}
   </div>
+  {!useShap&&contributions.note&&<p className="result-caveat">{contributions.note}</p>}
   {!hasShap&&<p className="result-caveat">SHAP values were not recorded for this analysis.</p>}
   {!entries.length?<p className="result-empty">No feature contribution values were recorded.</p>:<>
    <div className="contribution-axis" aria-label={`Scale: ${format(lo)} to ${format(hi)} ${unit}`}><span>{format(lo)}</span><span>{unit}</span><span>{format(hi)}</span></div>

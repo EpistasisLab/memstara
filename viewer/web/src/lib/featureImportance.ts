@@ -17,3 +17,17 @@ export function featureImportance(raw: unknown) {
   const values = Object.fromEntries(entries);
   return {values, method, note, unsupported: Object.keys(record).length > 0 && entries.length === 0};
 }
+
+/** Rank recorded numeric values, never absolute values. Missing values are not zero. */
+export function rankedContributions(raw: unknown, exclude = '', magnitude = false) {
+  return Object.entries(featureImportance(raw).values)
+    .filter(([name, value]) => name !== exclude && (!magnitude || value >= 0))
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
+export function contributionScale(entries: [string, number][]) {
+  const low = Math.min(0, ...entries.map(([, value]) => value));
+  const high = Math.max(0, ...entries.map(([, value]) => value));
+  const range = high - low || 1;
+  return {low, high, range, position: (value: number) => (value - low) / range * 100};
+}

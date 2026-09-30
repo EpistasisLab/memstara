@@ -1,9 +1,10 @@
+import { featureImportance, rankedContributions } from "../lib/featureImportance";
 import ContentOrigin from "../components/ContentOrigin";
 import { useLoopLabel } from '../lib/useLoopLabel';
 import { lazy, Suspense } from "react";
 const ReportBody = lazy(() => import("../components/ReportBody"));
 import { agentDisplayName } from "../lib/telemetry";
-import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine } from "recharts";
 import { ArrowRight, Hand, Inbox, Send } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useViewer } from "../store/viewer";
@@ -77,7 +78,8 @@ export default function TaskTab({ taskId: scopedTaskId }: { taskId?: number | nu
   if (!data) return <div className="p-8 text-ink-faint">Loading…</div>;
 
   const { task, trail } = data;
-  const importance = Object.entries(task.importance).sort((a, b) => b[1] - a[1]);
+  const contributions = featureImportance(task.importance);
+  const importance = rankedContributions(contributions.values, task.y_column);
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 p-4">
@@ -100,14 +102,16 @@ export default function TaskTab({ taskId: scopedTaskId }: { taskId?: number | nu
           <div className="mt-4">
             <h3 className="mb-1 text-sm font-bold">Importance</h3>
             <p className="mb-2 text-xs text-ink-faint">
-              Importance describes the fitted model, not causation. Negative permutation importance means shuffling improved the score; a negative SHAP value indicates direction. Interpret values using the recorded method.
+              Ordered by signed value, highest to lowest. Importance describes the fitted model, not causation. Negative permutation importance means shuffling improved the score; a negative SHAP value indicates direction. Interpret values using the recorded method.
             </p>
+            {contributions.method && <p>Recorded method: {contributions.method}</p>}{contributions.note && <p>{contributions.note}</p>}
             <ResponsiveContainer width="100%" height={Math.max(140, importance.length * 26)}>
               <BarChart data={importance.map(([col, v]) => ({ col, v }))} layout="vertical"
                         margin={{ left: 12, right: 24 }}>
                 <XAxis type="number" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis type="category" dataKey="col" width={96} tick={{ fontSize: 12 }}
                        axisLine={false} tickLine={false} />
+                <ReferenceLine x={0} stroke="currentColor" />
                 <Tooltip formatter={(v) => [Number(v).toFixed(5), "importance"]} />
                 <Bar dataKey="v" radius={[0, 3, 3, 0]} isAnimationActive={false}>
                   {importance.map(([col, v]) => (

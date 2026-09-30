@@ -1,3 +1,4 @@
+import { rankedContributions } from "../lib/featureImportance";
 import ContentOrigin from "../components/ContentOrigin";
 import { loopLabel } from '../lib/loopLabel';
 import ResultExplorer, { resultKey } from "../components/ResultExplorer";
@@ -195,7 +196,7 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
                   <Suspense fallback={null}><ReportBody origin="rule" text={r.evaluation.explanation?.scope || ""} /></Suspense>
                   {r.evaluation.explanation?.shap?.mean_absolute && <div className="mt-2">
                     <p className="font-bold">TreeSHAP · mean absolute contribution ({r.evaluation.explanation.shap.units})</p>
-                    {Object.entries(r.evaluation.explanation.shap.mean_absolute).sort((a,b) => b[1]-a[1]).slice(0,10).map(([name, value]) =>
+                    {rankedContributions(r.evaluation.explanation.shap.mean_absolute, r.y_column, true).slice(0,10).map(([name, value]) =>
                       <p key={name} className="text-xs">{name}: {value.toFixed(4)}</p>)}
                   </div>}
                   {r.evaluation.explanation?.partial_dependence?.map(curve => <div key={curve.feature} className="mt-2">
