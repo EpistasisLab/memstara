@@ -243,7 +243,7 @@ CREATE TABLE IF NOT EXISTS memstara_questions (
     times_used   INTEGER     NOT NULL DEFAULT 0,
     best_auc     DOUBLE PRECISION,
 
-    status       TEXT        NOT NULL DEFAULT 'open',   -- 'open' | 'exhausted'
+    status       TEXT        NOT NULL DEFAULT 'open',   -- 'open' | 'exhausted' | 'cleared' (archived memory)
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     -- Who is working this question right now, and since when. The same pair the board
@@ -399,6 +399,8 @@ async def run_lock(run_tag: str, *, on_lost=None) -> AsyncIterator[None]:
         if not await conn.fetchval("SELECT pg_try_advisory_lock($1)", key):
             raise BoardBusy(f"run_tag '{run_tag}' is already being worked by another process.")
         acquired = True
+        if not await conn.fetchval("SELECT pg_try_advisory_lock_shared(180947, 54)"):
+            raise BoardBusy("Question memory is being cleared. Retry starting the execution shortly.")
         lease = RunLease(conn, on_lost=on_lost)
         token = _current.set(lease)
         lease.start()

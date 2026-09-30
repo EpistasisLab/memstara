@@ -877,7 +877,7 @@ async def read_question_catalog(limit: int = 200) -> str:
         try:
             rows = await conn.fetch(
                 "SELECT question_id, text, okf_tags FROM memstara_questions "
-                "WHERE origin_run=$1 ORDER BY question_id DESC LIMIT $2",
+                "WHERE status <> 'cleared' AND origin_run=$1 ORDER BY question_id DESC LIMIT $2",
                 plan["run_tag"], max(1, min(200, int(limit))),
             )
         finally:
@@ -900,7 +900,7 @@ async def read_questions(status: str = "open", limit: int = 200) -> str:
 
     Args:
         status: "open" for questions still worth using, "exhausted" for ones retired,
-            or "" for both.
+            or "" for both. Cleared memory is excluded; historical evidence keeps its question IDs.
         limit: how many to return, newest first. The default is high enough to be the
             whole open bank in practice — a caller that sees only the newest slice
             proposes against a partial memory and re-asks what fell off the end, which
@@ -933,7 +933,7 @@ async def read_questions(status: str = "open", limit: int = 200) -> str:
                        -- two hypothesis workers. Plain TEXT, so no unpacking below.
                        claimed_run, claimed_by
                 FROM memstara_questions
-                WHERE ($1 = '' OR status = $1) AND ($3 = '' OR origin_run = $3)
+                WHERE status <> 'cleared' AND ($1 = '' OR status = $1) AND ($3 = '' OR origin_run = $3)
                 ORDER BY question_id DESC
                 LIMIT $2
                 """,
@@ -1153,7 +1153,7 @@ async def propose_questions(questions: list[QuestionProposal] | str, origin_run:
                      json.loads(r["okf_tags"]) if r["okf_tags"] else [])
                     for r in await conn.fetch(
                         "SELECT question_id, text, okf_tags FROM memstara_questions "
-                        "WHERE ($1 = '' OR origin_run = $1)", _pipeline_run())
+                        "WHERE status <> 'cleared' AND ($1 = '' OR origin_run = $1)", _pipeline_run())
                 ]
                 for item in parsed:
                     if not isinstance(item, dict):
@@ -1268,7 +1268,7 @@ async def record_question_outcomes(run_tag: str, retire_after: int = 3) -> str:
                           FROM memstara_results
                          WHERE question_id IS NOT NULL
                          GROUP BY question_id) s
-                 WHERE q.question_id = s.question_id
+                 WHERE q.question_id = s.question_id AND q.status <> 'cleared'
                    AND EXISTS (SELECT 1 FROM memstara_results r
                                 WHERE r.question_id = q.question_id
                                   AND ($1 = '' OR r.run_tag = $1))

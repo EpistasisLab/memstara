@@ -1,4 +1,5 @@
 import { featureImportance } from "../lib/featureImportance";
+import ClearQuestionMemory from "../components/ClearQuestionMemory";
 import ContentOrigin from "../components/ContentOrigin";
 import { useLoopLabel } from '../lib/useLoopLabel';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -89,7 +90,9 @@ export default function DiscoveryPanel() {
   const openSequence=useRef(0);
   const [pages, setPages] = useState<number[]>([0]);
   const before = pages[pages.length - 1];
-  const { data, error } = useLive<{ questions: Question[]; next_before: number | null }>(`/api/discovery/questions?before=${before}`);
+  const [memoryRevision,setMemoryRevision]=useState(0);
+  const [clearedThrough,setClearedThrough]=useState(0);
+  const { data, error } = useLive<{ questions: Question[]; next_before: number | null; cleared_through?: number }>(`/api/discovery/questions?before=${before}&memory_revision=${memoryRevision}`);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Question | null>(null);
   const [list, setList] = useState(false);
@@ -99,9 +102,9 @@ export default function DiscoveryPanel() {
   const evidence = useLive<Evidence>(selected ? `/api/discovery/questions/${selected.question_id}` : null);
   const questions = useMemo(() => {
     const records=new Map((data?.questions??[]).map(q=>[q.question_id,q]));
-    if(before===0)live.questions.forEach(q=>records.set(q.question_id,q));
-    return [...records.values()].sort((a,b)=>b.question_id-a.question_id).slice(0,120).filter(q=>`${q.text} ${q.rationale} ${q.okf_tags.join(' ')}`.toLowerCase().includes(search.toLowerCase()));
-  },[data,live.questions,before,search]);
+    if(data&&before===0)live.questions.forEach(q=>records.set(q.question_id,q));
+    return [...records.values()].filter(q=>q.status!=='cleared'&&q.question_id>Math.max(clearedThrough,data?.cleared_through??0)).sort((a,b)=>b.question_id-a.question_id).slice(0,120).filter(q=>`${q.text} ${q.rationale} ${q.okf_tags.join(' ')}`.toLowerCase().includes(search.toLowerCase()));
+  },[data,live.questions,before,search,clearedThrough]);
   const current = data?.questions.find(q => q.question_id === selected?.question_id) ?? selected;
   const result=evidence.data?.results.find(r=>r.result_id===resultId) ?? evidence.data?.results[0];
   const task=evidence.data?.tasks.find(t=>t.task_id===result?.task_id) ?? (!result?evidence.data?.tasks[0]:undefined);
@@ -122,8 +125,8 @@ export default function DiscoveryPanel() {
   const openStage=(name:string)=>{setStage(name);studio.current?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});};
   return <div className="universe-page universe-v2">
     <header className="universe-header"><div><span className="universe-eyebrow"><Sparkles size={13} /> MEMSTARA DISCOVERY</span><h1>Follow a question.<br /><span>Discover what follows.</span></h1></div><div className="space-header-note"><p>A living field of agent-generated questions,<br />with their recorded evidence one step away.</p><span className="universe-live">{error ? 'Connection interrupted' : data ? 'Live records · 5s updates' : 'Connecting…'}</span></div></header>
-    <ContentOrigin kind="proposal"/><div className="universe-tools"><label><Search size={17} /><input aria-label="Search loaded questions" placeholder="Find a question, rationale, or knowledge tag…" value={search} onChange={e => setSearch(e.target.value)} /></label><button onClick={() => setList(v => !v)} aria-pressed={list}>{list ? <Orbit size={16} /> : <List size={16} />}{list ? 'Question field' : 'Question list'}</button></div>
-    <div className="universe-context"><span>{questions.length} questions on this page · Across all recorded runs</span><span>Explore outputs, evidence and interpretations</span></div>
+    <ContentOrigin kind="proposal"/><div className="universe-tools"><label><Search size={17} /><input aria-label="Search loaded questions" placeholder="Find a question, rationale, or knowledge tag…" value={search} onChange={e => setSearch(e.target.value)} /></label><button onClick={() => setList(v => !v)} aria-pressed={list}>{list ? <Orbit size={16} /> : <List size={16} />}{list ? 'Question field' : 'Question list'}</button><ClearQuestionMemory onCleared={through=>{openSequence.current++;setClearedThrough(v=>Math.max(v,through));setPages([0]);setSelected(null);setOpenedReport(null);setOpenError('');setMemoryRevision(v=>v+1);}}/></div>
+    <div className="universe-context"><span>{questions.length} questions on this page · Active memory across runs</span><span>Explore outputs, evidence and interpretations</span></div>
     {error && <p className="universe-alert" role="alert">{error} {data ? 'Showing the last available questions.' : 'Retrying automatically.'}</p>}
     <LiveOutputDock open={event=>{void openOutput(event);}}/>
     {openError&&<p role="alert">{openError}</p>}

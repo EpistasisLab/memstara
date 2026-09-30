@@ -14,12 +14,13 @@ QUESTION_FIELDS = "question_id, question_contract, text, okf_tags, rationale, or
 async def question_list(before: int = 0) -> dict[str, Any]:
     async def read(conn):
         rows = await conn.fetch(f"SELECT {QUESTION_FIELDS} FROM memstara_questions "
-                                "WHERE ($1::integer = 0 OR question_id < $1) "
+                                "WHERE status <> 'cleared' AND ($1::integer = 0 OR question_id < $1) "
                                 "ORDER BY question_id DESC LIMIT 121", before)
         items = [{**dict(row), 'okf_tags': scene._jsonb(row['okf_tags'], []),
                   'question_contract': scene._jsonb(row.get('question_contract'), {}),
                   'created_at': scene._iso(row['created_at'])} for row in rows[:120]]
-        return {'questions': items, 'next_before': items[-1]['question_id'] if len(rows) > 120 else None}
+        cleared_through = await conn.fetchval("SELECT coalesce(max(question_id), 0) FROM memstara_questions WHERE status='cleared'")
+        return {'cleared_through': cleared_through, 'questions': items, 'next_before': items[-1]['question_id'] if len(rows) > 120 else None}
     result = await pools.guarded('memstara', read, None)
     if result is None:
         raise HTTPException(503, 'Question records are temporarily unavailable.')
@@ -76,7 +77,7 @@ async def live_outputs(tags: list[str]) -> dict[str, Any]:
 
     async def read(conn):
         questions = await conn.fetch(f'SELECT {QUESTION_FIELDS} FROM memstara_questions '
-                                    'WHERE origin_run = ANY($1::text[]) ORDER BY question_id DESC LIMIT 200', tags)
+                                    "WHERE status <> 'cleared' AND origin_run = ANY($1::text[]) ORDER BY question_id DESC LIMIT 200", tags)
         tasks = await conn.fetch('SELECT task_id, question_id, run_tag, trial, hypothesis, '
                                  'columns_used, auc, interpretation, task_type, status, updated_at '
                                  'FROM memstara_blackboard WHERE run_tag = ANY($1::text[]) '

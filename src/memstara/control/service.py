@@ -526,6 +526,14 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path.rstrip("/")
 
+        if path == "/control/question-memory":
+            from memstara.control.question_memory import handle
+            try:
+                self._send(200, handle(WORKSPACE, RUNS))
+            except Exception:
+                self._send(503, {"error": "Question memory is unavailable. No records were changed."})
+            return
+
         if path == "/control/skill-drafts/models":
             from memstara.control.skill_drafts import models
             try:
@@ -647,6 +655,18 @@ class Handler(BaseHTTPRequestHandler):
             body = self._body()
         except ValueError as e:
             self._send(400, {"error": str(e)})
+            return
+
+        if path == "/control/question-memory/clear":
+            from memstara.control.question_memory import handle, MemoryConflict
+            try:
+                self._send(200, handle(WORKSPACE, RUNS, body))
+            except MemoryConflict as exc:
+                self._send(409, {"error": str(exc)})
+            except ValueError as exc:
+                self._send(400, {"error": str(exc)})
+            except Exception:
+                self._send(503, {"error": "Clear outcome is uncertain. Retry this confirmation to check its outcome."})
             return
 
         if path == "/control/skill-drafts":
@@ -822,6 +842,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 _ROUTES = [
+    "GET  /control/question-memory",
+    "POST /control/question-memory/clear",
     "GET /control/health", "GET /control/skills", "GET /control/playbooks",
     "POST /control/playbooks", "POST /control/runs",
     "GET /control/runs", "GET /control/runs/{tag}/log", "POST /control/runs/{tag}/stop",

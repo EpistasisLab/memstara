@@ -39,7 +39,8 @@ def test_catalog_excludes_scores_rationales_and_old_runs(monkeypatch):
     data = json.loads(asyncio.run(bb.read_question_catalog()))
     assert set(data['questions'][0]) == {'question_id', 'text', 'okf_tags'}
     query, tag, limit = conn.fetch.call_args.args
-    assert 'WHERE origin_run=$1' in query and tag == 'primary' and limit == 200
+    assert 'origin_run=$1' in query and tag == 'primary' and limit == 200
+    assert "status <> 'cleared'" in query
     conn.close.assert_awaited_once()
 
 
