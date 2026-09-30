@@ -252,3 +252,22 @@ def test_finished_loop_limit_uses_frozen_execution_not_next_settings(tmp_path):
     assert result['configuration']['waves'] == 3
     assert result['latest']['configuration']['waves'] == 10
     assert result['progress']['iteration'] == 7
+
+
+def test_failure_details_follow_execution_and_do_not_mark_recovered_success_failed(tmp_path):
+    old = tmp_path / 'failed'
+    old.mkdir()
+    (old / 'execution.json').write_text(json.dumps({'calls': [
+        {'status': 'failed', 'error': 'System message must be at the beginning.', 'stage': 'question0-1'}]}))
+    record = {'run_tag': 'old', 'run_dir': str(old), 'exit_code': 1}
+    class HistoryManager(Manager):
+        def finished(self):
+            return [record]
+    workspace = PipelineWorkspace(tmp_path / 'workspace.json', HistoryManager)
+    item = workspace.mutate({'action': 'add'})
+    assert workspace.list()[0]['failure']['code'] == 'model_message_format'
+    record['exit_code'] = 0
+    assert workspace.list()[0]['failure'] is None
+    record['exit_code'] = 1
+    workspace.manager(item['id']).live = {'run_tag': 'new', 'run_dir': str(tmp_path / 'new')}
+    assert workspace.list()[0]['failure'] is None

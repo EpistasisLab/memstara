@@ -17,13 +17,13 @@ import AgentConfigPanel from "./panels/AgentConfigPanel";
 import LogPanel from "./panels/LogPanel";
 import ClinicianPanel from "./panels/ClinicianPanel";
 import ReportPanel from "./panels/ReportPanel";
-import FeedPanel from "./panels/FeedPanel";
 import ResultsPanel from "./panels/ResultsPanel";
 import AccessTab from "./tabs/AccessTab";
 import BoardTab from "./tabs/BoardTab";
 import TaskTab from "./tabs/TaskTab";
 import WorkspaceActions from "./components/WorkspaceActions";
 import { useLiveOutputs } from "./store/liveOutputs";
+import { IDLE_REFRESH_MS, LIVE_REFRESH_MS, pollContinuously } from './lib/liveRefresh';
 import { useControl } from "./store/control";
 
 
@@ -57,11 +57,11 @@ export default function App() {
   const start = useViewer((s) => s.start);
   const stop = useViewer((s) => s.stop);
   const view = useViewer((s) => s.view);
+  const liveRefreshScope = usePipelines(s => s.items.map(p => `${p.running ? 'active' : 'idle'}:${(p.running ?? p.latest)?.run_tag ?? ''}`).join(','));
   useEffect(() => {
-    void useLiveOutputs.getState().poll();
-    const timer = setInterval(() => { void useLiveOutputs.getState().poll(); }, 3000);
-    return () => clearInterval(timer);
-  }, []);
+    return pollContinuously(() => useLiveOutputs.getState().poll(), () =>
+      usePipelines.getState().items.some(p => p.running) && !useLiveOutputs.getState().error ? LIVE_REFRESH_MS : IDLE_REFRESH_MS);
+  }, [liveRefreshScope]);
   const pipeline = usePipelines(s => s.items.find(p => p.id === s.selected));
 
   useEffect(() => {
@@ -75,8 +75,8 @@ export default function App() {
   }, [start, stop]);
 
   useEffect(() => {
-    const poll = () => { if (!document.hidden) void usePipelines.getState().poll(); };
-    poll(); const timer = setInterval(poll, 2500); return () => clearInterval(timer);
+    return pollContinuously(() => usePipelines.getState().poll(), () =>
+      usePipelines.getState().error ? IDLE_REFRESH_MS : LIVE_REFRESH_MS);
   }, []);
 
   return <Tooltip.Provider delayDuration={200}>
@@ -86,7 +86,6 @@ export default function App() {
     <WindowWorkspace toolbar={<WorkspaceActions only="history"/>} items={[
       { id: "control", title: "Control", content: <ControlPanel /> },
       { id: "pipeline", title: `${VIEWS[view].label}${pipeline ? ` · ${pipeline.name}${view === "agents" ? "" : ` · ${pipelineLoopLabel(pipeline)}`}` : ""}`, content: <TopRegion /> },
-      { id: "feed", title: "Activity feed", content: <FeedPanel /> },
       { id: "results", title: "Results", content: <ResultsPanel /> },
       { id: "report", title: `Final Report${pipeline ? ` · ${pipeline.name}` : ""}`, content: <ReportPanel /> },
     ]} />

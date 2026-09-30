@@ -15,20 +15,20 @@ try{
  return r.fulfill({body:await readFile(file),contentType:path.endsWith('.js')?'application/javascript':path.endsWith('.css')?'text/css':'text/html'});
  });
  await page.goto('http://fixture.local/');await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
- for(const name of ['Activity feed','Results','Final report']){
- await page.getByRole('tab',{name,exact:true}).click();await page.getByRole('button',{name:`Collapse ${name==='Final report'?'Final Report':name}`,exact:true}).click();
+ for(const name of ['Results','Final report']){
+ if(await page.getByRole('tab',{name,exact:true}).count())await page.getByRole('tab',{name,exact:true}).click();await page.getByRole('button',{name:`Collapse ${name==='Final report'?'Final Report':name}`,exact:true}).click();
  const restore=page.getByRole('button',{name:`Expand ${name==='Final report'?'Final Report':name}`,exact:true});await restore.waitFor();
  const bounds=await restore.boundingBox();assert(bounds.y>=0&&bounds.y+bounds.height<=1000&&bounds.x+bounds.width<=width);
  }
- assert.equal(await page.locator('.workspace-minimized-window').count(),3);
+ assert.equal(await page.locator('.workspace-minimized-window').count(),2);
  assert.equal(await page.locator('.workspace-evidence-bar').count(),0);
  const restore=page.getByRole('button',{name:'Expand Results',exact:true});await restore.focus();await page.keyboard.press('Enter');
  await page.locator('#workspace-results .window-content').waitFor();assert.equal(await page.getByRole('button',{name:'Expand Results',exact:true}).count(),0);
- assert(await page.getByRole('button',{name:'Expand Activity feed',exact:true}).isVisible());
+ assert(await page.getByRole('button',{name:'Expand Final Report',exact:true}).isVisible());
  await page.getByRole('button',{name:'Collapse Results',exact:true}).click();
  await page.locator('#workspace-pipeline').getByRole('button',{name:/Maximize .* window/}).click();
- assert(await page.getByRole('button',{name:'Expand Activity feed',exact:true}).isVisible());
- await page.getByRole('button',{name:'Expand Activity feed',exact:true}).click();await page.locator('#workspace-feed .window-content').waitFor();
+ assert(await page.getByRole('button',{name:'Expand Final Report',exact:true}).isVisible());
+ await page.getByRole('button',{name:'Expand Final Report',exact:true}).click();await page.locator('#workspace-report .window-content').waitFor();
  assert.deepEqual(errors,[]);console.log(JSON.stringify({width,theme,visibleHeaders:true,keyboardRestore:true,maximizedRestore:true}));await page.close();
  }
 }finally{await browser.close();}

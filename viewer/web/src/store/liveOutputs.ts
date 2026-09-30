@@ -16,14 +16,14 @@ export const useLiveOutputs=create<{
   acknowledge:()=>set({pending:0,events:get().events.map(e=>({...e,fresh:false}))}),
   poll:async()=>{
     if(busy||document.hidden)return;
-    const tags=usePipelines.getState().items.map(p=>p.latest?.run_tag).filter(Boolean).sort().join(',');
+    const tags=usePipelines.getState().items.map(p=>(p.running??p.latest)?.run_tag).filter(Boolean).sort().join(',');
     if(!tags){set({tags:'',error:null});return;}
     busy=true;
     try{
       const response=await fetch(`/api/discovery/live?run_tags=${encodeURIComponent(tags)}`,{signal:AbortSignal.timeout(5500)});
       if(!response.ok)throw Error('Live output updates are unavailable. Previously received records are retained.');
       const body=await response.json() as Payload;
-      const nowTags=usePipelines.getState().items.map(p=>p.latest?.run_tag).filter(Boolean).sort().join(',');
+      const nowTags=usePipelines.getState().items.map(p=>(p.running??p.latest)?.run_tag).filter(Boolean).sort().join(',');
       if(nowTags!==tags)return;
       const receivedAt=Date.now();
       const changes=outputArrivals(revisions,body.events,receivedAt,initialized);

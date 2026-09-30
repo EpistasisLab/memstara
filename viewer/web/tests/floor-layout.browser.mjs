@@ -21,7 +21,7 @@ try {
   const floor=await page.locator('#workspace-pipeline').boundingBox();assert(g.bottom<=floor.y+floor.height+1,JSON.stringify({width,g,floor,reason:'Canvas clipped by window'}));
   const visible=await page.locator('.floating-window:not([hidden])').evaluateAll(es=>es.filter(e=>e.id!=='workspace-control').map(e=>({id:e.id,x:e.offsetLeft,y:e.offsetTop,w:e.offsetWidth,h:e.offsetHeight})));
   for(let i=0;i<visible.length;i++)for(let j=i+1;j<visible.length;j++){const a=visible[i],b=visible[j];assert(a.x+a.w<=b.x+1||b.x+b.w<=a.x+1||a.y+a.h<=b.y+1||b.y+b.h<=a.y+1,'Overlapping windows');}
-  for(const name of ['Activity feed','Results','Final report']){await page.getByRole('tab',{name,exact:true}).click();await page.waitForTimeout(60);}
+  for(const name of ['Results','Final report']){if(await page.getByRole('tab',{name,exact:true}).count())await page.getByRole('tab',{name,exact:true}).click();await page.waitForTimeout(60);}
   await page.locator('#workspace-pipeline').scrollIntoViewIfNeeded();
   const show=page.getByRole('button',{name:'Show pipeline list',exact:true});if(await show.isVisible())await show.click();
   await page.getByRole('button',{name:'Inspect Research pipeline 2',exact:true}).click();await page.waitForTimeout(600);

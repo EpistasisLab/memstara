@@ -90,7 +90,11 @@ class PipelineWorkspace:
                     except (OSError, ValueError):
                         pass
                 configuration, configuration_error = self.read_configuration(item["configuration"])
+                from memstara.pipeline.failures import visible_failure
+                failure = visible_failure(latest["run_dir"], include_legacy=(
+                    not current and latest.get("exit_code") not in (None, 0))) if latest else None
                 out.append({**copy.deepcopy(item), "configuration": configuration,
+                            "failure": failure,
                             "configuration_error": configuration_error,
                             "running": current, "latest": latest, "progress": progress,
                             "loop_totals": loop_totals(manager.history_records() if hasattr(manager, "history_records")

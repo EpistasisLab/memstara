@@ -62,7 +62,7 @@ function Row({ event }: { event: FeedEvent }) {
   </li>;
 }
 
-export default function FeedPanel() {
+export default function FeedPanel({stage}: {stage?: string} = {}) {
   const feed = useFeed();
   const snapshot=useSnapshot();
   const loop=(snapshot as (typeof snapshot & {telemetry?:{loop:number|null}}))?.telemetry?.loop??null;
@@ -77,10 +77,12 @@ export default function FeedPanel() {
   const names=[...new Set(records.map(e=>e.name||'Unknown agent'))];
   const needle=query.trim().toLowerCase();
   const activeAgent=names.includes(agent)?agent:'';
-  const matching=records.filter(e=>(!activeAgent||(e.name||'Unknown agent')===activeAgent)&&
+  const normalize=(value:string|null)=>value==='interpretation'?'interpreter':value==='explanation'?'report':value==='result'?'ml':value==='question'?'curator':value;
+  const matching=records.filter(e=>(!stage || (e.kind==='text'?normalize(e.message.stage)===normalize(stage):normalize(e.event.agent)===(stage==='question'?'hypothesis':normalize(stage))))&&(!activeAgent||(e.name||'Unknown agent')===activeAgent)&&
     (kind==='all'||e.kind===kind)&&[e.name,e.label,...(e.kind==='text'?[e.message.text,e.message.kind_label,e.message.stage]:[e.event.tool,e.event.server,STORE_LABEL[e.event.store],TOOL_ACTIONS[e.event.tool]])].join(' ').toLowerCase().includes(needle));
   return <Panel icon={Radio} title="Activity" bodyClassName="p-0">
     <div className="telemetry-activity-controls">
+      {stage==='question'&&<p className="text-sm">Question-generation tool calls share the Hypothesis agent identity. Related Hypothesis tool calls in this loop are included; agent text is restricted to question generation.</p>}
       <p className="text-sm"><strong>{context.name}</strong> · {context.startedLabel} · {loop===null?'All loops':`Loop ${loop}`}</p>
       <p className="text-sm text-ink-soft">Tool actions and actual agent text, newest first. Expand an entry to read its full output. Text appears when recorded, rather than token by token.</p>
       <div className="telemetry-filter-row">

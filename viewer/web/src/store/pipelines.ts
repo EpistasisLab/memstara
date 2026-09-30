@@ -7,6 +7,7 @@ import {startPipelines, type StartOutcome} from '../lib/startPipelines';
 export interface PipelineDefinition {
   id: string; number: number; name: string; configuration: RunRequest;
   running: RunningRun | null;
+  failure?: {code: string; message: string; stage?: string; loop?: number | null} | null;
   latest: (RunningRun & { exit_code?: number }) | null;
   loop_totals?: {attempted:number;completed:number;blocked:number;unknown_executions:number};
   progress: { exploration?: { attempted: number; completed: number; blocked: number; outcome: string; reason: string }; stage_percent?: number | null; iteration_completed?: boolean; iteration?: number; stage?: string; updated_at?: string; counts?: Record<string, number> };

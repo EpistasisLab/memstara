@@ -1,0 +1,46 @@
+.floor-observatory .clinical-log { flex:0 0 290px; width:290px; min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden; border:1px solid rgb(var(--line)); border-radius:10px; background:rgb(var(--panel)); color:rgb(var(--ink)); }
+.clinical-log-heading { display:flex; align-items:center; gap:7px; padding:10px; flex-shrink:0; border-bottom:1px solid rgb(var(--line)); }
+.clinical-log-heading h3 { flex:1; font-size:13px; font-weight:650; }
+.clinical-log-heading button { display:flex; align-items:center; justify-content:center; min-width:32px; min-height:32px; border-radius:6px; }
+.clinical-log-heading button:hover { background:rgb(var(--accent) / .08); }
+.clinical-log-context { padding:8px 12px; font-size:11px; line-height:1.5; color:rgb(var(--ink-soft)); border-bottom:1px solid rgb(var(--line)); }
+.clinical-log-context [role=status] { display:block; font-weight:650; color:rgb(var(--ink)); }
+.clinical-log-context .clinical-log-delayed { color:#a05a0a; }
+[data-theme=dark] .clinical-log-context .clinical-log-delayed { color:#f4c77d; }
+.clinical-log-scroll { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:0 12px; overflow-wrap:anywhere; scrollbar-gutter:stable; }
+.clinical-log-current article,.clinical-log-events li { padding:12px 0; border-bottom:1px solid rgb(var(--line)); }
+.clinical-log-current strong { font-size:12px; }
+.clinical-log-current small,.clinical-log-events small,.clinical-log-scroll time { display:block; font-size:10px; line-height:1.5; color:rgb(var(--ink-soft)); }
+.clinical-log-scroll p { font-size:12px; line-height:1.6; margin:5px 0; }
+.clinical-log-events { list-style:none; margin:0; padding:0; }
+.clinical-log-events summary { cursor:pointer; padding-top:6px; font-size:11px; color:rgb(var(--accent)); }
+.clinical-log-events details p { white-space:pre-wrap; }
+.clinical-log-empty { padding:12px 0; color:rgb(var(--ink-soft)); }
+.clinical-log-latest { display:flex; align-items:center; justify-content:center; gap:6px; padding:9px; font-size:11px; color:rgb(var(--accent)); border-top:1px solid rgb(var(--line)); }
+.clinical-log footer { padding:8px 12px; font-size:10px; line-height:1.5; color:rgb(var(--ink-soft)); }
+.clinical-log :focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:-2px; }
+.floor-observatory .clinical-log.is-collapsed { flex-basis:42px; width:42px; }
+.clinical-log.is-collapsed .clinical-log-heading { padding:5px; flex-direction:column; border:0; }
+.clinical-log.is-collapsed h3 { writing-mode:vertical-rl; padding:6px 0; }
+@container (max-width:1100px) {
+ .floor-observatory .clinical-log { flex-basis:240px; width:240px; }
+}
+@container (max-width:900px) {
+ .floor-observatory .pipeline-explorer-layout:has(.clinical-log) { overflow-y:auto; }
+ .floor-observatory .pipeline-explorer-layout:has(.clinical-log) .pipeline-detail-workspace { flex:1 0 480px; }
+ .floor-observatory .clinical-log { flex:0 0 300px; width:100%; min-height:0; }
+ .floor-observatory .clinical-log.is-collapsed { flex:0 0 42px; width:100%; }
+ .clinical-log.is-collapsed .clinical-log-heading { flex-direction:row; }
+ .clinical-log.is-collapsed h3 { writing-mode:horizontal-tb; padding:0; }
+}
+
+.clinical-log-scroll[hidden] { display:none; }
+.clinical-log-detail-view { flex:1; min-height:0; overflow:auto; padding:10px; overflow-wrap:anywhere; }
+.clinical-log-detail-view h4 { font-weight:650; font-size:13px; }
+.clinical-log-detail-view p { font-size:12px; margin:8px 0; }
+.clinical-log-details-button,.clinical-log-back { color:rgb(var(--accent)); min-height:36px; text-decoration:underline; font-size:12px; }
+.clinical-log-detail-view .telemetry-filter-row { display:flex; flex-direction:column; }
+.clinical-log-detail-view .telemetry-filter-row label { min-width:0; width:100%; }
+.clinical-log-detail-view input,.clinical-log-detail-view select { width:100%; min-width:0; }
+.clinical-log-detail-view .telemetry-event-summary { display:flex; flex-wrap:wrap; }
+.clinical-log-detail-view .telemetry-event-content { min-width:0; }

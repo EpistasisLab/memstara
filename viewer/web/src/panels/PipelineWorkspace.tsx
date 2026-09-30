@@ -4,6 +4,7 @@ import PipelineRowActions from "../components/PipelineRowActions";
 import MasterStop from "../components/MasterStop";
 import CombinationDesign from '../components/CombinationDesign';
 import PipelineBrowser from "../components/PipelineBrowser";
+import ClinicalLogPanel from "../components/ClinicalLogPanel";
 import { floorCallDestination, floorCallCategory } from "../lib/floorCallDestination";
 import FloorDatabaseNode from "../components/FloorDatabaseNode";
 import LoopUsage from "../components/LoopUsage";
@@ -307,6 +308,7 @@ export default function PipelineWorkspace(){
     </FloorDetailDialog>}
     {detail==='progress'&&<FloorDetailDialog title="Pipeline progress" close={()=>setDetail(null)}><PipelineStatus ids={visibleItems.map(p=>p.id)}/></FloorDetailDialog>}
       </div>
+      <ClinicalLogPanel pipelines={visibleItems}/>
     </div>
   </div>;
 }
