@@ -1,3 +1,4 @@
+import type {FloorActivity} from '../lib/floorActivity';
 import {createPortal} from "react-dom";
 import {WorkspaceHeaderContext} from "../components/WorkspaceHeaderContext";
 import PipelineRowActions from "../components/PipelineRowActions";
@@ -172,6 +173,7 @@ export default function PipelineWorkspace(){
       useControl.getState().openEditor(stage as PlaybookStage);
   },[select]);
   const snapshot=useViewer(s=>s.snapshot);
+  const [floorActivity,setFloorActivity]=useState<FloorActivity|null>(null);
   const combinationPipeline=comparison.length?undefined:items.find(p=>p.id===selected&&Object.keys(p.configuration.combination_skills??{}).length>0);
   const selectedPipeline=items.find(p=>p.id===selected);
   const focused=items.find(p=>p.id===inspected?.id&&p.id===selected);
@@ -268,7 +270,7 @@ export default function PipelineWorkspace(){
        {isCombination?<CombinationDesign pipeline={p}/>:<div className="floor-comparison-standard"><ReactFlow nodes={ownNodes} edges={ownEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView fitViewOptions={{padding:.12}} minZoom={.15} maxZoom={1.6} nodesDraggable={false} nodesConnectable={false} panOnScroll zoomOnScroll={false} onNodeClick={(_,node)=>{if(node.type==='station')configureStation(p.id,String(node.data.stage));}}><Background variant={BackgroundVariant.Lines} gap={32} color="rgb(var(--ink) / .05)"/><Controls showInteractive={false}/></ReactFlow></div>}
       </section>;
     })}</div>}
-    {combinationPipeline&&<CombinationDesign key={combinationPipeline.id} pipeline={combinationPipeline} headerHost={combinationHeader}/>}
+    {combinationPipeline&&<CombinationDesign key={combinationPipeline.id} pipeline={combinationPipeline} headerHost={combinationHeader} onActivity={setFloorActivity}/>}
     <div className="floor-detail-links"><button aria-pressed={showResources} title="Show shared knowledge, data, tools and storage alongside the pipeline" onClick={()=>setShowResources(v=>!v)}>Shared resources</button><button onClick={()=>setDetail('tools')}>Recent tool calls</button><button onClick={()=>setDetail('progress')}>Pipeline progress</button>{focused&&inspected&&<button onClick={()=>setDetail('agent')}>Selected agent details</button>}</div>
     <div ref={setToolbarHost} className="floor-docked-controls floor-visible-controls" role="group" aria-label="Floor Plan view controls"/>
     {!combinationPipeline&&!comparison.length&&<div className="floor-canvas">
@@ -308,7 +310,7 @@ export default function PipelineWorkspace(){
     </FloorDetailDialog>}
     {detail==='progress'&&<FloorDetailDialog title="Pipeline progress" close={()=>setDetail(null)}><PipelineStatus ids={visibleItems.map(p=>p.id)}/></FloorDetailDialog>}
       </div>
-      <ClinicalLogPanel pipelines={visibleItems}/>
+      <ClinicalLogPanel pipelines={visibleItems} floorActivity={combinationPipeline && floorActivity?.pipelineId===combinationPipeline.id && floorActivity.runTag===(combinationPipeline.running??combinationPipeline.latest)?.run_tag ? floorActivity : null}/>
     </div>
   </div>;
 }

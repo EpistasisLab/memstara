@@ -1,3 +1,4 @@
+import {floorCallRole as callRole, pendingCall as pending, floorCallStatus} from '../lib/floorActivity';
 import {useMemo, useCallback, useState, useEffect, type CSSProperties} from 'react';
 import {ReactFlow, Panel, useReactFlow, useStore, getViewportForBounds, Background, BackgroundVariant, Controls, Handle, Position, MarkerType, type NodeProps, type Node} from '@xyflow/react';
 import {Sparkles, Database, BrainCircuit, ScanEye, FileText, ExternalLink} from 'lucide-react';
@@ -9,8 +10,6 @@ import './combination-floor.css';
 type Skill={id:string;title?:string;hash?:string;stage:PlaybookStage};
 type Call={stage:string;status:string;skill?:Skill};
 const EMPTY_CALLS:Call[]=[];
-const callRole=(c:Call)=>c.skill?.stage??(c.stage.startsWith('question')?'hypothesis':c.stage.startsWith('interpret')?'interpreter':PLAYBOOK_STAGES.find(s=>c.stage.startsWith(s)));
-const pending=(s?:string)=>s==='started'||s==='running';
 type RoomData={role:PlaybookStage;skills:Skill[];selected?:string;status?:string;recorded:boolean;onSelect:(id:string)=>void;inspect:(s:Skill)=>void};
 const labels={hypothesis:'Hypothesis',data:'Data',ml:'Machine learning',interpreter:'Interpretation',report:'Explanation'};
 const icons={hypothesis:Sparkles,data:Database,ml:BrainCircuit,interpreter:ScanEye,report:FileText};
@@ -69,7 +68,7 @@ export default function CombinationFloor({skills,inspect,recorded=false,calls=EM
  const lastCalls=PLAYBOOK_STAGES.map(role=>calls.filter(c=>callRole(c)===role).at(-1));
  const chosen=skills.map((s,i)=>recorded?(lastCalls[i]?.skill?.id??activeSkills?.find(a=>a.stage===PLAYBOOK_STAGES[i])?.id??(activeSkills===undefined&&s.length===1?s[0]?.id:undefined)):(s.find(a=>a.id===selection[PLAYBOOK_STAGES[i]])?.id??s[0]?.id));
  const {nodes,edges}=useMemo(()=>{
-  const nodes:Node<RoomData>[]=PLAYBOOK_STAGES.map((role,i)=>({id:role,type:'room',position:{x:i*340,y:38},draggable:false,data:{role,skills:skills[i],selected:chosen[i],recorded,status:pending(lastCalls[i]?.status)?(stale?'Last recorded: running':paused?'Paused':live?'Running':'Last recorded: running'):(lastCalls[i]?.status==='completed'?'Completed':lastCalls[i]?.status??'Waiting · no call recorded'),onSelect:id=>setSelection(s=>({...s,[role]:id})),inspect}}));
+  const nodes:Node<RoomData>[]=PLAYBOOK_STAGES.map((role,i)=>({id:role,type:'room',position:{x:i*340,y:38},draggable:false,data:{role,skills:skills[i],selected:chosen[i],recorded,status:floorCallStatus(lastCalls[i],{stale,paused,live}),onSelect:id=>setSelection(s=>({...s,[role]:id})),inspect}}));
   const edges=PLAYBOOK_STAGES.slice(0,-1).flatMap((role,i)=>{
    const from=skills[i].findIndex(s=>s.id===chosen[i]),to=skills[i+1].findIndex(s=>s.id===chosen[i+1]);
    if(from<0||to<0)return [];

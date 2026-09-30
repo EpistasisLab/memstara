@@ -1,3 +1,4 @@
+import {floorCallRole as callRole, type FloorTrace as Trace, type FloorActivity} from '../lib/floorActivity';
 import {createPortal} from "react-dom";
 import {useEffect,useState,useRef,lazy,Suspense,type CSSProperties} from 'react';
 import {Sparkles,Database,BrainCircuit,ScanEye,FileText,ArrowRight,ChevronLeft,ChevronRight,Layers3,Network,History,Play,Check,Clock3,AlertCircle,Search,ExternalLink} from 'lucide-react';
@@ -17,11 +18,8 @@ const roles={
  report:{name:'Explanation',description:'Explain meaning and next steps',icon:FileText},
 };
 type Flavor={stage:PlaybookStage;id:string;title?:string;hash?:string};
-type Call={run_id?:string;stage:string;status:string;skill?:Flavor};
-type Trace={calls:Call[];planned?:{combination:number;repetition:number;selection_policy?:string;start_combination?:number;agents:Flavor[]}|null;total_loops?:number;run_tag?:string;preparing?:boolean};
-const callRole=(c:Call):PlaybookStage|undefined=>c.skill?.stage ?? (c.stage.startsWith('question')?'hypothesis':PLAYBOOK_STAGES.find(s=>c.stage.startsWith(s)));
 const statusLabel=(s?:string)=>s==='completed'?'Completed':(s==='running'||s==='started')?'Running':s==='failed'?'Failed':s==='cancelled'?'Cancelled':s??'Not recorded';
-export default function CombinationDesign({pipeline:p,headerHost}:{pipeline:PipelineDefinition;headerHost?:HTMLDivElement|null}){
+export default function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:PipelineDefinition;headerHost?:HTMLDivElement|null;onActivity?:(activity:FloorActivity|null)=>void}){
  const catalog=useControl(s=>s.catalog),busy=usePipelines(s=>s.busy);
  const board=useRef<HTMLDivElement>(null);
  const [view,setView]=useState<'floor'|'design'|'loop'>('floor'),[role,setRole]=useState<PlaybookStage|'all'>('all');
@@ -39,6 +37,9 @@ export default function CombinationDesign({pipeline:p,headerHost}:{pipeline:Pipe
  const key=`${p.id}:${p.running?.run_tag??p.latest?.run_tag??'draft'}:${requestedLoop}`;
  const trace=response?.key===key?response.data:null,error=failure?.key===key?failure.message:'';
  const historyTotal=trace?.total_loops??total;
+ const isRunning=!!p.running, executionState=p.running?.execution_state;
+ useEffect(()=>{onActivity?.({pipelineId:p.id,runTag,loop:requestedLoop,mode:following?'live':view==='loop'?'history':'preview',trace,error,live:following&&isRunning&&!error&&executionState!=='paused',paused:following&&executionState==='paused'});},[onActivity,p.id,runTag,requestedLoop,following,view,trace,error,isRunning,executionState]);
+ useEffect(()=>()=>onActivity?.(null),[onActivity]);
  useEffect(()=>{setLoop(1);setResponse(null);setFailure(null);setDetail(null);},[p.id,p.latest?.run_tag]);
  useEffect(()=>{
   if(view!=='loop'&&!following)return;
@@ -51,7 +52,7 @@ export default function CombinationDesign({pipeline:p,headerHost}:{pipeline:Pipe
     if(data.run_tag&&runTag&&data.run_tag!==runTag)throw Error('Execution changed; waiting for matching records.');
     if(active){setResponse(previous=>previous?.key===key&&JSON.stringify(previous.data)===JSON.stringify(data)?previous:{key,data});setFailure(null);}
    }catch(e){if(active)setFailure(previous=>{const message=e instanceof Error&&e.name==='AbortError'?'The execution history did not respond in time.':String(e);return previous?.key===key&&previous.message===message?previous:{key,message};});}
-   finally{clearTimeout(deadline);if(active)timer=setTimeout(()=>void read(),3000);}
+   finally{clearTimeout(deadline);if(active)timer=setTimeout(()=>void read(),500);}
   };
   void read();return()=>{active=false;if(timer)clearTimeout(timer);controller?.abort();};
  },[view,key,retry,p.id,requestedLoop,following,runTag]);
@@ -64,7 +65,7 @@ export default function CombinationDesign({pipeline:p,headerHost}:{pipeline:Pipe
    <div className="cs-heading-row">
     <div className="cs-compact-identity"><h3 title={p.name}>{p.name}</h3><span>All Combinations</span></div>
     <div className="cs-heading-actions">
-     {view==='floor'&&(p.running||p.latest)&&<span className="cs-loop-status" data-live={following&&!!p.running&&p.running.execution_state!=='paused'} title="Updates every 3 seconds · recorded skills and call status">{following?`Loop ${requestedLoop} / ${historyTotal} · ${p.running?(p.running.execution_state==='paused'?'Paused':'Live'):'Latest execution'}`:'Combination preview'}</span>}
+     {view==='floor'&&(p.running||p.latest)&&<span className="cs-loop-status" data-live={following&&!!p.running&&p.running.execution_state!=='paused'} title="Updates every 0.5 seconds · recorded skills and call status">{following?`Loop ${requestedLoop} / ${historyTotal} · ${p.running?(p.running.execution_state==='paused'?'Paused':'Live'):'Latest execution'}`:'Combination preview'}</span>}
      {!p.latest&&!p.running&&<button className="cs-run" data-help="Run combinations" data-help-description="Start this pipeline using one skill from each agent role per Loop, up to its configured maximum Loops." disabled={busy||!count} onClick={()=>void usePipelines.getState().play(p.id)}><Play size={16}/>Run combinations</button>}
      <button className="cs-info-button" aria-label="Combination schedule and map guide" data-help="Pipeline details" data-help-description="Review the combination count, maximum Loops, start policy and the meaning of connections in the diagram." onClick={()=>setShowGuide(true)}>Details</button>
     </div>
@@ -73,7 +74,7 @@ export default function CombinationDesign({pipeline:p,headerHost}:{pipeline:Pipe
    <button data-help="Floor plan" data-help-description="See the selected skills and recorded stage status for the current Loop. Preview mode explores possible combinations without changing execution." aria-pressed={view==='floor'} onClick={()=>setView('floor')}><Layers3 size={16}/>Floor plan</button>
    <button data-help="Skill architecture" data-help-description="Browse all configured skills by agent role. Search and read their instructions; this is the configuration, not the execution history." aria-pressed={view==='design'} onClick={()=>setView('design')}><Network size={16}/>Skill architecture</button>
    <button data-help="Loop explorer" data-help-description="Select a Loop to compare its planned skills with the actual recorded agent calls, sequence and status." aria-pressed={view==='loop'} onClick={()=>setView('loop')}><History size={16}/>Loop explorer</button>
-  </nav>{view==='floor'&&(p.running||p.latest)&&<button className="cs-preview-toggle" data-help={preview?"Follow execution":"Preview combinations"} data-help-description={preview?"Return to the latest recorded Loop and refresh its agent activity every 3 seconds. This does not start or resume the pipeline.":"Explore possible skill combinations without running agents or changing pipeline settings."} aria-pressed={preview} onClick={()=>setPreview(v=>!v)}>{preview?'Follow execution':'Preview combinations'}</button>}</div>{view==="design"&&<div className="cs-filters" role="search" aria-label="Filter configured skills">
+  </nav>{view==='floor'&&(p.running||p.latest)&&<button className="cs-preview-toggle" data-help={preview?"Follow execution":"Preview combinations"} data-help-description={preview?"Return to the latest recorded Loop and refresh its agent activity every 0.5 seconds. This does not start or resume the pipeline.":"Explore possible skill combinations without running agents or changing pipeline settings."} aria-pressed={preview} onClick={()=>setPreview(v=>!v)}>{preview?'Follow execution':'Preview combinations'}</button>}</div>{view==="design"&&<div className="cs-filters" role="search" aria-label="Filter configured skills">
     <label className="cs-search"><Search size={16} aria-hidden="true"/><input type="search" aria-label="Find a combination skill" data-help="Find a skill" data-help-description="Filter the configured skills by name or matching text. This only changes what is shown, not the pipeline configuration." value={search} onChange={e=>setSearch(e.target.value)} placeholder="Find a skill…"/></label>
     <label className="cs-role-filter">Role<select aria-label="Filter agent role" data-help="Filter agent role" data-help-description="Show skills for one agent role, or choose All five roles to see the complete skill architecture." value={role} onChange={e=>setRole(e.target.value as PlaybookStage|'all')}><option value="all">All five roles</option>{PLAYBOOK_STAGES.map(s=><option key={s} value={s}>{roles[s].name}</option>)}</select></label>
    </div>}
@@ -81,7 +82,7 @@ export default function CombinationDesign({pipeline:p,headerHost}:{pipeline:Pipe
  );
  return <section className={`combination-studio ${view==='floor'?'cs-floor-view':''}`} aria-label="Combination design">
   {headerHost?createPortal(header,headerHost):header}
-  {showGuide&&<FloorDetailDialog title="Combination schedule & map guide" close={()=>setShowGuide(false)}><dl className="cs-schedule-details"><dt>Possible combinations</dt><dd>{count.toLocaleString()}</dd><dt>Start policy</dt><dd>{p.configuration.combination_random_start?'Random Start':'Ordered start'} · then fixed-order cycles</dd><dt>Maximum Loops</dt><dd>{total.toLocaleString()}</dd><dt>Refresh interval</dt><dd>Every 3 seconds while viewing execution records.</dd></dl><p>One skill per role forms one complete path per Loop. Previewing does not change the execution plan.</p><p>Solid links indicate calls recorded at both stages. Dashed links indicate planned connections, not confirmed execution.</p></FloorDetailDialog>}
+  {showGuide&&<FloorDetailDialog title="Combination schedule & map guide" close={()=>setShowGuide(false)}><dl className="cs-schedule-details"><dt>Possible combinations</dt><dd>{count.toLocaleString()}</dd><dt>Start policy</dt><dd>{p.configuration.combination_random_start?'Random Start':'Ordered start'} · then fixed-order cycles</dd><dt>Maximum Loops</dt><dd>{total.toLocaleString()}</dd><dt>Refresh interval</dt><dd>Every 0.5 seconds while viewing execution records.</dd></dl><p>One skill per role forms one complete path per Loop. Previewing does not change the execution plan.</p><p>Solid links indicate calls recorded at both stages. Dashed links indicate planned connections, not confirmed execution.</p></FloorDetailDialog>}
   {view==='floor'?<>
 
    {following&&error&&<div className="cs-error" role="alert"><AlertCircle size={16}/><span>{error} {trace?'Last available records; activity may have changed.':'Waiting for this Loop’s records.'}</span><button onClick={()=>setRetry(n=>n+1)}>Retry</button></div>}
@@ -113,7 +114,7 @@ export default function CombinationDesign({pipeline:p,headerHost}:{pipeline:Pipe
    </div>
    {error&&<div className="cs-error" role="alert"><AlertCircle size={17}/><span>{error} {trace?'Showing the last records for this Loop.':'This does not mean the Loop is empty.'}</span><button onClick={()=>setRetry(n=>n+1)}>Retry</button></div>}
    {!trace&&!error?<p className="cs-empty" role="status">Loading this Loop’s execution path…</p>:trace&&<>
-    <div className="cs-path-caption"><span>{trace.planned?`Combination ${trace.planned.combination} · cycle ${trace.planned.repetition}${trace.planned.start_combination ? ` · ${trace.planned.selection_policy==='random_start_then_cycle_v1'?'Random':'Ordered'} start: ${trace.planned.start_combination}` : ''}`:trace.preparing?'Preparing execution…':'No execution plan recorded'}</span><span>{trace.calls.length} recorded calls · refreshes every 3 seconds</span></div>
+    <div className="cs-path-caption"><span>{trace.planned?`Combination ${trace.planned.combination} · cycle ${trace.planned.repetition}${trace.planned.start_combination ? ` · ${trace.planned.selection_policy==='random_start_then_cycle_v1'?'Random':'Ordered'} start: ${trace.planned.start_combination}` : ''}`:trace.preparing?'Preparing execution…':'No execution plan recorded'}</span><span>{trace.calls.length} recorded calls · refreshes every 0.5 seconds</span></div>
     <CombinationFloor recorded skills={PLAYBOOK_STAGES.map(stage=>{const flavor=trace.calls.filter(c=>callRole(c)===stage).at(-1)?.skill??trace.planned?.agents.find(a=>a.stage===stage);return flavor?[flavor]:[];})} calls={trace.calls} inspect={setDetail}/>
     <details className="cs-stage-details"><summary>Stage details and skill versions</summary><div className="cs-path">{PLAYBOOK_STAGES.map((stage,i)=>{
      const planned=trace.planned?.agents.find(a=>a.stage===stage),calls=trace.calls.filter(c=>callRole(c)===stage),last=calls.at(-1),actual=last?.skill,Icon=roles[stage].icon;

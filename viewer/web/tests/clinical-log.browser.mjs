@@ -7,7 +7,7 @@ try {
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   const roles=['hypothesis','data','ml','interpreter','report'];
   const skills=roles.map(stage=>({id:stage,stage,title:stage,hash:stage,content:'Fixture'}));
-  let unavailable=false,added=false,slow=false,inFlight=0,maxInFlight=0;
+  let unavailable=false,traceUnavailable=false,added=false,slow=false,inFlight=0,maxInFlight=0;
   const requestTimes=[];
   const run={run_tag:'test-run',execution_state:'running',configuration:{waves:3}};
   const pipeline={id:'p1',number:1,name:'Research pipeline',configuration:{waves:3,combination_skills:combination?Object.fromEntries(roles.map(s=>[s,[s]])):{}},running:run,latest:run,progress:{stage:'ml',iteration:2,updated_at:new Date().toISOString()}};
@@ -17,7 +17,8 @@ try {
    const path=new URL(r.request().url()).pathname;
    if(path==='/control/pipelines')return r.fulfill({json:{pipelines:[pipeline]}});
    if(path==='/control/playbooks')return r.fulfill({json:{catalog:skills,stages:roles,playbooks:roles,references:[],max_hypotheses:4}});
-   if(path.endsWith('/combinations'))return r.fulfill({json:{total_loops:3,planned:{combination:1,agents:skills},calls:[]}});
+   if(path.endsWith('/combinations')&&traceUnavailable)return r.fulfill({status:503,json:{error:'Fixture call records unavailable'}});
+   if(path.endsWith('/combinations'))return r.fulfill({json:{total_loops:3,planned:{combination:1,agents:skills},calls:[{stage:'ml#1',status:'started',skill:skills[2]}]}});
    return r.fulfill({json:{}});
   });
   await page.route('**/api/**',async r=>{
@@ -39,6 +40,30 @@ try {
   if(width===390)await panel.getByRole('button',{name:'Expand live log'}).click();
   await panel.getByText('Training and evaluating the prediction model.').waitFor();
   await panel.locator('.clinical-log-events li').first().waitFor();
+  if(combination){
+   const row=panel.locator('[data-role=ml]');
+   assert.match(await row.innerText(),/Machine learning · Running/);
+   assert.match(await row.innerText(),/Recorded agent: ml#1/);
+   assert.match(await panel.locator('[data-role=data]').innerText(),/Planned; not yet called/);
+   await page.getByRole('button',{name:'Preview combinations',exact:true}).click();
+   await panel.getByText('Configuration preview',{exact:true}).waitFor();
+   assert.equal(await panel.locator('[data-role=ml]').count(),0);
+   await page.getByRole('button',{name:'Follow execution',exact:true}).click();
+   await panel.locator('[data-role=ml]').waitFor();
+   await page.getByRole('button',{name:'Loop explorer',exact:true}).click();
+   await panel.getByText('Loop 1 · Historical records',{exact:true}).waitFor();
+   await panel.getByText('Machine learning · Last recorded: running',{exact:true}).waitFor();
+   assert.equal(await panel.locator('.clinical-log-events li').count(),0);
+   await page.getByRole('navigation',{name:'Combination views'}).getByRole('button',{name:'Floor plan',exact:true}).click();
+   await panel.getByText('Machine learning · Running',{exact:true}).waitFor();
+   traceUnavailable=true;
+   await panel.getByText('Machine learning · Last recorded: running',{exact:true}).waitFor();
+   assert.equal(await page.getByLabel('Machine learning stage is running').count(),0);
+   traceUnavailable=false;
+   await panel.getByText('Machine learning · Running',{exact:true}).waitFor();
+
+  }
+
   assert.equal(await panel.locator('.clinical-log-events li').count(),12);
   await panel.getByText('Live · checks every 0.5 seconds',{exact:true}).waitFor();
   await page.waitForTimeout(1600);
