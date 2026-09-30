@@ -1,3 +1,4 @@
+import { resultsStatus } from "../lib/resultsStatus";
 import { rankedContributions } from "../lib/featureImportance";
 import ContentOrigin from "../components/ContentOrigin";
 import { loopLabel } from '../lib/loopLabel';
@@ -70,6 +71,7 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
   const globalUnavailable = useViewer(s => !s.newRunMode && (s.snapshot?.health.memstara.up === false || !!s.error));
   const dataUnavailable = telemetry ? snapshot?.health.memstara.up === false : globalUnavailable;
   const pipeline = telemetry ? null : snapshot?.pipeline;
+  const statusNotice = resultsStatus(pipeline, !!dataUnavailable || !!snapshot?.stale);
   const selectedFailed = (useBoard()?.tasks ?? []).filter(task => task.status === "failed");
   const failed = scope==="all" ? (tags && all?.tags===tags?all.failures:[]) : selectedFailed;
 
@@ -78,7 +80,7 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
 
   return (
     <Panel id="results-panel" icon={BarChart3} title="Results">
-      {scope==="selected" && pipeline && pipeline.status !== "completed" && <p role="status" className="m-4 text-sm text-amber-800">Pipeline status: {pipeline.status}. Check stage results and report status.</p>}
+      {scope==="selected" && statusNotice && <p role="status" data-testid="results-status" data-tone={statusNotice.warning?"warning":"progress"} className={`m-4 text-sm ${statusNotice.warning?"text-amber-800":"text-ink-soft"}`}>{statusNotice.text}</p>}
       {scope==="selected" && dataUnavailable && <p role="status" className="m-4 text-sm text-amber-800">Connection interrupted. Showing the last available results; this is not an empty or completed run.</p>}
       {!telemetry && <div className="m-4 flex flex-wrap gap-2 text-sm"><button className="rounded border border-paper-line px-3 py-2" aria-pressed={scope==="all"} onClick={()=>setScope("all")}>Latest executions across pipelines</button><button className="rounded border border-paper-line px-3 py-2" aria-pressed={scope==="selected"} onClick={()=>setScope("selected")}>This execution</button></div>}
       {!telemetry && scope==="selected" && <p className="mx-4 text-sm text-ink-soft">Viewing: <strong>{executionContext.label}</strong>. Includes its recorded loops.</p>}

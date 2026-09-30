@@ -299,7 +299,7 @@ export interface Snapshot {
   run_configuration?: RunConfiguration | null;
   scene_scope?: string;
   report?: { status: string; text: string; error?: string | null } | null;
-  pipeline?: { status: string; report_completed?: boolean } | null;
+  pipeline?: { status: string; report_completed?: boolean; message?: string; reason?: string } | null;
   run_tag: string;
   runs: RunSummary[];
   /** The API gave up waiting for a fresh computation and re-sent its previous answer.
