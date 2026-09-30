@@ -1,4 +1,4 @@
-.floor-observatory .clinical-log { flex:0 0 290px; width:290px; min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden; border:1px solid rgb(var(--line)); border-radius:10px; background:rgb(var(--panel)); color:rgb(var(--ink)); }
+.floor-observatory .clinical-log { flex:0 0 320px; width:320px; min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden; border:1px solid rgb(var(--line)); border-radius:10px; background:rgb(var(--panel)); color:rgb(var(--ink)); }
 .clinical-log-heading { display:flex; align-items:center; gap:7px; padding:10px; flex-shrink:0; border-bottom:1px solid rgb(var(--line)); }
 .clinical-log-heading h3 { flex:1; font-size:13px; font-weight:650; }
 .clinical-log-heading button { display:flex; align-items:center; justify-content:center; min-width:32px; min-height:32px; border-radius:6px; }
@@ -23,12 +23,12 @@
 .clinical-log.is-collapsed .clinical-log-heading { padding:5px; flex-direction:column; border:0; }
 .clinical-log.is-collapsed h3 { writing-mode:vertical-rl; padding:6px 0; }
 @container (max-width:1100px) {
- .floor-observatory .clinical-log { flex-basis:240px; width:240px; }
+ .floor-observatory .clinical-log { flex-basis:280px; width:280px; }
 }
 @container (max-width:900px) {
  .floor-observatory .pipeline-explorer-layout:has(.clinical-log) { overflow-y:auto; }
  .floor-observatory .pipeline-explorer-layout:has(.clinical-log) .pipeline-detail-workspace { flex:1 0 480px; }
- .floor-observatory .clinical-log { flex:0 0 300px; width:100%; min-height:0; }
+ .floor-observatory .clinical-log { flex:0 0 420px; width:100%; min-height:0; }
  .floor-observatory .clinical-log.is-collapsed { flex:0 0 42px; width:100%; }
  .clinical-log.is-collapsed .clinical-log-heading { flex-direction:row; }
  .clinical-log.is-collapsed h3 { writing-mode:horizontal-tb; padding:0; }
@@ -44,3 +44,32 @@
 .clinical-log-detail-view input,.clinical-log-detail-view select { width:100%; min-width:0; }
 .clinical-log-detail-view .telemetry-event-summary { display:flex; flex-wrap:wrap; }
 .clinical-log-detail-view .telemetry-event-content { min-width:0; }
+
+/* Keep navigation and identity readable independently of the activity stream. */
+.clinical-log-context, .clinical-log-tabs, .clinical-log footer, .clinical-log-latest { flex-shrink:0; }
+.clinical-log-tabs { display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:8px; border-bottom:1px solid rgb(var(--line)); }
+.clinical-log-tabs button { display:flex; align-items:center; justify-content:center; gap:5px; min-height:36px; padding:6px; border-radius:7px; font-size:12px; font-weight:600; color:rgb(var(--ink-soft)); }
+.clinical-log-tabs button[aria-selected=true] { background:rgb(var(--accent) / .12); color:rgb(var(--accent)); }
+.clinical-log-tabs button span { border-radius:10px; background:rgb(var(--ink) / .07); padding:1px 6px; font-size:10px; }
+.clinical-log-scroll > [hidden] { display:none; }
+.clinical-log-current .clinical-log-execution { border-bottom:0; }
+.clinical-log-identity { display:flex; flex-direction:column; align-items:flex-start; gap:4px; margin-bottom:8px; }
+.clinical-log-identity > strong { font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+.clinical-log-identity .clinical-log-details-button { min-height:28px; margin:0; }
+.clinical-log-scroll .clinical-log-caption { font-size:11px; color:rgb(var(--ink-soft)); margin:8px 0 12px; }
+.clinical-agent-list { display:flex; flex-direction:column; gap:10px; padding:0; margin:12px 0 0; list-style:none; }
+.clinical-agent-card { min-width:0; padding:12px; border:1px solid rgb(var(--line)); border-radius:9px; background:rgb(var(--paper) / .5); }
+.clinical-agent-heading { display:flex; align-items:flex-start; flex-wrap:wrap; gap:6px 8px; }
+.clinical-agent-heading strong { flex:1 1 110px; min-width:0; line-height:1.6; }
+.clinical-agent-status { flex:0 1 auto; max-width:100%; font-size:10px; font-weight:600; line-height:1.5; border-radius:5px; padding:3px 6px; color:rgb(var(--ink-soft)); background:rgb(var(--ink) / .06); }
+.clinical-agent-card[data-state=running] { border-color:rgb(var(--accent) / .5); }
+.clinical-agent-card[data-state=running] .clinical-agent-status, .clinical-agent-card[data-state=completed] .clinical-agent-status { color:rgb(var(--accent)); background:rgb(var(--accent) / .12); }
+.clinical-agent-card[data-state=failed] .clinical-agent-status, .clinical-agent-card[data-state=cancelled] .clinical-agent-status { color:rgb(var(--ink)); border:1px solid rgb(var(--line)); }
+.clinical-log-scroll .clinical-agent-skill { margin:8px 0 4px; font-size:12px; line-height:1.5; }
+.clinical-agent-card .clinical-log-details-button { display:flex; align-items:center; justify-content:center; width:100%; margin-top:10px; padding:6px 8px; border:1px solid rgb(var(--line)); border-radius:6px; text-decoration:none; }
+.clinical-log-details-button:hover, .clinical-log-back:hover { background:rgb(var(--accent) / .08); }
+.clinical-saved-outputs > h4 { margin:14px 0 4px; font-size:12px; font-weight:650; }
+.clinical-log-current > article > [role=status] { padding:9px; border:1px solid rgb(var(--line)); border-radius:6px; background:rgb(var(--ink) / .04); }
+.clinical-log-current > article > strong { display:block; line-height:1.5; overflow-wrap:anywhere; }
+.clinical-log-current > article > .clinical-log-details-button { display:block; margin:6px 0; }
+.clinical-log-tabs button:focus-visible { outline-offset:0; }

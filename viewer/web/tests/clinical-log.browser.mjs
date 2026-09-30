@@ -39,10 +39,10 @@ try {
   const panel=page.getByRole('complementary',{name:'Clinical activity log'});
   if(width===390)await panel.getByRole('button',{name:'Expand live log'}).click();
   await panel.getByText('Training and evaluating the prediction model.').waitFor();
-  await panel.locator('.clinical-log-events li').first().waitFor();
+  await panel.locator('.clinical-log-events li').first().waitFor({state:'attached'});
   if(combination){
    const row=panel.locator('[data-role=ml]');
-   assert.match(await row.innerText(),/Machine learning · Running/);
+   assert.equal(await row.locator('.clinical-agent-status').innerText(),'Running');
    assert.match(await row.innerText(),/Recorded agent: ml#1/);
    assert.match(await panel.locator('[data-role=data]').innerText(),/Planned; not yet called/);
    await page.getByRole('button',{name:'Preview combinations',exact:true}).click();
@@ -52,15 +52,15 @@ try {
    await panel.locator('[data-role=ml]').waitFor();
    await page.getByRole('button',{name:'Loop explorer',exact:true}).click();
    await panel.getByText('Loop 1 · Historical records',{exact:true}).waitFor();
-   await panel.getByText('Machine learning · Last recorded: running',{exact:true}).waitFor();
+   await panel.locator('[data-role=ml]').getByText('Last recorded: running',{exact:true}).waitFor();
    assert.equal(await panel.locator('.clinical-log-events li').count(),0);
    await page.getByRole('navigation',{name:'Combination views'}).getByRole('button',{name:'Floor plan',exact:true}).click();
-   await panel.getByText('Machine learning · Running',{exact:true}).waitFor();
+   await panel.locator('[data-role=ml]').getByText('Running',{exact:true}).waitFor();
    traceUnavailable=true;
-   await panel.getByText('Machine learning · Last recorded: running',{exact:true}).waitFor();
+   await panel.locator('[data-role=ml]').getByText('Last recorded: running',{exact:true}).waitFor();
    assert.equal(await page.getByLabel('Machine learning stage is running').count(),0);
    traceUnavailable=false;
-   await panel.getByText('Machine learning · Running',{exact:true}).waitFor();
+   await panel.locator('[data-role=ml]').getByText('Running',{exact:true}).waitFor();
 
   }
 
@@ -77,6 +77,16 @@ try {
   });
   assert.equal(boxes.overflow,false);assert(width===1440?boxes.right:boxes.below);
   assert.equal(await page.locator('#workspace-feed').count(),0);
+  assert.equal(await panel.locator('.clinical-log-scroll').evaluate(e=>e.scrollTop),0,'Agent view must not auto-scroll to saved outputs');
+  if(combination) {
+   const geometry=await panel.locator('.clinical-agent-card').evaluateAll(es=>es.map(e=>({overflow:e.scrollWidth>e.clientWidth+1,height:e.clientHeight})));
+   assert(geometry.every(g=>!g.overflow&&g.height>60));
+  }
+  await panel.screenshot({path:`/private/tmp/live-log-agents-${width}-${combination}.png`});
+  await panel.getByRole('tab',{name:'Agent activity',exact:true}).focus();
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await panel.getByRole('tab',{name:/Saved outputs/}).getAttribute('aria-selected'),'true');
+  await panel.getByRole('tab',{name:/Saved outputs/}).click();
   await panel.getByRole('button',{name:'View details',exact:true}).first().click();
   await panel.getByText('MATCHED HYPOTHESIS OUTPUT',{exact:true}).first().waitFor();
   assert(!((await panel.innerText()).includes('OTHER STAGE OUTPUT')));
@@ -88,9 +98,11 @@ try {
   await panel.getByLabel('Search activity').fill('not present');
   await panel.getByText('No matching activity.',{exact:false}).waitFor();
   await panel.getByRole('button',{name:'Back to live updates'}).click();
+  await panel.getByRole('tab',{name:'Agent activity',exact:true}).click();
   await panel.getByRole('button',{name:'Browse activity'}).click();
   await panel.getByText('OTHER STAGE OUTPUT',{exact:true}).first().waitFor();
   await panel.getByRole('button',{name:'Back to live updates'}).click();
+  await panel.getByRole('tab',{name:/Saved outputs/}).click();
   const scroll=panel.locator('.clinical-log-scroll');await scroll.evaluate(e=>{e.scrollTop=0;e.dispatchEvent(new Event('scroll'));});
   await panel.getByRole('button',{name:'Follow latest updates'}).waitFor();
   added=true;await panel.getByText('The explanation record was updated.').waitFor();

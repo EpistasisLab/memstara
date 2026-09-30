@@ -1,5 +1,5 @@
 import {floorActivityRows, type FloorActivity} from '../lib/floorActivity';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { MessageSquareText, ChevronLeft, ChevronRight, ArrowDown } from 'lucide-react';
 import { useLiveOutputs } from '../store/liveOutputs';
 import { usePipelines, type PipelineDefinition } from '../store/pipelines';
@@ -32,6 +32,8 @@ function ClinicalLogBody({pipelines, live, pipelineError, floorActivity}: {
 }) {
   const [now, setNow] = useState(Date.now);
   const [following, setFollowing] = useState(true);
+  const [tab, setTab] = useState<'agents'|'outputs'>('agents');
+  const tabId = useId();
   const [detail, setDetail] = useState<ActivityScope | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 3000); return () => clearInterval(timer); }, []);
@@ -39,35 +41,45 @@ function ClinicalLogBody({pipelines, live, pipelineError, floorActivity}: {
   const owner = pipelines.find(p=>p.id===floorActivity?.pipelineId);
   const last = events.at(-1);
   const lastKey = last ? `${last.id}:${last.revision}` : '';
+  useLayoutEffect(() => {if (tab === 'agents' && scroll.current) scroll.current.scrollTop = 0;}, [tab]);
   useLayoutEffect(() => {
-    if (following && !detail && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
-  }, [lastKey, following, detail]);
+    if (tab === 'outputs' && following && !detail && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
+  }, [lastKey, following, detail, tab]);
   const hasExecution = pipelines.some(p => p.running || p.latest);
   const delayed = hasExecution && (!live.updatedAt || now - Date.parse(live.updatedAt) > 15000);
-  const interrupted = !!(live.error || pipelineError);
+  const interrupted = !!(live.error || pipelineError || floorActivity?.error);
   const connection = interrupted ? 'Updates interrupted' : delayed ? 'Waiting for fresh updates' : pipelines.some(p => p.running) ? 'Live · checks every 0.5 seconds' : hasExecution ? 'Saved activity · standing by' : 'Waiting for an execution';
   return <>
-    <div className="clinical-log-context"><p>Agent call status and saved outputs are separate records.</p><span role="status" className={interrupted || delayed ? 'clinical-log-delayed' : ''}>{connection}</span>
+    <div className="clinical-log-context"><span role="status" className={interrupted || delayed ? 'clinical-log-delayed' : ''}>{connection}</span>
       {(interrupted || delayed) && hasExecution && <p>Previously received records remain visible. This does not confirm that execution has stopped.</p>}
     </div>
+    {!detail && <div className="clinical-log-tabs" role="tablist" aria-label="Live log sections" onKeyDown={e=>{
+      if (!['ArrowLeft','ArrowRight','Home','End'].includes(e.key)) return;
+      e.preventDefault();
+      const next=e.key==='Home'?'agents':e.key==='End'?'outputs':tab==='agents'?'outputs':'agents';
+      setTab(next);document.getElementById(`${tabId}-${next}-tab`)?.focus();
+    }}>
+      <button id={`${tabId}-agents-tab`} aria-controls={`${tabId}-agents`} tabIndex={tab==='agents'?0:-1} role="tab" aria-selected={tab==='agents'} onClick={()=>setTab('agents')}>Agent activity</button>
+      <button id={`${tabId}-outputs-tab`} aria-controls={`${tabId}-outputs`} tabIndex={tab==='outputs'?0:-1} role="tab" aria-selected={tab==='outputs'} onClick={()=>setTab('outputs')}>Saved outputs <span>{events.length}</span></button>
+    </div>}
     {detail && <div className="clinical-log-detail-view"><button className="clinical-log-back" onClick={() => setDetail(null)}>Back to live updates</button><ActivityDetails key={`${detail.run_tag}:${detail.iteration}:${detail.stage}`} event={detail}/></div>}
     <div hidden={!!detail} className="clinical-log-scroll" ref={scroll} tabIndex={0} aria-label="Recorded clinical activity" onScroll={e => {
       const el = e.currentTarget; setFollowing(el.scrollHeight - el.scrollTop - el.clientHeight < 30);
     }}>
-      <section className="clinical-log-current" aria-label="Current pipeline activity">
+      <section id={`${tabId}-agents`} role="tabpanel" aria-labelledby={`${tabId}-agents-tab`} hidden={tab!=='agents'} className="clinical-log-current" aria-label="Current pipeline activity">
         {!pipelines.length && <p>Select or create a pipeline to see its activity.</p>}
         {!floorActivity && pipelines.map(p => <article key={p.id}><strong>{p.name}</strong><small>{p.progress.iteration != null ? `Loop ${p.progress.iteration}` : 'Loop not recorded'} · {clinicalRoles[p.progress.stage ?? ''] ?? 'Execution'}</small><p>{pipelineError ? 'Current execution status is unavailable. The last recorded state is retained.' : clinicalPipelineStatus(p)}</p>{(p.running ?? p.latest)?.run_tag && <button className="clinical-log-details-button" onClick={() => {setFollowing(false);setDetail({run_tag:(p.running ?? p.latest)!.run_tag,iteration:null,stage:'',pipeline_name:p.name,detail:''});}}>Browse activity</button>}{p.progress.updated_at && <time dateTime={p.progress.updated_at}>Last recorded {new Date(p.progress.updated_at).toLocaleTimeString()}</time>}</article>)}
-        {floorActivity && <article data-testid="floor-log-activity">
-          <strong>{pipelines.find(p=>p.id===floorActivity.pipelineId)?.name}</strong>
-          {floorActivity.runTag&&<button className="clinical-log-details-button" onClick={()=>{setFollowing(false);setDetail({run_tag:floorActivity.runTag!,iteration:null,stage:'',pipeline_name:owner?.name??'',detail:''});}}>Browse activity</button>}
+        {floorActivity && <article className="clinical-log-execution" data-testid="floor-log-activity">
+          <div className="clinical-log-identity"><strong>{pipelines.find(p=>p.id===floorActivity.pipelineId)?.name}</strong>
+          {floorActivity.runTag&&<button className="clinical-log-details-button" onClick={()=>{setFollowing(false);setDetail({run_tag:floorActivity.runTag!,iteration:null,stage:'',pipeline_name:owner?.name??'',detail:''});}}>Browse activity</button>}</div>
           <small>{floorActivity.mode==='preview'?'Configuration preview':`Loop ${floorActivity.loop} · ${floorActivity.mode==='history'?'Historical records':'Following floor plan'}`}</small>
           {owner && floorActivity.mode==='live' && (pipelineError || owner.failure || !owner.running || owner.running.pause_requested || owner.running.execution_state==='paused' || owner.running.connection_health?.state==='verifying') && <p role="status">{pipelineError?'Current execution status is unavailable.':clinicalPipelineStatus(owner)}</p>}
           {floorActivity.mode==='preview'?<p>This view shows possible skills, not executing agents. Follow execution to see current activity.</p>:<>
-            <p>Same agent-call records as the floor plan. Stage descriptions summarize the role; they do not identify the tool running at this instant.</p>
+            <p className="clinical-log-caption">Recorded agents and skills for the displayed Loop.</p>
             {floorActivity.error && <p role="status">Updates unavailable. Showing last recorded calls for this Loop.</p>}
-            {!floorActivity.trace?<p>Waiting for this Loop’s agent records.</p>:<ol aria-label="Floor plan agent activity">{floorActivityRows(floorActivity).map(row=><li key={row.role} data-role={row.role}>
-              <strong>{clinicalRoles[row.role]} · {row.status}</strong>
-              <p>{row.skill?.title??row.skill?.id??'Skill not recorded'}{!row.call&&row.skill?' · Planned; not yet called':''}</p>
+            {!floorActivity.trace?<p>Waiting for this Loop’s agent records.</p>:<ol className="clinical-agent-list" aria-label="Floor plan agent activity">{floorActivityRows(floorActivity).map(row=><li className="clinical-agent-card" key={row.role} data-role={row.role} data-state={row.status.toLowerCase()}>
+              <div className="clinical-agent-heading"><strong>{clinicalRoles[row.role]}</strong><span className="clinical-agent-status">{row.status==='Waiting · no call recorded'?'Not started':row.status}</span></div>
+              <p className="clinical-agent-skill">{row.skill?.title??row.skill?.id??'Skill not recorded'}</p>{!row.call&&row.skill&&<small>Planned; not yet called</small>}
               {row.call&&<small>Recorded agent: {row.call.stage}</small>}
               {row.status==='Running'&&<p>{({hypothesis:row.call?.stage.startsWith('question')?'Developing a research question.':'Developing a testable hypothesis.',data:'Preparing the selected measurements for analysis.',ml:'Training and evaluating the prediction model.',interpreter:'Describing what the analysis found.',report:'Preparing an explanation of the findings and their limitations.'})[row.role]}</p>}
               {row.call&&<button className="clinical-log-details-button" onClick={()=>{setFollowing(false);setDetail({run_tag:floorActivity.runTag!,iteration:floorActivity.loop,stage:row.role,pipeline_name:pipelines.find(p=>p.id===floorActivity.pipelineId)?.name??'',detail:''});}}>View recorded activity</button>}
@@ -75,7 +87,7 @@ function ClinicalLogBody({pipelines, live, pipelineError, floorActivity}: {
           </>}
         </article>}
       </section>
-      <h4>Saved output updates{floorActivity&&floorActivity.mode!=='preview'?` · Loop ${floorActivity.loop}`:''}</h4>
+      <section id={`${tabId}-outputs`} role="tabpanel" aria-labelledby={`${tabId}-outputs-tab`} hidden={tab!=='outputs'} className="clinical-saved-outputs"><h4>Saved output updates{floorActivity&&floorActivity.mode!=='preview'?` · Loop ${floorActivity.loop}`:''}</h4>
       {!events.length && <p className="clinical-log-empty">No saved output updates for this execution yet. New records will appear here automatically.</p>}
       <ol className="clinical-log-events" aria-label="Saved output updates">{events.map(event => {
         const owner = pipelines.find(p => (p.running ?? p.latest)?.run_tag === event.run_tag);
@@ -84,9 +96,9 @@ function ClinicalLogBody({pipelines, live, pipelineError, floorActivity}: {
           <button className="clinical-log-details-button" onClick={() => {setFollowing(false);setDetail(event);}}>View details</button>
           {!!event.detail && <details><summary>Read recorded excerpt</summary><p>{event.detail}</p><small>Saved text excerpt; may be shortened. Agent-written content requires review.</small></details>}
         </li>;
-      })}</ol>
+      })}</ol></section>
     </div>
-    {!following && !detail && <button className="clinical-log-latest" onClick={() => setFollowing(true)}><ArrowDown size={14}/> Follow latest updates</button>}
-    <footer>Received order · Recent updates only. Saved outputs do not establish clinical validity.</footer>
+    {tab==='outputs' && !following && !detail && <button className="clinical-log-latest" onClick={() => setFollowing(true)}><ArrowDown size={14}/> Follow latest updates</button>}
+    <footer>{tab==='agents'?'Stage summaries · See details for recorded actions.':'Recent saved outputs · Received order.'}</footer>
   </>;
 }
