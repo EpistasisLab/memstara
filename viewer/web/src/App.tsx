@@ -1,13 +1,14 @@
 import InterfaceHelp from './components/InterfaceHelp';
 import { pipelineLoopLabel } from "./lib/pipelineProgress";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { useEffect, lazy, Suspense, type ComponentType } from "react";
+import { useEffect, Suspense, type ComponentType } from "react";
 import Panel from "./components/Panel";
 import WindowWorkspace from "./components/WindowWorkspace";
 import { VIEWS } from "./lib/views";
 import ControlPanel from "./panels/ControlPanel";
 import PipelineWorkspace, { PipelineStatus } from "./panels/PipelineWorkspace";
-const DiscoveryPanel = lazy(() => import("./panels/DiscoveryPanel"));
+// Load with the application so an open tab cannot request a retired deployment chunk.
+import DiscoveryPanel from "./panels/DiscoveryPanel";
 import TelemetryPanel from "./panels/TelemetryPanel";
 import { usePipelines } from "./store/pipelines";
 import { useViewer, type ViewId } from "./store/viewer";
