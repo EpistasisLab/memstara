@@ -443,7 +443,8 @@ dialog::backdrop { backdrop-filter: blur(3px); }
 .loop-usage>header h3 { font-size:17px; font-weight:750; }
 .loop-usage>header p,.loop-usage-note,.loop-usage>footer { font-size:12px; line-height:1.7; color:rgb(var(--ink-soft)); margin-top:8px; }
 .loop-usage-cohort { font-size:12px; margin:16px 0 10px; }
-.loop-usage-averages { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:10px; }
+.usage-metric-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr)); gap:8px; padding:12px; }
+.loop-usage-averages { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr)); gap:10px; }
 .loop-usage-averages>div { padding:13px; border-radius:9px; background:rgb(var(--accent) / .055); min-width:0; }
 .loop-usage-averages dt { display:flex; align-items:center; gap:7px; font-size:11px; color:rgb(var(--ink-soft)); }
 .loop-usage-averages dd { font-size:21px; font-weight:750; margin:6px 0; overflow-wrap:anywhere; }

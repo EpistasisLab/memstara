@@ -4,6 +4,7 @@ import { usePipelines } from '../store/pipelines';
 import { useLiveOutputs } from '../store/liveOutputs';
 import { useViewer } from '../store/viewer';
 import './exploration-summary.css';
+import { costLabel } from '../lib/loopUsage';
 
 /** Workspace scope only: retained records are never presented as lifetime totals. */
 export default function ExplorationSummary() {
@@ -51,9 +52,9 @@ export default function ExplorationSummary() {
     return () => { stopped = true; clearTimeout(timer); request?.abort(); };
   }, [currentTags]);
   const scopedCost = cost?.run_tags.join(',') === currentTags ? cost : null;
-  const costValue = scopedCost && Number.isFinite(scopedCost.usd) ? `$${scopedCost.usd.toFixed(4)}` : '—';
+  const costValue = scopedCost ? costLabel(scopedCost) : '—';
   const costDescription = costError ? 'Update delayed · last available estimate' : !scopedCost ? 'Awaiting cost records'
-    : !tags.size ? 'No executions in this workspace' : scopedCost.status === 'partial' ? 'Partial · active calls or pricing missing' : 'Latest executions · estimated, not billed';
+    : !tags.size ? 'No executions in this workspace' : scopedCost.missing_costs > 0 ? `Pricing unavailable for ${scopedCost.missing_costs} calls; total cannot be determined` : scopedCost.status === 'partial' ? 'Incomplete usage · recorded subtotal only' : 'Latest executions · estimated, not billed';
   const stale = !!controlError || !!live.error || (tags.size > 0 && (live.tags !== currentTags || age === null || age > 15));
   const starts = active.map(p => Date.parse(p.running!.started)).filter(Number.isFinite);
   const seconds = starts.length ? Math.max(0, Math.floor((now - Math.min(...starts)) / 1000)) : null;

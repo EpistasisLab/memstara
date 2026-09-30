@@ -4,7 +4,14 @@ export function usageDuration(seconds:number|null|undefined):string {
   const total=Math.round(seconds);
   return total<60?`${total}s`:`${Math.floor(total/60)}m ${total%60}s`;
 }
-export const usageCost=(value:{usd:number;status:string})=>`$${value.usd.toFixed(4)}${value.status==='complete'?'':' (partial)'}`;
+/** Never present an unknown zero as a free run. */
+export function costLabel(value:{usd?:number;status?:string;missing_costs?:number}|null|undefined): string {
+  if (!value || !Number.isFinite(value.usd) || value.usd! < 0 || value.status === 'unavailable') return 'Not available';
+  const complete = value.status === 'complete' && !(value.missing_costs ?? 0);
+  if (!complete && value.usd === 0) return 'Not available';
+  return `$${value.usd!.toFixed(4)}${complete ? '' : ' · recorded subtotal'}`;
+}
+export const usageCost = costLabel;
 export function loopUsageMarkdown(execution:ExecutionUsage|undefined,updatedAt?:string,error?:string):string {
   const title='\n\n---\n\n## Measured Loop performance and usage\n\n';
   if(!execution)return title+'System telemetry was unavailable for this execution at export. Missing usage is not zero.\n';

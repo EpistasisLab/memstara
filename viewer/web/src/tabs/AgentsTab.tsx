@@ -1,4 +1,5 @@
 import DetailPreview from "../components/DetailPreview";
+import {costLabel} from '../lib/loopUsage';
 import { createColumnHelper } from "@tanstack/react-table";
 import { AlertTriangle, Coins, Repeat } from "lucide-react";
 import { agentDisplayName } from "../lib/telemetry";
@@ -45,7 +46,7 @@ const COLUMNS = [
   }),
   col.accessor("cost", {
     header: "Cost", meta: { align: "right" },
-    cell: (c) => <span className="font-mono text-xs">${c.getValue().toFixed(4)}</span>,
+    cell: (c) => <span className="font-mono text-xs">{costLabel({usd:c.getValue(),status:c.row.original.runs ? 'partial' : 'complete'})}</span>,
   }),
 ];
 
@@ -80,7 +81,7 @@ export default function AgentsTab() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { icon: Repeat, label: "Agent calls", value: runs.toLocaleString() },
-          { icon: Coins, label: "Recorded cost", value: `$${cost.toFixed(2)}` },
+          { icon: Coins, label: "Recorded cost subtotal", value: costLabel({usd:cost,status:runs?'partial':'complete'}) },
           { icon: Repeat, label: "Agents", value: `${totals.length}` },
         ].map((s) => (
           <div key={s.label} className="rounded-lg border border-paper-line bg-white p-4">

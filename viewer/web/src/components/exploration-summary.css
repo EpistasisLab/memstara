@@ -29,6 +29,7 @@
 .summary-card-label > span { flex:1; min-width:0; overflow-wrap:anywhere; }
 .summary-card-label > svg:last-child { width:12px; opacity:.65; }
 .exploration-summary-grid strong { display:block; font-size:25px; font-weight:650; line-height:1.2; letter-spacing:-.5px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.exploration-summary-grid .summary-cost strong { font-size:clamp(18px,2.1vw,25px); letter-spacing:-.25px; }
 .exploration-summary-grid strong b { font-size:14px; font-weight:450; color:rgb(var(--ink-soft)); letter-spacing:0; }
 .summary-card-description { display:block; margin-top:auto; font-size:12px; line-height:1.5; color:rgb(var(--ink-soft)); overflow-wrap:anywhere; }
 .exploration-summary-grid .summary-primary { border-color:rgb(var(--accent) / .3); background:linear-gradient(135deg,rgb(var(--accent) / .1),rgb(var(--accent) / .025)); }
