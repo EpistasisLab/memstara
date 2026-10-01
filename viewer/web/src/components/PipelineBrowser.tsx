@@ -6,7 +6,7 @@ import PipelineDeleteDialog from './PipelineDeleteDialog';
 import { pipelineLoopLabel } from '../lib/pipelineProgress';
 
 export function pipelineState(p: PipelineDefinition) {
-  if (p.running?.pause_requested || p.running?.execution_state === 'paused') return p.running.execution_state === 'paused' ? 'Paused' : 'Stopping';
+  if (p.running?.pause_requested || p.running?.execution_state === 'paused' || p.running?.execution_state === 'stopping') return p.running.execution_state === 'paused' ? 'Paused' : 'Stopping';
   if (p.running) return p.running.waiting_for_questions ? 'Waiting' : 'Running';
   if (p.latest?.recoverable) return 'Interrupted';
   if ((p.progress.counts?.failed ?? 0) > 0 || (p.latest?.exit_code != null && p.latest.exit_code !== 0)) return 'Needs attention';

@@ -16,3 +16,10 @@ test('real failures and interruptions retain their diagnostic and incomplete-rep
 test('a stale running record is not presented as current execution',()=>{
  const notice=resultsStatus({status:'running'},true);assert.equal(notice.warning,true);assert.match(notice.text,/Last recorded/);assert.doesNotMatch(notice.text,/Pipeline is running/);
 });
+test('Results follows controller pause without masking failure or stale data',()=>{
+ const stopping={paused:false,stopping:true},paused={paused:true,stopping:false};
+ assert.match(resultsStatus({status:'running'},false,stopping).text,/Pause requested/);
+ assert.match(resultsStatus({status:'running'},false,paused).text,/Pipeline is paused/);
+ assert.match(resultsStatus({status:'running'},true,paused).text,/Last recorded/);
+ assert.match(resultsStatus({status:'failed',message:'actual failure'},false,paused).text,/actual failure/);
+});

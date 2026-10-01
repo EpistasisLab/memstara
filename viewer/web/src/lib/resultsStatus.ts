@@ -1,9 +1,13 @@
 interface PipelineStatus {status: string; message?: string}
 
 /** A running snapshot is progress, not a warning. Stale data must not imply liveness. */
-export function resultsStatus(pipeline?: PipelineStatus | null, stale = false) {
+export function resultsStatus(pipeline?: PipelineStatus | null, stale = false, execution?: {paused:boolean; stopping:boolean}) {
   if (!pipeline || pipeline.status === 'completed') return null;
   if (stale) return {warning:true, text:`Last recorded pipeline status: ${pipeline.status}. Live updates are unavailable; saved results remain visible.`};
+  if (!['failed','blocked','incomplete','interrupted'].includes(pipeline.status)) {
+    if (execution?.paused) return {warning:false, text:'Pipeline is paused. Saved results remain available.'};
+    if (execution?.stopping) return {warning:false, text:'Pause requested. An existing call may still be finishing; saved results remain available.'};
+  }
   switch (pipeline.status) {
     case 'running':
       return {warning:false, text:'Pipeline is running. Completed results appear as they are saved; the final report is not complete yet.'};

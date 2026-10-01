@@ -1,4 +1,5 @@
 import { outputArrivals } from '../lib/outputArrival';
+import { retainEqual } from '../lib/retainEqual';
 import { create } from 'zustand';
 import { usePipelines } from './pipelines';
 import type { Result } from '../types';
@@ -31,9 +32,9 @@ export const useLiveOutputs=create<{
       const results=new Map(get().results.map(r=>[r.result_id,r]));body.results.forEach(r=>results.set(r.result_id,r));
       const questions=new Map(get().questions.map(q=>[q.question_id,q]));body.questions.forEach(q=>questions.set(q.question_id,q));
       set(s=>({tags,error:null,updatedAt:body.generated_at,limit:body.record_limit,
-        events:[...additions.reverse(),...s.events].slice(0,500),pending:s.pending+additions.filter(e=>e.fresh).length,
-        results:[...results.values()].sort((a,b)=>b.result_id-a.result_id).slice(0,600),
-        questions:[...questions.values()].sort((a,b)=>b.question_id-a.question_id).slice(0,400),reports:{...s.reports,...body.reports}}));
+        events:additions.length?[...additions.reverse(),...s.events].slice(0,500):s.events,pending:s.pending+additions.filter(e=>e.fresh).length,
+        results:retainEqual(s.results,[...results.values()].sort((a,b)=>b.result_id-a.result_id).slice(0,600)),
+        questions:retainEqual(s.questions,[...questions.values()].sort((a,b)=>b.question_id-a.question_id).slice(0,400)),reports:retainEqual(s.reports,{...s.reports,...body.reports})}));
       initialized=true;
     }catch(error){set({error:String(error)});}finally{busy=false;}
   },

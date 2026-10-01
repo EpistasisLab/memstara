@@ -41,3 +41,6 @@
 .cs-floor-view > .cf-floor-shell { flex:1 0 280px; display:flex; flex-direction:column; min-height:280px; }
 .cs-floor-view > .cf-floor-shell > .cf-map { flex:1; height:auto; min-height:280px; }
 .cf-navigation button { min-height:30px; padding:4px 8px; border:1px solid rgb(var(--line)); border-radius:6px; font-size:11px; background:rgb(var(--paper)); }
+/* Keep the small opacity/transform indicators; avoid repainting the whole room. */
+.cf-room.cf-active-room,.cf-active-room .cf-room-icon { animation:none; }
+.cf-room.cf-active-room:before { content:none; animation:none; }

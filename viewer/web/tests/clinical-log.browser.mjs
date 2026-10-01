@@ -38,7 +38,7 @@ try {
   await page.evaluate(d=>document.documentElement.dataset.theme=d,combination?'dark':'light');
   const panel=page.getByRole('complementary',{name:'Clinical activity log'});
   if(width===390)await panel.getByRole('button',{name:'Expand live log'}).click();
-  await panel.getByText('Training and evaluating the prediction model.').waitFor();
+  await panel.getByText(combination?'The task board is at model evaluation.':'Training and evaluating the prediction model.').waitFor();
   await panel.locator('.clinical-log-events li').first().waitFor({state:'attached'});
   if(combination){
    const row=panel.locator('[data-role=ml]');
@@ -52,18 +52,33 @@ try {
    await panel.locator('[data-role=ml]').waitFor();
    await page.getByRole('button',{name:'Loop explorer',exact:true}).click();
    await panel.getByText('Loop 1 · Historical records',{exact:true}).waitFor();
-   await panel.locator('[data-role=ml]').getByText('Last recorded: running',{exact:true}).waitFor();
+   await panel.locator('[data-role=ml]').getByText('Last recorded: call open',{exact:true}).waitFor();
    assert.equal(await panel.locator('.clinical-log-events li').count(),0);
    await page.getByRole('navigation',{name:'Combination views'}).getByRole('button',{name:'Floor plan',exact:true}).click();
    await panel.locator('[data-role=ml]').getByText('Running',{exact:true}).waitFor();
    traceUnavailable=true;
-   await panel.locator('[data-role=ml]').getByText('Last recorded: running',{exact:true}).waitFor();
+   await panel.locator('[data-role=ml]').getByText('Last recorded: call open',{exact:true}).waitFor();
    assert.equal(await page.getByLabel('Machine learning stage is running').count(),0);
    traceUnavailable=false;
    await panel.locator('[data-role=ml]').getByText('Running',{exact:true}).waitFor();
 
   }
 
+  pipeline.running={...run,pause_requested:true};
+  await panel.getByText('Pausing after the current agent call finishes.',{exact:true}).waitFor();
+  if(combination){
+   await panel.locator('[data-role=ml]').getByText('Pause requested · finishing call',{exact:true}).waitFor();
+   assert.equal(await page.locator('.cf-active-room,.cf-map .react-flow__edge.animated').count(),0);
+   await page.locator('.cs-loop-status').getByText(/Pausing/).waitFor();
+  }
+  pipeline.running={...run,execution_state:'stopping'};
+  await panel.getByText('Pausing after the current agent call finishes.',{exact:true}).waitFor();
+  pipeline.running={...run,execution_state:'paused',pause_requested:true};
+  await panel.getByText('Paused. The pipeline is waiting to resume.',{exact:true}).waitFor();
+  await panel.getByText('Paused · saved activity',{exact:true}).waitFor();
+  if(combination)assert.equal(await page.locator('.cf-active-room,.cf-map .react-flow__edge.animated').count(),0);
+  pipeline.running={...run};
+  await panel.getByText(combination?'The task board is at model evaluation.':'Training and evaluating the prediction model.').waitFor();
   assert.equal(await panel.locator('.clinical-log-events li').count(),12);
   await panel.getByText('Live · checks every 0.5 seconds',{exact:true}).waitFor();
   await page.waitForTimeout(1600);
@@ -120,7 +135,7 @@ try {
   pipeline.failure={code:'model_message_format',message:'The model rejected the system-message format.'};
   await panel.getByText(pipeline.failure.message,{exact:true}).waitFor();
   pipeline.running={...run,run_tag:'new-run'};pipeline.latest=pipeline.running;pipeline.failure=null;
-  await panel.getByText('Training and evaluating the prediction model.').waitFor();
+  await panel.getByText(combination?'The task board is at model evaluation.':'Training and evaluating the prediction model.').waitFor();
   assert.equal(await panel.getByText('The model rejected the system-message format.',{exact:true}).count(),0);
   assert.deepEqual(errors,[]);console.log(JSON.stringify({width,combination,layout:'pass',scope:'pass',live:'pass',scroll:'pass',outage:'pass'}));await page.close();
  }

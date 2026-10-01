@@ -1,4 +1,4 @@
-import {floorActivityRows, type FloorActivity} from '../lib/floorActivity';
+import {floorActivityRows, floorExecutionState, type FloorActivity} from '../lib/floorActivity';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { MessageSquareText, ChevronLeft, ChevronRight, ArrowDown } from 'lucide-react';
 import { useLiveOutputs } from '../store/liveOutputs';
@@ -48,7 +48,7 @@ function ClinicalLogBody({pipelines, live, pipelineError, floorActivity}: {
   const hasExecution = pipelines.some(p => p.running || p.latest);
   const delayed = hasExecution && (!live.updatedAt || now - Date.parse(live.updatedAt) > 15000);
   const interrupted = !!(live.error || pipelineError || floorActivity?.error);
-  const connection = interrupted ? 'Updates interrupted' : delayed ? 'Waiting for fresh updates' : pipelines.some(p => p.running) ? 'Live · checks every 0.5 seconds' : hasExecution ? 'Saved activity · standing by' : 'Waiting for an execution';
+  const connection = interrupted ? 'Updates interrupted' : delayed ? 'Waiting for fresh updates' : pipelines.some(p => floorExecutionState(p.running).live) ? 'Live · checks every 0.5 seconds' : pipelines.some(p=>floorExecutionState(p.running).stopping) ? 'Pausing · waiting for existing calls' : pipelines.some(p=>floorExecutionState(p.running).paused) ? 'Paused · saved activity' : hasExecution ? 'Saved activity · standing by' : 'Waiting for an execution';
   return <>
     <div className="clinical-log-context"><span role="status" className={interrupted || delayed ? 'clinical-log-delayed' : ''}>{connection}</span>
       {(interrupted || delayed) && hasExecution && <p>Previously received records remain visible. This does not confirm that execution has stopped.</p>}
@@ -73,7 +73,7 @@ function ClinicalLogBody({pipelines, live, pipelineError, floorActivity}: {
           <div className="clinical-log-identity"><strong>{pipelines.find(p=>p.id===floorActivity.pipelineId)?.name}</strong>
           {floorActivity.runTag&&<button className="clinical-log-details-button" onClick={()=>{setFollowing(false);setDetail({run_tag:floorActivity.runTag!,iteration:null,stage:'',pipeline_name:owner?.name??'',detail:''});}}>Browse activity</button>}</div>
           <small>{floorActivity.mode==='preview'?'Configuration preview':`Loop ${floorActivity.loop} · ${floorActivity.mode==='history'?'Historical records':'Following floor plan'}`}</small>
-          {owner && floorActivity.mode==='live' && (pipelineError || owner.failure || !owner.running || owner.running.pause_requested || owner.running.execution_state==='paused' || owner.running.connection_health?.state==='verifying') && <p role="status">{pipelineError?'Current execution status is unavailable.':clinicalPipelineStatus(owner)}</p>}
+          {owner && floorActivity.mode==='live' && (pipelineError || owner.failure || !owner.running || owner.running.pause_requested || owner.running.execution_state==='paused' || owner.running.execution_state==='stopping' || owner.running.connection_health?.state==='verifying') && <p role="status">{pipelineError?'Current execution status is unavailable.':clinicalPipelineStatus(owner)}</p>}
           {floorActivity.mode==='preview'?<p>This view shows possible skills, not executing agents. Follow execution to see current activity.</p>:<>
             <p className="clinical-log-caption">Recorded agents and skills for the displayed Loop.</p>
             {floorActivity.error && <p role="status">Updates unavailable. Showing last recorded calls for this Loop.</p>}
@@ -81,7 +81,8 @@ function ClinicalLogBody({pipelines, live, pipelineError, floorActivity}: {
               <div className="clinical-agent-heading"><strong>{clinicalRoles[row.role]}</strong><span className="clinical-agent-status">{row.status==='Waiting · no call recorded'?'Not started':row.status}</span></div>
               <p className="clinical-agent-skill">{row.skill?.title??row.skill?.id??'Skill not recorded'}</p>{!row.call&&row.skill&&<small>Planned; not yet called</small>}
               {row.call&&<small>Recorded agent: {row.call.stage}</small>}
-              {row.status==='Running'&&<p>{({hypothesis:row.call?.stage.startsWith('question')?'Developing a research question.':'Developing a testable hypothesis.',data:'Preparing the selected measurements for analysis.',ml:'Training and evaluating the prediction model.',interpreter:'Describing what the analysis found.',report:'Preparing an explanation of the findings and their limitations.'})[row.role]}</p>}
+              {row.status==='Call still open'&&<p>This agent call has not returned yet. It may be finishing after handing off its result; this does not confirm that its main task is still running.</p>}
+              {row.status==='Running'&&<p>{({hypothesis:row.call?.stage.startsWith('question')?'Developing a research question.':'Developing a testable hypothesis.',data:'Preparing the selected measurements for analysis.',ml:'The task board is at model evaluation.',interpreter:'The task board is at interpretation of the analysis.',report:'Preparing an explanation of the findings and their limitations.'})[row.role]}</p>}
               {row.call&&<button className="clinical-log-details-button" onClick={()=>{setFollowing(false);setDetail({run_tag:floorActivity.runTag!,iteration:floorActivity.loop,stage:row.role,pipeline_name:pipelines.find(p=>p.id===floorActivity.pipelineId)?.name??'',detail:''});}}>View recorded activity</button>}
             </li>)}</ol>}
           </>}

@@ -10,7 +10,7 @@ export default function PipelineRowActions({pipeline:p,onSettings,compact=false}
   const busy=usePipelines(s=>s.busy);
   const [settingsOpen,setSettingsOpen]=useState(false);
   const [additionalOpen,setAdditionalOpen]=useState(false);
-  const paused=!!p.running&&(p.running.pause_requested||p.running.execution_state==='paused');
+  const paused=!!p.running&&(p.running.pause_requested||p.running.execution_state==='paused'||p.running.execution_state==='stopping');
   const combinations=!!p.configuration.combination_skills&&Object.keys(p.configuration.combination_skills).length>0;
   const recoverable=!p.running&&!!p.latest?.recoverable;
   const action=paused?'Resume':p.running?'Pause':recoverable?'Resume from checkpoint':p.latest?(combinations?'Run combinations again':'Additional analysis'):'Run';
@@ -23,6 +23,7 @@ export default function PipelineRowActions({pipeline:p,onSettings,compact=false}
     {!compact&&finished&&<div className="pipeline-execution-summary" role="status">
       <strong>{infrastructure?.status==='interrupted'?'Connection interrupted — results retained':recoverable?'Execution interrupted — checkpoint available':completed?'Execution completed':p.latest?.exit_code===0?'Execution ended':'Execution stopped — review results'}</strong>
       {exploration&&<span>{exploration.completed} Loops completed · {exploration.blocked} blocked</span>}
+      {p.failure&&<span role="alert">{p.failure.message}</span>}
       {p.latest?.recovery_blocked&&<span>Automatic recovery requires review. See execution details.</span>}
     </div>}
     {!compact&&infrastructure&&<p className="pipeline-row-note" role="status">{infrastructure.message}</p>}

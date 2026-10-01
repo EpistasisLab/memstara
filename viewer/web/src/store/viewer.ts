@@ -1,3 +1,4 @@
+import { retainEqual } from '../lib/retainEqual';
 import { useContext } from 'react';
 import { SnapshotScope } from '../lib/SnapshotScope';
 import { create } from "zustand";
@@ -188,6 +189,10 @@ export const useViewer = create<ViewerState>((set, get) => ({
           snapshot.feed = previous.feed; snapshot.access = previous.access; snapshot.stale = true;
         }
       }
+      if(previous?.run_tag===snapshot.run_tag){
+        snapshot.results=retainEqual(previous.results,snapshot.results);
+        snapshot.board=retainEqual(previous.board,snapshot.board);
+      }
       set((s) => ({
         snapshot,
         loading: false,
@@ -238,15 +243,16 @@ export const useViewer = create<ViewerState>((set, get) => ({
 
 // Selectors. Components subscribe to the slice they draw, so a board update does not
 // re-render the results table.
-export function useSnapshot() {
+function useSnapshotSlice<T>(select: (snapshot: Snapshot | null) => T): T {
   const scoped = useContext(SnapshotScope);
-  const global = useViewer(s => s.snapshot);
-  return scoped === undefined ? global : scoped;
+  const global = useViewer(s => scoped === undefined ? select(s.snapshot) : undefined);
+  return scoped === undefined ? global as T : select(scoped);
 }
-export const useScene = () => useSnapshot()?.scene ?? null;
-export const useBoard = () => useSnapshot()?.board ?? null;
-export const useHealth = () => useSnapshot()?.health ?? null;
-export const useAccess = () => useSnapshot()?.access ?? null;
-export const useResults = () => useSnapshot()?.results ?? null;
-export const useAgentTotals = () => useSnapshot()?.agents ?? null;
-export const useFeed = () => useSnapshot()?.feed ?? null;
+export const useSnapshot = () => useSnapshotSlice(s => s);
+export const useScene = () => useSnapshotSlice(s => s?.scene ?? null);
+export const useBoard = () => useSnapshotSlice(s => s?.board ?? null);
+export const useHealth = () => useSnapshotSlice(s => s?.health ?? null);
+export const useAccess = () => useSnapshotSlice(s => s?.access ?? null);
+export const useResults = () => useSnapshotSlice(s => s?.results ?? null);
+export const useAgentTotals = () => useSnapshotSlice(s => s?.agents ?? null);
+export const useFeed = () => useSnapshotSlice(s => s?.feed ?? null);

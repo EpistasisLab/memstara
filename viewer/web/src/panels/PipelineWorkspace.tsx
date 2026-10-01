@@ -1,4 +1,4 @@
-import type {FloorActivity} from '../lib/floorActivity';
+import {floorExecutionState, type FloorActivity} from '../lib/floorActivity';
 import {createPortal} from "react-dom";
 import {WorkspaceHeaderContext} from "../components/WorkspaceHeaderContext";
 import PipelineRowActions from "../components/PipelineRowActions";
@@ -40,7 +40,7 @@ function Station(props: NodeProps<Node<StationData>>) {
   const review=usePipelineSetup(s=>s.reviews[pipeline.id]);
   const guided=selected===pipeline.id&&review&&!review.paused&&
     setupStages.find(s=>review.confirmed?.[s]!==skillSignature(pipeline.configuration,s))===stage;
-  const active=!!pipeline.running && pipeline.running.execution_state!=='paused' && !pipeline.running.waiting_for_questions && pipeline.progress.stage===stage;
+  const active=floorExecutionState(pipeline.running).live && !pipeline.running?.waiting_for_questions && pipeline.progress.stage===stage;
 
   if(stage==='source') return <KnowledgeNode {...props} data={{
     compact:true,value:pipeline.configuration.skill,locked:!!pipeline.running||busy,saved:false,
@@ -112,7 +112,7 @@ export function PipelineStatus({ids}: {ids?: string[]} = {}){
       const waiting=!!p.running?.waiting_for_questions;
       const failed=(p.progress.counts?.failed??0)>0 || p.progress.exploration?.outcome === "blocked";
       const percent=pipelinePercent(p);
-      const status=p.running?.pause_requested?(p.running.execution_state==='paused'?'Stopped':'Stopping'):failed?'Needs attention':waiting?'Waiting for knowledge':p.running?'Running':p.latest?(p.latest.exit_code===0?'Completed':'Stopped'):'Ready';
+      const status=(floorExecutionState(p.running).paused||floorExecutionState(p.running).stopping)?(floorExecutionState(p.running).paused?'Paused':'Pausing'):failed?'Needs attention':waiting?'Waiting for knowledge':p.running?'Running':p.latest?(p.latest.exit_code===0?'Completed':'Stopped'):'Ready';
       const current=index>=0?shortLabels[index]:'Not started';
       return <article key={p.id} className={`pipeline-progress-card ${selected===p.id?'is-selected':''} ${failed?'needs-attention':''}`}>
         <header className="pipeline-progress-header">
@@ -129,7 +129,7 @@ export function PipelineStatus({ids}: {ids?: string[]} = {}){
         </p>}
         <div className="pipeline-progress-context">
           <span className="pipeline-current-stage">{current}</span>
-          <span className="pipeline-state"><i className={p.running&&p.running.execution_state!=='paused'&&!waiting&&!failed?'is-live':''}/>{status}</span>
+          <span className="pipeline-state"><i className={floorExecutionState(p.running).live&&!waiting&&!failed?'is-live':''}/>{status}</span>
         </div>
         <div className="pipeline-stage-track" role="progressbar" aria-label={`${p.name} stage-based progress`}
           aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent??undefined}
@@ -172,9 +172,9 @@ export default function PipelineWorkspace(){
     if(['hypothesis','ml','interpreter','report'].includes(stage))
       useControl.getState().openEditor(stage as PlaybookStage);
   },[select]);
-  const snapshot=useViewer(s=>s.snapshot);
   const [floorActivity,setFloorActivity]=useState<FloorActivity|null>(null);
   const combinationPipeline=comparison.length?undefined:items.find(p=>p.id===selected&&Object.keys(p.configuration.combination_skills??{}).length>0);
+  const snapshot=useViewer(s=>combinationPipeline?null:s.snapshot);
   const selectedPipeline=items.find(p=>p.id===selected);
   const focused=items.find(p=>p.id===inspected?.id&&p.id===selected);
   const allPlaces=useMemo(()=>[
@@ -191,6 +191,7 @@ export default function PipelineWorkspace(){
   useEffect(()=>{void usePipelines.getState().poll();},[]);
   const [nodes,setNodes,onNodesChange]=useNodesState<Node>([]);
   useEffect(()=>{
+    if(combinationPipeline)return;
     setNodes(previous=>{
       const definitions:Node[]=[
         {id:'resources-zone',type:'zone',position:{x:0,y:0},zIndex:-2,selectable:false,
@@ -217,7 +218,7 @@ export default function PipelineWorkspace(){
       ];
       return definitions.map(node=>({...previous.find(old=>old.id===node.id),...node}));
     });
-  },[visibleItems,inspected,selected,places,technical,setNodes,select,configureStation]);
+  },[combinationPipeline,visibleItems,inspected,selected,places,technical,setNodes,select,configureStation]);
   const edges=useMemo(()=>{
     const routes=visibleItems.flatMap(p=>stages.slice(1).map((stage,i)=>({
       id:`${p.id}-${stage}`,source:`${p.id}-${stages[i]}`,sourceHandle:i===0?undefined:'flow',target:`${p.id}-${stage}`,
@@ -227,7 +228,7 @@ export default function PipelineWorkspace(){
     if(!showTools || !snapshot) return routes;
     // Only actual observations from the selected run produce animated resource links.
     const owner=visibleItems.find(p=>p.latest?.run_tag===snapshot.run_tag);
-    if(!owner || snapshot.stale) return routes;
+    if(!owner?.running || owner.running.pause_requested || owner.running.execution_state==='paused' || owner.running.execution_state==='stopping' || snapshot.stale) return routes;
     const seen=new Set<string>();
     const tools=snapshot.scene.flashes.flatMap(f=>{
       const agent=snapshot.scene.agents.find(a=>a.id===f.agent);
@@ -247,7 +248,7 @@ export default function PipelineWorkspace(){
     <div ref={setCombinationHeader} className="pipeline-context-header"/>
     {!combinationPipeline&&<div className="pipeline-context-title"><strong>{comparison.length?'Compare pipelines':selectedPipeline?.name??'Research pipelines'}</strong><span>{comparison.length?`${comparison.length} selected`:'Floor plan'}</span></div>}
     <div className="pipeline-global-actions" role="group" aria-label="Controls for all pipelines">
-      <span className="pipeline-running-count" data-help="Running pipelines" data-help-description="Number of pipelines currently executing. Paused pipelines are excluded; this is not the number of Loops or combinations." tabIndex={0} title="Pipelines currently executing; paused pipelines are excluded"><Activity size={13}/>{items.filter(p=>p.running&&p.running.execution_state!=='paused').length} running</span>
+      <span className="pipeline-running-count" data-help="Running pipelines" data-help-description="Number of pipelines currently executing. Paused pipelines are excluded; this is not the number of Loops or combinations." tabIndex={0} title="Pipelines currently executing; paused pipelines are excluded"><Activity size={13}/>{items.filter(p=>floorExecutionState(p.running).live).length} running</span>
       <MasterStop/>
       <button className="pipeline-add-primary" data-help="Add pipeline" data-help-description={items.length>=3?"The maximum of 3 pipelines has been reached. Delete one before creating another.":"Open the setup wizard to choose knowledge sources, agent skills, execution limits and a pipeline name. Creating a pipeline does not start it."} disabled={!loaded||busy||items.length>=3} title={items.length>=3?'Maximum of 3 pipelines reached. Delete a pipeline to create another.':'Create a pipeline and choose its sources, agents and skills'} onClick={()=>void add()}><Plus size={17}/><span>Add pipeline</span></button>
     </div>
@@ -266,7 +267,7 @@ export default function PipelineWorkspace(){
       const ownNodes=nodes.filter(n=>n.id.startsWith(p.id+"-"));
       const ids=new Set(ownNodes.map(n=>n.id));const ownEdges=edges.filter(e=>ids.has(e.source)&&ids.has(e.target));
       return <section className="floor-comparison-pane" key={p.id} aria-label={`Comparison · ${p.name}`}>
-       <header className="floor-comparison-pane-heading"><strong>{p.name}</strong><span>{isCombination?'All Combinations':'Selected pipeline'} · Loop {p.progress.iteration??'—'} · {p.running?(p.running.execution_state==='paused'?'Paused':labels[p.progress.stage as keyof typeof labels]??'Running'):'Not running'}</span></header>
+       <header className="floor-comparison-pane-heading"><strong>{p.name}</strong><span>{isCombination?'All Combinations':'Selected pipeline'} · Loop {p.progress.iteration??'—'} · {p.running?(p.running.execution_state==='paused'?'Paused':floorExecutionState(p.running).stopping?'Pausing':labels[p.progress.stage as keyof typeof labels]??'Running'):'Not running'}</span></header>
        {isCombination?<CombinationDesign pipeline={p}/>:<div className="floor-comparison-standard"><ReactFlow nodes={ownNodes} edges={ownEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView fitViewOptions={{padding:.12}} minZoom={.15} maxZoom={1.6} nodesDraggable={false} nodesConnectable={false} panOnScroll zoomOnScroll={false} onNodeClick={(_,node)=>{if(node.type==='station')configureStation(p.id,String(node.data.stage));}}><Background variant={BackgroundVariant.Lines} gap={32} color="rgb(var(--ink) / .05)"/><Controls showInteractive={false}/></ReactFlow></div>}
       </section>;
     })}</div>}

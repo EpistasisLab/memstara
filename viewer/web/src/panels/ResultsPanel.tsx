@@ -1,4 +1,5 @@
 import { resultsStatus } from "../lib/resultsStatus";
+import { floorExecutionState } from '../lib/floorActivity';
 import { rankedContributions } from "../lib/featureImportance";
 import ContentOrigin from "../components/ContentOrigin";
 import { loopLabel } from '../lib/loopLabel';
@@ -7,7 +8,7 @@ import ResultEvidenceVisuals from "../components/ResultEvidenceVisuals";
 import { useExecutionContext } from '../components/ExecutionContext';
 import { lazy, Suspense } from "react";
 const ReportBody = lazy(() => import("../components/ReportBody"));
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { usePipelines } from "../store/pipelines";
 import type { Result } from "../types";
 import FinalReport from "../components/FinalReport";
@@ -36,9 +37,9 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
   const selectedResults = useResults();
   const savedConfig=snapshot?.run_configuration;
   const savedTag=snapshot?.run_tag;
-  const labeledSelected=selectedResults?.map(r=>({...r,run_tag:savedTag,
+  const labeledSelected=useMemo(()=>selectedResults?.map(r=>({...r,run_tag:savedTag,
     pipeline_name:savedConfig?.pipeline_name,
-    iteration:savedConfig?.trials?Math.floor(r.trial/savedConfig.trials)+1:null}));
+    iteration:savedConfig?.trials?Math.floor(r.trial/savedConfig.trials)+1:null})),[selectedResults,savedTag,savedConfig?.pipeline_name,savedConfig?.trials]);
   const globalScope=usePipelines(s=>s.resultsScope);
   const scope=telemetry ? "selected" : globalScope;
   const setScope=(resultsScope:"all"|"selected")=>usePipelines.setState({resultsScope});
@@ -71,7 +72,9 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
   const globalUnavailable = useViewer(s => !s.newRunMode && (s.snapshot?.health.memstara.up === false || !!s.error));
   const dataUnavailable = telemetry ? snapshot?.health.memstara.up === false : globalUnavailable;
   const pipeline = telemetry ? null : snapshot?.pipeline;
-  const statusNotice = resultsStatus(pipeline, !!dataUnavailable || !!snapshot?.stale);
+  const executionOwner=definitions.find(p=>p.running?.run_tag===savedTag);
+  const controlError=usePipelines(s=>s.error);
+  const statusNotice = resultsStatus(pipeline, !!dataUnavailable || !!snapshot?.stale || !!controlError, floorExecutionState(executionOwner?.running));
   const selectedFailed = (useBoard()?.tasks ?? []).filter(task => task.status === "failed");
   const failed = scope==="all" ? (tags && all?.tags===tags?all.failures:[]) : selectedFailed;
 
