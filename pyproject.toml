@@ -119,7 +119,7 @@ select = ["E", "F", "UP", "B"]
 # Preserve their upstream behavior: the claim that
 # this package is a faithful port rests entirely on a diff against upstream
 # printing only what the PORT NOTEs declare
-# (`src/memstara/matcher/__init__.py:44-48`), and a tidied import block is
+# (`src/memstara/matcher/__init__.py:1-4`), and a tidied import block is
 # indistinguishable from a divergence in that diff.
 #
 # The one finding here is upstream's, and it is correct as it stands: the `torch`

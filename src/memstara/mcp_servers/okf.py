@@ -483,7 +483,7 @@ def okf_list_domains() -> str:
 #: is not — at which point the run reads the whole corpus and looks exactly like a run
 #: that did as it was told. An agent cannot set this variable and cannot see it.
 #:
-#: It must also be on `mcp_allowed_env_vars` (`src/memstara/config.py:106`), or core
+#: It must also be on `mcp_allowed_env_vars` (`src/memstara/config.py:18-20`), or core
 #: never forwards it to this child and the lock silently does not exist. That is how
 #: `MEMSTARA_DEBUGPY` failed once already (`src/memstara/env.py:116-118`).
 #:
