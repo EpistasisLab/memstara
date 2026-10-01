@@ -491,7 +491,9 @@ def tools_for(
     back. Without tool-level filtering, giving any agent the board would give it all
     of those, and "each agent only takes its own work" would stop being true.
     """
-    picked = [t for t in registry.get_all_tools() if t.get("server") in servers]
+    server_ids = [key for key, entry in registry.servers.items()
+                  if entry.name in servers and (entry.owner_id is None or entry.is_system)]
+    picked = [t for t in registry.get_all_tools(server_ids=server_ids) if t.get("server") in servers]
     if only is None:
         return picked
     return [t for t in picked if t.get("tool_name") in only]
@@ -559,7 +561,9 @@ async def _run_stage(
     row.run_ids[stage] = str(run.id)
 
     with _tagged(trial=row.trial, stage=stage, run_id=run.id):
-        result = await execute_run(run_id=run.id, registry=registry, available_tools=tools)
+        from memstara.pipeline.llm import PipelineLLMService
+        result = await execute_run(run_id=run.id, registry=registry, available_tools=tools,
+                                   llm_service=PipelineLLMService(principal_id=run.owner_id))
     _record_usage(row, stage, result)
 
     if result.error or result.status != "completed":
@@ -590,7 +594,9 @@ async def _run_stage_text(
     row.run_ids[stage] = str(run.id)
 
     with _tagged(trial=row.trial, stage=stage, run_id=run.id):
-        result = await execute_run(run_id=run.id, registry=registry, available_tools=[])
+        from memstara.pipeline.llm import PipelineLLMService
+        result = await execute_run(run_id=run.id, registry=registry, available_tools=[],
+                                   llm_service=PipelineLLMService(principal_id=run.owner_id))
     _record_usage(row, stage, result)
 
     if result.error or result.status != "completed":

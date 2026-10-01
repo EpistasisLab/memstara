@@ -4,6 +4,7 @@ from contextvars import ContextVar
 from pathlib import Path
 
 call_context = ContextVar('memstara_call', default=None)
+call_loop = ContextVar('memstara_call_loop', default=None)
 _installed = False
 
 

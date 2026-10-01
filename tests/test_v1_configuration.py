@@ -21,6 +21,7 @@ def clean_data(tmp_path, monkeypatch):
     # Register restoration even when the variable was initially absent: freeze()
     # writes it directly and must not leak a plan into subsequent ML tests.
     monkeypatch.setenv("MEMSTARA_RUN_CONFIG", "")
+    monkeypatch.setenv("MEMSTARA_ML_ENGINE", "xgboost")
     monkeypatch.setenv("MEMSTARA_OUTPUT_DIR", str(tmp_path))
     rng = np.random.default_rng(12)
     x = rng.normal(size=100)

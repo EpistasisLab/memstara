@@ -132,7 +132,8 @@ class ExecutionGate:
         temporary.replace(target)
 
     async def wait(self):
-        from memstara.pipeline.run_ownership import require_ownership
+        from memstara.pipeline.run_ownership import require_ownership, await_ownership
+        await await_ownership()
         require_ownership()
         while (self.run_dir / 'pause.request').exists():
             self.publish()

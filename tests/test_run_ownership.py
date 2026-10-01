@@ -60,7 +60,7 @@ def test_unresponsive_connection_triggers_monitor(connection,monkeypatch):
     original=own.RunLease.__init__
     def init(self,*args,**kw): original(self,*args,**kw,interval=.001,timeout=.001)
     monkeypatch.setattr(own.RunLease,'__init__',init)
-    connection.fetchval.side_effect=[True, TimeoutError()]
+    connection.fetchval.side_effect=[True, True, TimeoutError(), TimeoutError(), TimeoutError()]
     async def run():
         with pytest.raises(own.RunOwnershipLost):
             async with board.run_lock('test'):
@@ -145,3 +145,57 @@ def test_closed_session_detected_at_dispatch_even_before_listener(connection):
                 own.require_ownership()
     asyncio.run(run())
     connection.execute.assert_not_awaited()
+
+
+def test_transient_timeout_waits_for_same_session_verification(connection, monkeypatch):
+    original = own.RunLease.__init__
+    monkeypatch.setattr(own.RunLease, '__init__', lambda self,*a,**k: original(self,*a,**k,interval=.001,timeout=.01))
+    events = []
+    verified = asyncio.Event()
+    count = 0
+    async def probe(*args, **kwargs):
+        nonlocal count
+        count += 1
+        if count == 3:
+            raise TimeoutError()
+        if count == 4:
+            await verified.wait()
+        return True
+    connection.fetchval.side_effect = probe
+    async def run():
+        async with board.run_lock('test', on_health=events.append):
+            while not any(e['state']=='verifying' for e in events):
+                await asyncio.sleep(.001)
+            waiting = asyncio.create_task(own.await_ownership())
+            await asyncio.sleep(.005)
+            assert not waiting.done()
+            verified.set()
+            await asyncio.wait_for(waiting, .5)
+            own.require_ownership()
+    asyncio.run(run())
+    assert [e['state'] for e in events] == ['healthy', 'verifying', 'recovered']
+    assert events[1]['error_type'] == 'TimeoutError'
+
+
+def test_missing_lock_interrupts_even_when_connection_is_open(connection, monkeypatch):
+    original = own.RunLease.__init__
+    monkeypatch.setattr(own.RunLease, '__init__', lambda self,*a,**k: original(self,*a,**k,interval=.001))
+    connection.fetchval.side_effect = [True, True, False]
+    reasons = []
+    async def run():
+        with pytest.raises(own.RunOwnershipLost):
+            async with board.run_lock('test', on_lost=reasons.append):
+                await asyncio.sleep(1)
+    asyncio.run(run())
+    assert reasons == ['execution_lock_missing']
+
+
+def test_outer_handler_preserves_specific_cause_and_health_history(tmp_path):
+    own.record_health(tmp_path, {'state':'verifying','error_type':'TimeoutError'})
+    own.record_health(tmp_path, {'state':'lost','reason':'lock_connection_unresponsive'})
+    own.record_interruption(tmp_path, 'lock_connection_unresponsive')
+    own.record_interruption(tmp_path, 'execution_ownership_lost')
+    result = json.loads((tmp_path/'pipeline_status.json').read_text())
+    assert result['reason'] == 'lock_connection_unresponsive'
+    assert 'repeated' in result['message']
+    assert len(json.loads((tmp_path/'connection_health.json').read_text())['history']) == 2

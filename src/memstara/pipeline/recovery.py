@@ -1,5 +1,6 @@
 """Bounded recovery driven by persisted artifacts, never by agent prose."""
 import asyncio
+from memstara.pipeline.failures import PipelineExecutionFailure
 
 MAX_ATTEMPTS = 2
 
@@ -19,6 +20,8 @@ async def ensure_artifact(invoke, present, *, attempts=MAX_ATTEMPTS):
             return True, None
         try:
             await invoke(attempt)
+        except PipelineExecutionFailure:
+            raise
         except Exception as exc:
             last_error = type(exc).__name__
         if await present():

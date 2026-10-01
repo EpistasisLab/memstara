@@ -49,6 +49,7 @@ from memstara.pipeline.core import (
 )
 # memstara/pipeline/prompts.py — what each agent is told, and its fingerprint
 from memstara.pipeline.prompts import load_prompt, prompt_digest
+from memstara.pipeline.failures import PipelineExecutionFailure
 # memstara/mcp_servers/frontmatter.py — the same reader the okf server uses for --skill.
 # Imported so a malformed skill is refused here, by the same code that will enforce it,
 # rather than a second parser that could come to disagree with it.
@@ -382,9 +383,16 @@ _EXECUTION_GATE = None
 
 
 async def call_agent(*args, **kwargs):
-    if _EXECUTION_GATE is None:
-        return await _call_agent_uncontrolled(*args, **kwargs)
-    return await _EXECUTION_GATE.call(_call_agent_uncontrolled, *args, **kwargs)
+    try:
+        if _EXECUTION_GATE is None:
+            return await _call_agent_uncontrolled(*args, **kwargs)
+        return await _EXECUTION_GATE.call(_call_agent_uncontrolled, *args, **kwargs)
+    except PipelineExecutionFailure:
+        raise
+    except Exception as exc:
+        from memstara.pipeline.failures import stop_execution
+        stop_execution(_TRACE_DIR.parent if _TRACE_DIR else None,
+                       kwargs.get('stage', ''), _CURRENT_LOOP.get(), exc)
 
 
 async def _call_agent_uncontrolled(
@@ -396,7 +404,7 @@ async def _call_agent_uncontrolled(
     temperature: float | None = None,
     stage: str = "",
 ) -> tuple[str, dict[str, Any]]:
-    """Run one agent once and return its text, or "" if the run did not complete.
+    """Run one agent once; stop the execution if the agent fails.
 
     Call one person, set them to work, and take back what they said.
 
@@ -415,6 +423,8 @@ async def _call_agent_uncontrolled(
         flight — with two, the other one's append moves it. Returning it removes the
         assumption instead of documenting it.
     """
+    from memstara.pipeline.failures import ensure_not_failed, stop_execution
+    ensure_not_failed(_TRACE_DIR.parent if _TRACE_DIR else None)
     from memstara.pipeline.scientific_policy import check_primary_tools
     require_ownership()
     from memstara.evaluation import active_plan
@@ -466,24 +476,35 @@ async def _call_agent_uncontrolled(
     # launch.json steps F11 over it here. What we see is only the result.
     #
     # What happened inside is what _trace_one() below pulls out into a file.
-    from memstara.pipeline.diagnostics import call_context
+    from memstara.pipeline.diagnostics import call_context, call_loop
     context_token = call_context.set((str(_TRACE_DIR.parent), str(run.id), stage)) if _TRACE_DIR else None
+    loop_token = call_loop.set(_CURRENT_LOOP.get())
     try:
-        async with asyncio.timeout(600):
-            result = await execute_run(run_id=run.id, registry=registry, available_tools=tools)
+        async with asyncio.timeout((plan or {}).get('runtime_timeouts', {}).get('agent_timeout_seconds', 600)):
+            from memstara.pipeline.llm import PipelineLLMService
+            result = await execute_run(run_id=run.id, registry=registry, available_tools=tools,
+                                       llm_service=PipelineLLMService(principal_id=run.owner_id))
     except BaseException as exc:
         entry["status"] = "cancelled" if isinstance(exc, asyncio.CancelledError) else "failed"
         entry["error"] = type(exc).__name__
         write_execution_manifest()
+        if isinstance(exc, Exception):
+            stop_execution(_TRACE_DIR.parent if _TRACE_DIR else None, stage, _CURRENT_LOOP.get(), exc)
         raise
     finally:
+        call_loop.reset(loop_token)
         if context_token is not None:
             call_context.reset(context_token)
         entry["duration_seconds"] = time.time() - entry["started_at"]
+        write_execution_manifest()
     entry["status"] = getattr(result.status, "value", str(result.status))
     if result.error:
         entry["error"] = str(result.error)
     write_execution_manifest()
+    # Latch immediately, before trace reads or another worker can start a new request.
+    if result.error or result.status != "completed":
+        stop_execution(_TRACE_DIR.parent if _TRACE_DIR else None, stage, _CURRENT_LOOP.get(),
+                       result.error or result.status)
 
     # The trace file for **this one call** is written the moment the run finishes.
     #
@@ -501,11 +522,6 @@ async def _call_agent_uncontrolled(
     # between, so one call's block reaches the screen in a single slice. Two calls
     # running together interleave block by block, never line by line.
     await show_what_agent_did(entry)
-
-    # An empty string on failure. The caller usually re-reads the result off the board,
-    # so rather than throwing here it quietly empties out and leaves it to the next lap.
-    if result.error or result.status != "completed":
-        return "", entry
 
     # Agent output is usually JSON shaped like {"result": "..."}. Failing that, the raw text.
     try:
@@ -593,6 +609,8 @@ async def call_report(*args, **kwargs) -> tuple[str, dict[str, Any]]:
     for attempt in range(2):
         try:
             text, entry = await call_agent(*args, **kwargs)
+        except PipelineExecutionFailure:
+            raise
         except Exception as exc:
             text, entry = "", {"status": "failed", "error": type(exc).__name__}
         if entry.get("status") == "completed" and text.strip():
@@ -1133,13 +1151,16 @@ async def questions_for_wave(
                         "an array of okf_tags, and "
                         "parent_task_ids plus learning_goal when prior evidence is supplied. "
                         "Do not repeat an already banked question from an earlier wave.")
-            outcomes = await asyncio.gather(*(write_one(i, k, a) for i, (k, a) in enumerate(writers)),
-                                            return_exceptions=True)
-            for outcome in outcomes:
-                if isinstance(outcome, asyncio.CancelledError):
-                    raise outcome
-                if isinstance(outcome, BaseException):
-                    note(f"question writer failed: {type(outcome).__name__}")
+            tasks = [asyncio.create_task(write_one(i, k, a)) for i, (k, a) in enumerate(writers)]
+            try:
+                await asyncio.gather(*tasks)
+            finally:
+                # A rejected provider request is not an empty question bank. Stop
+                # sibling writers promptly instead of waiting for another paid turn.
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
         after = await call_board_tool(registry, "read_questions", {"status": "open", "limit": 200})
         if not isinstance(after, dict) or after.get("error") or "questions" not in after:
             raise RuntimeError("Question bank unavailable after generation")
@@ -1149,6 +1170,8 @@ async def questions_for_wave(
             return fresh[:want], False
         note("No executable question after two attempts; no fallback or completed iteration is claimed.")
         return [], True
+    except PipelineExecutionFailure:
+        raise
     except Exception as exc:
         # Do not hide infrastructure failures as a depleted corpus or restart a
         # mutation when the read-back itself is unavailable.
@@ -1266,7 +1289,12 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         if not 1 <= args.waves <= 10:
             raise ValueError("Maximum Loops per pipeline must be between 1 and 10")
         args.continuous = False
+    from memstara.pipeline.runtime import runtime_timeouts
+    args.runtime_timeouts = runtime_timeouts(args.model)
     runtime_settings = Settings()
+    if args.runtime_timeouts:
+        runtime_settings = runtime_settings.model_copy(update={
+            key: value for key, value in args.runtime_timeouts.items() if key != 'agent_timeout_seconds'})
     configure(runtime_settings)   # Set up the runtime before provisioning or opening tools.
     from memstara.pipeline.diagnostics import install
     install()
@@ -1401,6 +1429,18 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         by_stage["question"] = tools_for(
             registry, QUESTION_SERVERS, only=QUESTION_TOOLS,
         )
+        from memstara.pipeline.failures import require_tools
+        from memstara.pipeline.ablation import enabled as ablation_enabled
+        from memstara.evaluation import active_plan
+        required = {**BOARD_TOOLS, "question": QUESTION_TOOLS}
+        if args.report_only:
+            required = {"report": BOARD_TOOLS["report"]}
+        elif args.no_curator:
+            required.pop("question")
+        if ablation_enabled(active_plan()):
+            required = {stage: {name for name in names if not name.startswith('okf_')}
+                        for stage, names in required.items()}
+        require_tools(by_stage, required, run_dir)
         # Print who got what. Later it can be confirmed from the log alone.
         step("(3)", "decide who gets which button", "cut them off from other people's work")
         _ROLE = {"hypothesis": "hypothesis agent (answering)", "data": "data agent",
@@ -1774,6 +1814,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
 
                 outcomes = await live_workers.completed()
                 for _, outcome in outcomes:
+                    if isinstance(outcome, PipelineExecutionFailure):
+                        raise outcome
                     if isinstance(outcome, BaseException):
                         note(f"Worker failed: {type(outcome).__name__}: {outcome}")
                 if outcomes:
@@ -2031,6 +2073,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     except Exception as exc:
         from memstara.pipeline.exploration import close_active_round
         close_active_round(run_dir, "blocked",
+                           str(exc) if isinstance(exc, PipelineExecutionFailure) else
                            f"Execution could not be verified ({type(exc).__name__}). Review run log.")
         raise
     finally:
@@ -2423,9 +2466,14 @@ async def main() -> int:
             # released with the connection, so a killed process leaves nothing behind.
             # Two of them once ran at the same time, taking each other's sheets, and the
             # board ended up scrambled.
-            async with run_lock(args.run_tag, on_lost=lambda reason: record_interruption(run_dir, reason)):
+            from memstara.pipeline.run_ownership import record_health
+            async with run_lock(args.run_tag, on_lost=lambda reason: record_interruption(run_dir, reason),
+                                on_health=lambda value: record_health(run_dir, value)):
                 if args.resume:
                     (run_dir / "infrastructure_status.json").unlink(missing_ok=True)
+                    from memstara.pipeline.checkpoint import atomic_json
+                    atomic_json(run_dir / "pipeline_status.json",
+                                {"status": "running", "resumed": True, "report_completed": False})
                     record = json.loads((run_dir / "control_record.json").read_text())
                     if record.get("pid") != os.getpid():
                         record = {k: v for k, v in record.items() if k not in ("exit_code", "ended")}
@@ -2455,7 +2503,7 @@ async def main() -> int:
                             "function": frame.name}
                            for frame in traceback.extract_tb(exc.__traceback__)],
             }, indent=2), encoding="utf-8")
-            message = (str(exc) if isinstance(exc, DataQualityError) else
+            message = (str(exc) if isinstance(exc, (DataQualityError, PipelineExecutionFailure)) else
                        "Pipeline could not safely continue; inspect console.log and trace/.")
             (run_dir / "pipeline_status.json").write_text(json.dumps({
                 "status": "failed", "error_type": type(exc).__name__,

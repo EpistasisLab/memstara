@@ -8,8 +8,17 @@ class PipelineExecutionFailure(RuntimeError):
     """An execution error is not an unproductive research question."""
 
 
+def exception_chain(error):
+    """Inspect wrappers without storing their possibly sensitive messages."""
+    seen = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        yield error
+        error = getattr(error, '__cause__', None) or getattr(error, '__context__', None)
+
+
 def failure_summary(error):
-    text = f'{type(error).__name__}: {error}'.lower()
+    text = ' '.join(f'{type(e).__name__}: {e}' for e in exception_chain(error)).lower()
     if 'system message must be at the beginning' in text:
         return 'model_message_format', 'The model rejected the system-message format. Further execution was stopped.'
     if any(s in text for s in ('badrequest', 'bad request', 'error code: 400', 'status code: 400')):
@@ -17,7 +26,10 @@ def failure_summary(error):
     if any(s in text for s in ('authentication', 'unauthorized', 'permissiondenied',
                                'error code: 401', 'error code: 403')):
         return 'model_access', 'The model rejected access. Check the deployment credentials and permissions.'
-    if any(s in text for s in ('timeout', 'timed out', 'connectionerror')):
+    transport_error = any(isinstance(e, (ConnectionError, TimeoutError)) for e in exception_chain(error))
+    if transport_error or any(s in text for s in (
+            'timeout', 'timed out', 'connectionerror', 'connection error', 'connection reset',
+            'connecterror', 'readerror', 'remoteprotocolerror', 'server disconnected')):
         return 'model_connection', ('The model connection failed or timed out. '
                                     'Saved results are retained; further execution was stopped.')
     return 'agent_execution_failed', ('An agent execution failed. '
@@ -44,6 +56,7 @@ def ensure_not_failed(run_dir):
 def stop_execution(run_dir, stage, loop, error, *, code=None, message=None):
     kind, summary = failure_summary(error)
     record = dict(code=code or kind, message=message or summary, stage=stage, loop=loop,
+                  exception_types=[type(e).__name__ for e in exception_chain(error)],
                   at=datetime.now(UTC).isoformat())
     if run_dir:
         from memstara.pipeline.checkpoint import atomic_json

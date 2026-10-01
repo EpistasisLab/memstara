@@ -18,7 +18,8 @@ async def test_data_server_protocol_and_target_isolation(tmp_path):
     parameters = StdioServerParameters(
         command=sys.executable,
         args=["-m", "memstara.mcp_servers.data"],
-        env={**os.environ, "MEMSTARA_DATASET_PATH": str(dataset), "MEMSTARA_OUTPUT_DIR": str(tmp_path)},
+        env={**os.environ, "MEMSTARA_DATASET_PATH": str(dataset), "MEMSTARA_OUTPUT_DIR": str(tmp_path),
+             "MEMSTARA_RUN_CONFIG": "", "MEMSTARA_OUTCOME_COLUMN": "outcome"},
     )
     async with stdio_client(parameters) as (reader, writer):
         async with ClientSession(reader, writer, read_timeout_seconds=timedelta(seconds=20)) as session:

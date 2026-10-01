@@ -28,6 +28,10 @@ class Checkpoint:
     def __init__(self, root, *, resume=False):
         self.path = Path(root) / 'checkpoint.json'
         if resume:
+            from memstara.pipeline.failures import read_failure
+            if failure := read_failure(root):
+                raise RecoveryBlocked(f"{failure['message']} Correct the cause and start a new execution; "
+                                      "saved results are retained.")
             self.state = json.loads(self.path.read_text())
             if not isinstance(self.state, dict) or self.state.get('version') != 1:
                 raise RecoveryBlocked('Unsupported checkpoint version')

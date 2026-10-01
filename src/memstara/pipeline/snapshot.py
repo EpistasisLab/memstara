@@ -15,6 +15,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     combination_plan = json.loads(getattr(args, "combination_plan", "") or "null")
     if combination_plan:
         books = {stage: [s['id'] for s in entries] for stage, entries in combination_plan['skills'].items()}
+    from memstara.pipeline.runtime import provider_policy
     resolved = {}
     for stage in ("hypothesis", "data", "ml", "interpreter", "report"):
         for book in books.get(stage) or [""]:
@@ -74,6 +75,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         "skill": getattr(args, "skill", ""),
         "provider": getattr(args, "provider", None),
         "model": getattr(args, "model", None),
+        "runtime_timeouts": getattr(args, "runtime_timeouts", {}),
+        "provider_request_policy": provider_policy(getattr(args, "model", "") or ""),
         "hypotheses": args.hypothesis_agents,
         "interpreters": getattr(args, "interpret_agents", 1),
         "interpretation_mode": "all_per_hypothesis",

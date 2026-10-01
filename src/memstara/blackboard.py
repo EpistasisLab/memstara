@@ -377,7 +377,7 @@ class BoardBusy(RuntimeError):
 
 
 @contextlib.asynccontextmanager
-async def run_lock(run_tag: str, *, on_lost=None) -> AsyncIterator[None]:
+async def run_lock(run_tag: str, *, on_lost=None, on_health=None) -> AsyncIterator[None]:
     """Hold an exclusive claim on *run_tag* for as long as this block runs."""
     # crc32 gives a stable 32-bit key from the tag. hashtext() would also work but is
     # an internal function with no compatibility promise across versions.
@@ -401,7 +401,7 @@ async def run_lock(run_tag: str, *, on_lost=None) -> AsyncIterator[None]:
         acquired = True
         if not await conn.fetchval("SELECT pg_try_advisory_lock_shared(180947, 54)"):
             raise BoardBusy("Question memory is being cleared. Retry starting the execution shortly.")
-        lease = RunLease(conn, on_lost=on_lost)
+        lease = RunLease(conn, on_lost=on_lost, on_health=on_health, lock_key=key)
         token = _current.set(lease)
         lease.start()
         try:
