@@ -19,11 +19,13 @@ export function useTelemetryTotals(){
   return {data,error};
 }
 export function UsageCards({metric}:{metric:Metric}){
-  return <dl className="usage-metric-cards">{[
-    ['Agent calls',metric.calls.toLocaleString()],['Tokens',`${metric.tokens.toLocaleString()}${metric.tokens_status==='partial'?' · partial':''}`],
-    ['Estimated cost',costLabel(metric.cost)],
-    ...(metric.duration_basis?[['End-to-end time',usageDuration(metric.seconds)]]:[]),
-  ].map(([label,value])=><div key={label} className="min-w-0 rounded-lg border border-paper-line bg-paper p-3"><dt className="text-xs text-ink-soft">{label}</dt><dd className="mt-1 break-words text-lg font-bold text-ink">{value}{label==='End-to-end time'&&<p className="text-xs text-ink-faint">{metric.duration_basis}</p>}</dd></div>)}</dl>;
+  const cards=[
+    {label:'Agent calls',value:metric.calls.toLocaleString()},
+    {label:'Tokens',value:`${metric.tokens.toLocaleString()}${metric.tokens_status==='partial'?' · partial':''}`},
+    {label:'Estimated cost',value:costLabel(metric.cost),note:metric.cost.missing_costs?`Pricing unavailable for ${metric.cost.missing_costs} calls`:metric.cost.status==='partial'?'Incomplete · recorded subtotal only':undefined},
+    ...(metric.duration_basis?[{label:'End-to-end time',value:usageDuration(metric.seconds),note:metric.duration_basis}]:[]),
+  ];
+  return <dl className="usage-metric-cards">{cards.map(({label,value,note})=><div key={label} className="min-w-0 rounded-lg border border-paper-line bg-paper p-3"><dt className="text-xs text-ink-soft">{label}</dt><dd className="mt-1 break-words text-lg font-bold text-ink">{value}</dd>{note&&<p className="mt-1 break-words text-xs leading-5 text-ink-soft">{note}</p>}</div>)}</dl>;
 }
 export default function TelemetryTotals({data,error,runTag,loop}:{data:Totals|null;error:string;runTag:string|null;loop:number|null}){
   const execution=data?.executions.find(e=>e.run_tag===runTag);
@@ -32,7 +34,7 @@ export default function TelemetryTotals({data,error,runTag,loop}:{data:Totals|nu
     {error&&<p role="alert">{error}. {data?'Last available totals are shown.':'Totals are not assumed to be zero.'}</p>}
     {!data?<p>Loading totals…</p>:<>
       <h3 className="text-lg font-bold">All pipelines</h3><p className="text-sm text-ink-soft">{data.scope}. Calls are counted once by ID. Updated {new Date(data.updated_at).toLocaleTimeString()}.</p><UsageCards metric={data.total}/>
-      <div className="overflow-x-auto"><table className="w-full text-left text-sm"><caption className="pb-2 text-left font-bold">Totals for each pipeline · all saved executions</caption><thead><tr>{['Pipeline','Executions','Agent calls','Tokens','Estimated cost'].map(t=><th key={t} className="p-2">{t}</th>)}</tr></thead><tbody>{data.pipelines.map(p=><tr key={p.id} className="border-t border-paper-line"><td className="p-2"><button className="font-bold text-accent underline" onClick={()=>usePipelines.getState().select(p.id)}>{p.name}</button></td><td className="p-2">{p.executions}</td><td className="p-2">{p.calls}</td><td className="p-2">{p.tokens.toLocaleString()}{p.tokens_status==='partial'?' · partial':''}</td><td className="p-2 whitespace-nowrap">{costLabel(p.cost)}</td></tr>)}</tbody></table></div>
+      <div className="overflow-x-auto"><table className="w-full text-left text-sm"><caption className="pb-2 text-left font-bold">Totals for each pipeline · all saved executions</caption><thead><tr>{['Pipeline','Executions','Agent calls','Tokens','Estimated cost'].map(t=><th key={t} className="p-2">{t}</th>)}</tr></thead><tbody>{data.pipelines.map(p=><tr key={p.id} className="border-t border-paper-line"><td className="p-2"><button className="font-bold text-accent underline" onClick={()=>usePipelines.getState().select(p.id)}>{p.name}</button></td><td className="p-2">{p.executions}</td><td className="p-2">{p.calls}</td><td className="p-2">{p.tokens.toLocaleString()}{p.tokens_status==='partial'?' · partial':''}</td><td className="p-2 whitespace-nowrap">{costLabel(p.cost)}{p.cost.missing_costs>0&&<small className="block text-ink-soft">{p.cost.missing_costs} unpriced calls</small>}</td></tr>)}</tbody></table></div>
       <h3 className="font-bold">Selected execution · {loop===null?'All loops':`Loop ${loop}`}</h3>{metric?<UsageCards metric={metric}/>:<p>No matching usage record is available.</p>}
       {execution&&<div>
         <h3 className="font-bold">Execution-wide Loop comparison</h3>
