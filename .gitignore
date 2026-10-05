@@ -48,3 +48,6 @@ htmlcov/
 
 /test-results/
 /.venv-test/
+
+# Local-only recorded examples for the developer lesson; never publish run artifacts.
+/viewer/web/public/local-examples/

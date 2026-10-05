@@ -8,6 +8,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     rollupOptions: {
+      input: { workspace: "index.html", developer: "developer.html" },
       output: {
         // Split the two heavy visual libraries out of the app bundle. They change far
         // less often than the app does, so a browser keeps them across deploys.

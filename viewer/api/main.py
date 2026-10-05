@@ -47,6 +47,8 @@ careful — verified: UPDATE and DELETE are refused.
 
 from __future__ import annotations
 
+import uuid
+
 import os
 import asyncio
 import sys
@@ -295,3 +297,19 @@ async def telemetry_conversation(run_tag: str = Query(min_length=1, max_length=2
                                  loop: int | None = Query(default=None, ge=1)):
     from conversation import conversation
     return await conversation(run_tag, loop)
+
+
+@app.get("/api/developer/execution")
+async def developer_execution(run_tag: str = Query(min_length=1, max_length=200),
+                              loop: int | None = Query(default=None, ge=1)):
+    from developer import execution
+    return await execution(run_tag, loop)
+
+
+@app.get("/api/developer/steps")
+async def developer_steps(run_id: uuid.UUID,
+                          run_tag: str = Query(min_length=1, max_length=200),
+                          offset: int = Query(default=0, ge=0),
+                          detail: bool = False):
+    from developer import steps
+    return await steps(run_tag, run_id, offset, detail)

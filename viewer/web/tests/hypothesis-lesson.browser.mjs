@@ -1,0 +1,92 @@
+import {chromium} from '@playwright/test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {resolve,basename} from 'node:path';
+import {fileURLToPath} from 'node:url';
+const root=fileURLToPath(new URL('../',import.meta.url));
+const ids=['context','search','read','concepts','question','claim','mapping','task'];
+const sample={story:{en:{assignment:'Initial assignment',steps:ids.map(id=>({title:id,ai:'AI asks for information',software:'Program returns information',result:'Ready for the next step'}))},ko:{assignment:'처음 받은 과제',steps:ids.map(id=>({title:id,ai:'정보를 요청합니다',software:'정보를 반환합니다',result:'다음 단계로 갑니다'}))}},version:1,runTag:'browser-fixture',model:'fixture-model',questionId:1,taskId:2,examples:Object.fromEntries(ids.map(id=>[id,{en:'Recorded example explanation',ko:'기록된 예시 설명',walkthrough:{en:{title:'Recorded step',why:'Reason for this step',request:'Requested action: okf_list_domains and read_question_catalog',response:'Returned information',next:'Used in the next step'},ko:{title:'실제 단계',why:'필요한 이유',request:'요청 내용: okf_list_domains와 read_question_catalog',response:'반환된 정보',next:'다음 단계의 쓰임'}},excerpt:'Original saved field',references:['fixture trace step']}]))};
+sample.examples.context.categories=['anchors','computations','mechanisms','predictions'].map((name,index)=>({name,count:index+1,source:'fixture source',en:{title:'Category explained',what:'Contents',example:'Document example',use:'Use in a question',caution:'Documents, not patients'},ko:{title:'분류 설명',what:'담긴 내용',example:'문서 예시',use:'질문에 쓰이는 방법',caution:'환자 수가 아닌 문서 수'}}));
+const browser=await chromium.launch({headless:true});
+try{for(const width of [1440,900,390]){
+ let missing=false;
+ const page=await browser.newPage({viewport:{width,height:1000}}),errors=[],api=[];
+ page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/*',async route=>{
+  const path=new URL(route.request().url()).pathname;
+  if(path==='/local-examples/hypothesis.json')return missing?route.fulfill({status:404,body:'Unavailable'}):route.fulfill({json:sample});
+  if(path.startsWith('/api/')||path.startsWith('/control/')){api.push(path);return route.abort();}
+  const file=path.startsWith('/assets/')?resolve(root,'dist/assets',basename(path)):resolve(root,'dist/developer.html');
+  return route.fulfill({body:await readFile(file),contentType:path.endsWith('.js')?'application/javascript':path.endsWith('.css')?'text/css':'text/html'});
+ });
+ await page.goto('http://localhost/developer.html?view=agents&lesson=hypothesis&detail=1');
+ await page.locator('.hyp-real-example').waitFor();
+ assert.equal(await page.locator('.hyp-scene').count(),1);
+ assert.equal(await page.locator('.hyp-walkthrough li').count(),4);
+ assert.equal(await page.locator('.hyp-step-list button').count(),8);
+ assert.equal(await page.getByRole('button',{name:'← Previous',exact:true}).isDisabled(),true);
+ assert.equal(await page.locator('.hyp-record-details').getAttribute('open'),null);
+ assert.equal(await page.locator('.hyp-record-details pre').isVisible(),false);
+ await page.getByText('Original record',{exact:true}).click();
+ assert.equal(await page.locator('.hyp-record-details pre').isVisible(),true);
+ await page.getByText('Explore the four knowledge categories',{exact:true}).click();
+ assert.equal(await page.locator('.hyp-category-grid>article').count(),1);
+ for(const name of ['anchors','computations','mechanisms','predictions']){
+  await page.locator('.hyp-category-picker').getByRole('button',{name,exact:true}).click();
+  assert.match(await page.locator('.hyp-category-grid').innerText(),new RegExp(name));
+ }
+ await page.getByRole('button',{name:'Next →',exact:true}).focus();
+ await page.keyboard.press('Enter');
+ await page.locator('#hyp-current-search').waitFor();
+ assert.equal(await page.locator('.hyp-scene').count(),1);
+ assert.match(page.url(),/step=search/);
+ assert.equal(await page.evaluate(()=>document.activeElement?.tagName),'H2');
+ assert.equal(await page.locator('.hyp-historical-search').getAttribute('open'),null);
+ assert.equal(await page.locator('.hyp-search-steps button').count(),5);
+ for(let n=0;n<4;n++)await page.locator('.hyp-search-nav button').last().click();
+ assert.equal(await page.locator('.hyp-search-nav button').last().isDisabled(),true);
+ assert.equal(await page.locator('.hyp-record-details').getAttribute('open'),null);
+ await page.getByRole('button',{name:'Next →',exact:true}).click();
+ await page.locator('#hyp-read').waitFor();
+ await page.goBack();await page.locator('#hyp-current-search').waitFor();
+ await page.goForward();await page.locator('#hyp-read').waitFor();
+ await page.getByRole('button',{name:'한국어',exact:true}).click();
+ assert.match(page.url(),/step=read/);
+ await page.reload();await page.locator('#hyp-read .hyp-real-example').waitFor();
+ assert.equal(await page.locator('.hyp-lesson').getAttribute('lang'),'ko');
+ for(let i=3;i<8;i++){
+  await page.getByRole('button',{name:'다음 →',exact:true}).click();
+  await page.locator('#hyp-'+ids[i]).waitFor();
+  assert.equal(await page.locator('.hyp-scene').count(),1);
+ }
+ assert.equal(await page.getByRole('button',{name:'다음 →',exact:true}).count(),0);
+ await page.getByRole('button',{name:'처음부터 보기',exact:true}).click();
+ await page.locator('#hyp-context').waitFor();
+ assert.equal(await page.getByRole('button',{name:'← 이전',exact:true}).isDisabled(),true);
+ const term=page.locator('.hyp-walkthrough .hyp-term').first();
+ await term.hover();await page.getByRole('tooltip').waitFor();
+ assert.match(await page.getByRole('tooltip').innerText(),/사용할 수 있는 지식 분류 확인/);
+ await page.keyboard.press('Escape');
+ assert.equal(await page.getByRole('tooltip').count(),0);
+ await page.getByRole('button',{name:'가설 애니메이션 일시정지',exact:true}).click();
+ assert.equal(await page.locator('.hyp-moving').count(),0);
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+ await page.screenshot({path:`/private/tmp/memstara-wizard-${width}.png`});
+ await page.getByRole('button',{name:'쉬운 설명으로 돌아가기',exact:false}).click();
+ assert.equal(await page.locator('.hyp-simple-step').count(),8);
+ await page.getByRole('button',{name:'상세 보기',exact:true}).click();
+ assert.equal(await page.locator('.hyp-scene').count(),1);
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await page.waitForFunction(()=>document.querySelector('.hyp-wizard-progress button')?.disabled);
+ assert.equal(await page.getByRole('button',{name:'가설 애니메이션 재개',exact:true}).isDisabled(),true);
+ missing=true;await page.reload();
+ await page.getByText('로컬 실제 예시를 불러올 수 없습니다.',{exact:false}).waitFor();
+ assert.equal(await page.locator('.hyp-real-example').count(),0);
+ assert.equal(await page.locator('.hyp-scene').count(),1);
+ missing=false;
+ await page.goto('http://localhost/developer.html?view=agents&lesson=hypothesis&detail=1&step=invalid');
+ await page.locator('#hyp-context .hyp-real-example').waitFor();
+ assert.equal(await page.locator('.hyp-step-list [aria-current=step]').count(),1);
+ assert.deepEqual(api,[]);assert.deepEqual(errors,[]);
+ console.log(JSON.stringify({width,visibleStages:1,allEightStages:'pass',history:'pass',reload:'pass',details:'pass',errors}));await page.close();
+}}finally{await browser.close();}
