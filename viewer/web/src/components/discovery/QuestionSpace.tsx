@@ -22,22 +22,26 @@ export default function QuestionSpace(props: Props) {
   useEffect(()=>{const changed=()=>setFullScreen(document.fullscreenElement===scene.current);document.addEventListener('fullscreenchange',changed);return()=>document.removeEventListener('fullscreenchange',changed);},[]);
   const host = useRef<HTMLDivElement>(null), canvas = useRef<HTMLCanvasElement>(null);
   const live = useRef(props);
+  const invalidate = useRef<() => void>(() => {});
   useEffect(() => { live.current = props; }, [props]);
   const camera = useRef<Camera>({ ...home }), target = useRef<Camera>({ ...home });
   const labels = useRef(new Map<number, HTMLButtonElement>());
   const hit = useRef<{ q: SpaceQuestion; x: number; y: number; z: number }[]>([]);
   const pointer = useRef<{ x: number; y: number; startX: number; startY: number; moved: boolean; id: number } | null>(null);
   const hover = useRef<number | null>(null);
-  const [orbit, setOrbit] = useState(()=>!matchMedia('(prefers-reduced-motion: reduce)').matches), orbitRef = useRef(orbit);
+  // Motion is opt-in; an open observatory must not keep the GPU busy indefinitely.
+  const [orbit, setOrbit] = useState(false), orbitRef = useRef(orbit);
   const [hovered, setHovered] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const selectedId = props.selected?.question_id;
   const expandedQuestion = expandedId === selectedId;
   const [available, setAvailable] = useState(true);
   const seen = useRef(new Map<number, number>());
-  useEffect(() => { orbitRef.current = orbit; }, [orbit]);
+  useEffect(() => { orbitRef.current = orbit; invalidate.current(); }, [orbit]);
+  useEffect(() => { invalidate.current(); }, [props.questions, hovered]);
   useEffect(() => {
     target.current = selectedId !== undefined ? cameraForPoint(pointForId(selectedId)) : { ...home };
+    invalidate.current();
   }, [selectedId]);
   useEffect(() => {
     const el = host.current, surface = canvas.current;
@@ -45,32 +49,37 @@ export default function QuestionSpace(props: Props) {
     const context = surface.getContext('2d');
     if (!context) { setAvailable(false); return; }
     let renderer:QuestionFieldRenderer|null=null;
-    const initializeGPU=()=>{try{renderer?.dispose();renderer=gpuCanvas.current?new QuestionFieldRenderer(gpuCanvas.current):null;setRendererLabel(renderer?'3D perspective':'Canvas view');}catch{renderer=null;setRendererLabel('Canvas view');}};
-    const loseGPU=(event:Event)=>{event.preventDefault();renderer?.dispose();renderer=null;setRendererLabel('Canvas view');};
-    const wheel=(event:WheelEvent)=>{if(!event.shiftKey||live.current.selected)return;event.preventDefault();orbitRef.current=false;setOrbit(false);target.current.zoom=Math.max(.65,Math.min(1.5,target.current.zoom-event.deltaY*.002));};
+    const initializeGPU=()=>{try{renderer?.dispose();renderer=gpuCanvas.current?new QuestionFieldRenderer(gpuCanvas.current):null;setRendererLabel(renderer?'3D perspective':'Canvas view');}catch{renderer=null;setRendererLabel('Canvas view');}invalidate.current();};
+    const loseGPU=(event:Event)=>{event.preventDefault();renderer?.dispose();renderer=null;setRendererLabel('Canvas view');invalidate.current();};
+    const wheel=(event:WheelEvent)=>{if(!event.shiftKey||live.current.selected)return;event.preventDefault();orbitRef.current=false;setOrbit(false);target.current.zoom=Math.max(.65,Math.min(1.5,target.current.zoom-event.deltaY*.002));invalidate.current();};
     el.addEventListener('wheel',wheel,{passive:false});
     const gpu=gpuCanvas.current;
-    initializeGPU();gpu?.addEventListener('webglcontextlost',loseGPU);gpu?.addEventListener('webglcontextrestored',initializeGPU);
+    gpu?.addEventListener('webglcontextlost',loseGPU);gpu?.addEventListener('webglcontextrestored',initializeGPU);
     let width = 0, height = 0, frame = 0, last = 0;
     let inView=true;
-    const visibility=new IntersectionObserver(([entry])=>{inView=entry.isIntersecting;});visibility.observe(el);
+    const visibility=new IntersectionObserver(([entry])=>{inView=entry.isIntersecting;if(inView)invalidate.current();});visibility.observe(el);
     const reduced = matchMedia('(prefers-reduced-motion: reduce)');
     const resize = new ResizeObserver(([entry]) => {
       width = entry.contentRect.width; height = entry.contentRect.height;
       const dpr = Math.min(devicePixelRatio || 1, 2);
       surface.width = Math.round(width * dpr); surface.height = Math.round(height * dpr);
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      invalidate.current();
     }); resize.observe(el);
     const draw = (now: number) => {
-      frame = requestAnimationFrame(draw);
-      if (document.hidden || !inView || !width || !height || now - last < 30) return;
+      frame = 0;
+      if (document.hidden || !inView || !width || !height) return;
+      if (now - last < 30) { wake(); return; }
       const dt = Math.min((now - last) / 1000, .1); last = now;
       const focused = live.current.selected;
-      if (orbitRef.current && !pointer.current && !focused && !hover.current && !reduced.matches) target.current.yaw += dt * .065;
+      const rotating = orbitRef.current && !pointer.current && !focused && hover.current === null && !reduced.matches;
+      if (rotating) target.current.yaw += dt * .065;
       const ease = reduced.matches ? 1 : 1 - Math.exp(-dt * 6);
       const c = camera.current, t = target.current;
       c.yaw += angleDelta(c.yaw, t.yaw) * ease;
       c.pitch += angleDelta(c.pitch, t.pitch) * ease; c.zoom += (t.zoom - c.zoom) * ease;
+      const moving = Math.abs(angleDelta(c.yaw,t.yaw)) + Math.abs(angleDelta(c.pitch,t.pitch)) + Math.abs(c.zoom-t.zoom) > .0001;
+      if (!moving) { c.yaw=t.yaw; c.pitch=t.pitch; c.zoom=t.zoom; }
       const dark = document.documentElement.dataset.theme !== 'light';
       const ink = dark ? '#dce7f5' : '#344761';
       context.clearRect(0, 0, width, height);
@@ -92,7 +101,7 @@ export default function QuestionSpace(props: Props) {
       for(const id of seen.current.keys())if(!ids.has(id))seen.current.delete(id);
       if(renderer){
         const nodes=points.map(p=>{const born=seen.current.get(p.q.question_id)??now;seen.current.set(p.q.question_id,born);return {id:p.q.question_id,color:colorFor(p.q),active:p.q.question_id===focused?.question_id||p.q.question_id===hover.current,arrival:reduced.matches?1:Math.min(1,(now-born)/1000)};});
-        renderer.draw(c,width,height,nodes,reduced.matches||!orbitRef.current?0:now/1000,dark,!!focused);
+        renderer.draw(c,width,height,nodes,rotating?now/1000:0,dark,!!focused);
       }
       if(!renderer)for (const p of points) {
         const color=colorFor(p.q), active=p.q.question_id===focused?.question_id || p.q.question_id===hover.current;
@@ -117,8 +126,10 @@ export default function QuestionSpace(props: Props) {
         const rect={x:p.x+15,y:p.y-25,w:Math.min(200,width*.43),h:82};
         const active=p.q.question_id===hover.current;
         const visible=!focused && (active || (p.z>-.35 && count<(width<600?4:8) && !occupied.some(r=>overlaps(r,rect)))) && rect.x+rect.w<width-18 && rect.y>60 && rect.y+rect.h<height-70;
-        button.style.visibility=visible?'visible':'hidden';button.style.pointerEvents=visible?'auto':'none';
-        button.tabIndex=visible?0:-1;button.style.transform=`translate(${rect.x}px,${rect.y}px)`;
+        const visibility = visible?'visible':'hidden';
+        if(button.style.visibility!==visibility){button.style.visibility=visibility;button.style.pointerEvents=visible?'auto':'none';button.tabIndex=visible?0:-1;}
+        if(!visible)continue;
+        button.style.transform=`translate(${rect.x}px,${rect.y}px)`;
         button.style.width=`${rect.w}px`;button.style.setProperty('--question-color',colorFor(p.q));
         if(visible){occupied.push(rect);count++;context.strokeStyle=ink;context.globalAlpha=.26;context.beginPath();context.moveTo(p.x+6,p.y);context.lineTo(rect.x-3,p.y);context.stroke();context.globalAlpha=1;}
       }
@@ -129,11 +140,21 @@ export default function QuestionSpace(props: Props) {
           context.beginPath();context.moveTo(width*.5,height*.48);context.lineTo(width*x,height*y);context.stroke();
         }context.setLineDash([]);
       }
+      const arriving = !reduced.matches && [...seen.current.values()].some(born=>now-born<1000);
+      if (rotating || moving || arriving) wake();
     };
-    frame=requestAnimationFrame(draw);
-    return()=>{cancelAnimationFrame(frame);resize.disconnect();visibility.disconnect();el.removeEventListener('wheel',wheel);renderer?.dispose();gpu?.removeEventListener('webglcontextlost',loseGPU);gpu?.removeEventListener('webglcontextrestored',initializeGPU);};
+    // Only queue another frame for an actual change or an unfinished transition.
+    function wake() { if (!frame) frame=requestAnimationFrame(draw); }
+    invalidate.current=wake;
+    const visibilityChanged=()=>{if(!document.hidden)wake();};
+    document.addEventListener('visibilitychange',visibilityChanged);
+    reduced.addEventListener('change',wake);
+    const theme=new MutationObserver(wake);
+    theme.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+    initializeGPU();wake();
+    return()=>{invalidate.current=()=>{};cancelAnimationFrame(frame);theme.disconnect();document.removeEventListener('visibilitychange',visibilityChanged);reduced.removeEventListener('change',wake);resize.disconnect();visibility.disconnect();el.removeEventListener('wheel',wheel);renderer?.dispose();gpu?.removeEventListener('webglcontextlost',loseGPU);gpu?.removeEventListener('webglcontextrestored',initializeGPU);};
   }, []);
-  const stop=()=>{orbitRef.current=false;setOrbit(false);};
+  const stop=()=>{orbitRef.current=false;setOrbit(false);invalidate.current();};
   const toggleFullscreen=()=>{
     const message='Full-screen is unavailable in this browser. You can maximize the workspace window instead.';
     if(document.fullscreenElement)void document.exitFullscreen().catch(()=>setNotice(message));
@@ -147,7 +168,7 @@ export default function QuestionSpace(props: Props) {
       if(e.pointerId!==drag.id)return;
       if(Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)>5)drag.moved=true;
       if(drag.moved){target.current.yaw+=(e.clientX-drag.x)*.006;target.current.pitch=Math.max(-1.4,Math.min(1.4,target.current.pitch+(e.clientY-drag.y)*.006));}
-      drag.x=e.clientX;drag.y=e.clientY;return;
+      drag.x=e.clientX;drag.y=e.clientY;invalidate.current();return;
     }
     if(props.selected||(e.target as HTMLElement).closest('button'))return;
     const bounds=e.currentTarget.getBoundingClientRect(),x=e.clientX-bounds.left,y=e.clientY-bounds.top;
@@ -171,12 +192,12 @@ export default function QuestionSpace(props: Props) {
       onPointerMove={onMove}
       onPointerUp={e=>{const drag=pointer.current;if(!drag || drag.id!==e.pointerId)return;pointer.current=null;if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);if(!drag.moved){const rect=e.currentTarget.getBoundingClientRect();const nearest=[...hit.current].reverse().find(p=>Math.hypot(p.x-(e.clientX-rect.left),p.y-(e.clientY-rect.top))<22);if(nearest)pick(nearest.q.question_id);}}}
       onPointerCancel={()=>{pointer.current=null;}}
-      onPointerLeave={()=>{hover.current=null;setHovered(null);}}>
+      onPointerLeave={()=>{hover.current=null;setHovered(null);invalidate.current();}}>
       <canvas ref={gpuCanvas} className="space-gpu" aria-hidden="true" /><canvas ref={canvas} className="space-overlay-canvas" aria-hidden="true" />
       {!available && <p className="space-unavailable">Canvas is unavailable. Use Question list to explore all recorded questions.</p>}
       <div className="space-coordinate" aria-hidden="true"><span>MEMSTARA / OBSERVATORY</span><span>{props.selected?'EVIDENCE IN FOCUS':`${rendererLabel} · ${props.questions.length} questions`}</span></div>
       <div className="space-label-layer">{props.questions.map(q=><button key={q.question_id} className="space-label" ref={el=>{if(el)labels.current.set(q.question_id,el);else labels.current.delete(q.question_id);}}
-        aria-label={`Explore question ${q.question_id}: ${q.text}`} onPointerEnter={()=>{hover.current=q.question_id;setHovered(q.question_id);stop();}} onClick={()=>pick(q.question_id)} onFocus={()=>{hover.current=q.question_id;stop();}} onBlur={()=>{hover.current=null;}}>
+        aria-label={`Explore question ${q.question_id}: ${q.text}`} onPointerEnter={()=>{hover.current=q.question_id;setHovered(q.question_id);stop();}} onClick={()=>pick(q.question_id)} onFocus={()=>{hover.current=q.question_id;stop();}} onBlur={()=>{hover.current=null;invalidate.current();}}>
         <span>Q{q.question_id}<i>{q.okf_tags[0] || 'Source not recorded'}</i></span><strong>{q.text}</strong>
       </button>)}</div>
       {!props.selected && !props.questions.length && <div className="space-empty">No matching questions.<small>Recorded questions will appear here as they arrive.</small></div>}
@@ -191,8 +212,8 @@ export default function QuestionSpace(props: Props) {
     <footer className="space-controls"><span>{props.selected?'Recorded question → linked evidence':'Drag to orbit · Shift + scroll to zoom · Select a sphere'}<small>Spheres are recorded questions. Dust and orbits are decorative; position and size do not rank scientific value. Colors follow the first source tag.</small></span><div>
       <button disabled={!!props.selected} aria-label="Rotate cloud left" onClick={()=>{stop();target.current.yaw-=.35;}}><ArrowLeft size={15}/></button>
       <button disabled={!!props.selected} aria-label="Rotate cloud right" onClick={()=>{stop();target.current.yaw+=.35;}}><ArrowRight size={15}/></button>
-      <button disabled={!!props.selected} aria-label="Zoom out" onClick={()=>{target.current.zoom=Math.max(.65,target.current.zoom-.15);}}><Minus size={15}/></button>
-      <button disabled={!!props.selected} aria-label="Zoom in" onClick={()=>{target.current.zoom=Math.min(1.5,target.current.zoom+.15);}}><Plus size={15}/></button>
+      <button disabled={!!props.selected} aria-label="Zoom out" onClick={()=>{invalidate.current();target.current.zoom=Math.max(.65,target.current.zoom-.15);}}><Minus size={15}/></button>
+      <button disabled={!!props.selected} aria-label="Zoom in" onClick={()=>{invalidate.current();target.current.zoom=Math.min(1.5,target.current.zoom+.15);}}><Plus size={15}/></button>
       <button disabled={!!props.selected} aria-pressed={orbit} aria-label="Toggle gentle rotation" onClick={()=>setOrbit(v=>!v)}>{orbit?<Pause size={15}/>:<Orbit size={15}/>}</button>
       <button aria-label={fullScreen?"Exit immersive view":"Enter immersive view"} title="Full-screen question field" onClick={toggleFullscreen}>{fullScreen?<Minimize2 size={15}/>:<Maximize2 size={15}/>}</button>
       <button aria-label="Reset question field" onClick={()=>{stop();target.current={...home};props.clear();}}><RotateCcw size={15}/></button>

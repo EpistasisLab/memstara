@@ -1,3 +1,4 @@
+import { retainEqual } from '../lib/retainEqual';
 import SignedContributionBar from "../components/SignedContributionBar";
 import { featureImportance, rankedContributions, contributionScale } from "../lib/featureImportance";
 import ClearQuestionMemory from "../components/ClearQuestionMemory";
@@ -39,7 +40,7 @@ function useLive<T>(url: string | null) {
         const response = await fetch(url, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]) });
         if (!response.ok) throw Error(response.status === 503 ? 'The records are temporarily unavailable.' : `Could not read records (${response.status}).`);
         const data = await response.json() as T;
-        if (!disposed) setRecord({ url, data });
+        if (!disposed) setRecord(previous => retainEqual(previous, { url, data }));
       } catch (error) {
         if (!disposed) setRecord(previous => ({ url, data: previous.url === url ? previous.data : undefined, error: String(error) }));
       } finally { if (!disposed) timer = setTimeout(poll, 5000); }
@@ -85,7 +86,8 @@ function EvidencePanel({ question, data, error, stage, setStage, resultId, setRe
 }
 
 export default function DiscoveryPanel() {
-  const live=useLiveOutputs();
+  const liveQuestions=useLiveOutputs(s=>s.questions);
+  const liveReports=useLiveOutputs(s=>s.reports);
   const [openedReport,setOpenedReport]=useState<string|null>(null);
   const [openError,setOpenError]=useState('');
   const openSequence=useRef(0);
@@ -103,9 +105,9 @@ export default function DiscoveryPanel() {
   const evidence = useLive<Evidence>(selected ? `/api/discovery/questions/${selected.question_id}` : null);
   const questions = useMemo(() => {
     const records=new Map((data?.questions??[]).map(q=>[q.question_id,q]));
-    if(data&&before===0)live.questions.forEach(q=>records.set(q.question_id,q));
+    if(data&&before===0)liveQuestions.forEach(q=>records.set(q.question_id,q));
     return [...records.values()].filter(q=>q.status!=='cleared'&&q.question_id>Math.max(clearedThrough,data?.cleared_through??0)).sort((a,b)=>b.question_id-a.question_id).slice(0,120).filter(q=>`${q.text} ${q.rationale} ${q.okf_tags.join(' ')}`.toLowerCase().includes(search.toLowerCase()));
-  },[data,live.questions,before,search,clearedThrough]);
+  },[data,liveQuestions,before,search,clearedThrough]);
   const current = data?.questions.find(q => q.question_id === selected?.question_id) ?? selected;
   const result=evidence.data?.results.find(r=>r.result_id===resultId) ?? evidence.data?.results[0];
   const task=evidence.data?.tasks.find(t=>t.task_id===result?.task_id) ?? (!result?evidence.data?.tasks[0]:undefined);
@@ -115,7 +117,7 @@ export default function DiscoveryPanel() {
     if(event.stage==='report'){setOpenedReport(event.run_tag);return;}
     if(event.question_id===null){setOpenError('This output has no recorded question link. It remains visible in the live stream.');return;}
     try{
-      let question=live.questions.find(q=>q.question_id===event.question_id)??data?.questions.find(q=>q.question_id===event.question_id);
+      let question=liveQuestions.find(q=>q.question_id===event.question_id)??data?.questions.find(q=>q.question_id===event.question_id);
       if(!question){const response=await fetch(`/api/discovery/questions/${event.question_id}`,{signal:AbortSignal.timeout(5000)});if(!response.ok)throw Error('Question evidence is temporarily unavailable.');question=(await response.json()).question;}
       if(sequence!==openSequence.current||!question)return;
       select(question);setOpenedReport(null);
@@ -131,11 +133,11 @@ export default function DiscoveryPanel() {
     {error && <p className="universe-alert" role="alert">{error} {data ? 'Showing the last available questions.' : 'Retrying automatically.'}</p>}
     <LiveOutputDock open={event=>{void openOutput(event);}}/>
     {openError&&<p role="alert">{openError}</p>}
-    {openedReport&&<article className="universe-evidence"><button className="universe-close" onClick={()=>setOpenedReport(null)}>Close report ×</button><h2>Live run report</h2><p className="universe-note">{openedReport} · {live.reports[openedReport]?.status||'Not available'}</p><ReportBody report text={live.reports[openedReport]?.text||live.reports[openedReport]?.error||'No report text is available yet.'}/></article>}
+    {openedReport&&<article className="universe-evidence"><button className="universe-close" onClick={()=>setOpenedReport(null)}>Close report ×</button><h2>Live run report</h2><p className="universe-note">{openedReport} · {liveReports[openedReport]?.status||'Not available'}</p><ReportBody report text={liveReports[openedReport]?.text||liveReports[openedReport]?.error||'No report text is available yet.'}/></article>}
     <section className="universe-explore" aria-label="Question exploration">
       {!data ? <p className="universe-loading" role="status">{error?'Question field is temporarily unavailable.':'Reading the question bank…'}</p> : list ? <div className="universe-list">{questions.map(q => <button key={q.question_id} aria-pressed={q.question_id === current?.question_id} onClick={() => select(q)}><span>Q{q.question_id} · {q.status}</span><strong>{q.text}</strong><small>{q.okf_tags.join(' · ') || 'No source tags recorded'}</small></button>)}{!questions.length && <p>No matching questions.</p>}</div> : <QuestionSpace questions={questions} selected={current} select={id=>{const q=questions.find(q=>q.question_id===id);if(q)select(q);}} clear={()=>setSelected(null)} openStage={openStage} activeStage={stage}
         summary={{hypothesis:result?.hypothesis||task?.hypothesis||'',features:result?result.columns_used.length:task?.columns_used.length?task.columns_used.length:null,auc:result?.auc??task?.auc??null,interpretations:result?.evaluation?.interpretations?.length??(result?.interpretation||task?.interpretation?1:null),hasRun:!!(result?.run_tag||task?.run_tag||current?.origin_run)}} />}
-      <div className="universe-pagination"><button disabled={pages.length === 1} onClick={() => setPages(p => p.slice(0, -1))}>Newer questions</button><span>Page {pages.length}</span><button disabled={!data?.next_before} onClick={() => { if (data?.next_before) setPages(p => [...p, data.next_before!]); }}>Older questions</button></div>
+      <div className="universe-pagination"><button disabled={pages.length === 1} onClick={() => setPages(p => p.slice(0, -1))}>View recent questions</button><span>Page {pages.length}</span><button disabled={!data?.next_before} onClick={() => { if (data?.next_before) setPages(p => [...p, data.next_before!]); }}>View older questions</button></div>
     </section>
     {current && <div className="space-studio" ref={studio}><div className="space-studio-title"><span className="universe-eyebrow">EVIDENCE STUDIO / Q{current.question_id}</span><p>Recorded outputs, connected by question identity.</p></div><EvidencePanel key={current.question_id} question={current} data={evidence.data} error={evidence.error} stage={stage} setStage={setStage} resultId={resultId} setResultId={setResultId}/></div>}
   </div>;

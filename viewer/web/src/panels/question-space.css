@@ -84,7 +84,7 @@
 .space-surface:focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:-3px; }
 .space-surface .space-gpu { pointer-events:none; }
 .space-overlay-canvas { pointer-events:none; }
-.space-label { backdrop-filter:blur(8px); border:1px solid rgb(var(--line) / .5); border-left:2px solid var(--question-color); border-radius:8px; padding:5px 9px; box-shadow:0 4px 16px rgb(0 0 0 / .06); }
+.space-label { border:1px solid rgb(var(--line) / .5); border-left:2px solid var(--question-color); border-radius:8px; padding:5px 9px; box-shadow:0 4px 16px rgb(0 0 0 / .06); }
 .space-label:hover,.space-label:focus-visible { border-radius:8px; }
 .space-guide { z-index:1; max-width:80%; }
 .space-guide h2 { font-size:clamp(20px,2.5vw,32px); font-weight:550; }
