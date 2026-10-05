@@ -100,6 +100,18 @@ The five MCP servers are `okf`, `memstara-data`, `memstara-ml`,
 `memstara-blackboard`, and `semantic-matcher`. Their launch definitions live in
 [servers.py](src/memstara/servers.py); each runs under the same Python interpreter
 as the pipeline. `BOARD_SERVERS` and `BOARD_TOOLS` restrict each role's access.
+Knowledge search publishes structured `filters` with category choices derived from
+its configured corpus and run confinement. `okf_list_domains` also returns these
+choices. Topic words belong in `queries`; they do not imply a category exists.
+The model-facing legacy `fields` argument accepts only an empty string, so an old
+non-empty request is rejected rather than silently ignored. Internal Python callers
+retain validated `fields=` compatibility. Invalid filters are rejected before
+scoring; successful responses include requested and applied filters. Model/tool
+I/O records preserve requests, validation responses and subsequent corrections.
+No automatic fallback changes the selected scope and no new retry loop is added.
+Tool schemas refresh when a new pipeline process connects its knowledge server;
+existing experiments and their archived outputs are not rewritten.
+
 The alternative `mvp` entry point runs Hypothesis, Data, ML, and Interpretation
 under a supervisor instead of the board scheduler.
 

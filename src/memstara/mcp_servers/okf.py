@@ -9,7 +9,7 @@ import math         # the word weight (idf) uses a logarithm
 import os           # one variable is read: the branch a run is confined to
 import pathlib      # file paths. Used in place of os.path
 import re           # used for splitting words and for frontmatter patterns
-from typing import Any
+from typing import Any, Literal
 
 import yaml         # the frontmatter is YAML
 
@@ -467,7 +467,10 @@ def okf_list_domains() -> str:
                 title = ""   # an unreadable cover still leaves the list itself usable
         domains.append({"slug": slug, "title": title or slug, "documents": counts[slug]})
 
-    out: dict[str, Any] = {"domains": domains, "total": len(docs)}
+    out: dict[str, Any] = {"domains": domains, "total": len(docs),
+                           "filter_options": _filter_options(docs),
+                           "filter_guidance": ("Use only listed filters. Put topics such as HIV in queries; "
+                                               "omit filters for no additional restriction.")}
     if skipped:
         out["skipped"] = skipped   # included only when something was passed over
     return json.dumps(out)
@@ -514,9 +517,17 @@ def _render(wanted: dict[str, str]) -> str:
     return ",".join(f"{key}={value}" for key, value in wanted.items())
 
 
+def _filter_options(docs: list[_Doc]) -> dict[str, list[str]]:
+    """Branch choices from accessible documents, never an invented vocabulary."""
+    return {key: values_for((doc.fields for doc in docs), key)
+            for key in ("terminus_kind", "mechanism_family")
+            if any(key in doc.fields for doc in docs)}
+
+
 @mcp.tool()
 def okf_search(
-    queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = "", fields: str = ""
+    queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = "", fields: str = "",
+    filters: dict[str, str] | None = None,
 ) -> str:
     """Search the bundle by what its authors said each document is about.
 
@@ -535,7 +546,9 @@ def okf_search(
         k: results per query. Default 8, raised to at most 20.
         domain: restrict to one domain slug; "" = all. See okf_list_domains.
         tags: comma-separated; keep only documents carrying ANY of these tags.
-        fields: front matter equalities, `key=value` separated by commas — e.g.
+        filters: Structured branch choices from okf_list_domains.filter_options.
+            Omit for no additional restriction. Never infer a category from a topic.
+        fields: Legacy front matter equalities, `key=value` separated by commas — e.g.
             "terminus_kind=sud" or "mechanism_family=treatment-toxicity,terminus_kind=sud".
             **ALL of them must hold**, which is what names one branch of the bundle.
             Use this and not `tags` to ask for a branch: this bundle's `terminus_kind`
@@ -587,7 +600,28 @@ def okf_search(
     try:
         locked = _locked_filter()
         # The lock first, so a caller cannot overrule it by passing the same key.
-        wanted_fields = merge_locked(locked, parse_field_filter(fields))
+        asked = parse_field_filter(fields)
+        for key, value in (filters or {}).items():
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"filter {key!r} requires a non-empty string")
+            if key in asked and asked[key].casefold() != value.casefold():
+                raise ValueError(f"conflicting legacy and structured filter for {key!r}")
+            asked[key] = value
+        wanted_fields = merge_locked(locked, asked)
+        accessible = [doc for doc in docs if matches(doc.fields, locked)]
+        invalid = {key: value for key, value in asked.items()
+                   if value.casefold() not in {
+                       item.casefold() for item in values_for((doc.fields for doc in accessible), key)}}
+        if invalid:
+            return json.dumps({
+                "error": "Unknown filter value; search was not executed.",
+                "code": "invalid_filter", "requested_filters": asked,
+                "invalid_filters": invalid,
+                "values": {key: values_for((doc.fields for doc in accessible), key) for key in asked},
+                "filter_options": _filter_options(accessible), "searched": 0,
+                "guidance": ("Choose an available value or explicitly omit the filter. "
+                             "Put topics such as HIV in queries. No filter was changed automatically."),
+            })
     except (OKFError, ValueError) as e:
         # A malformed filter is not an empty one. Narrowing to nothing and reporting
         # zero hits would look exactly like a question the bundle cannot answer.
@@ -649,7 +683,8 @@ def okf_search(
 
     # searched = how many documents were actually swept this time (the count after
     # narrowing by domain, tags and fields).
-    out: dict[str, Any] = {"results": results, "searched": len(pool)}
+    out: dict[str, Any] = {"results": results, "searched": len(pool),
+                           "requested_filters": asked, "applied_filters": wanted_fields}
     if notes:
         out["notes"] = notes
     return json.dumps(out)
@@ -809,7 +844,46 @@ def okf_read(refs: str, section: str = "", max_chars: int = 0) -> str:
     return result
 
 
+def register_search_schema() -> None:
+    """Publish corpus-derived branch enums for this server's pinned bundle.
+
+    Legacy Python callers retain fields=. Model-facing calls use the structured
+    filters object only. Runtime validation still checks the current bundle.
+    A missing bundle fails startup rather than publishing unrestricted choices.
+    """
+    from pydantic import ConfigDict, create_model
+
+    docs, _ = _load(_bundle_root())
+    locked = _locked_filter()
+    docs = [doc for doc in docs if matches(doc.fields, locked)]
+    options = _filter_options(docs)
+    filter_model = create_model(
+        "KnowledgeFilters", __config__=ConfigDict(extra="forbid"),
+        **{key: (Literal[tuple(values)] | None, None) for key, values in options.items()},
+    )
+
+    def search(queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = "",
+               filters=None, fields: Literal[""] = "") -> str:
+        selected = filters.model_dump(exclude_none=True) if filters is not None else {}
+        return okf_search(queries, k, domain, tags, filters=selected)
+
+    search.__annotations__["filters"] = filter_model | None
+    mcp.remove_tool("okf_search")
+    mcp.add_tool(search, name="okf_search", description=(
+        "Search knowledge document metadata using topic words in queries (comma-separated). "
+        "Use okf_list_domains first. Optional filters select ONLY the corpus categories "
+        "listed in this schema; omit filters for no additional restriction. The retired fields "
+        "argument accepts only an empty string; use filters instead. HIV can be a "
+        "query word without being a category. Never guess category values. All supplied "
+        "filters must match the same document; run confinement is always enforced. "
+        "k limits results per query (maximum 20); domain and tags optionally narrow further. "
+        "After a rejected request, correct it using the returned choices; do not repeat "
+        "the same invalid request. Existing agent step limits still apply."
+    ))
+
+
 if __name__ == "__main__":
     # Running this file directly brings it up as an MCP server. core's tools and the
     # three tools above come out of the one server together.
+    register_search_schema()
     mcp.run()

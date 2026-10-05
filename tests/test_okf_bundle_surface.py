@@ -73,3 +73,87 @@ def test_auto_section_preserves_literature_and_whole_body_fallback(bundle):
     (bundle / 'alpha' / 'paper.md').write_text('---\ntitle: Paper\n---\n# Bottom line\nConclusion.\n')
     assert 'Conclusion.' in okf._read_documents('paper', section='auto')
     assert 'Synthetic only.' in okf._read_documents('alpha/deep/one', section='auto')
+
+
+@pytest.fixture
+def classified_bundle(bundle):
+    (bundle / 'alpha/deep/one.md').write_text(
+        '---\ntitle: HIV synthetic finding\nterminus_kind: psychiatric\n'
+        'mechanism_family: comorbidity\n---\nSynthetic.\n')
+    (bundle / 'beta/two.md').write_text(
+        '---\ntitle: HIV synthetic finding\nterminus_kind: sud\nmechanism_family: toxicity\n---\nSynthetic.\n')
+    return bundle
+
+
+def test_invalid_filter_never_reaches_scoring(classified_bundle, monkeypatch):
+    def forbidden(_):
+        pytest.fail('Invalid filters must be rejected before search scoring')
+    monkeypatch.setattr(okf, '_idf', forbidden)
+    for kwargs in ({'fields': 'terminus_kind=hiv'}, {'filters': {'terminus_kind': 'hiv'}}):
+        result = json.loads(okf.okf_search('HIV', **kwargs))
+        assert result['code'] == 'invalid_filter'
+        assert result['searched'] == 0
+        assert result['values']['terminus_kind'] == ['psychiatric', 'sud']
+        assert result['requested_filters'] == {'terminus_kind': 'hiv'}
+
+
+def test_topic_search_correction_and_legacy_equivalence(classified_bundle):
+    assert json.loads(okf.okf_search('HIV'))['searched'] == 2
+    selected = json.loads(okf.okf_search('HIV', filters={'terminus_kind': 'sud'}))
+    assert selected == json.loads(okf.okf_search('HIV', fields='terminus_kind=sud'))
+    assert selected['searched'] == 1
+    assert selected['applied_filters'] == {'terminus_kind': 'sud'}
+    assert 'error' in json.loads(okf.okf_search('HIV', fields='terminus_kind=sud',
+                                              filters={'terminus_kind': 'psychiatric'}))
+
+
+def test_choices_and_search_respect_lock(classified_bundle, monkeypatch):
+    monkeypatch.setenv('MEMSTARA_OKF_FIELDS', 'terminus_kind=sud')
+    choices = json.loads(okf.okf_list_domains())['filter_options']
+    assert choices == {'terminus_kind': ['sud'], 'mechanism_family': ['toxicity']}
+    assert 'error' in json.loads(okf.okf_search('HIV', filters={'terminus_kind': 'psychiatric'}))
+    assert json.loads(okf.okf_search('HIV'))['searched'] == 1
+    result = json.loads(okf.okf_search('HIV', filters={'mechanism_family': 'comorbidity'}))
+    assert result['code'] == 'invalid_filter'
+    assert result['values'] == {'mechanism_family': ['toxicity']}
+
+
+def test_valid_values_with_empty_intersection_do_not_broaden(classified_bundle):
+    result = json.loads(okf.okf_search('HIV', filters={
+        'terminus_kind': 'sud', 'mechanism_family': 'comorbidity'}))
+    assert 'error' in result
+    assert 'results' not in result
+
+
+def test_model_schema_uses_bundle_choices_and_rejects_invention(classified_bundle):
+    import asyncio
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    okf.register_search_schema()
+
+    async def check():
+        tool = next(t for t in await okf.mcp.list_tools() if t.name == 'okf_search')
+        schema = tool.inputSchema
+        assert schema['properties']['fields']['const'] == ''
+        assert 'filters' in schema['properties']
+        encoded = json.dumps(schema)
+        assert 'psychiatric' in encoded and 'sud' in encoded
+        assert '"hiv"' not in encoded
+        with pytest.raises(ToolError):
+            await okf.mcp.call_tool('okf_search', {'queries': 'HIV', 'filters': {'terminus_kind': 'hiv'}})
+        with pytest.raises(ToolError):
+            await okf.mcp.call_tool('okf_search', {'queries': 'HIV', 'filters': {'unknown': 'sud'}})
+        with pytest.raises(ToolError):
+            await okf.mcp.call_tool('okf_search', {'queries': 'HIV', 'fields': 'terminus_kind=hiv'})
+        response = await okf.mcp.call_tool('okf_search', {'queries': 'HIV', 'filters': {'terminus_kind': 'sud'}})
+        assert 'applied_filters' in str(response)
+    asyncio.run(check())
+
+
+def test_schema_without_classifications_allows_unfiltered_search(bundle):
+    import asyncio
+    okf.register_search_schema()
+    async def check():
+        result = await okf.mcp.call_tool('okf_search', {'queries': 'Synthetic'})
+        assert 'searched' in str(result)
+    asyncio.run(check())
