@@ -7,7 +7,12 @@ try {
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   let items=Array.from({length:3},(_,i)=>({id:`p${i}`,number:i===2?100:i+1,name:i===0?'Research Alpha':i===1?'Running research':'A long pipeline name for responsive deletion confirmation',configuration:{waves:10,hypothesis_agents:1,interpret_agents:1},running:i===1?{run_tag:'running',configuration:{waves:10},execution_state:'running'}:null,latest:null,progress:i===2?{counts:{failed:1}}:{}}));
   let attempts=0,fail=true,release;
+  let endAttempts=0,failEnd=true;
   await page.route('**/control/**',async route=>{
+   if(new URL(route.request().url()).pathname==='/control/runs/running/end'){
+    assert.equal(route.request().method(),'POST');endAttempts++;
+    return failEnd?route.fulfill({status:503,json:{error:'Fixture end rejected'}}):route.fulfill({json:{stopping:'running'}});
+   }
    if(new URL(route.request().url()).pathname!=='/control/pipelines')return route.fulfill({json:{}});
    if(route.request().method()==='GET')return route.fulfill({json:{pipelines:items}});
    const body=route.request().postDataJSON();assert.equal(body.action,'remove');attempts++;
@@ -45,6 +50,22 @@ try {
   await dialog.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(attempts,0);
   await page.getByRole('button',{name:'Delete Running research',exact:true}).click();
   assert.equal(await dialog.getByRole('button',{name:'Delete pipeline',exact:true}).isDisabled(),true);
+  await dialog.getByRole('button',{name:'End execution…',exact:true}).click();
+  await dialog.getByRole('button',{name:'Keep execution',exact:true}).click();
+  assert.equal(endAttempts,0);
+  await dialog.getByRole('button',{name:'End execution…',exact:true}).click();
+  await dialog.getByRole('button',{name:'Confirm end execution',exact:true}).click();
+  await dialog.getByText(/Fixture end rejected/).waitFor();
+  assert.equal(attempts,0);assert.equal(endAttempts,1);
+  failEnd=false;
+  await dialog.getByRole('button',{name:'Confirm end execution',exact:true}).click();
+  await dialog.getByText(/Waiting for the server to confirm/).waitFor();
+  assert.equal(await dialog.getByRole('button',{name:'Delete pipeline',exact:true}).isDisabled(),true);
+  assert.equal(attempts,0);assert.equal(endAttempts,2);
+  items[1].running=null;
+  await dialog.getByText(/Execution ended. You can now delete/).waitFor();
+  assert.equal(await dialog.getByRole('button',{name:'Delete pipeline',exact:true}).isEnabled(),true);
+  await dialog.getByRole('button',{name:'Cancel',exact:true}).focus();
   await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});assert.equal(attempts,0);
   await page.getByRole('button',{name:'Delete Research Alpha',exact:true}).click();
   await dialog.getByRole('button',{name:'Delete pipeline',exact:true}).click();

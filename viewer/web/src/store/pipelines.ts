@@ -37,7 +37,7 @@ export const usePipelines = create<{
   items: PipelineDefinition[]; selected: string | null; loaded: boolean; busy: boolean; error: string | null;
   poll: () => Promise<void>; select: (id: string) => void; add: () => Promise<void>;
   save: (id: string, config: RunRequest) => void; rename: (id:string,name:string)=>Promise<void>;
-  stoppingAll: boolean; stopAll:()=>Promise<void>; end:(id:string)=>Promise<void>; pause:(id:string,paused:boolean)=>Promise<void>;
+  stoppingAll: boolean; stopAll:()=>Promise<void>; end:(id:string,expectedRunTag?:string)=>Promise<boolean>; pause:(id:string,paused:boolean)=>Promise<void>;
   startingAll: boolean; startOutcomes: StartOutcome[]; playAll:()=>Promise<void>;
   remove: (id:string)=>Promise<boolean>; play: (id:string, options?:{mode:"additional"|"fresh";loops?:number;expectedRunTag:string})=>Promise<boolean>; stop: (id:string)=>Promise<void>;
 }>((set,get)=>({
@@ -181,11 +181,12 @@ export const usePipelines = create<{
       if(body.errors?.length)throw Error(body.errors.map((e:{pipeline:string;error:string})=>`${e.pipeline}: ${e.error}`).join('; '));
     }catch(e){set({error:String(e)});}finally{set({stoppingAll:false});void get().poll();}
   },
-  end:async id=>{
-    const run=get().items.find(p=>p.id===id)?.running;if(!run||get().busy)return;
+  end:async (id,expectedRunTag)=>{
+    const run=get().items.find(p=>p.id===id)?.running;if(!run||get().busy)return false;
+    if(expectedRunTag && run.run_tag!==expectedRunTag){set({error:'The execution changed. Review the current execution before ending it.'});return false;}
     set({busy:true,error:null});
-    try{const r=await fetch(`/control/runs/${encodeURIComponent(run.run_tag)}/end`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error((await r.json()).error);}
-    catch(e){set({error:String(e)});}finally{set({busy:false});void get().poll();}
+    try{const r=await fetch(`/control/runs/${encodeURIComponent(run.run_tag)}/end`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error((await r.json()).error);return true;}
+    catch(e){set({error:String(e)});return false;}finally{set({busy:false});void get().poll();}
   },
   stop:async id=>{
     const run=get().items.find(p=>p.id===id)?.running;if(!run || get().busy)return;set({busy:true,error:null});
