@@ -98,6 +98,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     if combination_plan and not getattr(args, "report_only", False):
         from memstara.pipeline.feature_selection import freeze as freeze_selection
         state["feature_selection_policy"] = freeze_selection(state)
+        state["feature_reproduction"] = {"version": 1, "directory": "feature_reproduction"}
     knowledge = Path(os.environ.get("AGENTIC_OKF_BUNDLE_DIR", "/nonexistent"))
     state["knowledge_hashes"] = (
         {
@@ -118,6 +119,9 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     else:
         with location.open("x", encoding="utf-8") as stream:
             json.dump(state, stream, indent=2)
+    if state.get("feature_selection_policy"):
+        from memstara.feature_reproduction import archive
+        archive(state, dataset, knowledge, run_dir)
     os.environ["MEMSTARA_RUN_CONFIG"] = str(location.resolve())
     os.environ["MEMSTARA_OUTCOME_COLUMN"] = args.y_column
     return state

@@ -291,8 +291,12 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
         raise DataQualityError('Input changed during evaluation; results cannot be reproduced.')
     if persist:
         from memstara.reproducibility import save_bundle
+        comparison_path = path.with_suffix('.comparison.json')
+        selection = (json.loads(comparison_path.read_text()).get('feature_selection')
+                     if comparison_path.exists() else None)
         result['evaluation']['reproducibility'] = save_bundle(
-            source_bytes, target, plan, list(X.columns), fixed_trials, partition, artifacts, result)
+            source_bytes, target, plan, list(X.columns), fixed_trials, partition, artifacts, result,
+            feature_selection=selection)
     return result
 
 

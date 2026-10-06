@@ -36,7 +36,8 @@ def environment() -> dict:
     }
 
 
-def save_bundle(source, target, plan, predictors, fixed_trials, partition, artifacts, result):
+def save_bundle(source, target, plan, predictors, fixed_trials, partition, artifacts, result, *,
+                feature_selection=None):
     import joblib
     import numpy as np
     import pandas as pd
@@ -75,6 +76,9 @@ def save_bundle(source, target, plan, predictors, fixed_trials, partition, artif
         original = Path(__file__).with_name(name)
         (directory / name).write_bytes(original.read_bytes())
         code[name] = digest(original)
+    if feature_selection:
+        write_selection = directory / 'feature-selection.json'
+        write_selection.write_text(json.dumps(feature_selection, indent=2))
     (directory / 'environment.json').write_text(json.dumps(environment(), indent=2))
     (directory / 'result.json').write_text(json.dumps(result, indent=2, allow_nan=False))
     manifest = {

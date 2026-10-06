@@ -53,7 +53,12 @@ def write_context(subset_path, task, snapshot):
         header = next(csv.reader(stream), [])
     if set(header) != set(columns + baseline + [task['y_column']]) or len(header) != len(set(header)):
         raise ValueError('Extract exactly the hypothesis predictors, fixed baseline and target')
-    payload = {'version': 'paired_groups_v1', 'config_hash': snapshot['config_hash'],
+    selection_record = None
+    if selected:
+        from memstara.feature_reproduction import record_extraction
+        selection_record = record_extraction(task, snapshot, selected)
+    payload = {'feature_selection': selection_record, 'version': 'paired_groups_v1',
+               'config_hash': snapshot['config_hash'],
                'dataset_sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
                'target': task['y_column'], 'baseline_columns': baseline,
                'hypothesis_columns': columns, 'groups': groups}
