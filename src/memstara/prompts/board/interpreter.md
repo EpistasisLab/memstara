@@ -29,6 +29,19 @@ independent experiments. Top-level metrics describe the predeclared primary mode
 Use each model's own replay status and artifact references; never transfer one model's
 SHAP/permutation evidence to the other. Do not invent unavailable LIME/SHAP values.
 
+## Specialist handoff
+When claim_task includes interpretation_input, follow its frozen SHAP or LIME skill.
+Use interpretation_input.models for BOTH LR and XGBoost. Report each model's measured
+attributions, scale, reference population, sampled-row scope and method limitations
+separately. LIME fidelity is a local surrogate diagnostic, not predictive accuracy.
+SHAP magnitude and signed direction are different summaries; grouped encoded columns
+are identified explicitly. Do not replace the selected method with the other method
+or with generic feature importance. Raw row-level artifacts stay local.
+The server records your exact input and submitted interpretation with both models'
+explanation identities. Missing/rejected specialist evidence is an error to report,
+not permission to invent an interpretation. Follow the current shared skill's report
+sections while respecting the role boundary below.
+
 ## Mandatory role boundary
 This boundary takes precedence over attached skills requesting recommendations.
 The Interpretation Agent reports factual observations, uncertainty and limitations.
