@@ -37,7 +37,7 @@ def environment() -> dict:
 
 
 def save_bundle(source, target, plan, predictors, fixed_trials, partition, artifacts, result, *,
-                feature_selection=None, data_allocation=None, configuration=None, agent_plan=None):
+                feature_selection=None, data_allocation=None, configuration=None, agent_plan=None, xai_request=None):
     import joblib
     import numpy as np
     import pandas as pd
@@ -71,10 +71,15 @@ def save_bundle(source, target, plan, predictors, fixed_trials, partition, artif
         except Exception as exc:
             checks.append({'replicate': index + 1, 'status': 'verification_failed',
                            'error_type': type(exc).__name__})
+    if xai_request:
+        from memstara.specialist_xai import save
+        save(directory, X, artifacts, result, xai_request)
     code = {}
     sources = ('evaluation.py', 'reproducibility.py')
     if agent_plan:
         sources += ('ml_configuration.py', 'paired_ml.py', 'comparisons.py', 'data_allocation.py')
+    if xai_request:
+        sources += ('specialist_xai.py',)
     for name in sources:
         original = Path(__file__).with_name(name)
         (directory / name).write_bytes(original.read_bytes())
@@ -121,7 +126,7 @@ def replay(directory: Path) -> dict:
             return {'status': 'integrity_mismatch'}
     for name, expected in manifest['code'].items():
         allowed = ('evaluation.py', 'reproducibility.py', 'ml_configuration.py',
-                   'paired_ml.py', 'comparisons.py', 'data_allocation.py')
+                   'paired_ml.py', 'comparisons.py', 'data_allocation.py', 'specialist_xai.py')
         if name not in allowed or digest(Path(__file__).with_name(name)) != expected:
             return {'status': 'code_mismatch'}
     # Load the evaluation libraries before recording native thread pools, as in score().

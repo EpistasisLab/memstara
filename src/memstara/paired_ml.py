@@ -145,6 +145,8 @@ def fit(request):
     estimated_fits = 2 * evaluation['replicates'] * (proposal['folds'] + 2) * variants
     if estimated_fits > limits['max_fits']:
         raise ValueError('Paired ML fit count exceeds the resource budget')
+    from memstara.specialist_xai import request as xai_request
+    specialist = xai_request(snapshot, handoff['trial'])
     results = {}
     with threadpool_limits(limits=1):
         for name in config.MODELS:
@@ -152,9 +154,10 @@ def fit(request):
             plan = {**evaluation, 'engine': name, 'folds': proposal['folds'], 'search_trials': 1}
             configuration = proposal['models'][name]
             if snapshot.get('comparison_policy'):
-                measured = score_comparisons(path, request['target'], plan, snapshot, configuration=configuration)
+                measured = score_comparisons(path, request['target'], plan, snapshot, configuration=configuration,
+                                             xai_request=specialist)
             else:
-                measured = score(path, request['target'], plan, configuration=configuration)
+                measured = score(path, request['target'], plan, configuration=configuration, xai_request=specialist)
             results[name] = measured
             atomic(path.with_suffix('.paired-progress.json'), {'phase': name + '_completed',
                                                               'completed_models': results})
@@ -169,6 +172,8 @@ def fit(request):
                   'primary_selection': 'Declared by the ML Agent before either model was fitted',
                   'same_features': True, 'same_splits': True,
                   'xgboost_minus_lr_auc': xgb['auc'] - lr['auc']}}
+    if specialist and any(row.get('specialist_xai', {}).get('status') != 'completed' for row in results.values()):
+        result.update(status='failed', error='Specialist explanations are incomplete; inspect saved model artifacts.')
     if config.identity(path, snapshot, evaluation, proposal) != request['record']:
         raise ValueError('ML inputs changed during fitting')
     return result

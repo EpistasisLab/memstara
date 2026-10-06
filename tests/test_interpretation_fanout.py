@@ -45,3 +45,20 @@ def test_aggregate_preserves_all_perspectives_and_marks_missing_results():
         assert 'view 1' in call.args[2] and 'view 2' in call.args[2]
         assert 'view 3' not in call.args[2]
     asyncio.run(check())
+
+
+def test_combination_uses_current_loop_skill_without_extra_branches():
+    import json
+    async def check():
+        conn=AsyncMock()
+        skills={stage:[{'id':stage}] for stage in ('hypothesis','data','ml','interpreter','report')}
+        skills['interpreter']=[{'id':'shared-anil-shap'},{'id':'shared-anil-lime'}]
+        config={'interpretation_mode':'all_per_hypothesis','interpreters':3,
+                'books':{'interpreter':['shared-anil-shap','shared-anil-lime']},
+                'combination_plan':{'skills':skills,'total_loops':2,'combinations':2}}
+        await expand(conn,10,config,trial=1)
+        assert conn.execute.await_count==1
+        branch=json.loads(conn.execute.call_args.args[2])['interpretation_branch']
+        assert branch['skill']=='shared-anil-lime'
+        assert branch['total']==1 and branch['worker']=='interpret#1'
+    asyncio.run(check())

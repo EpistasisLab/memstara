@@ -114,6 +114,13 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     from memstara.data_allocation import SKILLS, VERSION as allocation_version
     if any(book in SKILLS for book in books.get("data", [])):
         state["data_allocation_policy"] = {"version": allocation_version}
+    if not getattr(args, "report_only", False):
+        from memstara.specialist_xai import freeze as freeze_xai
+        specialist = freeze_xai(books, resolved)
+        if specialist:
+            state["specialist_xai_policy"] = specialist
+            from memstara.ml_configuration import policy
+            state.setdefault("ml_configuration_policy", policy())
     state["config_hash"] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
     location = run_dir / "config.json"
     if location.exists():

@@ -12,6 +12,8 @@ dependencies = [
     "xgboost",
     "psutil",
     "threadpoolctl",
+    "shap==0.52.0",
+    "lime==0.2.0.1",
     "python-dotenv",
     # Logging is imported directly by the control service and driver.
     "structlog",

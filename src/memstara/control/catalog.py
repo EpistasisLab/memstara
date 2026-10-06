@@ -7,11 +7,42 @@ import os
 import re
 from pathlib import Path
 
-from memstara.paths import DEFAULT_OUTPUT_DIR
+from memstara.paths import DEFAULT_OUTPUT_DIR, WORKSPACE_ROOT
 from memstara.agent_labels import agent_label
 from memstara.pipeline import prompts
 
 ROLES = ('hypothesis', 'data', 'ml', 'interpreter', 'report')
+
+# Exact current filenames only: no recursive discovery and no archive fallback.
+ANIL_SKILLS = {
+    'shared-anil-shap': ('SHAP-Interpretation.md', 'interpreter', 'SHAP Interpretation'),
+    'shared-anil-lime': ('LIME-Interpretation.md', 'interpreter', 'LIME Interpretation'),
+}
+
+
+def anil_dir() -> Path:
+    return WORKSPACE_ROOT / 'anil_shared'
+
+
+def anil_skills() -> list[dict]:
+    root = anil_dir().resolve()
+    if 'old' in {part.casefold() for part in root.parts}:
+        raise ValueError('Archived skill directories are not allowed')
+    items = []
+    for item_id, (filename, stage, title) in ANIL_SKILLS.items():
+        path = root / filename
+        if not path.is_file():
+            continue
+        if path.resolve().parent != root:
+            raise ValueError(f'{filename}: shared skills must be current root files, not archive links')
+        item = _external_entry(item_id, path, stage)
+        if not item['content'].strip():
+            raise ValueError(f'{filename}: shared skill has no instructions')
+        item.update(title=title, source_file=filename,
+                    source_hash=hashlib.sha256(path.read_bytes()).hexdigest())
+        items.append(item)
+    return items
+
 
 # Optional external documents are configured by the deployment.
 def shared_dir() -> Path | None:
@@ -45,7 +76,7 @@ def user_dir() -> Path:
 
 
 def catalog() -> list[dict]:
-    items = []
+    items = anil_skills()
     path = document_path('MEMSTARA_RESULTS_SKILL_PATH', 'ml-results.md')
     if path is not None and path.is_file():
         items.append(_external_entry('shared-ml-results', path, 'report'))
@@ -90,7 +121,11 @@ def _entry(name: str, content: str, stage: str, source: str) -> dict:
 
 def resolve(name: str) -> dict:
     name = canonical_name(name)
-    return next((x for x in catalog() if x['id'] == name), {})
+    item = next((x for x in catalog() if x['id'] == name), {})
+    if name in ANIL_SKILLS and not item:
+        raise FileNotFoundError(
+            f'{ANIL_SKILLS[name][0]} is missing from the current shared folder; no archive fallback')
+    return item
 
 
 def register(body: dict) -> dict:

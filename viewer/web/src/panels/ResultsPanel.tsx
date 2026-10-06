@@ -1,3 +1,4 @@
+import SpecialistEvidence from "../components/SpecialistEvidence";
 import { resultsStatus } from "../lib/resultsStatus";
 import { floorExecutionState } from '../lib/floorActivity';
 import { rankedContributions } from "../lib/featureImportance";
@@ -164,6 +165,7 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
                           <tr><th>1</th><td>{split.operating_point.false_negative}</td><td>{split.operating_point.true_positive}</td></tr>
                         </tbody></table>
                       </div>)}
+                      <SpecialistEvidence evidence={model.specialist_xai} />
                       <p>Replay: {model.evaluation.reproducibility?.status ?? 'not recorded'}</p>
                       <details><summary>Model parameters and replay location</summary><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify({configuration:model.ml_configuration,replay:model.evaluation.reproducibility},null,2)}</pre></details>
                     </div>)}

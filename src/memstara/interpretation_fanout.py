@@ -18,11 +18,17 @@ def pending_slots(tasks):
     return {int(metadata(t.get('evaluation'))['interpretation_branch']['slot']) for t in ready}
 
 
-async def expand(conn, task_id, config):
+async def expand(conn, task_id, config, trial=None):
     if config.get('interpretation_mode') != 'all_per_hypothesis':
         return
     count = config.get('interpreters', 1)
     books = config.get('books', {}).get('interpreter') or ['']
+    if config.get('combination_plan'):
+        from memstara.combinations import task_books
+        if trial is None:
+            trial = await conn.fetchval('SELECT trial FROM memstara_blackboard WHERE task_id=$1', task_id)
+        books = task_books(config, trial).get('interpreter') or ['']
+        count = 1
     for slot in range(1, count + 1):
         branch = {'source_task_id': task_id, 'slot': slot, 'total': count,
                   'worker': f'interpret#{slot}', 'skill': books[slot - 1] if slot <= len(books) else books[0]}
@@ -56,7 +62,8 @@ async def aggregate(conn, source_id):
     for row in rows:
         branch = metadata(row['evaluation'])['interpretation_branch']
         items.append({**branch, 'task_id': row['task_id'], 'status': row['status'],
-                      'text': row['interpretation'], 'error': row['error']})
+                      'text': row['interpretation'], 'error': row['error'],
+                      'specialist': metadata(row['evaluation']).get('specialist_interpretation')})
     combined = '\n\n'.join(
         f"## Interpreter {item['slot']} — {item['skill'] or 'default'} [{item['status']}]\n\n"
         + (item['text'] if item['status'] == 'done' else 'This interpretation is not available.')

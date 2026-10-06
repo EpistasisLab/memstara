@@ -147,7 +147,7 @@ def preflight(path: Path, target: str, plan: dict, *, reserve_validation: bool =
 
 
 def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=None, explain=True,
-          persist=True, partition=None, configuration=None) -> dict:
+          persist=True, partition=None, configuration=None, xai_request=None) -> dict:
     import numpy as np
     import sklearn
     from sklearn.metrics import roc_auc_score, average_precision_score, balanced_accuracy_score, confusion_matrix
@@ -320,7 +320,7 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
         result['evaluation']['reproducibility'] = save_bundle(
             source_bytes, target, plan, list(X.columns), fixed_trials, partition, artifacts, result,
             feature_selection=selection, data_allocation=handoff.get('data_allocation'),
-            configuration=configuration,
+            configuration=configuration, xai_request=xai_request,
             agent_plan=json.loads(path.with_suffix(".ml-plan.json").read_text())
             if path.with_suffix(".ml-plan.json").exists() else None)
     return result

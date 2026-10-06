@@ -328,6 +328,20 @@ async def claim_task(task_type: str, run_tag: str = "", worker: str = "") -> str
         specification = allocation_request(active_plan(), out["trial"])
         if specification:
             out["data_allocation_request"] = specification
+    if task_type == "interpret":
+        from memstara.evaluation import active_plan
+        from memstara.specialist_xai import handoff, record_io
+        try:
+            snapshot = active_plan()
+            evidence = handoff(snapshot, out, worker)
+            if evidence:
+                out["evaluation"] = {k: v for k, v in out["evaluation"].items()
+                                     if k not in ("model_results", "specialist_xai")}
+                out["interpretation_input"] = evidence
+                out["interpretation_input_record"] = record_io(snapshot, out, worker, evidence)
+        except (ValueError, KeyError, OSError) as exc:
+            return json.dumps({"error": "Specialist Interpretation input rejected", "error_type": type(exc).__name__,
+                               "task_id": out["task_id"]})
     # default=str — JSON does not know values such as datetime, so they become strings.
     return json.dumps(out, ensure_ascii=False, default=str)
 
@@ -516,6 +530,11 @@ async def submit_result(task_id: int, subset_path: str = "",
                     suffix = identity.rsplit("#", 1)[-1]
                     slot = int(suffix) - 1 if "#" in identity and suffix.isdigit() else 0
                     skill = books[slot] if slot < len(books) else books[0]
+                    from memstara.specialist_xai import handoff, record_io
+                    evidence = handoff(config, {**dict(cur), "evaluation": previous}, identity)
+                    if evidence:
+                        receipt = record_io(config, dict(cur), identity, evidence, interpretation=interpretation)
+                        previous = {**previous, "specialist_interpretation": receipt}
                     await conn.execute("UPDATE memstara_blackboard SET evaluation=$2::jsonb WHERE task_id=$1",
                                        task_id, json.dumps({**previous, "interpreter": {
                                            "worker": identity, "skill": skill}}))
@@ -627,7 +646,7 @@ async def submit_result(task_id: int, subset_path: str = "",
                 if stage == "ml":
                     config_path = os.environ.get("MEMSTARA_RUN_CONFIG")
                     config = json.loads(Path(config_path).read_text()) if config_path else {}
-                    await expand(conn, task_id, config)
+                    await expand(conn, task_id, config, trial=cur["trial"])
                 if new_status == "done" and branch:
                     await aggregate(conn, branch['source_task_id'])
                 elif new_status == "done":

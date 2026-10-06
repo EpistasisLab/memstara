@@ -169,6 +169,15 @@ export interface ModelComparison {
   variants: {id:string; label:string; features:string[]; removed_features:string[]; status:string; auc?:number;
     delta_from_full?:number; delta_from_baseline?:number; error_type?:string; reason?:string}[];
 }
+export interface SpecialistXai {
+  status: string;
+  items: Array<{method: string; model: string; replicate: number; status: string; error_type?: string;
+    explainer?: string; output_scale?: string; explained_count?: number; reference_count?: number;
+    seed: number; baseline?: number; max_additivity_error?: number;
+    fidelity_r2?: {minimum: number; mean: number}; samples_per_row?: number;
+    feature_summary?: Record<string, {mean_absolute: number; mean_signed: number}>;
+    limitation?: string; artifact_path?: string; artifact_sha256?: string; explanation_id?: string}>;
+}
 export interface Result {
   run_tag?: string; pipeline_id?: string; pipeline_name?: string; iteration?: number | null;
   hypothesis_id?: string;
@@ -176,7 +185,7 @@ export interface Result {
     paired_models?: {primary_model: string; primary_selection: string; same_features: boolean; same_splits: boolean; xgboost_minus_lr_auc: number};
     ml_configuration?: {requested: unknown; effective: unknown; resource_limits: unknown};
     model_results?: Record<string, {auc: number; n_train: number; n_test: number; model: string;
-      ml_configuration?: unknown; evaluation: {replicates: Array<{seed: number; auc: number;
+      ml_configuration?: unknown; specialist_xai?: SpecialistXai; evaluation: {replicates: Array<{seed: number; auc: number;
         average_precision: number; operating_point: {true_negative: number; false_positive: number;
           false_negative: number; true_positive: number; probability_cutoff: number}}>;
         reproducibility?: {status: string; bundle_path: string}}}>;

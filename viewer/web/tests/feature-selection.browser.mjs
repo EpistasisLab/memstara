@@ -22,6 +22,12 @@ try {
     same_features:true,same_splits:true,xgboost_minus_lr_auc:.1};
   result.evaluation.ml_configuration={requested:{rationale:'Synthetic fixture'},effective:{},resource_limits:{threads:1}};
   result.evaluation.model_results=Object.fromEntries(['logistic_regression','xgboost'].map((name,i)=>[name,{
+    specialist_xai:{status:'completed',items:['shap','lime'].map(method=>({method,model:name,replicate:1,
+      status:'completed',seed:7,explainer:method==='shap'?'TreeExplainer':'LimeTabularExplainer',
+      output_scale:method==='shap'?'positive-class log-odds':'positive-class probability',explained_count:8,
+      reference_count:32,feature_summary:{age:{mean_absolute:.2,mean_signed:-.1},bmi:{mean_absolute:.1,mean_signed:.03}},
+      ...(method==='lime'?{fidelity_r2:{minimum:.6,mean:.8},samples_per_row:512}:{baseline:-.3,max_additivity_error:1e-7}),
+      limitation:'Synthetic sampled evidence only',explanation_id:`${name}-${method}`,artifact_path:'/synthetic/xai.json'}))},
     model:name,auc:.6+i*.1,n_train:80,n_test:80,ml_configuration:{parameters:{fixture:1}},
     evaluation:{replicates:[{seed:7,auc:.6+i*.1,average_precision:.55+i*.1,
       operating_point:{true_negative:50,false_positive:14,false_negative:6,true_positive:10,probability_cutoff:.5}}],
@@ -54,13 +60,25 @@ try {
                       'training 80 rows','evaluation 80 rows','0: 64 / 64','1: 16 / 16'])assert(allocationText.includes(value),value);
   const pair=page.getByRole('region',{name:'Paired ML models'});
   await pair.waitFor();
-  assert.equal(await pair.getByRole('table').count(),2);
+  assert.equal(await pair.getByRole('table',{name:/confusion matrix/}).count(),2);
+  assert.equal(await pair.getByRole('table',{name:/attribution summary/}).count(),4);
+  assert((await pair.innerText()).includes('LIME local fidelity R²: mean 0.8000'));
+  assert((await pair.innerText()).includes('sampled evaluation rows'));
+  assert((await pair.innerText()).includes('not classifier accuracy'));
   assert((await pair.innerText()).includes('XGBoost − LR AUROC: 0.1000'));
   assert((await pair.innerText()).includes('chosen before fitting'));
   await pair.getByText('Agent proposal and enforced limits',{exact:true}).click();
   assert((await pair.innerText()).includes('Synthetic fixture'));
   assert(await pair.evaluate(el=>el.scrollWidth<=el.clientWidth+2));
   for(const name of features)assert(await evidence.getByText(name,{exact:true}).count());
+  assert.deepEqual(errors,[]);
+  result.evaluation.model_results.xgboost.specialist_xai.items[1]={method:'lime',model:'xgboost',replicate:1,
+    status:'failed',error_type:'RuntimeError',seed:7};
+  await page.reload();
+  const reopen=page.getByRole('button',{name:'Expand Results',exact:true});if(await reopen.count())await reopen.click();
+  const reselect=page.getByRole('tab',{name:'Results',exact:true});if(await reselect.count())await reselect.click();
+  await page.getByRole('button',{name:'Latest executions across pipelines',exact:true}).click();
+  await page.getByText('Explanation unavailable (RuntimeError). Do not infer feature effects.',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);
   console.log(`Saved selection and evaluated predictor display passed at ${width}px; all APIs mocked.`);
   await page.close();
