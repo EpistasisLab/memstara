@@ -34,6 +34,7 @@ try{
  await page.waitForTimeout(400); await page.screenshot({path:'/tmp/combinations-dark.png'});
  await dialog.getByRole('button',{name:'Review plan'}).click();
  await dialog.getByText(/Guided and random hypothesis skills each use 4–20/).waitFor();
+ await dialog.getByText(/Training-heavy and balanced Data skills override/).waitFor();
  await dialog.getByLabel('Maximum Loops per execution').fill('48');
  await dialog.getByLabel('Name',{exact:true}).fill('Combination test');
  await dialog.getByRole('checkbox',{name:/I reviewed/}).check();

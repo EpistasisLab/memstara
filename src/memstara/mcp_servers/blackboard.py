@@ -322,6 +322,12 @@ async def claim_task(task_type: str, run_tag: str = "", worker: str = "") -> str
     # The empty default differs by field: [] for the lists, {} for the importances.
     for k in ("columns", "okf_concept_ids", "columns_used", "feature_importance", "evaluation"):
         out[k] = json.loads(out[k]) if out[k] else ([] if k != "feature_importance" else {})
+    if task_type == "data":
+        from memstara.evaluation import active_plan
+        from memstara.data_allocation import request as allocation_request
+        specification = allocation_request(active_plan(), out["trial"])
+        if specification:
+            out["data_allocation_request"] = specification
     # default=str — JSON does not know values such as datetime, so they become strings.
     return json.dumps(out, ensure_ascii=False, default=str)
 
@@ -370,7 +376,8 @@ async def submit_result(task_id: int, subset_path: str = "",
                         columns_used: list[str] | None = None,
                         columns_missing: list[str] | None = None, auc: float | None = None,
                         feature_importance: str = "", model: str = "",
-                        interpretation: str = "", error: str = "", *, worker: str) -> str:
+                        interpretation: str = "", error: str = "", *, worker: str,
+                        data_plan: dict | None = None) -> str:
     """Write what you produced and hand the task to the next stage."""
     if isinstance(columns_used, str) or isinstance(columns_missing, str):
         return json.dumps(
@@ -476,7 +483,15 @@ async def submit_result(task_id: int, subset_path: str = "",
                         if source != destination:
                             shutil.copyfile(source, destination)
                         subset_path = str(destination)
-                        write_context(subset_path, dict(cur), plan)
+                        from memstara.data_allocation import prepare as prepare_allocation
+                        allocation = prepare_allocation(data_plan, dict(cur), plan, subset_path)
+                        write_context(subset_path, dict(cur), plan, data_allocation=allocation)
+                        if allocation:
+                            previous = cur["evaluation"] or {}
+                            if isinstance(previous, str):
+                                previous = json.loads(previous)
+                            await conn.execute("UPDATE memstara_blackboard SET evaluation=$2::jsonb WHERE task_id=$1",
+                                               task_id, json.dumps({**previous, "data_allocation": allocation}))
                         if plan.get("feature_selection_policy"):
                             original = cur["columns"]
                             if isinstance(original, str):
@@ -525,6 +540,8 @@ async def submit_result(task_id: int, subset_path: str = "",
                     if measured["evaluation"]["dataset_sha256"] != hashlib.sha256(
                             Path(cur["subset_path"]).read_bytes()).hexdigest():
                         return json.dumps({"error": "The subset changed after training; evaluate it again"})
+                    if (previous or {}).get("data_allocation") != measured.get("data_allocation"):
+                        return json.dumps({"error": "Measured Data allocation differs from the accepted plan"})
                     if measured.get("status") == "failed":
                         await conn.execute(
                             "UPDATE memstara_blackboard SET status='failed', error=$2, "

@@ -141,6 +141,15 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
                     ` · ${r.okf_concept_ids.length} OKF concept${r.okf_concept_ids.length === 1 ? "" : "s"} behind them`}
                 </p>
 
+                {r.evaluation?.data_allocation && <section aria-label="Data allocation" className="mt-3 rounded border border-paper-line p-3 text-sm">
+                  <strong>Data allocation · {r.evaluation.data_allocation.request.skill}</strong>
+                  <p>Requested training/evaluation: {Math.round((1-r.evaluation.data_allocation.agent_plan.test_size)*100)}% / {Math.round(r.evaluation.data_allocation.agent_plan.test_size*100)}% of {r.evaluation.data_allocation.exploration_count} exploration rows.</p>
+                  <p>{r.evaluation.data_allocation.reserved_count} independent validation rows remain reserved. Stratification preserves observed class proportions; no class resampling.</p>
+                  {r.evaluation.data_allocation.replicates.map((split, index)=><p key={index}>
+                    Split {index+1} · seed {split.seed} · training {split.n_train} rows · evaluation {split.n_test} rows.
+                    {' '}Class counts (training / evaluation): {Object.keys(split.train_class_counts).map(k=>`${k}: ${split.train_class_counts[k]} / ${split.test_class_counts[k] ?? 0}`).join('; ')}
+                  </p>)}
+                </section>}
                 <ResultEvidenceVisuals key={resultKey(r)} result={r} />
                 <section className="mt-3 rounded-lg border border-[#c9d9e8] bg-stage-data/5 p-3" aria-label="Clinical interpretation summary">
                   <div className="flex flex-wrap items-center justify-between gap-2">

@@ -109,6 +109,9 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         if knowledge.is_dir() and not ablate_okf
         else {}
     )
+    from memstara.data_allocation import SKILLS, VERSION as allocation_version
+    if any(book in SKILLS for book in books.get("data", [])):
+        state["data_allocation_policy"] = {"version": allocation_version}
     state["config_hash"] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
     location = run_dir / "config.json"
     if location.exists():

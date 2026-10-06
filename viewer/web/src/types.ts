@@ -173,6 +173,10 @@ export interface Result {
   run_tag?: string; pipeline_id?: string; pipeline_name?: string; iteration?: number | null;
   hypothesis_id?: string;
   evaluation?: {
+    data_allocation?: {request: {skill: string; population: string}; agent_plan: {test_size: number; seed: number};
+      exploration_count: number; reserved_count: number;
+      replicates: {seed: number; n_train: number; n_test: number;
+        train_class_counts: Record<string, number>; test_class_counts: Record<string, number>}[]};
     feature_selection?: {mode: "guided" | "random"; minimum: number; maximum: number;
       actual_count: number; features: string[]; seed: number | null; pool_size: number;
       pool_sha256: string; loop: number; combination: number};

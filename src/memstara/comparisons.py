@@ -26,7 +26,7 @@ def validate_baseline(columns, target, dataset=None):
     return columns
 
 
-def write_context(subset_path, task, snapshot):
+def write_context(subset_path, task, snapshot, *, data_allocation=None):
     from memstara.paths import DEFAULT_OUTPUT_DIR
     path = Path(subset_path).resolve()
     path.relative_to(Path(os.environ.get('MEMSTARA_OUTPUT_DIR') or DEFAULT_OUTPUT_DIR).resolve())
@@ -53,11 +53,17 @@ def write_context(subset_path, task, snapshot):
         header = next(csv.reader(stream), [])
     if set(header) != set(columns + baseline + [task['y_column']]) or len(header) != len(set(header)):
         raise ValueError('Extract exactly the hypothesis predictors, fixed baseline and target')
+    existing = path.with_suffix('.comparison.json')
+    if existing.exists():
+        recorded = json.loads(existing.read_text()).get('data_allocation')
+        if recorded is not None and recorded != data_allocation:
+            raise ValueError('Accepted Data allocation cannot be changed on retry')
     selection_record = None
     if selected:
         from memstara.feature_reproduction import record_extraction
         selection_record = record_extraction(task, snapshot, selected)
-    payload = {'feature_selection': selection_record, 'version': 'paired_groups_v1',
+    payload = {'trial': task.get('trial', 0), 'data_allocation': data_allocation,
+               'feature_selection': selection_record, 'version': 'paired_groups_v1',
                'config_hash': snapshot['config_hash'],
                'dataset_sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
                'target': task['y_column'], 'baseline_columns': baseline,

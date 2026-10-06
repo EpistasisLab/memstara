@@ -292,11 +292,11 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     if persist:
         from memstara.reproducibility import save_bundle
         comparison_path = path.with_suffix('.comparison.json')
-        selection = (json.loads(comparison_path.read_text()).get('feature_selection')
-                     if comparison_path.exists() else None)
+        handoff = json.loads(comparison_path.read_text()) if comparison_path.exists() else {}
+        selection = handoff.get('feature_selection')
         result['evaluation']['reproducibility'] = save_bundle(
             source_bytes, target, plan, list(X.columns), fixed_trials, partition, artifacts, result,
-            feature_selection=selection)
+            feature_selection=selection, data_allocation=handoff.get('data_allocation'))
     return result
 
 

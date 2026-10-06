@@ -37,7 +37,7 @@ def environment() -> dict:
 
 
 def save_bundle(source, target, plan, predictors, fixed_trials, partition, artifacts, result, *,
-                feature_selection=None):
+                feature_selection=None, data_allocation=None):
     import joblib
     import numpy as np
     import pandas as pd
@@ -76,6 +76,8 @@ def save_bundle(source, target, plan, predictors, fixed_trials, partition, artif
         original = Path(__file__).with_name(name)
         (directory / name).write_bytes(original.read_bytes())
         code[name] = digest(original)
+    if data_allocation:
+        (directory / 'data-allocation.json').write_text(json.dumps(data_allocation, indent=2))
     if feature_selection:
         write_selection = directory / 'feature-selection.json'
         write_selection.write_text(json.dumps(feature_selection, indent=2))

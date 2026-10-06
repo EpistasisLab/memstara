@@ -67,6 +67,8 @@ def train_and_score(
             "folds": folds, "replicates": replicates, "search_trials": search_trials,
         }
         plan = validate(plan)
+        from memstara.data_allocation import load_effective
+        plan, allocation = load_effective(p, snapshot, plan)
         try:
             if (snapshot or {}).get("comparison_policy"):
                 from memstara.comparisons import score_comparisons
@@ -79,6 +81,8 @@ def train_and_score(
             result = {"status": "failed", "error": detail,
                       "evaluation": {"dataset_sha256": hashlib.sha256(p.read_bytes()).hexdigest()}}
 
+        if allocation:
+            result["data_allocation"] = allocation
         result["config_hash"] = snapshot.get("config_hash") if snapshot else None
         result["y_column"] = y_column
         destination = p.with_suffix(".evaluation.json")
