@@ -132,12 +132,17 @@ def replay(directory):
 
 def record_extraction(task, plan, selection):
     """Save accepted predictor provenance independently of database retention."""
+    if not plan.get('feature_reproduction'):
+        return None  # Legacy snapshots must never write into a newer run's bundle.
     location = os.environ.get('MEMSTARA_RUN_CONFIG')
     if not location or not (Path(location).parent / 'feature_reproduction').is_dir():
         if plan.get('feature_reproduction'):
             raise ValueError('Required feature reproduction bundle is missing; extraction cannot advance')
         return None  # Historical runs have no bundle; never retrofit their experimental record.
     directory = Path(location).parent / 'feature_reproduction'
+    frozen = json.loads((directory / 'config.json').read_text())
+    if any(frozen.get(k) != plan.get(k) for k in ('config_hash', 'run_tag')):
+        raise ValueError('Feature reproduction bundle belongs to another run')
     record = {'task_id': task['task_id'], 'question_id': task.get('question_id'),
               'config_hash': plan['config_hash'], 'selection': selection,
               'stage': 'verified_extraction_before_ml', 'manifest_sha256': digest(directory / 'manifest.json')}

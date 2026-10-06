@@ -18,7 +18,8 @@ def bundle(tmp_path, monkeypatch):
     knowledge.mkdir()
     (knowledge / 'source.md').write_text('Synthetic evidence')
     stages = ('hypothesis', 'data', 'ml', 'interpreter', 'report')
-    p = {'run_tag': 'test', 'pipeline_id': 'pipeline', 'config_hash': 'fixture', 'y_column': 'Y',
+    p = {'feature_reproduction': {'version': 1}, 'run_tag': 'test', 'pipeline_id': 'pipeline',
+         'config_hash': 'fixture', 'y_column': 'Y',
          'dataset_sha256': reproduction.digest(data), 'evaluation': {'seed': 42},
          'prompts': {'hypothesis': {'system_prompt': 'Synthetic frozen prompt'}},
          'knowledge_hashes': {'source.md': reproduction.digest(knowledge / 'source.md')},
@@ -138,3 +139,9 @@ def test_required_bundle_cannot_disappear_silently(monkeypatch):
     with pytest.raises(ValueError, match='Required feature reproduction bundle'):
         reproduction.record_extraction({}, {'feature_reproduction': {'version': 1}}, {})
     assert reproduction.record_extraction({}, {}, {}) is None
+
+
+def test_extraction_cannot_write_into_another_runs_bundle(bundle):
+    _, plan, *_ = bundle
+    with pytest.raises(ValueError, match='another run'):
+        reproduction.record_extraction({'task_id': 1}, {**plan, 'run_tag': 'other'}, {})
