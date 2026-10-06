@@ -18,7 +18,16 @@ try {
     data_allocation:{request:{skill:'data_balanced_stratified',population:'exploration'},
       agent_plan:{test_size:.5,seed:7},exploration_count:160,reserved_count:40,
       replicates:[{seed:7,n_train:80,n_test:80,train_class_counts:{0:64,1:16},test_class_counts:{0:64,1:16}}]}}};
-  const run={run_tag:'fixture',configuration:{waves:1}};
+  result.evaluation.paired_models={primary_model:'logistic_regression',primary_selection:'Before fitting',
+    same_features:true,same_splits:true,xgboost_minus_lr_auc:.1};
+  result.evaluation.ml_configuration={requested:{rationale:'Synthetic fixture'},effective:{},resource_limits:{threads:1}};
+  result.evaluation.model_results=Object.fromEntries(['logistic_regression','xgboost'].map((name,i)=>[name,{
+    model:name,auc:.6+i*.1,n_train:80,n_test:80,ml_configuration:{parameters:{fixture:1}},
+    evaluation:{replicates:[{seed:7,auc:.6+i*.1,average_precision:.55+i*.1,
+      operating_point:{true_negative:50,false_positive:14,false_negative:6,true_positive:10,probability_cutoff:.5}}],
+      reproducibility:{status:'verified',bundle_path:'/synthetic/replay/'+name}}
+  }]));
+  const run={run_tag:'fixture' ,configuration:{waves:1}};
   await page.route('**/*',async route=>{
    const path=new URL(route.request().url()).pathname;
    if(path==='/control/pipelines')return route.fulfill({json:{pipelines:[{id:'p',name:'Fixture',number:1,
@@ -43,6 +52,14 @@ try {
   const allocationText=await allocation.innerText();
   for(const value of ['50% / 50% of 160 exploration rows','40 independent validation rows','seed 7',
                       'training 80 rows','evaluation 80 rows','0: 64 / 64','1: 16 / 16'])assert(allocationText.includes(value),value);
+  const pair=page.getByRole('region',{name:'Paired ML models'});
+  await pair.waitFor();
+  assert.equal(await pair.getByRole('table').count(),2);
+  assert((await pair.innerText()).includes('XGBoost − LR AUROC: 0.1000'));
+  assert((await pair.innerText()).includes('chosen before fitting'));
+  await pair.getByText('Agent proposal and enforced limits',{exact:true}).click();
+  assert((await pair.innerText()).includes('Synthetic fixture'));
+  assert(await pair.evaluate(el=>el.scrollWidth<=el.clientWidth+2));
   for(const name of features)assert(await evidence.getByText(name,{exact:true}).count());
   assert.deepEqual(errors,[]);
   console.log(`Saved selection and evaluated predictor display passed at ${width}px; all APIs mocked.`);

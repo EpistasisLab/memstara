@@ -150,6 +150,27 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
                     {' '}Class counts (training / evaluation): {Object.keys(split.train_class_counts).map(k=>`${k}: ${split.train_class_counts[k]} / ${split.test_class_counts[k] ?? 0}`).join('; ')}
                   </p>)}
                 </section>}
+                {r.evaluation?.paired_models && <section aria-label="Paired ML models" className="mt-3 rounded border border-paper-line p-3 text-sm">
+                  <strong>LR and XGBoost · paired evaluation</strong>
+                  <p>Same predictors and splits. Primary model: {r.evaluation.paired_models.primary_model}, chosen before fitting.</p>
+                  <p>All other result charts below refer to this primary model. These are exploratory scores, not independent validation.</p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {Object.entries(r.evaluation.model_results ?? {}).map(([name, model])=><div key={name} className="min-w-0 rounded border border-paper-line p-2">
+                      <strong>{name}</strong><p>AUROC {model.auc.toFixed(4)} · training {model.n_train} · evaluation {model.n_test}</p>
+                      {model.evaluation.replicates.map((split,i)=><div key={i}>
+                        <p>Split {i+1} · seed {split.seed} · AP {split.average_precision.toFixed(4)} · cutoff {split.operating_point.probability_cutoff}</p>
+                        <table aria-label={`${name} confusion matrix split ${i+1}`} className="w-full text-xs"><thead><tr><th>Actual / predicted</th><th>0</th><th>1</th></tr></thead><tbody>
+                          <tr><th>0</th><td>{split.operating_point.true_negative}</td><td>{split.operating_point.false_positive}</td></tr>
+                          <tr><th>1</th><td>{split.operating_point.false_negative}</td><td>{split.operating_point.true_positive}</td></tr>
+                        </tbody></table>
+                      </div>)}
+                      <p>Replay: {model.evaluation.reproducibility?.status ?? 'not recorded'}</p>
+                      <details><summary>Model parameters and replay location</summary><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify({configuration:model.ml_configuration,replay:model.evaluation.reproducibility},null,2)}</pre></details>
+                    </div>)}
+                  </div>
+                  <p>XGBoost − LR AUROC: {r.evaluation.paired_models.xgboost_minus_lr_auc.toFixed(4)}</p>
+                  <details><summary>Agent proposal and enforced limits</summary><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(r.evaluation.ml_configuration,null,2)}</pre></details>
+                </section>}
                 <ResultEvidenceVisuals key={resultKey(r)} result={r} />
                 <section className="mt-3 rounded-lg border border-[#c9d9e8] bg-stage-data/5 p-3" aria-label="Clinical interpretation summary">
                   <div className="flex flex-wrap items-center justify-between gap-2">

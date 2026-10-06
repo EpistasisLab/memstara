@@ -335,7 +335,7 @@ BOARD_TOOLS = {
     "hypothesis": {"okf_list_domains", "okf_search", "okf_read", "describe_dataset",
                    "match_concepts", "match_concept", "claim_question", "create_task"},
     "data": {"describe_dataset", "slice_columns", "claim_task", "submit_result"},
-    "ml": {"train_and_score", "claim_task", "submit_result"},
+    "ml": {"get_ml_configuration", "train_and_score", "claim_task", "submit_result"},
     "interpreter": {"claim_task", "submit_result"},
     "report": {"read_results", "okf_search", "okf_read"},
 }

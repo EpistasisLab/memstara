@@ -173,6 +173,13 @@ export interface Result {
   run_tag?: string; pipeline_id?: string; pipeline_name?: string; iteration?: number | null;
   hypothesis_id?: string;
   evaluation?: {
+    paired_models?: {primary_model: string; primary_selection: string; same_features: boolean; same_splits: boolean; xgboost_minus_lr_auc: number};
+    ml_configuration?: {requested: unknown; effective: unknown; resource_limits: unknown};
+    model_results?: Record<string, {auc: number; n_train: number; n_test: number; model: string;
+      ml_configuration?: unknown; evaluation: {replicates: Array<{seed: number; auc: number;
+        average_precision: number; operating_point: {true_negative: number; false_positive: number;
+          false_negative: number; true_positive: number; probability_cutoff: number}}>;
+        reproducibility?: {status: string; bundle_path: string}}}>;
     data_allocation?: {request: {skill: string; population: string}; agent_plan: {test_size: number; seed: number};
       exploration_count: number; reserved_count: number;
       replicates: {seed: number; n_train: number; n_test: number;

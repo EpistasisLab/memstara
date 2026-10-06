@@ -40,9 +40,34 @@ def _make_model(engine: str, seed: int):
     return model_for(engine, seed)
 
 
+@mcp.tool()
+async def get_ml_configuration(path: str, y_column: str) -> str:
+    """Get complete LR/XGBoost parameters and permitted choices before proposing ml_plan.
+
+    The server owns predictor/split identity and resource limits. The ML Agent chooses
+    the exposed model parameters, scaling, cutoff, training CV and primary perspective.
+    """
+    from memstara.evaluation import active_plan
+    from memstara.data_allocation import load_effective
+    from memstara.ml_configuration import context, enabled
+    try:
+        p = Path(path).resolve()
+        p.relative_to(_output_dir())
+        snapshot = active_plan()
+        if not enabled(snapshot):
+            return json.dumps({"required": False, "instruction": "Use the frozen single-model run policy."})
+        if snapshot['y_column'] != y_column:
+            raise ValueError('Target differs from the run target')
+        plan, _ = load_effective(p, snapshot, snapshot['evaluation'])
+        return json.dumps(context(snapshot, plan))
+    except Exception as exc:
+        return json.dumps({'error': str(exc) if isinstance(exc, ValueError) else type(exc).__name__})
+
+
 def train_and_score(
     path: str, y_column: str, test_size: float = 0.25, seed: int = 42,
     engine: str = "", folds: int = 0, replicates: int = 1, search_trials: int = 1,
+    ml_plan: dict | None = None,
 ) -> str:
     """Evaluate with the frozen run policy, or explicit options for standalone calls.
 
@@ -69,13 +94,26 @@ def train_and_score(
         plan = validate(plan)
         from memstara.data_allocation import load_effective
         plan, allocation = load_effective(p, snapshot, plan)
+        from memstara.ml_configuration import enabled, validate as validate_ml
+        if enabled(snapshot):
+            # Proposal errors are repairable and cannot start training or freeze a plan.
+            validate_ml(ml_plan, snapshot, plan)
+        elif ml_plan is not None:
+            raise ValueError('This frozen run does not support agent-configured paired ML')
         try:
-            if (snapshot or {}).get("comparison_policy"):
+            if enabled(snapshot):
+                from memstara.paired_ml import execute
+                result = execute(p, y_column, plan, snapshot, ml_plan)
+                if result.get('retryable'):
+                    return json.dumps(result)
+            elif (snapshot or {}).get("comparison_policy"):
                 from memstara.comparisons import score_comparisons
                 result = score_comparisons(p, y_column, plan, snapshot)
             else:
                 result = score(p, y_column, plan)
         except Exception as exc:
+            if enabled(snapshot) and isinstance(exc, ValueError):
+                raise
             # Never send data values embedded in library exception messages to an LLM.
             detail = str(exc) if isinstance(exc, DataQualityError) else f"Evaluation failed ({type(exc).__name__})"
             result = {"status": "failed", "error": detail,
@@ -99,17 +137,19 @@ def train_and_score(
 async def train_and_score_async(
     path: str, y_column: str, test_size: float = 0.25, seed: int = 42,
     engine: str = "", folds: int = 0, replicates: int = 1, search_trials: int = 1,
+    ml_plan: dict | None = None,
 ) -> str:
     """Evaluate a model without blocking MCP. Frozen run settings override these options.
 
-    engine: xgboost, random_forest or logistic_regression; empty uses the default.
+    ml_plan: complete proposal from get_ml_configuration for new paired-model runs.
+    Legacy engine: xgboost, random_forest or logistic_regression; empty uses the default.
     folds: training-only stratified CV (0 off, 2-10 enabled).
     replicates: 1-10 seeded splits. search_trials: 1-10 training-CV candidates.
     test_size: reserved hold-out fraction. No cleaning or imputation is performed.
     """
     import asyncio
     return await asyncio.to_thread(
-        train_and_score, path, y_column, test_size, seed, engine, folds, replicates, search_trials,
+        train_and_score, path, y_column, test_size, seed, engine, folds, replicates, search_trials, ml_plan,
     )
 
 

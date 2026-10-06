@@ -37,7 +37,7 @@ def environment() -> dict:
 
 
 def save_bundle(source, target, plan, predictors, fixed_trials, partition, artifacts, result, *,
-                feature_selection=None, data_allocation=None):
+                feature_selection=None, data_allocation=None, configuration=None, agent_plan=None):
     import joblib
     import numpy as np
     import pandas as pd
@@ -72,10 +72,15 @@ def save_bundle(source, target, plan, predictors, fixed_trials, partition, artif
             checks.append({'replicate': index + 1, 'status': 'verification_failed',
                            'error_type': type(exc).__name__})
     code = {}
-    for name in ('evaluation.py', 'reproducibility.py'):
+    sources = ('evaluation.py', 'reproducibility.py')
+    if agent_plan:
+        sources += ('ml_configuration.py', 'paired_ml.py', 'comparisons.py', 'data_allocation.py')
+    for name in sources:
         original = Path(__file__).with_name(name)
         (directory / name).write_bytes(original.read_bytes())
         code[name] = digest(original)
+    if agent_plan:
+        (directory / 'ml-plan.json').write_text(json.dumps(agent_plan, indent=2))
     if data_allocation:
         (directory / 'data-allocation.json').write_text(json.dumps(data_allocation, indent=2))
     if feature_selection:
@@ -87,7 +92,8 @@ def save_bundle(source, target, plan, predictors, fixed_trials, partition, artif
         'version': 1, 'target': target, 'predictors': predictors, 'plan': plan,
         'fixed_trials': fixed_trials, 'partition': partition, 'code': code,
         'schema': {str(k): str(v) for k, v in frame.dtypes.items()},
-        'target_classes': [0, 1], 'decision_threshold': 0.5,
+        'target_classes': [0, 1], 'decision_threshold': configuration['threshold'] if configuration else .5,
+        'configuration': configuration,
         'files': {p.name: digest(p) for p in directory.iterdir() if p.is_file()},
         'verification': checks,
     }
@@ -114,17 +120,25 @@ def replay(directory: Path) -> dict:
         if Path(name).name != name or not (directory / name).is_file() or digest(directory / name) != expected:
             return {'status': 'integrity_mismatch'}
     for name, expected in manifest['code'].items():
-        if name not in ('evaluation.py', 'reproducibility.py') or digest(Path(__file__).with_name(name)) != expected:
+        allowed = ('evaluation.py', 'reproducibility.py', 'ml_configuration.py',
+                   'paired_ml.py', 'comparisons.py', 'data_allocation.py')
+        if name not in allowed or digest(Path(__file__).with_name(name)) != expected:
             return {'status': 'code_mismatch'}
     # Load the evaluation libraries before recording native thread pools, as in score().
     from memstara.evaluation import model_for
     model_for(manifest['plan']['engine'], manifest['plan']['seed'])
+    if 'ml-plan.json' in manifest['files']:
+        # The paired worker loads both libraries before either fit. Recreate that
+        # native-runtime environment even when replaying only its LR bundle.
+        model_for('logistic_regression', manifest['plan']['seed'])
+        model_for('xgboost', manifest['plan']['seed'])
     if environment() != json.loads((directory / 'environment.json').read_text()):
         return {'status': 'environment_mismatch'}
     expected = json.loads((directory / 'result.json').read_text())
     actual = score(directory / 'input.csv', manifest['target'], manifest['plan'],
                    predictors=manifest['predictors'], fixed_trials=manifest['fixed_trials'],
-                   partition=manifest['partition'], persist=False, explain=False)
+                   partition=manifest['partition'], persist=False, explain=False,
+                   configuration=manifest.get('configuration'))
     equal = (actual['evaluation']['replicates'] == expected['evaluation']['replicates']
              and actual['features'] == expected['features'] and actual['auc'] == expected['auc'])
     status = {'status': 'verified' if equal else 'mismatch',

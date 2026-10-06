@@ -10,6 +10,8 @@ dependencies = [
     "scikit-learn",
     "numpy",
     "xgboost",
+    "psutil",
+    "threadpoolctl",
     "python-dotenv",
     # Logging is imported directly by the control service and driver.
     "structlog",

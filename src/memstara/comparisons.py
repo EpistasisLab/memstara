@@ -74,7 +74,7 @@ def write_context(subset_path, task, snapshot, *, data_allocation=None):
     temporary.replace(path.with_suffix('.comparison.json'))
 
 
-def score_comparisons(path, target, plan, snapshot):
+def score_comparisons(path, target, plan, snapshot, *, configuration=None):
     from memstara.evaluation import score, evaluation_splits, validate_clean_dataset
     context = json.loads(path.with_suffix('.comparison.json').read_text())
     if (context.get('config_hash') != snapshot['config_hash'] or context.get('target') != target
@@ -85,7 +85,7 @@ def score_comparisons(path, target, plan, snapshot):
     full = list(dict.fromkeys(baseline + context['hypothesis_columns']))
     # Choose HP on full-model training folds, then freeze them for every variant.
     # The test split is never used for candidate selection.
-    result = score(path, target, plan, predictors=full)
+    result = score(path, target, plan, predictors=full, configuration=configuration)
     reference = result['evaluation']['replicates']
     trials = [r['selected_trial'] for r in reference]
     variants = []
@@ -108,7 +108,7 @@ def score_comparisons(path, target, plan, snapshot):
             else:
                 if signature not in cache:
                     cache[signature] = score(path, target, plan, predictors=columns,
-                                             fixed_trials=trials, explain=False)
+                                             fixed_trials=trials, explain=False, configuration=configuration)
                 measured = cache[signature]
                 item['method'] = plan['engine']
             runs = measured['evaluation']['replicates']

@@ -99,6 +99,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         from memstara.pipeline.feature_selection import freeze as freeze_selection
         state["feature_selection_policy"] = freeze_selection(state)
         state["feature_reproduction"] = {"version": 1, "directory": "feature_reproduction"}
+        from memstara.ml_configuration import policy
+        state["ml_configuration_policy"] = policy()
     knowledge = Path(os.environ.get("AGENTIC_OKF_BUNDLE_DIR", "/nonexistent"))
     state["knowledge_hashes"] = (
         {

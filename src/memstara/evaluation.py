@@ -147,7 +147,7 @@ def preflight(path: Path, target: str, plan: dict, *, reserve_validation: bool =
 
 
 def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=None, explain=True,
-          persist=True, partition=None) -> dict:
+          persist=True, partition=None, configuration=None) -> dict:
     import numpy as np
     import sklearn
     from sklearn.metrics import roc_auc_score, average_precision_score, balanced_accuracy_score, confusion_matrix
@@ -190,13 +190,15 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                         'Missingness may reflect measurement practices; review before clinical interpretation.')
     if (X.nunique(dropna=True) <= 1).any():
         warnings.append('Some predictors are constant or entirely missing and provide little or no information.')
+    threshold = configuration['threshold'] if configuration else .5
     runs = []
     artifacts = []
     last = None
     # Replicates share their split across hypotheses; only feature sets change.
     for seed, train, test in evaluation_splits(y, plan, partition=partition):
         pre = ColumnTransformer([
-            ('numeric', 'passthrough' if plan['engine'] == 'xgboost' else StandardScaler(), numeric),
+            ('numeric', (StandardScaler() if configuration['scale_numeric'] else 'passthrough') if configuration else
+             ('passthrough' if plan['engine'] == 'xgboost' else StandardScaler()), numeric),
             ('categorical', OneHotEncoder(handle_unknown='ignore', sparse_output=False), categorical),
         ], verbose_feature_names_out=False)
         best, best_cv, best_params, selected_trial = None, None, None, 0
@@ -205,6 +207,8 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
         fold_count = min(fold_count, int(y.iloc[train].value_counts().min()))
         if fold_count < 2:
             fold_count = 0
+        if configuration and fold_count != requested_folds:
+            raise DataQualityError('Requested training CV exceeds the available training class count')
         if fold_count != requested_folds:
             warnings.append('CV folds reduced to match training minority count; '
                             'search is disabled when CV is unavailable.')
@@ -212,6 +216,11 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                       else range(plan['search_trials'] if fold_count else 1))
         for trial in candidates:
             model = model_for(plan['engine'], seed, trial)
+            if configuration:
+                parameters = dict(configuration['parameters'])
+                if parameters.get('missing') == 'NaN':
+                    parameters['missing'] = float('nan')
+                model.set_params(**parameters)
             pipe = Pipeline([('encode', pre), ('model', model)])
             cv_scores = None
             if fold_count:
@@ -228,9 +237,10 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
         probability = best.predict_proba(X.iloc[test])[:, 1]
         artifacts.append((best, train.copy(), test.copy(), probability.copy()))
         auc = float(roc_auc_score(y.iloc[test], probability))
-        tn, fp, fn, tp = (int(n) for n in confusion_matrix(y.iloc[test], probability >= .5, labels=[0, 1]).ravel())
+        matrix = confusion_matrix(y.iloc[test], probability >= threshold, labels=[0, 1])
+        tn, fp, fn, tp = (int(n) for n in matrix.ravel())
         operating_point = {
-            'probability_cutoff': .5, 'selection': 'fixed before evaluation; not optimized on hold-out',
+            'probability_cutoff': threshold, 'selection': 'fixed before evaluation; not optimized on hold-out',
             'sensitivity': tp / (tp + fn), 'specificity': tn / (tn + fp),
             'precision': tp / (tp + fp) if tp + fp else None,
             'precision_reason': ('No positive predictions at the fixed cutoff: TP + FP = 0, '
@@ -249,6 +259,13 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                      'train_class_counts': {str(k): int(v) for k, v in y.iloc[train].value_counts().items()},
                      'test_class_counts': {str(k): int(v) for k, v in y.iloc[test].value_counts().items()},
                      'cv_auc': best_cv if fold_count else None, 'cv_folds': fold_count})
+        if configuration:
+            from sklearn.metrics import brier_score_loss, f1_score, log_loss, precision_recall_curve, auc as area
+            precision, recall, _ = precision_recall_curve(y.iloc[test], probability)
+            runs[-1].update(brier_score=float(brier_score_loss(y.iloc[test], probability)),
+                            log_loss=float(log_loss(y.iloc[test], probability, labels=[0, 1])),
+                            f1=float(f1_score(y.iloc[test], probability >= threshold, zero_division=0)),
+                            pr_auc=float(area(recall, precision)))
         last = (best, train, test)
     best, train, test = last
     try:
@@ -287,6 +304,12 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                              'validation_reserve': {k:v for k,v in reserve.items()
                                                     if k != 'exploration_rows'}},
               'explanation': explanation}
+    if configuration:
+        result['ml_configuration'] = configuration
+        result['data_quality']['preprocessing'] = (
+            'Training-fold one-hot encoding; numeric ' +
+            ('standard scaling.' if configuration['scale_numeric'] else 'passthrough.') +
+            ' No cleaning, imputation or row changes.')
     if path.read_bytes() != source_bytes:
         raise DataQualityError('Input changed during evaluation; results cannot be reproduced.')
     if persist:
@@ -296,7 +319,10 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
         selection = handoff.get('feature_selection')
         result['evaluation']['reproducibility'] = save_bundle(
             source_bytes, target, plan, list(X.columns), fixed_trials, partition, artifacts, result,
-            feature_selection=selection, data_allocation=handoff.get('data_allocation'))
+            feature_selection=selection, data_allocation=handoff.get('data_allocation'),
+            configuration=configuration,
+            agent_plan=json.loads(path.with_suffix(".ml-plan.json").read_text())
+            if path.with_suffix(".ml-plan.json").exists() else None)
     return result
 
 
