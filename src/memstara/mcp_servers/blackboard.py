@@ -125,6 +125,12 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
     # commas included, is left exactly as given.
     cols = [str(c).strip() for c in columns if str(c).strip()]
     ids = [str(c).strip() for c in (okf_concept_ids or []) if str(c).strip()]
+    from memstara.pipeline.feature_selection import validate as validate_selection, scoped
+    try:
+        feature_selection = validate_selection(columns, snapshot, trial)
+        snapshot = scoped(snapshot, trial)
+    except ValueError as exc:
+        return json.dumps({"error": str(exc), "code": "invalid_feature_selection"})
     from memstara.pipeline.critic import review
     try:
         critic = review(cols, snapshot, question_id, trial)
@@ -206,7 +212,9 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
                                 "hypothesis_policy": {**snapshot.get("hypothesis_policy", {}),
                                     **({"kind": contract["kind"]} if contract and "kind" in contract else {})},
                                 "question_contract": contract, "feature_mapping": feature_mapping,
-                                "critic": critic} if snapshot else {}),
+                                "critic": critic,
+                                **({"feature_selection": feature_selection} if feature_selection else {})}
+                               if snapshot else {}),
                 )
         finally:
             await conn.close()
@@ -452,6 +460,9 @@ async def submit_result(task_id: int, subset_path: str = "",
                         return json.dumps({"error": f"Question contract rejected: {exc}"})
 
                 stage = cur["task_type"]          # the stage this task is at now
+                if (plan or {}).get("feature_selection_policy"):
+                    # Only verified extraction/model artifacts can update these fields.
+                    used_json = missing_json = ""
                 if stage == "data" and (plan or {}).get("comparison_policy"):
                     from memstara.comparisons import write_context
                     try:
@@ -466,6 +477,12 @@ async def submit_result(task_id: int, subset_path: str = "",
                             shutil.copyfile(source, destination)
                         subset_path = str(destination)
                         write_context(subset_path, dict(cur), plan)
+                        if plan.get("feature_selection_policy"):
+                            original = cur["columns"]
+                            if isinstance(original, str):
+                                original = json.loads(original)
+                            used_json = json.dumps(original + [cur["y_column"]])
+                            missing_json = "[]"
                     except (ValueError, OSError) as exc:
                         return json.dumps({"error": f"Comparison inputs rejected: {exc}"})
                 if stage == "interpret" and not interpretation.strip():
@@ -515,6 +532,14 @@ async def submit_result(task_id: int, subset_path: str = "",
                             task_id, measured["error"], json.dumps({**(previous or {}), **measured}))
                         return json.dumps({"ok": True, "task_id": task_id, "status": "failed",
                                            "task_type": "ml", "reason": measured["error"]})
+                    if (plan or {}).get("feature_selection_policy"):
+                        from memstara.pipeline.feature_selection import validate_measured
+                        try:
+                            fitted = validate_measured(measured.get("features"), previous["feature_selection"])
+                        except (ValueError, KeyError) as exc:
+                            return json.dumps({"error": str(exc)})
+                        used_json = json.dumps(fitted + [cur["y_column"]])
+                        missing_json = "[]"
                     auc, model = measured["auc"], measured["model"]
                     feature_importance = json.dumps(measured["feature_importance"])
                     await conn.execute("UPDATE memstara_blackboard SET evaluation=$2::jsonb WHERE task_id=$1",
@@ -1179,7 +1204,7 @@ async def propose_questions(questions: list[QuestionProposal] | str, origin_run:
                         rejected.append({"text": text, "why": "empty text"})
                         continue
                     from memstara.pipeline.ablation import enabled as ablation_enabled
-                    if not tags and not ablation_enabled(plan):
+                    if not tags and not (ablation_enabled(plan) or contract.get("kind") == "random_feature_control"):
                         rejected.append({
                             "text": text,
                             "why": "no okf_tags — a question the corpus cannot answer forces "
@@ -1197,7 +1222,8 @@ async def propose_questions(questions: list[QuestionProposal] | str, origin_run:
                     # Checked before the insert, not after: the unique index below is a
                     # string comparison and would let this one through.
                     near = _near_duplicate(text, tags, banked)
-                    if near is not None and not contract.get("parent_task_ids"):
+                    if (near is not None and not contract.get("parent_task_ids")
+                            and contract.get("kind") != "random_feature_control"):
                         near_qid, ratio = near
                         skipped.append({
                             "text": text,

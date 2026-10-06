@@ -194,6 +194,8 @@ def build_argv(
     trials = _whole_number(body, "trials", _MAX_TRIALS)
     combination_plan = None
     if body.get("combination_skills"):
+        if baseline:
+            raise ValueError("All Combinations uses 4–20 hypothesis predictors; clear fixed baseline columns")
         from memstara.combinations import build_plan
         combination_plan = build_plan(body["combination_skills"], body.get("combination_repetitions", 1),
                                       random_start=body.get('combination_random_start', False),

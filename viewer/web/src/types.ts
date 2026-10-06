@@ -173,6 +173,9 @@ export interface Result {
   run_tag?: string; pipeline_id?: string; pipeline_name?: string; iteration?: number | null;
   hypothesis_id?: string;
   evaluation?: {
+    feature_selection?: {mode: "guided" | "random"; minimum: number; maximum: number;
+      actual_count: number; features: string[]; seed: number | null; pool_size: number;
+      pool_sha256: string; loop: number; combination: number};
     comparison?: ModelComparison;
     question_contract?: QuestionContract;
     hypothesis_policy?: { version?: string; kind?: string; validation_status?: string };

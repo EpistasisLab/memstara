@@ -430,6 +430,12 @@ async def _call_agent_uncontrolled(
     from memstara.evaluation import active_plan
     from memstara.pipeline.ablation import enabled, filter_tools, INSTRUCTIONS
     plan = active_plan()
+    if stage.startswith(("hypothesis", "question")):
+        from memstara.pipeline.feature_selection import scoped, hypothesis_tools, instructions as selection_instructions
+        wave = max(0, (_CURRENT_LOOP.get() or 1) - 1)
+        prompt += selection_instructions(plan, wave)
+        tools = hypothesis_tools(tools, plan, wave)
+        plan = scoped(plan, wave)
     tools = filter_tools(tools, plan)
     if enabled(plan):
         prompt += '\n' + INSTRUCTIONS
@@ -1087,6 +1093,8 @@ async def questions_for_wave(
     from memstara.pipeline.question_contract import generation_instructions
     from memstara.pipeline.iteration_learning import enabled as learning_enabled, summarize, save_feedback, instructions
     snapshot = active_plan()
+    from memstara.pipeline.feature_selection import scoped
+    snapshot = scoped(snapshot, wave)
     if learning_enabled(snapshot):
         history = await call_board_tool(registry, "read_board", {"run_tag": run_tag}) if wave else {"tasks": []}
         if not isinstance(history, dict) or "tasks" not in history or history.get("error"):
@@ -1102,6 +1110,8 @@ async def questions_for_wave(
     ask += generation_instructions(snapshot)
     from memstara.pipeline.feature_context import instructions as feature_instructions
     ask += feature_instructions(snapshot)
+    from memstara.pipeline.feature_selection import instructions as selection_instructions
+    ask += selection_instructions(snapshot, wave)
     if snapshot and snapshot.get("question"):
         ask += " Research question: " + snapshot["question"]
     if skill:
@@ -1711,6 +1721,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                             "concept and selected column. Read actual Instances and pass clinical entities "
                             "to match_concepts, never relation labels. "
                             "If those concepts cannot be mapped, stop without creating an unrelated task.")
+                from memstara.pipeline.feature_selection import instructions as selection_instructions
+                ask += selection_instructions(plan, i)
                 _, call = await call_agent(
                     agent_id, ask,
                     tools=by_stage["hypothesis"], registry=registry, temperature=temperature_for(i),

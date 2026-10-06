@@ -46,16 +46,25 @@ def knowledge_text(value, label, limit=4000):
 
 
 def make_contract(item, plan):
+    from memstara.pipeline.feature_selection import context, scoped
+    selection = context(plan, item.get("origin_wave"))
+    random_selection = selection is not None and selection["mode"] == "random"
+    if selection:
+        plan = scoped(plan, item["origin_wave"])
     target = plan.get("y_column")
     if not isinstance(target, str) or not target or item.get("target", target) != target:
         raise ValueError("Question target must exactly match the fixed run target")
     concepts = item.get("predictor_concepts")
     if not isinstance(concepts, list) or not 1 <= len(concepts) <= 40:
         raise ValueError("Supply 1–40 predictor_concepts grounded in the knowledge source")
-    concepts = [knowledge_text(c, "predictor concept", 160) for c in concepts]
+    if random_selection:
+        if concepts != selection["required_features"]:
+            raise ValueError("Random question must use the exact server-sampled predictors")
+    else:
+        concepts = [knowledge_text(c, "predictor concept", 160) for c in concepts]
     if len(set(c.casefold() for c in concepts)) != len(concepts):
         raise ValueError("Predictor concepts must be distinct")
-    for concept in concepts:
+    for concept in ([] if random_selection else concepts):
         if re.sub(r"[^A-Z0-9]", "", concept.upper().split("(")[0]) in RELATION_TYPES:
             raise ValueError("A graph relation is not a predictor concept. Read the document's "
                              "Instances section and use concrete clinical entities or measurements.")
@@ -110,6 +119,10 @@ def make_contract(item, plan):
         inventory = plan.get("knowledge_hashes", {})
         if inventory and any(s.removesuffix(".md") + ".md" not in inventory for s in sources):
             raise ValueError("Source document is not in the frozen knowledge bundle")
+    if selection:
+        lineage["origin_wave"] = item["origin_wave"]
+        if random_selection:
+            lineage["kind"] = "random_feature_control"
     contract = {"version": VERSION, "target": target, "predictor_concepts": concepts,
                 "rationale": rationale, **lineage,
                 **({"evidence_mode": "no_okf"} if ablated else {}),
@@ -120,7 +133,10 @@ def make_contract(item, plan):
 
 
 def question_text(contract):
-    return f"Do {'; '.join(contract['predictor_concepts'])} predict {contract['target']}?"
+    text = f"Do {'; '.join(contract['predictor_concepts'])} predict {contract['target']}?"
+    if contract.get("kind") == "random_feature_control":
+        text += f" (Random control, Loop {contract['origin_wave'] + 1})"
+    return text
 
 
 def hypothesis_text(contract):

@@ -95,6 +95,9 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         "waves": args.waves,
         "continuous": getattr(args, "continuous", False),
     }
+    if combination_plan and not getattr(args, "report_only", False):
+        from memstara.pipeline.feature_selection import freeze as freeze_selection
+        state["feature_selection_policy"] = freeze_selection(state)
     knowledge = Path(os.environ.get("AGENTIC_OKF_BUNDLE_DIR", "/nonexistent"))
     state["knowledge_hashes"] = (
         {

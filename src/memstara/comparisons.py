@@ -36,6 +36,10 @@ def write_context(subset_path, task, snapshot):
     columns = task['columns']
     if isinstance(columns, str):
         columns = json.loads(columns)
+    from memstara.pipeline.feature_selection import validate as validate_selection
+    selected = validate_selection(columns, snapshot, task.get('trial'))
+    if selected and evaluation.get('feature_selection') != selected:
+        raise ValueError('Task feature selection provenance changed before training')
     baseline = validate_baseline(snapshot['comparison_policy']['baseline_columns'], task['y_column'])
     groups = {}
     for row in evaluation.get('feature_mapping', []):

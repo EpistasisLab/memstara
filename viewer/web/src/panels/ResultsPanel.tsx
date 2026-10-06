@@ -151,6 +151,14 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
                   </div>
                   <ContentOrigin kind="rule" compact/><p className="text-xs text-ink-soft">The status above uses a fixed rule: AUC unavailable, AUC ≤ 0.5, or AUC &gt; 0.5. It is not a research-priority assessment.</p><p className="mt-2 text-xs text-ink-soft">Predictor inputs used by the model:</p>
                   <div className="mt-2 flex flex-wrap gap-1">
+                    {r.evaluation?.feature_selection && <p className="w-full text-xs text-ink-soft">
+                      Hypothesis selection: {r.evaluation.feature_selection.mode} · {r.evaluation.feature_selection.actual_count} original predictors
+                      {' '}· allowed {r.evaluation.feature_selection.minimum}–{r.evaluation.feature_selection.maximum}
+                      {' '}· eligible pool {r.evaluation.feature_selection.pool_size}
+                      {r.evaluation.feature_selection.seed != null && <> · random seed {r.evaluation.feature_selection.seed}</>}
+                      {' '}· Loop {r.evaluation.feature_selection.loop} · combination {r.evaluation.feature_selection.combination}.
+                      The list below contains the predictors recorded for this evaluated result.
+                    </p>}
                     {predictors.map(column => <span key={column} className="rounded border border-[#c9d9e8] bg-white px-1.5 py-0.5 font-mono text-[12px] text-ink-soft">{column}</span>)}
                     {(r.columns_used ?? []).length === 0 && <span className="text-xs text-ink-faint">No features were recorded.</span>}
                   </div>

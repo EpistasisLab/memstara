@@ -46,6 +46,12 @@ def retry_instructions(plan, wave, writer):
 
 async def preflight_mapping(contract, plan):
     """Candidate existence is necessary, never sufficient, for clinical equivalence."""
+    from memstara.pipeline.feature_selection import context
+    selection = context(plan, contract.get("origin_wave"))
+    if selection and selection["mode"] == "random":
+        if contract["predictor_concepts"] != selection["required_features"]:
+            return {"code": "random_selection_changed", "why": "Keep the frozen random sample"}
+        return None
     if not plan.get("feature_context"):
         return None  # Legacy snapshots lack the frozen catalog required by this check.
     import asyncio
