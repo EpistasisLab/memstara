@@ -1,3 +1,4 @@
+import ExpertExplanationEvidence from "../components/ExpertExplanationEvidence";
 import ContentOrigin from "../components/ContentOrigin";
 import { transparentReportMarkdown } from "../lib/reportTransparency";
 import LoopUsage from "../components/LoopUsage";
@@ -91,6 +92,7 @@ export default function ReportPanel() {
               <summary className="cursor-pointer text-sm font-semibold">Loop learning history</summary>
               {snapshot.results.map(r => <ScientificProvenance key={r.result_id} result={r} />)}
             </details>}
+          <ExpertExplanationEvidence evidence={report?.specialist_explanation}/>
           {report?.error && <p role="status" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{report.error}</p>}
           {snapshot.results.filter(result => result.evaluation?.explanation?.review_status).map(result =>
             <details key={result.result_id} className="mb-3 rounded-lg border border-paper-line p-3">

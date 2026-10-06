@@ -611,6 +611,25 @@ async def settle_finished_workers(registry: MCPServerRegistry, run_tag: str,
 
 
 async def call_report(*args, **kwargs) -> tuple[str, dict[str, Any]]:
+    """Run a scoped specialist when frozen; preserve historical report behavior."""
+    from memstara.evaluation import active_plan
+    from memstara.specialist_explanation import execute
+    plan = active_plan() or {}
+    if not plan.get("specialist_explanation_policy"):
+        return await _call_report_default(*args, **kwargs)
+    run_dir = _TRACE_DIR.parent if _TRACE_DIR else None
+    text, entry = await execute(plan, _CURRENT_LOOP.get(), run_dir,
+                                args, kwargs, _call_report_default, call_board_tool)
+    if entry.get("status") != "completed":
+        if run_dir:
+            save_report(run_dir, text, entry)
+        from memstara.pipeline.failures import stop_execution
+        stop_execution(run_dir, "report", _CURRENT_LOOP.get(),
+                       RuntimeError(entry.get("error", "Specialist Explanation failed")))
+    return text, entry
+
+
+async def _call_report_default(*args, **kwargs) -> tuple[str, dict[str, Any]]:
     """Retry the read-only reporting stage once; never replay data/ML writes."""
     for attempt in range(2):
         try:
@@ -631,6 +650,8 @@ def save_report(run_dir: Path, text: str, entry: dict[str, Any]) -> bool:
     complete = entry.get("status") == "completed" and bool(text.strip())
     status = {"status": "completed" if complete else "failed", "agent_run_id": entry.get("run_id"),
               "error": None if complete else entry.get("error", "Explanation agent returned no report text")}
+    if entry.get("specialist_explanation"):
+        status["specialist_explanation"] = entry["specialist_explanation"]
     (run_dir / "report_status.json").write_text(json.dumps(status, indent=2), encoding="utf-8")
     if complete:
         temporary = run_dir / "report.md.tmp"
@@ -1308,7 +1329,9 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     configure(runtime_settings)   # Set up the runtime before provisioning or opening tools.
     from memstara.pipeline.diagnostics import install
     install()
-    freeze(args, run_dir, chosen_playbooks(args))
+    frozen_configuration = freeze(args, run_dir, chosen_playbooks(args))
+    from memstara.specialist_explanation import preflight as explanation_preflight
+    await explanation_preflight(frozen_configuration, run_dir)
     from memstara.pipeline.checkpoint import Checkpoint, atomic_json
     checkpoint = None if args.report_only else Checkpoint(run_dir, resume=args.resume)
     _EXECUTION_GATE.checkpoint = checkpoint

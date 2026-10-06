@@ -85,3 +85,13 @@ def test_pipeline_results_keeps_all_outputs_and_run_identity(monkeypatch):
     assert len(response["results"]) == 4
     assert [(r["run_tag"], r["iteration"]) for r in response["results"]] == [
         ("a", 1), ("a", 4), ("b", 1), ("b", 4)]
+
+
+def test_specialist_report_provenance_survives_api(tmp_path,monkeypatch):
+    monkeypatch.setattr(run_artifacts,'ROOT',tmp_path)
+    directory=tmp_path/'expert';directory.mkdir()
+    (directory/'config.json').write_text(json.dumps({'run_tag':'expert'}))
+    metadata={'status':'completed','expert':'hiv','database_ids':['hiv-fixture'],
+              'interpretation_methods':['shap'],'task_ids':[12]}
+    (directory/'report_status.json').write_text(json.dumps({'status':'completed','specialist_explanation':metadata}))
+    assert run_artifacts.lookup('expert')['report']['specialist_explanation']==metadata

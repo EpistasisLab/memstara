@@ -121,6 +121,10 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
             state["specialist_xai_policy"] = specialist
             from memstara.ml_configuration import policy
             state.setdefault("ml_configuration_policy", policy())
+    from memstara.specialist_explanation import freeze as freeze_explanation
+    explanation = freeze_explanation(books, resolved)
+    if explanation:
+        state["specialist_explanation_policy"] = explanation
     state["config_hash"] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
     location = run_dir / "config.json"
     if location.exists():

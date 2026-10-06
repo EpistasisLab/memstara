@@ -1,3 +1,4 @@
+import ExpertExplanationEvidence from "./ExpertExplanationEvidence";
 import { transparentReportMarkdown } from "../lib/reportTransparency";
 import LoopUsage from "./LoopUsage";
 import { useTelemetryTotals } from "./TelemetryTotals";
@@ -32,6 +33,7 @@ export default function FinalReport() {
     </div>
     <p className="px-3 pb-2 text-[12px] text-ink-faint">{tag}</p>
     {report.error && <p role="status" className="px-3 pb-3 text-sm text-amber-800">{report.error}</p>}
+    <ExpertExplanationEvidence evidence={report.specialist_explanation}/>
     {expanded && <div className="border-t border-paper-line p-4">
       <LoopUsage execution={execution} updatedAt={usage.data?.updated_at} error={usage.error}/>
       {report.text ? <Suspense fallback={<p>Loading report…</p>}><div data-final-report-content><ReportBody report analysesPerLoop={analysesPerLoop} text={report.text} /></div></Suspense>

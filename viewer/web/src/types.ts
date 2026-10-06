@@ -321,7 +321,7 @@ export interface RunConfiguration {
 export interface Snapshot {
   run_configuration?: RunConfiguration | null;
   scene_scope?: string;
-  report?: { status: string; text: string; error?: string | null } | null;
+  report?: { status: string; text: string; error?: string | null; specialist_explanation?: ExplanationEvidence | null } | null;
   pipeline?: { status: string; report_completed?: boolean; message?: string; reason?: string } | null;
   run_tag: string;
   runs: RunSummary[];
@@ -338,4 +338,18 @@ export interface Snapshot {
   /** Every run and both driving paths — not just the selected run. See api/scene._feed. */
   feed: FeedEvent[];
   results: Result[];
+}
+
+
+export interface ExplanationEvidence {
+  status: string;
+  expert?: string;
+  loop?: number | null;
+  database_ids?: string[];
+  interpretation_methods?: string[];
+  task_ids?: number[];
+  citations?: string[];
+  reports?: ExplanationEvidence[];
+  missing_loops?: number[];
+  aggregation?: string;
 }

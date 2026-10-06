@@ -17,6 +17,8 @@ ROLES = ('hypothesis', 'data', 'ml', 'interpreter', 'report')
 ANIL_SKILLS = {
     'shared-anil-shap': ('SHAP-Interpretation.md', 'interpreter', 'SHAP Interpretation'),
     'shared-anil-lime': ('LIME-Interpretation.md', 'interpreter', 'LIME Interpretation'),
+    'shared-anil-addiction': ('Addiction-Expert-Explanation.md', 'report', 'Addiction Expert Explanation'),
+    'shared-anil-hiv': ('HIV-Expert-Explanation.md', 'report', 'HIV Expert Explanation'),
 }
 
 

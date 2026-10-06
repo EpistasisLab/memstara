@@ -101,7 +101,8 @@ def lookup(tag):
             "calls": calls,
             "report": {"status": (report_status or {}).get(
                            "status", "available" if report.strip() else "not_available"),
-                       "text": report, "error": (report_status or {}).get("error")},
+                       "text": report, "error": (report_status or {}).get("error"),
+                       "specialist_explanation": (report_status or {}).get("specialist_explanation")},
             "pipeline": read_json(directory / "pipeline_status.json"),
         }
         return result

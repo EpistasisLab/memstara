@@ -110,6 +110,11 @@ class PipelineLLMService(LLMService):
             kwargs['max_retries'] = 0
         context = call_context.get()
         prepared = provider_messages(messages, config.model)
+        if context and context[2] == 'report':
+            from memstara.evaluation import active_plan
+            if (active_plan() or {}).get('specialist_explanation_policy'):
+                from memstara.specialist_explanation import record_model
+                record_model(config, context, call_loop.get())
         with request_scope(config.model):
             for attempt in range(6):
                 await request_ready(context)
