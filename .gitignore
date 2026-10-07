@@ -51,3 +51,6 @@ htmlcov/
 
 # Local-only recorded examples for the developer lesson; never publish run artifacts.
 /viewer/web/public/local-examples/
+
+# Deployment-specific model endpoints; credentials remain in the runtime environment.
+/config/stage-models.local.json

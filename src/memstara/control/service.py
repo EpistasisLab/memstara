@@ -159,6 +159,8 @@ class _Runs:
                                            ("hypotheses", "interpreters", "interpretation_mode",
                                             "books", "evaluation", "comparison_policy", "trials", "waves", "continuous",
                                             "question", "y_column", "provider", "model")}
+                from memstara.stage_models import public_profiles
+                record["configuration"]["stage_models"] = public_profiles(config.get("stage_models"))
             except (OSError, ValueError):
                 pass
             record["waiting_for_questions"] = (Path(record["run_dir"]) / "questions.waiting").exists()
@@ -572,7 +574,15 @@ class Handler(BaseHTTPRequestHandler):
                        "source": "motoro/.env (process environment)", "restart_required_after_edit": True}
             except ValueError as exc:
                 llm = {"provider": "", "model": "", "error": str(exc)}
-            self._send(200, {"ok": True, "bundle": bundle, "running": RUNS.running(), "llm": llm})
+            from memstara.stage_models import deployment_profiles, public_profiles
+            try:
+                stage_models = public_profiles(deployment_profiles())
+                stage_model_error = None
+            except ValueError:
+                stage_models = {}
+                stage_model_error = "Deployment stage model profiles are missing or invalid"
+            self._send(200, {"ok": True, "bundle": bundle, "running": RUNS.running(), "llm": llm,
+                             "stage_models": stage_models, "stage_model_error": stage_model_error})
             return
 
         if path.startswith("/control/pipelines/") and path.endswith("/combinations"):

@@ -189,7 +189,7 @@ async def _ensure_agent(name: str, **kwargs: Any) -> Any:
         # model_config (models/agent.py:49). Reading existing.model_config here
         # would pick up pydantic's own class attribute instead.
         current = existing.model_config_data or {}
-        if (current.get("provider"), current.get("model")) != (wanted_mc.provider.value, wanted_mc.model):
+        if current != wanted_mc.model_dump(mode="json"):
             updates["model_config"] = wanted_mc
 
     for attr in ("system_prompt", "goal"):
@@ -432,18 +432,28 @@ async def provision_board_agents(
     *, provider: str = "", model: str = "",
     playbooks: dict[str, list[str]] | None = None,
     namespace: str = "",
+    stage_models: dict | None = None,
 ) -> dict[str, uuid.UUID]:
     """Create the board-driven agents (or find the existing ones)."""
     from memstara.env import configured_llm, configured_api_base
-    provider, model = configured_llm(provider, model)
-    mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096,
-                     api_base=configured_api_base(provider))
+    if stage_models:
+        from memstara.stage_models import validate_profiles
+        validate_profiles(stage_models)
+    mc = None
+    if not stage_models:
+        provider, model = configured_llm(provider, model)
+        mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096,
+                         api_base=configured_api_base(provider))
     react = {"execution_pattern": "reason_act"}
 
     out: dict[str, uuid.UUID] = {}
     for key, (name, book) in board_workers(playbooks, namespace).items():
+        selected_model = mc
+        if stage_models:
+            from memstara.stage_models import for_stage
+            selected_model = ModelConfig(**for_stage(stage_models, key))
         agent = await _ensure_agent_from_file(
-            name, f"board/{stage_of(key)}", book, model_config=mc, pattern_config=react,
+            name, f"board/{stage_of(key)}", book, model_config=selected_model, pattern_config=react,
         )
         out[key] = agent.id
     return out

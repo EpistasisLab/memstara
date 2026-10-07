@@ -1329,6 +1329,24 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     configure(runtime_settings)   # Set up the runtime before provisioning or opening tools.
     from memstara.pipeline.diagnostics import install
     install()
+    from memstara.stage_models import resolve_run_profiles
+    frozen_models = None
+    if args.resume:
+        frozen_models = json.loads((run_dir / "config.json").read_text())
+    elif args.report_only:
+        from memstara.paths import RUNS_DIR
+        originals = [json.loads(path.read_text()) for path in RUNS_DIR.glob("*/config.json")]
+        originals = [item for item in originals if item.get("run_tag") == args.run_tag
+                     and item.get("mode") != "report_only"]
+        if len(originals) != 1:
+            raise ValueError("Report recovery requires one unambiguous frozen source execution")
+        frozen_models = originals[0]
+    stage_models = resolve_run_profiles(getattr(args, "stage_models", {}),
+                                       recovering=bool(args.resume or args.report_only), frozen=frozen_models)
+    args.stage_models = stage_models
+    if stage_models:
+        from memstara.stage_models import preflight_profiles
+        await preflight_profiles(stage_models)
     frozen_configuration = freeze(args, run_dir, chosen_playbooks(args))
     from memstara.specialist_explanation import preflight as explanation_preflight
     await explanation_preflight(frozen_configuration, run_dir)
@@ -1378,7 +1396,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     workers = board_workers(playbooks, args.run_tag if args.pipeline_id else "")
     agents = await provision_board_agents(
         provider=args.provider, model=args.model, playbooks=playbooks,
-        namespace=args.run_tag if args.pipeline_id else ""
+        namespace=args.run_tag if args.pipeline_id else "", stage_models=stage_models or None
     )
     done("(1)", f"{len(agents)} ready — {' · '.join(agents)}")
 
@@ -1565,7 +1583,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 from memstara.combinations import prepare_loop
                 agents, flavors, playbooks, namespace = await prepare_loop(
                     combination_plan, wave + 1, provider=args.provider, model=args.model,
-                    run_tag=args.run_tag, provision=provision_board_agents,
+                    run_tag=args.run_tag, provision=provision_board_agents, stage_models=stage_models or None,
                 )
                 _CURRENT_FLAVORS.set(flavors)
                 workers = board_workers(playbooks, namespace)

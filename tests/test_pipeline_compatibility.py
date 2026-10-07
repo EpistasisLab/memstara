@@ -37,7 +37,8 @@ def test_content_blocks_and_images_remain_in_order():
                 {'role': 'system', 'content': [{'type': 'text', 'text': 'skill'}]},
                 {'role': 'user', 'content': [{'type': 'image_url', 'image_url': {'url': 'test'}}]}]
     assert provider_messages(messages, 'qwen-test') == [
-        {'role': 'system', 'content': [{'type': 'text', 'text': 'rules'}, {'type': 'text', 'text': 'skill'}]}, messages[2]]
+        {'role': 'system', 'content': [{'type': 'text', 'text': 'rules'}, {'type': 'text', 'text': 'skill'}]},
+        messages[2]]
 
 
 @pytest.mark.parametrize('method', ['complete', 'complete_text', 'complete_with_tools'])
@@ -45,7 +46,8 @@ def test_actual_service_entrypoints_use_adapter(method, monkeypatch):
     invoke = AsyncMock(return_value='response')
     monkeypatch.setattr(LLMService, method, invoke)
     service = PipelineLLMService()
-    messages = [{'role': 'system', 'content': 'a'}, {'role': 'system', 'content': 'b'}, {'role': 'user', 'content': 'c'}]
+    messages = [{'role': 'system', 'content': 'a'}, {'role': 'system', 'content': 'b'},
+                {'role': 'user', 'content': 'c'}]
     args = [NS(model='qwen--qwen38-27b'), messages]
     if method == 'complete_with_tools':
         args.append([{'name': 'test'}])
@@ -60,7 +62,10 @@ def test_current_registry_scopes_local_tools_but_excludes_foreign_owners():
         key = uuid4()
         tool = NS(name=name, description='', input_schema={}, title=None, output_schema=None, annotations=None)
         client = NS(connected=True, tools=[tool], instructions='')
-        registry._servers[key] = ServerEntry(key, 'memstara-data', owner, False, 'stdio', None, None, client)
+        registry._servers[key] = ServerEntry(
+            server_id=key, name='memstara-data', owner_id=owner, is_system=False,
+            transport='stdio', command=None, url=None, config_revision=0, client=client,
+        )
     assert registry.get_all_tools() == []  # Reproduces the old unscoped lookup failure.
     assert [t['tool_name'] for t in tools_for(registry, {'memstara-data'})] == ['allowed']
     assert tools_for(registry, {'memstara-data'}, only={'foreign'}) == []
@@ -78,6 +83,7 @@ def test_preflight_refuses_even_one_missing_tool(tmp_path):
 
 @pytest.fixture
 def isolated_board(tmp_path, monkeypatch):
+    monkeypatch.setattr('memstara.stage_models.deployment_profiles', lambda: {})
     trace = tmp_path / 'trace'
     trace.mkdir()
     monkeypatch.setattr(board, '_TRACE_DIR', trace)
@@ -85,7 +91,8 @@ def isolated_board(tmp_path, monkeypatch):
     monkeypatch.setattr(board, '_EXECUTION_GATE', None)
     monkeypatch.setattr('memstara.evaluation.active_plan', lambda: None)
     monkeypatch.setattr(board, 'create_run', AsyncMock(return_value=NS(id=uuid4(), owner_id=None)))
-    monkeypatch.setattr(board, 'execute_run', AsyncMock(return_value=NS(status='failed', error='BadRequestError: System message must be at the beginning. secret-key', output='')))
+    monkeypatch.setattr(board, 'execute_run', AsyncMock(return_value=NS(
+        status='failed', error='BadRequestError: System message must be at the beginning. secret-key', output='')))
     return tmp_path
 
 
@@ -104,7 +111,8 @@ def test_failure_is_durable_and_blocks_every_later_role(isolated_board):
 def test_question_failure_does_not_trigger_retry(isolated_board, monkeypatch):
     monkeypatch.setattr(board, 'call_board_tool', AsyncMock(return_value={'questions': []}))
     with pytest.raises(PipelineExecutionFailure):
-        asyncio.run(board.questions_for_wave(None, {'hypothesis': 'agent'}, {'question': []}, run_tag='test', wave=0, want=1))
+        asyncio.run(board.questions_for_wave(
+            None, {'hypothesis': 'agent'}, {'question': []}, run_tag='test', wave=0, want=1))
     assert board.execute_run.await_count == 1
 
 
@@ -118,7 +126,8 @@ def test_run_creation_failure_also_stops_question_retries(isolated_board, monkey
     board.create_run.side_effect = ConnectionError('private detail')
     monkeypatch.setattr(board, 'call_board_tool', AsyncMock(return_value={'questions': []}))
     with pytest.raises(PipelineExecutionFailure):
-        asyncio.run(board.questions_for_wave(None, {'hypothesis': 'agent'}, {'question': []}, run_tag='test', wave=0, want=1))
+        asyncio.run(board.questions_for_wave(
+            None, {'hypothesis': 'agent'}, {'question': []}, run_tag='test', wave=0, want=1))
     assert board.create_run.await_count == 1
     assert board.execute_run.await_count == 0
     assert visible_failure(isolated_board)['code'] == 'model_connection'
@@ -135,7 +144,8 @@ def test_legacy_failure_is_read_only_and_new_execution_is_clear(tmp_path):
     old = tmp_path / 'old'
     old.mkdir()
     path = old / 'execution.json'
-    path.write_text(json.dumps({'calls': [{'status': 'failed', 'stage': 'question0-1', 'error': 'System message must be at the beginning. private'}]}))
+    path.write_text(json.dumps({'calls': [{'status': 'failed', 'stage': 'question0-1',
+                                         'error': 'System message must be at the beginning. private'}]}))
     original = path.read_bytes()
     assert visible_failure(old)['code'] == 'model_message_format'
     assert 'private' not in visible_failure(old)['message']

@@ -1,14 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { Cpu, RefreshCw, X } from "lucide-react";
 
+import { stageModelRows, type ModelConfiguration, type StageProfiles } from "../lib/stageModels";
+
 type Connection = { provider: string; model: string; endpoint?: string; resource?: string; source?: string; error?: string };
-type Active = { name: string; running?: { run_tag: string; configuration?: { provider?: string; model?: string } } };
+type Active = { id: string; name: string; configuration?: ModelConfiguration; configuration_error?: string; running?: { run_tag: string; configuration?: ModelConfiguration } };
+
+function Assignment({configuration}: {configuration?: ModelConfiguration}) {
+  return <dl className="space-y-2" aria-label="Stage model assignments">{stageModelRows(configuration).map(row =>
+    <div key={row.stage} className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[140px_minmax(0,1fr)]">
+      <dt className="text-sm text-ink-soft">{row.stage}</dt>
+      <dd className="min-w-0 text-sm [overflow-wrap:anywhere]">{row.model} · {row.provider}</dd>
+    </div>)}</dl>;
+}
 
 export default function ModelConnectionDialog() {
   const dialog = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [data, setData] = useState<{ llm: Connection; pipelines: Active[] } | null>(null);
+  const [data, setData] = useState<{ llm: Connection; pipelines: Active[]; stage_models?: StageProfiles; stage_model_error?: string } | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   useEffect(() => {
@@ -24,7 +34,7 @@ export default function ModelConnectionDialog() {
     Promise.all([read("/control/health"), read("/control/pipelines")]).then(([health, workspace]) => {
       if (controller.signal.aborted) return;
       if (!health.llm) throw new Error("Model settings are unavailable. Refresh the control service.");
-      setData({ llm: health.llm, pipelines: (workspace.pipelines ?? []).filter((p: Active) => p.running) });
+      setData({ llm: health.llm, pipelines: workspace.pipelines ?? [], stage_models: health.stage_models, stage_model_error: health.stage_model_error });
     }).catch(e => { if (dialog.current?.open) setError(e.name === "AbortError" ? "The service did not respond in time. Please retry." : e.message); })
       .finally(() => { clearTimeout(timeout); if (!controller.signal.aborted || dialog.current?.open) setLoading(false); });
     return () => { clearTimeout(timeout); controller.abort(); };
@@ -41,11 +51,15 @@ export default function ModelConnectionDialog() {
         <button type="button" aria-label="Close model connection" onClick={() => dialog.current?.close()} className="rounded-lg p-2"><X size={20} /></button>
       </header>
       <div className="space-y-5 p-5" aria-busy={loading}>
-        <p className="text-sm text-ink-soft">Server configuration used for new executions.</p>
+        <p className="text-sm text-ink-soft">Default assignments and each pipeline’s saved or active assignments. Active assignments come from its frozen execution.</p>
         {loading && <p role="status">Loading connection settings…</p>}
         {error && <p role="alert" className="text-sm">{error}</p>}
         {data && <>
           {data.llm.error && <p role="alert">{data.llm.error}</p>}
+          {data.stage_model_error && <p role="alert">{data.stage_model_error}</p>}
+          <section className="space-y-2"><h3 className="font-semibold">New pipeline defaults</h3>
+            {!data.stage_model_error && <Assignment configuration={{...data.llm, stage_models: data.stage_models}}/>}
+          </section>
           <dl className="space-y-3">
             {[["Deployment model", data.llm.model], ["Connection provider", data.llm.provider], ["Azure resource", data.llm.resource],
               ["Endpoint", data.llm.endpoint], ["Configuration source", data.llm.source]].map(([label, value]) =>
@@ -54,14 +68,16 @@ export default function ModelConnectionDialog() {
               </div>)}
           </dl>
           <section className="space-y-2">
-            <h3 className="font-semibold">Running pipelines</h3>
-            {data.pipelines.length === 0 ? <p className="text-sm text-ink-soft">No pipelines are running.</p> : data.pipelines.map(p =>
-              <div key={p.running!.run_tag} className="rounded-lg border border-paper-line p-3">
+            <h3 className="font-semibold">Pipeline assignments</h3>
+            {data.pipelines.length === 0 ? <p className="text-sm text-ink-soft">No saved pipelines.</p> : data.pipelines.map(p =>
+              <div key={p.id} className="rounded-lg border border-paper-line p-3">
                 <p className="font-semibold [overflow-wrap:anywhere]">{p.name}</p>
-                <p className="text-sm text-ink-soft">{p.running?.configuration?.model || "Model not recorded"} · {p.running?.configuration?.provider || "Provider not recorded"}</p>
+                <p className="mb-2 text-sm text-ink-soft">{p.running ? "Active execution — frozen assignments" : "Next execution — saved assignments"}</p>
+                {p.configuration_error && <p role="alert">{p.configuration_error}</p>}
+                <Assignment configuration={p.running ? p.running.configuration : p.configuration}/>
               </div>)}
           </section>
-          <p className="text-sm text-ink-soft">The provider “openai” denotes OpenAI-compatible transport. The endpoint determines whether requests go to Azure. Editing .env requires a service restart; running pipelines retain their existing settings.</p>
+          <p className="text-sm text-ink-soft">The provider “openai” denotes OpenAI-compatible transport. Assignments identify configured deployments, not independently verified model versions. Active runs retain frozen settings; saved pipeline profiles override deployment defaults. Call traces record the model actually invoked.</p>
         </>}
         <button type="button" disabled={loading} onClick={() => setRevision(v => v + 1)} className="flex items-center gap-2 rounded-lg border border-paper-line px-3 py-2 text-sm disabled:opacity-50"><RefreshCw size={15} /> Refresh status</button>
       </div>

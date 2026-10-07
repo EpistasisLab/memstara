@@ -65,6 +65,7 @@ export type PlaybookStage = (typeof PLAYBOOK_STAGES)[number];
 export type EvaluationPlan = { engine: string; seed: number; test_size: number; folds: number; replicates: number; search_trials: number };
 export type SkillInfo = { evaluation?: Partial<EvaluationPlan>; id: string; title: string; stage: PlaybookStage; description: string; content: string; hash: string; source: string };
 export type RunRequest = {
+  stage_models?: import("../lib/stageModels").StageProfiles;
   combination_skills?: Partial<Record<PlaybookStage,string[]>>;
   combination_repetitions?: number;
   combination_random_start?: boolean;

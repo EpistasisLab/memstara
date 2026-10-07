@@ -98,6 +98,7 @@ DEFAULTS: dict[str, Any] = {
     "y_column": "outcome",
     "provider": "",
     "model": "",
+    "stage_models": {},
     # One key per stage rather than one `playbooks` object, so the allow-list stays flat
     # and an unknown *stage* is caught by the same check that catches an unknown field
     # — a nested object would need its own copy of that rule, and the copy is what goes
@@ -271,6 +272,12 @@ def build_argv(
         "--model", model,
         "--skill", skill,
     ]
+    from memstara.stage_models import resolve_run_profiles
+    stage_models = resolve_run_profiles(body.get("stage_models"))
+    if stage_models:
+        import json
+        from memstara.stage_models import validate_profiles
+        argv += ["--stage-models", json.dumps(validate_profiles(stage_models))]
     if continuous:
         argv += ["--continuous"]
     for stage, book in chosen:

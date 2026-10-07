@@ -1,0 +1,14 @@
+{
+  "qwen": {
+    "provider": "openai",
+    "model": "qwen-your-deployment",
+    "api_base": "https://your-qwen-endpoint.example.com/v1",
+    "max_tokens": 8192
+  },
+  "sonnet": {
+    "provider": "azure_foundry",
+    "model": "claude-sonnet-your-deployment",
+    "api_base": "https://your-foundry-resource.example.com",
+    "max_tokens": 4096
+  }
+}

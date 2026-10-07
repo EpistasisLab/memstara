@@ -94,18 +94,25 @@ def record_retry(context, loop, state, attempt, error=None, delay=0):
     """Retain retry evidence without prompts, arguments, endpoints or credentials."""
     if not context:
         return
+    from memstara.pipeline.failures import provider_error_details
     record = dict(at=datetime.now(UTC).isoformat(), run_id=context[1], stage=context[2],
                   loop=loop, state=state, attempt=attempt, max_attempts=6, delay_seconds=delay,
-                  error_type=type(error).__name__ if error else None)
+                  error_type=type(error).__name__ if error else None,
+                  **provider_error_details(error))
     with (Path(context[0]) / 'model_retries.jsonl').open('a') as stream:
         stream.write(json.dumps(record) + '\n')
-    print(f"Model connection · {context[2]} · {state} · attempt {attempt}/6", flush=True)
+    print(f"Model request · {context[2]} · {state} · attempt {attempt}/6", flush=True)
 
 
 class PipelineLLMService(LLMService):
+    def __init__(self, *args, **kwargs):
+        from memstara.pricing_compat import install
+        install()
+        super().__init__(*args, **kwargs)
+
     async def _request(self, method, config, messages, *args, **kwargs):
         from memstara.pipeline.diagnostics import call_context, call_loop
-        from memstara.pipeline.failures import stop_execution, failure_summary
+        from memstara.pipeline.failures import stop_execution, retryable_model_error
         if getattr(method, '__name__', '') in ('complete', 'complete_with_tools'):
             kwargs['max_retries'] = 0
         context = call_context.get()
@@ -119,9 +126,13 @@ class PipelineLLMService(LLMService):
             for attempt in range(6):
                 await request_ready(context)
                 try:
+                    if context:
+                        from memstara.evaluation import active_plan
+                        from memstara.stage_models import validate_call
+                        validate_call(config, context[2], active_plan())
                     result = await method(config, copy.deepcopy(prepared), *args, **kwargs)
                 except Exception as exc:
-                    retryable = failure_summary(exc)[0] == 'model_connection'
+                    retryable = retryable_model_error(exc)
                     if retryable and attempt < len(TRANSPORT_RETRY_DELAYS):
                         delay = TRANSPORT_RETRY_DELAYS[attempt]
                         record_retry(context, call_loop.get(), 'retry_wait', attempt + 1, exc, delay)

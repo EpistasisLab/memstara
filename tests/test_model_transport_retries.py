@@ -15,6 +15,7 @@ from memstara.pipeline.runtime import runtime_timeouts, TRANSPORT_RETRY_DELAYS
 
 @pytest.fixture
 def context(tmp_path, monkeypatch):
+    monkeypatch.setattr('memstara.evaluation.active_plan', lambda: None)
     token = call_context.set((str(tmp_path), 'synthetic', 'ml#1'))
     loop = call_loop.set(4)
     monkeypatch.setattr('memstara.pipeline.llm.asyncio.sleep', AsyncMock())
@@ -107,3 +108,57 @@ def test_user_pause_blocks_retry_until_resume(context, monkeypatch):
     assert asyncio.run(request(invoke)) == 'result'
     assert waits == [2, .25]
     assert invoke.await_count == 2
+
+
+@pytest.mark.parametrize('status', [500, 502, 503, 504, 529])
+def test_server_error_recovers_on_fifth_retry_with_unchanged_tool_history(context, status):
+    from test_failure_diagnostics import provider_error
+    messages = [{'role': 'system', 'content': 'synthetic'},
+                {'role': 'assistant', 'tool_calls': [{'id': 'done', 'type': 'function',
+                 'function': {'name': 'read', 'arguments': '{}'}}]},
+                {'role': 'tool', 'tool_call_id': 'done', 'content': 'already executed'}]
+    original = json.loads(json.dumps(messages))
+    attempts = []
+
+    async def invoke(config, history):
+        attempts.append(json.loads(json.dumps(history)))
+        history.append({'role': 'user', 'content': 'SDK mutation'})
+        if len(attempts) < 6:
+            raise provider_error(status)
+        return 'recovered'
+
+    service = PipelineLLMService()
+    assert asyncio.run(service._request(invoke, NS(model='qwen-test'), messages)) == 'recovered'
+    assert attempts == [original] * 6
+    assert messages == original
+    assert not (context / 'pipeline_failure.json').exists()
+    events = [json.loads(line) for line in (context / 'model_retries.jsonl').read_text().splitlines()]
+    assert [e['http_status'] for e in events[:-1]] == [status] * 5
+    assert events[-1]['state'] == 'recovered'
+
+
+def test_persistent_server_error_stops_after_six_requests(context):
+    from test_failure_diagnostics import provider_error
+    invoke = AsyncMock(side_effect=provider_error(500))
+    with pytest.raises(PipelineExecutionFailure):
+        asyncio.run(request(invoke))
+    with pytest.raises(PipelineExecutionFailure):
+        asyncio.run(request(invoke))
+    assert invoke.await_count == 6
+    failure = json.loads((context / 'pipeline_failure.json').read_text())
+    assert failure['code'] == 'model_server'
+    assert failure['http_status'] == 500
+
+
+def test_retry_cannot_switch_to_another_stage_model(context, monkeypatch):
+    profiles = {'qwen': {'provider': 'openai', 'model': 'qwen-test'},
+                'sonnet': {'provider': 'azure_foundry', 'model': 'claude-sonnet-test'}}
+    monkeypatch.setattr('memstara.evaluation.active_plan', lambda: {'stage_models': profiles})
+    config = NS(provider='openai', model='qwen-test')
+    async def mutate_then_fail(*args, **kwargs):
+        config.model = 'claude-sonnet-test'
+        raise ConnectionResetError('synthetic')
+    invoke = AsyncMock(side_effect=mutate_then_fail)
+    with pytest.raises(PipelineExecutionFailure):
+        asyncio.run(PipelineLLMService()._request(invoke, config, []))
+    assert invoke.await_count == 1

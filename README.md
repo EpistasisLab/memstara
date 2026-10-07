@@ -389,3 +389,28 @@ Memstara and Motoro use separate databases and volumes. Removing a database
 volume deletes its stored work; resetting Motoro can also affect other products
 using that runtime. Back up both databases and verify which volumes belong to
 the deployment before resetting them.
+
+## Stage-specific model configuration
+
+Use [config/stage-models.example.json](config/stage-models.example.json) as a
+credential-free template. Copy it to `config/stage-models.local.json` (gitignored),
+or set `MEMSTARA_STAGE_MODELS_PATH` to your deployment profile file. Replace the
+placeholder deployment names and endpoints before starting a run.
+
+The `qwen` profile serves question generation, Hypothesis, Data, ML and both
+Interpretation specialists. The `sonnet` profile serves both Explanation experts.
+For Claude on Foundry use `azure_foundry` and the resource base URL. Credentials
+remain in Motoro's runtime credential resolver; never include keys in profile JSON.
+Connection preflight checks both profiles without sending inference.
+
+A pipeline's nonempty `configuration.stage_models` overrides deployment defaults.
+Update saved pipeline definitions through `/control/pipelines`; changing defaults
+does not replace an already saved assignment. New executions freeze profiles before
+provisioning. Resume and report recovery preserve the original assignment or reject
+an incompatible request; neither silently selects a different model. Transport
+retries retain the same stage model. Historical run files must not be edited.
+
+Settings → Model connection shows defaults, saved next-execution assignments and
+frozen active assignments separately. These are deployment identities; actual call
+traces establish which model was invoked. Missing pricing remains unavailable.
+LR and XGBoost are predictive learners, distinct from these LLM agents.

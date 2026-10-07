@@ -101,6 +101,9 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         state["feature_reproduction"] = {"version": 1, "directory": "feature_reproduction"}
         from memstara.ml_configuration import policy
         state["ml_configuration_policy"] = policy()
+    if getattr(args, "stage_models", None):
+        from memstara.stage_models import validate_profiles
+        state["stage_models"] = validate_profiles(args.stage_models)
     knowledge = Path(os.environ.get("AGENTIC_OKF_BUNDLE_DIR", "/nonexistent"))
     state["knowledge_hashes"] = (
         {

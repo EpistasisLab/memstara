@@ -166,6 +166,8 @@ class PipelineWorkspace:
             "continuous": value.get("continuous", False),
             "question": "",
         }
+        from memstara.stage_models import resolve_run_profiles
+        config['stage_models'] = resolve_run_profiles(config.get('stage_models'))
         from memstara.control.request import _MAX_WAVES
         if config.get('combination_skills'):
             from memstara.combinations import build_plan

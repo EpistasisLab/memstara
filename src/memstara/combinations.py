@@ -90,12 +90,13 @@ def loop_flavors(plan, loop):
             'agents': [{'stage': stage, **chosen[stage]} for stage in STAGES]}
 
 
-async def prepare_loop(plan, loop, *, provider, model, run_tag, provision):
+async def prepare_loop(plan, loop, *, provider, model, run_tag, provision, stage_models=None):
     """Bind each scheduled flavor to the actual provisioned agent identity."""
     flavors = loop_flavors(plan, loop)
     books = {item['stage']: [item['id']] for item in flavors['agents']}
     namespace = f"{run_tag}-combination-{flavors['combination']}"
-    agents = await provision(provider=provider, model=model, playbooks=books, namespace=namespace)
+    options = {"stage_models": stage_models} if stage_models else {}
+    agents = await provision(provider=provider, model=model, playbooks=books, namespace=namespace, **options)
     for item in flavors['agents']:
         item['agent_id'] = str(agents[item['stage']])
     return agents, flavors, books, namespace
