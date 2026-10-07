@@ -3,7 +3,9 @@ name = "memstara"
 dynamic = ["version"]
 description = "Memstara sandbox: the agentic ML pipeline, its MCP tool servers, and the shared blackboard."
 readme = "README.md"
-requires-python = ">=3.12"
+# The CI/runtime support matrix is Python 3.12 and 3.13. FastAPI 0.115.6
+# conflicts with MCP 1.29+ Starlette requirements on Python 3.14+.
+requires-python = ">=3.12,<3.14"
 
 dependencies = [
     "pandas",
@@ -31,11 +33,11 @@ dependencies = [
     # same library, and a resolver that ever drops that edge would break the matcher
     # for a reason with no visible connection to it.
     "pydantic",
-    # Capped to match motoro's own cap exactly (`motoro/pyproject.toml:53`). mcp 2.0.0
+    # Match Motoro v0.9.0's supported SDK range (>=1.29.0,<2.0.0). mcp 2.0.0
     # renames FastMCP and changes ClientSession's shutdown so a connected client hangs
     # on exit. Declaring it unpinned here would let a resolver walk this environment
     # straight into that, past the cap core wrote to prevent it.
-    "mcp>=1.27.1,<2.0.0",
+    "mcp>=1.29.0,<2.0.0",
 ]
 
 # `optional-dependencies`, not PEP 735 `[dependency-groups]` as motoro uses. motoro is
