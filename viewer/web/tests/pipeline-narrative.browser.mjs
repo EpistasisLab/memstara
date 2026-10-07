@@ -1,3 +1,4 @@
+import {tmpdir} from 'node:os';
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -43,7 +44,7 @@ try{for(const width of [1440,900,390]){
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
  const grid=await page.locator('#learn-question .learn-flow').evaluate(e=>getComputedStyle(e).gridTemplateColumns.split(' ').length);
  assert.equal(grid,width===390?1:5);
- await page.screenshot({path:`/private/tmp/memstara-narrative-${width}.png`});
+ await page.screenshot({path:`${tmpdir()}/memstara-narrative-${width}.png`});
  await page.getByRole('button',{name:'Open optional technical explorer'}).click();
  await page.getByRole('heading',{name:'From knowledge to evidence.'}).waitFor();
  await page.getByRole('button',{name:'Hide technical explorer'}).click();

@@ -1,3 +1,4 @@
+import {tmpdir} from 'node:os';
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -55,6 +56,6 @@ try {for(const width of [1440,390]){
  assert.deepEqual(errors,[]);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
  await page.getByRole('button',{name:'Execution blueprint',exact:true}).click();
- await page.screenshot({path:`/private/tmp/memstara-pipeline-explorer-${width}.png`,fullPage:true});
+ await page.screenshot({path:`${tmpdir()}/memstara-pipeline-explorer-${width}.png`,fullPage:true});
  console.log(JSON.stringify({width,phases:16,scopeIsolation:'pass',payload:'pass',staleError:'pass',errors}));await page.close();
 }}finally{await browser.close();}

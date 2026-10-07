@@ -3,6 +3,8 @@ from decimal import Decimal
 from collections import OrderedDict
 from unittest.mock import Mock
 import pytest
+
+pytest.importorskip('motoro', reason='Pricing adapter requires the optional Motoro runtime')
 from memstara import pricing_compat as pricing
 
 

@@ -1,3 +1,4 @@
+import {tmpdir} from 'node:os';
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
@@ -97,7 +98,7 @@ try {
    const geometry=await panel.locator('.clinical-agent-card').evaluateAll(es=>es.map(e=>({overflow:e.scrollWidth>e.clientWidth+1,height:e.clientHeight})));
    assert(geometry.every(g=>!g.overflow&&g.height>60));
   }
-  await panel.screenshot({path:`/private/tmp/live-log-agents-${width}-${combination}.png`});
+  await panel.screenshot({path:`${tmpdir()}/live-log-agents-${width}-${combination}.png`});
   await panel.getByRole('tab',{name:'Agent activity',exact:true}).focus();
   await page.keyboard.press('ArrowRight');
   assert.equal(await panel.getByRole('tab',{name:/Saved outputs/}).getAttribute('aria-selected'),'true');

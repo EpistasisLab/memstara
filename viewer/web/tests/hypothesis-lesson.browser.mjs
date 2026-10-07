@@ -1,3 +1,4 @@
+import {tmpdir} from 'node:os';
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -71,7 +72,7 @@ try{for(const width of [1440,900,390]){
  await page.getByRole('button',{name:'가설 애니메이션 일시정지',exact:true}).click();
  assert.equal(await page.locator('.hyp-moving').count(),0);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
- await page.screenshot({path:`/private/tmp/memstara-wizard-${width}.png`});
+ await page.screenshot({path:`${tmpdir()}/memstara-wizard-${width}.png`});
  await page.getByRole('button',{name:'쉬운 설명으로 돌아가기',exact:false}).click();
  assert.equal(await page.locator('.hyp-simple-step').count(),8);
  await page.getByRole('button',{name:'상세 보기',exact:true}).click();

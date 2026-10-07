@@ -1,3 +1,4 @@
+import {tmpdir} from 'node:os';
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -46,7 +47,7 @@ try{
   await page.evaluate(()=>scrollTo(0,0));
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,'No horizontal page overflow');
   assert.deepEqual(api,[],'Developer page must not contact application APIs');assert.deepEqual(errors,[]);
-  await page.screenshot({path:`/private/tmp/memstara-code-atlas-${width}.png`,fullPage:true});
+  await page.screenshot({path:`${tmpdir()}/memstara-code-atlas-${width}.png`,fullPage:true});
   console.log(JSON.stringify({width,files:count,navigation:'pass',search:'pass',apiCalls:0,errors}));await page.close();
  }
 }finally{await browser.close();}

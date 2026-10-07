@@ -70,31 +70,32 @@ try{
   assert.equal(await studio.locator('.cs-call-list li').count(),0,'Old loop calls leaked');
   console.log(JSON.stringify({theme,width,architecture:'passed',trace:'passed',versionMismatch:'passed',failure:'passed'}));
  }
- liveFixture=true;pipeline.running={run_tag:'fixture-run',execution_state:'running'};pipeline.progress={iteration:1};
+ liveFixture=true;pipeline.running={run_tag:'fixture-run',execution_state:'running'};pipeline.progress={iteration:1,stage:'ml'};
  await p.reload();await p.getByText('Loop 1 / 48 · Live',{exact:true}).waitFor();
  await studio.locator('.cf-active-room').waitFor();assert.equal(await studio.locator('.cf-active-room h4').innerText(),'Machine learning');
  assert.equal(await studio.locator('.cf-desk.is-selected').count(),5);
  assert.equal(await studio.locator('.cf-desk.cf-unused').count(),5);
- pipeline.progress.iteration=2;
+ pipeline.progress.iteration=2;pipeline.progress.stage='interpreter';
  await p.getByText('Loop 2 / 48 · Live',{exact:true}).waitFor();
  await p.waitForFunction(()=>document.querySelector('.cf-active-room h4')?.textContent==='Interpretation');
  assert.equal(await studio.getByRole('button',{name:'Preview Social determinants',exact:true}).getAttribute('aria-pressed'),'true');
  pipeline.running.execution_state='paused';
  await p.getByText('Loop 2 / 48 · Paused',{exact:true}).waitFor();
  assert.equal(await studio.locator('.cf-active-room').count(),0);
- pipeline.running.execution_state='running';pipeline.progress.iteration=3;
+ pipeline.running.execution_state='running';pipeline.progress.iteration=3;pipeline.progress.stage='report';
  await p.getByText('Loop 3 / 48 · Live',{exact:true}).waitFor();
  await studio.getByRole('status',{name:'Explanation stage is running',exact:true}).waitFor();
  const activeRoom=studio.locator('.cf-active-room');
  assert.equal(await activeRoom.locator('h4').innerText(),'Explanation');
- assert.equal(await activeRoom.evaluate(e=>getComputedStyle(e).animationName),'cf-stage-breathe');
- assert.equal(await activeRoom.evaluate(e=>getComputedStyle(e,'::before').animationName),'cf-border-travel');
+ // Whole-room repaint animations were removed; the small running indicator remains.
+ assert.equal(await activeRoom.evaluate(e=>getComputedStyle(e).animationName),'none');
+ assert.equal(await activeRoom.evaluate(e=>getComputedStyle(e,'::before').animationName),'none');
  assert.equal(await activeRoom.locator('.cf-running-track>span').count(),3);
  await p.emulateMedia({reducedMotion:'reduce'});
  assert.equal(await activeRoom.evaluate(e=>getComputedStyle(e).animationName),'none');
  assert.equal(await activeRoom.evaluate(e=>getComputedStyle(e,'::before').animationName),'none');
  await p.emulateMedia({reducedMotion:'no-preference'});
- console.log('Explanation box animation and reduced motion passed');
+ console.log('Explanation activity, bounded animation and reduced motion passed');
  console.log('Live following, started status, Loop transition, selected skills and pause passed');
  assert.deepEqual(errors,[]);
 }finally{await browser.close();}
