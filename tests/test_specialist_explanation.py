@@ -253,6 +253,7 @@ def test_unavailable_database_prevents_llm(frozen, result, tmp_path):
 
 
 def test_report_dispatch_and_saved_status(frozen, result, tmp_path, monkeypatch):
+    pytest.importorskip('motoro', reason='Board dispatch requires the optional Motoro runtime')
     from memstara.pipeline import board
 
     monkeypatch.setattr("memstara.evaluation.active_plan", lambda: frozen)
@@ -346,6 +347,7 @@ def test_invented_citation_is_rejected(frozen, result, tmp_path):
 
 
 def test_expert_failure_stops_following_pipeline_execution(frozen, result, tmp_path, monkeypatch):
+    pytest.importorskip('motoro', reason='Board dispatch requires the optional Motoro runtime')
     from memstara.pipeline import board
     from memstara.pipeline.failures import PipelineExecutionFailure, ensure_not_failed
 

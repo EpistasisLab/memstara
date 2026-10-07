@@ -147,6 +147,7 @@ export const actors:Actor[] = [
       ],
       "tools": [
         "train_and_score",
+        "get_ml_configuration",
         "claim_task",
         "submit_result"
       ],
