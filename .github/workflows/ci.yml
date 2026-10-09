@@ -33,7 +33,7 @@ jobs:
       - run: uv lock --check
       - run: uv sync --frozen --extra dev
       - name: Lint
-        run: uv run --frozen ruff check src/ tests/integration tests/test_mcp_protocol.py tests/test_saved_skill_compatibility.py scripts/check_distribution.py
+        run: uv run --frozen ruff check src/ tests/integration tests/live tests/test_mcp_protocol.py tests/test_saved_skill_compatibility.py tests/test_research_input_matrix.py scripts/check_distribution.py
       - name: Import boundaries
         run: uv run --frozen lint-imports
       - name: Unit, component and MCP protocol tests

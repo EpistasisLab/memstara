@@ -1,11 +1,15 @@
 # Code Atlas
 
+For configuration, model routing, execution controls, and debugging procedures,
+see the [developer operations guide](../../../../DEVELOPER_GUIDE.md). This document
+focuses on the code exploration interface.
+
 Open `/developer.html` on the viewer origin. This is a separate React entry point,
 not a research-workspace panel. It never executes runs. Source views make no API calls. Pipeline internals reads execution APIs only after explicit selection, with optional refresh.
 
 ## Refresh the inventory
 
-From the repository root, using the project's Python 3.12+ environment:
+From the repository root, using the project's Python 3.12 or 3.13 environment:
 
 ```sh
 .venv/bin/python scripts/build_code_atlas.py

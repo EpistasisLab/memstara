@@ -1,7 +1,7 @@
 # Memstara
 
 [![CI](https://github.com/HyunjunA/memstara/actions/workflows/ci.yml/badge.svg)](https://github.com/HyunjunA/memstara/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/Python-%E2%89%A53.12-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![Python](https://img.shields.io/badge/Python-3.12%20%7C%203.13-3776AB?logo=python&logoColor=white)](pyproject.toml)
 
 A **multi-agent research workbench** that reads a literature corpus, proposes
 predictors of a clinical outcome, evaluates them against a cohort, and explains
@@ -77,6 +77,14 @@ The Explanation Agent retains `report` identifiers for saved-run compatibility.
 Its default skill is `report_clinical_explanations`; Interpretation defaults to
 `interpreter_factual_observations`. Existing saved selections are retained.
 Instructions guide model behavior and do not guarantee compliant output.
+
+The agent-configured paired workflow adds Data allocation skills (training-heavy
+or balanced, both stratified), an LLM-proposed LR/XGBoost plan within server-enforced
+resource limits, and SHAP or LIME specialists that each receive both models.
+Explanation specialists consume Interpretation output and scoped knowledge.
+These contracts apply when the corresponding policies and skills are selected;
+legacy single-model runs remain supported. See the
+[agent contracts](DEVELOPER_GUIDE.md#agent-contracts-and-skills) before comparing routes.
 
 **Coordination and tools**
 
@@ -160,6 +168,13 @@ On an existing workspace, use its checkouts and environment; keep the existing
 Pipeline environment loading reads both files and preserves exported values.
 Use absolute paths for datasets and bundles so subprocesses resolve them consistently.
 
+To use your own corpus, dataset and prediction target, open **Floor plan → Prepare
+research inputs**, inspect and save a version, then select it when creating a
+pipeline or in **Data & target** settings. See the
+[synthetic research walkthrough](examples/research-inputs/README.md) for supported
+input formats, label mapping, versioning and CLI usage. Registration does not
+start an experiment; execution uses a separate analysis copy and preserves sources.
+
 **2. Prepare the databases and Redis.** On a new host, follow
 [Motoro's setup](https://github.com/EpistasisLab/motoro#development) to provision
 its services and apply its migrations. Then, from the Memstara checkout:
@@ -172,7 +187,9 @@ docker compose ps
 **3. Configure the connection and research inputs.** Set the deployed provider
 and model in `../motoro/.env`. The board driver resolves the deployment-wide
 selection through the control configuration; its legacy `--provider` and
-`--model` flags are not independent overrides. Provide the credentials required
+`--model` flags are not independent overrides. Explicit `stage_models` profiles
+override the agent model assignments; see the [developer guide](DEVELOPER_GUIDE.md#model-profiles-and-their-limits).
+Keep deployment defaults configured for control validation. Provide the credentials required
 by that connection: `ANTHROPIC_API_KEY`, both `ANTHROPIC_FOUNDRY_API_KEY` and
 `ANTHROPIC_FOUNDRY_RESOURCE`, or `OPENAI_API_KEY`.
 
@@ -222,7 +239,8 @@ connections remain read-only; pipeline actions go through the control service.
 
 ## Using the workspace
 
-**Selected Pipelines** configures and runs one saved pipeline at a time.
+**Selected Pipelines** configures and starts individual saved pipelines.
+Different saved pipelines can execute concurrently.
 **All Combinations** selects skill variants across all five roles. Two Hypothesis,
 three Data, two ML, two Interpretation, and one Explanation variant produce
 24 combinations, displayed in three design rows. A row is not an extra agent.
@@ -259,6 +277,13 @@ The configured outcome column is a label and never a predictor. Keep the target 
 matcher, and evaluation. Scores and feature importance describe the configured
 experiment; they are not evidence of a causal effect.
 
+In the paired workflow, an independent validation reserve is set aside before
+Data divides the exploration population into training and evaluation partitions.
+Saved evaluation metrics and confusion matrices describe their recorded partition;
+a reserve marked `reserved_not_evaluated` has no independent-validation results.
+Check the split indices and evaluation provenance before comparing runs. See the
+[artifact audit](DEVELOPER_GUIDE.md#read-and-verify-an-execution).
+
 ## Everyday commands
 
 Run these from the Memstara checkout with the `memstara` environment active:
@@ -284,7 +309,7 @@ schema upgrades. A viewer rebuild does not apply Motoro database migrations.
 | `MEMSTARA_DATASET_PATH` | Cohort CSV |
 | `MEMSTARA_OUTPUT_DIR` | Generated subsets and matcher artifacts |
 | `MEMSTARA_OUTCOME_COLUMN` | Target excluded from matcher and data feature lists |
-| `MEMSTARA_LLM_PROVIDER`, `MEMSTARA_LLM_MODEL` | Deployment-wide LLM selection |
+| `MEMSTARA_LLM_PROVIDER`, `MEMSTARA_LLM_MODEL` | Deployment default; explicit stage profiles override agent assignments |
 | `MEMSTARA_LLM_API_BASE` | Optional configured provider endpoint |
 
 See [.env.example](.env.example), [config.py](src/memstara/config.py), and
@@ -299,10 +324,27 @@ for the complete interface. `--skill` filters the knowledge corpus;
 `--playbook-<stage>` selects instruction text. `--playbook-explanation` and
 `--playbook-report` address the same compatibility stage.
 
+## Developer operations
+
+See [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) for stage-model profiles, configuration
+precedence, control API examples, restart/recovery procedures, agent contracts,
+artifact verification, and troubleshooting. It documents current routing limits
+and distinguishes exploration evaluation from independent validation.
+
 ## Development
 
 Use Python 3.12 or 3.13 and a separate test environment so synchronizing test
-dependencies does not replace the application runtime:
+dependencies does not replace the application runtime. First check that dependency
+metadata and the lockfile agree:
+
+```bash
+uv lock --check
+```
+
+If dependency declarations changed, regenerate with `uv lock`, review the resulting
+lockfile diff, and include it with the dependency change before using `--frozen`.
+A frozen install uses the existing lockfile; it does not incorporate new declarations.
+Then run:
 
 ```bash
 export UV_PROJECT_ENVIRONMENT=.venv-test
@@ -397,8 +439,8 @@ credential-free template. Copy it to `config/stage-models.local.json` (gitignore
 or set `MEMSTARA_STAGE_MODELS_PATH` to your deployment profile file. Replace the
 placeholder deployment names and endpoints before starting a run.
 
-The `qwen` profile serves question generation, Hypothesis, Data, ML and both
-Interpretation specialists. The `sonnet` profile serves both Explanation experts.
+The `non_explanation_agents` profile serves question generation, Hypothesis, Data, ML and both
+Interpretation specialists. The `explanation_agent` profile serves both Explanation experts.
 For Claude on Foundry use `azure_foundry` and the resource base URL. Credentials
 remain in Motoro's runtime credential resolver; never include keys in profile JSON.
 Connection preflight checks both profiles without sending inference.

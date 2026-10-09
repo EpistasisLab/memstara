@@ -1,0 +1,15 @@
+{
+  "name": "Synthetic baseline prediction tutorial",
+  "dataset_path": "examples/research-inputs/dataset.csv",
+  "knowledge_path": "examples/research-inputs/okf",
+  "target": {
+    "column": "simulated_event",
+    "description": "Predict a generated toy event; positive means event and negative means no event. This is not a clinical endpoint.",
+    "positive_label": "event",
+    "negative_label": "no_event",
+    "prediction_time": "All four generated predictors are available at simulated baseline",
+    "horizon": "One simulated follow-up interval; no real-world duration"
+  },
+  "excluded_columns": ["record_id"],
+  "missing_policy": "reject"
+}

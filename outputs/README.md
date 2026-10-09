@@ -48,8 +48,11 @@ matching outcome settings and a catalogue rebuilt for that dataset.
 
 `MEMSTARA_OUTPUT_DIR` redirects subsets and matcher artifacts. Run history and
 logs remain under the checkout's `outputs/runs` and `outputs/logs`; see
-[paths.py](../src/memstara/paths.py). Not every optional artifact appears in every
-run. Preserve the run's recorded configuration when interpreting its output.
+[paths.py](../src/memstara/paths.py). Paired-model runs also save model, prediction, split,
+reproduction, and XAI artifacts at paths recorded in their manifests. Follow those
+recorded paths rather than assuming every file lives directly under `runs/`.
+See the [execution audit](../DEVELOPER_GUIDE.md#read-and-verify-an-execution).
+Not every optional artifact appears in every run. Preserve the run's recorded configuration when interpreting its output.
 
 A bundle can live outside this directory: set `AGENTIC_OKF_BUNDLE_DIR` to its
 absolute path. `okf_<source>_<contents>` is a naming convention for generated

@@ -13,6 +13,9 @@ The browser sends `/api/` requests to the observation API and `/control/` reques
 to the host control service. Only the observation database connections are
 read-only; the workspace as a whole includes explicit execution controls.
 
+For model profiles, control API usage, restart behavior and artifact auditing, see
+the [developer guide](../DEVELOPER_GUIDE.md).
+
 ## Requirements
 
 Complete the [pipeline setup](../README.md#get-started) first. The viewer needs
@@ -96,7 +99,6 @@ host firewall or loopback-only mappings when restricting access to this machine.
 |---|---|
 | Question universe | Generated questions and their hypotheses, evidence, and results |
 | Clinician view | Findings in clinical language with evidence and limitations |
-| Status | Pipeline stage, Loop, and completion state |
 | Floor plan | Agents, resources, and live activity across pipelines |
 | Run log | Execution messages and troubleshooting |
 | Final report | Saved explanations and research summaries |
@@ -106,9 +108,10 @@ host firewall or loopback-only mappings when restricting access to this machine.
 | Access map | Tool access to stores |
 | Results panel | Recorded model evaluations and interpretation |
 
-The primary navigation exposes Floor plan, Status, Clinician view, Board,
-Telemetry, Final report, and Question universe. Logs and task/access detail are
-additional workspace panels rather than all being top-level navigation entries.
+The primary navigation exposes Floor plan, Clinician view, Telemetry, Final report,
+and Question universe. Logs, Board, and task/access detail are additional workspace
+panels rather than all being top-level navigation entries. Pipeline status is shown
+within the workspace; the retained internal Status view is not a primary navigation tab.
 
 The five visible roles are Hypothesis, Data, ML, Interpretation, and Explanation.
 The Explanation role retains the internal `report` stage for compatibility.

@@ -1,0 +1,15 @@
+{
+  "profiles": [
+    {
+      "provider": "openai",
+      "model": "your-exact-azure-deployment-name",
+      "api_base": "https://your-resource.services.ai.azure.com/openai/v1/",
+      "region": "your-resource-region",
+      "meters": {
+        "input": "REPLACE_WITH_VERIFIED_INPUT_METER_UUID",
+        "output": "REPLACE_WITH_VERIFIED_OUTPUT_METER_UUID",
+        "cache_read": "REPLACE_WITH_VERIFIED_CACHED_INPUT_METER_UUID"
+      }
+    }
+  ]
+}

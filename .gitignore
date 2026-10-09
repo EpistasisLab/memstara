@@ -55,3 +55,7 @@ htmlcov/
 # Deployment-specific model endpoints; credentials remain in the runtime environment.
 /config/stage-models.local.json
 /config/*.local*.json
+
+# Deployment-specific pricing and account mappings
+config/pricing.local.json
+config/azure-pricing-meters.local.json
