@@ -66,6 +66,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
             "validation_status": "exploratory_not_independently_validated",
             "refinement": "prior_iteration_evidence_with_explicit_lineage",
         },
+        "data_mode": "dataset",
+        "knowledge_mode": "llm_only" if ablate_okf else "okf",
         "mode": "report_only" if getattr(args, "report_only", False) else "pipeline",
         "run_tag": args.run_tag,
         "pipeline_id": getattr(args, "pipeline_id", ""),
@@ -85,16 +87,21 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         "evaluation": evaluation,
         "comparison_policy": comparison_policy,
         "input_contract": "clean single dataset; column selection only; fixed binary target",
-        "missing_value_policy": "native_xgboost" if evaluation["engine"] == "xgboost" else "reject",
+        "missing_value_policy": "reject" if combination_plan else (
+            "native_xgboost" if evaluation["engine"] == "xgboost" else "reject"),
         "explainability_review": "Review required; provisional specification",
         "dataset_sha256": digest.hexdigest(),
-        **({"feature_context": freeze_feature_context(dataset, args.y_column)}
+        **({"feature_context": freeze_feature_context(dataset, args.y_column,
+                                                      require_complete=bool(combination_plan))}
            if not getattr(args, "report_only", False) else {}),
         "knowledge_path": None if ablate_okf else os.environ.get("AGENTIC_OKF_BUNDLE_DIR"),
         "trials": args.trials,
         "waves": args.waves,
         "continuous": getattr(args, "continuous", False),
     }
+    if getattr(args, 'research_profile', None):
+        state['research_profile'] = args.research_profile
+        state['missing_value_policy'] = 'reject'
     if combination_plan and not getattr(args, "report_only", False):
         from memstara.pipeline.feature_selection import freeze as freeze_selection
         state["feature_selection_policy"] = freeze_selection(state)
@@ -102,8 +109,10 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         from memstara.ml_configuration import policy
         state["ml_configuration_policy"] = policy()
     if getattr(args, "stage_models", None):
-        from memstara.stage_models import validate_profiles
-        state["stage_models"] = validate_profiles(args.stage_models)
+        from memstara.stage_models import snapshot_profiles
+        prior_path = run_dir / "config.json"
+        prior_profiles = json.loads(prior_path.read_text()).get("stage_models") if prior_path.exists() else None
+        state["stage_models"] = snapshot_profiles(args.stage_models, prior_profiles)
     knowledge = Path(os.environ.get("AGENTIC_OKF_BUNDLE_DIR", "/nonexistent"))
     state["knowledge_hashes"] = (
         {
@@ -125,9 +134,13 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
             from memstara.ml_configuration import policy
             state.setdefault("ml_configuration_policy", policy())
     from memstara.specialist_explanation import freeze as freeze_explanation
-    explanation = freeze_explanation(books, resolved)
+    explanation = None if ablate_okf else freeze_explanation(books, resolved)
     if explanation:
         state["specialist_explanation_policy"] = explanation
+    from memstara.controlled_comparison import freeze as freeze_controls
+    controls = freeze_controls(getattr(args, 'controlled_comparison', '{}'), state)
+    if controls:
+        state['controlled_comparison'] = controls
     state["config_hash"] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
     location = run_dir / "config.json"
     if location.exists():

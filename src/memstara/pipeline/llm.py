@@ -14,12 +14,61 @@ _options = ContextVar('memstara_request_options', default=None)
 _installed = False
 
 
+def record_response(context, response, max_tokens):
+    """Persist termination evidence without response text or tool arguments."""
+    if not context:
+        return
+    choices = getattr(response, 'choices', []) or []
+    usage = getattr(response, 'usage', None)
+    event = dict(at=datetime.now(UTC).isoformat(), run_id=context[1], stage=context[2],
+                 response_id=getattr(response, 'id', None), max_tokens=max_tokens,
+                 finish_reasons=[getattr(c, 'finish_reason', None) for c in choices],
+                 completion_tokens=getattr(usage, 'completion_tokens', None))
+    with (Path(context[0]) / 'model_response_outcomes.jsonl').open('a') as stream:
+        stream.write(json.dumps(event) + '\n')
+
+
+def interpretation_saved(messages):
+    """Only a successful tool receipt establishes an already committed handoff."""
+    submissions = set()
+    for message in messages:
+        for call in message.get('tool_calls', []) or []:
+            if call.get('function', {}).get('name', '').endswith('submit_result'):
+                submissions.add(call.get('id'))
+        if message.get('role') == 'tool' and message.get('tool_call_id') in submissions:
+            try:
+                receipt = json.loads(message.get('content', ''))
+            except (TypeError, ValueError):
+                continue
+            if isinstance(receipt, dict) and receipt.get('ok') is True and not receipt.get('error'):
+                return True
+    return False
+
+
 def request_options(kwargs):
     options = _options.get()
     if options is None:
         return kwargs
     import httpx
     result = {**kwargs, 'num_retries': 0, 'max_retries': 0}
+    # Motoro's capability table may lag the installed provider adapter. Use the
+    # same local capability check as that adapter, including trial overrides.
+    model = kwargs.get('model', '')
+    if 'claude' in model.lower():
+        from litellm.llms.anthropic.common_utils import AnthropicModelInfo
+        if not AnthropicModelInfo._supports_sampling_params(model):
+            removed = {key: result.pop(key) for key in ('temperature', 'top_p', 'top_k')
+                       if key in result}
+            if removed:
+                from memstara.pipeline.diagnostics import call_context
+                context = call_context.get()
+                if context:
+                    with (Path(context[0]) / 'model_request_adjustments.jsonl').open('a') as stream:
+                        stream.write(json.dumps(dict(
+                            at=datetime.now(UTC).isoformat(), stage=context[2],
+                            run_id=context[1], model=model, omitted_sampling_parameters=removed,
+                            reason='Installed Anthropic adapter disables sampling parameters',
+                        )) + '\n')
     if runtime_timeouts(kwargs.get('model', '')):
         result['timeout'] = httpx.Timeout(1800, connect=15, read=1800, write=60, pool=15)
     if 'max_tokens' in options:
@@ -35,6 +84,10 @@ def request_scope(model):
         import litellm
         from litellm.integrations.custom_logger import CustomLogger
         class RequestPolicy(CustomLogger):
+            async def async_log_success_event(self, kwargs, response_obj, start_time, end_time):
+                from memstara.pipeline.diagnostics import call_context
+                record_response(call_context.get(), response_obj, kwargs.get('max_tokens'))
+
             async def async_pre_call_deployment_hook(self, kwargs, call_type):
                 from memstara.pipeline.run_ownership import await_ownership
                 await await_ownership()
@@ -125,6 +178,11 @@ class PipelineLLMService(LLMService):
         with request_scope(config.model):
             for attempt in range(6):
                 await request_ready(context)
+                from memstara.cost_accounting import request_profile, price_receipt, record_attempt
+                profile_token = request_profile.set({
+                    'provider': getattr(getattr(config, 'provider', None), 'value', getattr(config, 'provider', None)),
+                    'model': config.model, 'api_base': getattr(config, 'api_base', None)})
+                receipt_token = price_receipt.set(None)
                 try:
                     if context:
                         from memstara.evaluation import active_plan
@@ -132,6 +190,7 @@ class PipelineLLMService(LLMService):
                         validate_call(config, context[2], active_plan())
                     result = await method(config, copy.deepcopy(prepared), *args, **kwargs)
                 except Exception as exc:
+                    record_attempt(context, call_loop.get(), config, error=True)
                     retryable = retryable_model_error(exc)
                     if retryable and attempt < len(TRANSPORT_RETRY_DELAYS):
                         delay = TRANSPORT_RETRY_DELAYS[attempt]
@@ -143,6 +202,14 @@ class PipelineLLMService(LLMService):
                     if context:
                         stop_execution(context[0], context[2], call_loop.get(), exc)
                     raise
+                else:
+                    record = getattr(result, 'record', None)
+                    if record is None and isinstance(result, tuple):
+                        record = next((v for v in result if hasattr(v, 'cost_estimate')), None)
+                    record_attempt(context, call_loop.get(), config, record)
+                finally:
+                    request_profile.reset(profile_token)
+                    price_receipt.reset(receipt_token)
                 if attempt:
                     record_retry(context, call_loop.get(), 'recovered', attempt + 1)
                 return result
@@ -154,7 +221,86 @@ class PipelineLLMService(LLMService):
         return await self._request(super().complete_text, config, messages, *args, **kwargs)
 
     async def complete_with_tools(self, config, messages, tools, *args, **kwargs):
-        return await self._request(super().complete_with_tools, config, messages, tools, *args, **kwargs)
+        # Motoro can return a completion with no tool calls and a validation
+        # failure in its record. Returning it unchanged makes the agent appear
+        # completed even though its proposed action never ran. Own this repair
+        # loop separately from transport retries; never replay executed tools.
+        from memstara.pipeline.diagnostics import call_context, call_loop
+        from memstara.pipeline.failures import stop_execution
+        history = copy.deepcopy(messages)
+        current_config = config
+        for attempt in range(6):
+            result = await self._request(super().complete_with_tools, current_config, history,
+                                         tools, *args, **kwargs)
+            context = call_context.get()
+            record = getattr(result, 'record', None)
+            limit = max(getattr(current_config, 'max_tokens', 4096),
+                        provider_policy(config.model).get('max_tokens', 0))
+            capped = (getattr(record, 'completion_tokens', 0) or 0) >= limit
+            empty_interpretation = (context and context[2].startswith('interpret')
+                                    and not getattr(result, 'tool_calls', [])
+                                    and not getattr(result, 'text', '').strip()
+                                    and not interpretation_saved(history))
+            if capped or empty_interpretation:
+                # This completion has not reached Motoro's tool executor. Reissue
+                # only this uncommitted turn, retaining every earlier tool receipt.
+                next_limit = min(limit * 2, max(16384, getattr(config, 'max_tokens', 4096)))
+                event = dict(at=datetime.now(UTC).isoformat(), stage=context[2] if context else None,
+                             run_id=context[1] if context else None, attempt=attempt + 1,
+                             max_attempts=6, reason='output_limit' if capped else 'empty_interpretation',
+                             max_tokens=limit, next_max_tokens=next_limit,
+                             state='retry' if attempt < 5 else 'exhausted')
+                if context:
+                    with (Path(context[0]) / 'model_completion_repairs.jsonl').open('a') as stream:
+                        stream.write(json.dumps(event) + '\n')
+                if attempt == 5:
+                    message = 'The model did not finish a usable response within the bounded output-repair budget.'
+                    if context:
+                        stop_execution(context[0], context[2], call_loop.get(), ValueError(message),
+                                       code='model_output_incomplete', message=message)
+                    raise ValueError(message)
+                current_config = copy.copy(current_config)
+                current_config.max_tokens = next_limit
+                history.append({'role': 'user', 'content': (
+                    'Your previous response was incomplete and was not executed. '
+                    'Use the existing tool results above; do not repeat successful actions. '
+                    'Keep the response concise and complete the pending task through its required tool. '
+                    'If an interpretation task is already claimed, call submit_result with the '
+                    'required interpretation and task_id; do not claim it again. '
+                    'Do not return an empty answer or invent missing evidence.'
+                )})
+                continue
+            reason = getattr(getattr(result, 'record', None), 'failure_reason', None)
+            if not reason:
+                return result
+            repairable = any(code in reason for code in
+                             ('tool_args_schema_invalid', 'tool_args_parse_error'))
+            context = call_context.get()
+            if context:
+                with (Path(context[0]) / 'tool_argument_repairs.jsonl').open('a') as stream:
+                    stream.write(json.dumps(dict(
+                        at=datetime.now(UTC).isoformat(), run_id=context[1], stage=context[2],
+                        loop=call_loop.get(), attempt=attempt + 1, max_attempts=6,
+                        state='retry' if repairable and attempt < 5 else 'exhausted',
+                    )) + '\n')
+            if not repairable or attempt == 5:
+                message = ('The model did not produce a valid tool call. Further execution was '
+                           'stopped; inspect the saved tool-argument validation trace.')
+                if context:
+                    stop_execution(context[0], context[2], call_loop.get(),
+                                   ValueError('Tool argument validation failed'),
+                                   code='tool_argument_validation', message=message)
+                raise ValueError(message)
+            history.extend([
+                {'role': 'assistant', 'content': 'My proposed tool arguments were rejected before execution.'},
+                {'role': 'user', 'content': (
+                    f'Tool argument validation failed: {reason[:2000]}. '
+                    'Re-issue the intended tool calls using the declared schema. '
+                    'Object parameters (including filters) must be JSON objects, not '
+                    'JSON-encoded strings. Use only allowed keys and values. Do not repeat '
+                    'earlier successful actions; none of the rejected calls were executed.'
+                )},
+            ])
 
     async def _complete(self, *args, **kwargs):
         from tenacity import stop_after_attempt

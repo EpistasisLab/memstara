@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from types import SimpleNamespace
 import pytest
 from memstara.pipeline.ablation import filter_tools
@@ -28,19 +29,51 @@ def test_normal_tools_unchanged_ablation_removes_all_knowledge_surface():
     assert filter_tools(tools,PLAN)==tools[2:]
 
 
-def test_ablation_never_hydrates_persisted_knowledge_servers(monkeypatch):
-    pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
+@pytest.mark.parametrize("existing_command", [None, "command", "old-command"])
+def test_ablation_never_hydrates_persisted_knowledge_servers(monkeypatch, existing_command):
+    pytest.importorskip("motoro", reason="Requires the installed Motoro runtime")
     from memstara.pipeline import board
     from memstara import evaluation
-    seen=[]
+    from motoro.services import mcp_service
+    from unittest.mock import create_autospec
+
+    server_id = uuid.uuid4()
+    server = SimpleNamespace(id=server_id, command=existing_command)
+    seen = []
+
     class Registry:
-        async def register(self,**kw):
-            seen.append(kw['name']);return SimpleNamespace(error=None)
-        async def disconnect_all(self):pass
-    monkeypatch.setattr(evaluation,'active_plan',lambda:PLAN)
-    monkeypatch.setattr(board,'MCPServerRegistry',Registry)
-    monkeypatch.setattr(board,'launch_table',lambda:[('okf','unused'),('memstara-data','command')])
-    async def forbidden(**kw):raise AssertionError('Persistent server hydration must not occur')
-    monkeypatch.setattr(board,'hydrate_registry',forbidden)
-    asyncio.run(board.setup_tools())
-    assert seen==['memstara-data']
+        servers = {}
+        async def disconnect_all(self):
+            pass
+
+    async def get(name):
+        assert name == 'memstara-data', "OKF must never be looked up or connected"
+        return server if existing_command is not None else None
+
+    async def connected(*args, **kwargs):
+        seen.append((args, kwargs))
+        kwargs['registry'].servers[server_id] = SimpleNamespace(error=None)
+        return server
+
+    register = create_autospec(board.register_server, side_effect=connected)
+    update = create_autospec(board.update_server, side_effect=connected)
+    reconnect = create_autospec(mcp_service.reconnect_server, side_effect=connected)
+    monkeypatch.setattr(evaluation, 'active_plan', lambda: PLAN)
+    monkeypatch.setattr(board, 'MCPServerRegistry', Registry)
+    monkeypatch.setattr(board, 'launch_table', lambda: [('okf', 'unused'), ('memstara-data', 'command')])
+    monkeypatch.setattr(board, 'get_server_by_name', get)
+    monkeypatch.setattr(board, 'register_server', register)
+    monkeypatch.setattr(board, 'update_server', update)
+    monkeypatch.setattr(mcp_service, 'reconnect_server', reconnect)
+    async def forbidden(**kwargs):
+        raise AssertionError('Persistent server hydration must not occur')
+    monkeypatch.setattr(board, 'hydrate_registry', forbidden)
+    registry = asyncio.run(board.setup_tools())
+    assert set(registry.servers) == {server_id}
+    assert len(seen) == 1
+    if existing_command is None:
+        register.assert_awaited_once_with(name='memstara-data', transport='stdio', command='command', registry=registry)
+    elif existing_command == 'command':
+        reconnect.assert_awaited_once_with(server_id, registry=registry)
+    else:
+        update.assert_awaited_once_with(server_id, command='command', registry=registry)

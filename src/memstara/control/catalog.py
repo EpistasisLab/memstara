@@ -74,7 +74,8 @@ def canonical_name(name: str) -> str:
 
 
 def user_dir() -> Path:
-    return Path(os.environ.get('MEMSTARA_OUTPUT_DIR') or DEFAULT_OUTPUT_DIR) / 'skills'
+    return Path(os.environ.get('MEMSTARA_USER_SKILLS_DIR') or
+                (Path(os.environ.get('MEMSTARA_OUTPUT_DIR') or DEFAULT_OUTPUT_DIR) / 'skills'))
 
 
 def catalog() -> list[dict]:

@@ -363,14 +363,14 @@ load_env()
 WORKSPACE = PipelineWorkspace(RUNS_DIR / "pipeline_workspace.json", _Runs)
 
 
-def skills() -> list[dict[str, Any]]:
+def skills(root=None) -> list[dict[str, Any]]:
     """Every branch of the bundle that holds at least one document.
 
     A branch with nothing in it is left out rather than shown greyed: offering it would
     be offering a run whose agents can read nothing, and the failure would look like a
     thin literature rather than like an empty filter.
     """
-    docs, _ = _load(_bundle_root())
+    docs, _ = _load(root or _bundle_root())
     fields = [d.fields for d in docs]
     out: list[dict[str, Any]] = []
 
@@ -528,6 +528,14 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path.rstrip("/")
 
+        if path == "/control/research-inputs":
+            from memstara.research_inputs import list_inputs
+            try:
+                self._send(200, {"inputs": list_inputs()})
+            except (OSError, ValueError):
+                self._send(503, {"error": "Registered research inputs could not be read"})
+            return
+
         if path == "/control/question-memory":
             from memstara.control.question_memory import handle
             try:
@@ -667,6 +675,17 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, {"error": str(e)})
             return
 
+        if path in ("/control/research-inputs/inspect", "/control/research-inputs/register"):
+            from memstara.research_inputs import inspect, register as register_research_inputs
+            try:
+                result = (register_research_inputs if path.endswith('/register') else inspect)(body)
+                self._send(200, result)
+            except ValueError as exc:
+                self._send(400, {"error": str(exc)})
+            except OSError:
+                self._send(400, {"error": "Research files are unavailable or cannot be read"})
+            return
+
         if path == "/control/question-memory/clear":
             from memstara.control.question_memory import handle, MemoryConflict
             try:
@@ -796,10 +815,20 @@ class Handler(BaseHTTPRequestHandler):
         body = dict(body)
         if body.get('continuous') is True:
             body.update(continuous=False, waves=10)
+        research = None
         try:
-            offered = [s["skill"] for s in skills()]
-        except OKFError as e:
-            self._send(503, {"error": str(e)})
+            if body.get('research_input_id'):
+                from memstara.research_inputs import prepare
+                research = prepare(body['research_input_id'])
+                config = research['configuration']
+                body.update(knowledge_mode=config['knowledge_mode'], data_mode=config['data_mode'],
+                            research_objective=config['target']['description'],
+                            y_column=config['target']['column'] or 'outcome')
+            available = ([] if body.get('knowledge_mode') == 'llm_only' else
+                         skills(Path(research['root']) / 'okf') if research else skills())
+            offered = [s["skill"] for s in available]
+        except (OKFError, ValueError, OSError) as e:
+            self._send(422, {"error": f"Run not started. {e}", "code": "input_validation_failed"})
             return
         # Read here rather than cached at import, so that writing a new playbook while
         # the service is running makes it startable without a restart. It is a directory
@@ -818,15 +847,21 @@ class Handler(BaseHTTPRequestHandler):
         from memstara.evaluation import DataQualityError, preflight, validate
         from memstara.control.catalog import resolve
         try:
-            dataset = os.environ.get("MEMSTARA_DATASET_PATH", "")
-            if not dataset:
-                raise DataQualityError('No dataset is configured. Configure a curated CSV before starting.')
-            book = body.get("playbook_ml", "")
-            policy = resolve(book).get("evaluation", {}) if book else {}
-            plan = validate({**policy, **body.get("evaluation", {})})
-            preflight(Path(dataset), argv[argv.index("--y-column") + 1], plan, reserve_validation=True)
-            from memstara.comparisons import validate_baseline
-            validate_baseline(body.get("baseline_columns", []), argv[argv.index("--y-column") + 1], Path(dataset))
+            if body.get('data_mode', 'dataset') == 'dataset':
+                dataset = (str(Path(research['root']) / 'dataset.csv') if research
+                           else os.environ.get("MEMSTARA_DATASET_PATH", ""))
+                if not dataset:
+                    raise DataQualityError('No dataset is configured. Configure a curated CSV before starting.')
+                book = body.get("playbook_ml", "")
+                policy = resolve(book).get("evaluation", {}) if book else {}
+                plan = validate({**policy, **body.get("evaluation", {})})
+                preflight(Path(dataset), argv[argv.index("--y-column") + 1], plan, reserve_validation=True)
+                if body.get("combination_skills"):
+                    from memstara.pipeline.feature_context import freeze_feature_context
+                    freeze_feature_context(Path(dataset), argv[argv.index("--y-column") + 1],
+                                           require_complete=True)
+                from memstara.comparisons import validate_baseline
+                validate_baseline(body.get("baseline_columns", []), argv[argv.index("--y-column") + 1], Path(dataset))
         except ValueError as e:
             self._send(422, {"error": f"Run not started. {e}", "code": "input_validation_failed"})
             return

@@ -23,7 +23,7 @@ from memstara.pipeline.prompts import load_prompt, playbook_names
 AGENTS = [
     "mvp/hypothesis", "mvp/data", "mvp/ml", "mvp/interpreter",
     "board/hypothesis", "board/data", "board/ml", "board/interpreter",
-    "board/report",
+    "board/report", "pilot/hypothesis", "pilot/data", "pilot/ml",
 ]
 
 #: Files that are not agents. A fragment has no goal and is never loaded on its own.

@@ -82,6 +82,10 @@ def normalize_agent_configuration(body):
 
 
 DEFAULTS: dict[str, Any] = {
+    "research_input_id": "",
+    "knowledge_mode": "okf",
+    "data_mode": "dataset",
+    "research_objective": "",
     "question": "",
     "combination_skills": {},
     "combination_repetitions": 1,
@@ -99,6 +103,7 @@ DEFAULTS: dict[str, Any] = {
     "provider": "",
     "model": "",
     "stage_models": {},
+    "controlled_comparison": {},
     # One key per stage rather than one `playbooks` object, so the allow-list stays flat
     # and an unknown *stage* is caught by the same check that catches an unknown field
     # — a nested object would need its own copy of that rule, and the copy is what goes
@@ -158,11 +163,31 @@ def build_argv(
             f"The fields are {', '.join(sorted(DEFAULTS))}"
         )
 
+    research_id = _text(body, 'research_input_id')
+    if research_id:
+        from memstara.research_inputs import load
+        profile = load(research_id)
+        config = profile['configuration']
+        body.update(knowledge_mode=config['knowledge_mode'], data_mode=config['data_mode'],
+                    research_objective=config['target']['description'],
+                    y_column=config['target']['column'] or 'outcome')
+    knowledge_mode, data_mode = _text(body, 'knowledge_mode'), _text(body, 'data_mode')
+    if knowledge_mode not in ('okf', 'llm_only') or data_mode not in ('dataset', 'proposal'):
+        raise ValueError('Select supported knowledge and data modes')
+    objective = _text(body, 'research_objective')
+    if len(objective) > 8000 or (data_mode == 'proposal' and not objective):
+        raise ValueError('Proposal mode requires a research objective (at most 8000 characters)')
+    if knowledge_mode == 'llm_only' and _text(body, 'skill'):
+        raise ValueError('Clear knowledge filters in LLM-only mode')
+    if data_mode == 'proposal' and body.get('baseline_columns'):
+        raise ValueError('Proposal mode cannot bind fixed baseline columns without a dataset')
     from memstara.evaluation import validate
     evaluation = body.get("evaluation", {})
     if not isinstance(evaluation, dict):
         raise ValueError("evaluation must be an object")
     validate(evaluation)
+    from memstara.controlled_comparison import validate as validate_controls
+    controls = validate_controls(body.get('controlled_comparison', {}))
     from memstara.comparisons import validate_baseline
     baseline = validate_baseline(body.get("baseline_columns", []), body.get("y_column", DEFAULTS["y_column"]))
     question = _text(body, "question")
@@ -272,12 +297,30 @@ def build_argv(
         "--model", model,
         "--skill", skill,
     ]
+    if research_id or knowledge_mode == 'llm_only' or data_mode == 'proposal':
+        from memstara.research_inputs import validate_skills
+        selected_books = {stage: value.split(',') for stage, value in chosen}
+        if combination_plan:
+            selected_books = {stage: [item['id'] for item in entries]
+                              for stage, entries in combination_plan['skills'].items()}
+        validate_skills(selected_books)
+        if research_id:
+            argv += ['--research-input-id', research_id]
+    if knowledge_mode != 'okf':
+        argv += ['--knowledge-mode', knowledge_mode]
+    if data_mode != 'dataset':
+        argv += ['--data-mode', data_mode]
+    if objective:
+        argv += ['--research-objective', objective]
     from memstara.stage_models import resolve_run_profiles
     stage_models = resolve_run_profiles(body.get("stage_models"))
     if stage_models:
         import json
         from memstara.stage_models import validate_profiles
         argv += ["--stage-models", json.dumps(validate_profiles(stage_models))]
+    if controls:
+        import json
+        argv += ['--controlled-comparison', json.dumps(controls)]
     if continuous:
         argv += ["--continuous"]
     for stage, book in chosen:

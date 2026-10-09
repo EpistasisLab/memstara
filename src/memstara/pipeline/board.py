@@ -197,7 +197,8 @@ _PROVIDER_KEYS = {
 }
 
 
-async def check_environment(provider: str = "", y_column: str = "", *, use_okf: bool = True) -> list[str]:
+async def check_environment(provider: str = "", y_column: str = "", *,
+                            use_okf: bool = True, use_data: bool = True) -> list[str]:
     """Everything missing, reported at once, before anything starts.
 
     What is missing is collected **all together** rather than reported one at a time.
@@ -227,6 +228,8 @@ async def check_environment(provider: str = "", y_column: str = "", *, use_okf: 
         ("MOTORO_DATABASE_URL", "core's own database — agents and run history"),
     ):
         if name == "AGENTIC_OKF_BUNDLE_DIR" and not use_okf:
+            continue
+        if name == "MEMSTARA_DATASET_PATH" and not use_data:
             continue
         value = os.environ.get(name, "").strip()   # empty string if unset
         if not value:
@@ -327,11 +330,21 @@ async def setup_tools() -> MCPServerRegistry:
         from memstara.pipeline.ablation import enabled
         if enabled(active_plan()):
             # Do not hydrate persisted servers: that would reconnect OKF too.
+            from motoro.services.mcp_service import reconnect_server
             for name, command in launch_table():
                 if name == 'okf':
                     continue
-                entry = await registry.register(name=name, command=command)
-                if entry.error:
+                # Tool dispatch checks persisted registration IDs. Reconnect only
+                # selected non-OKF entries through the public service API.
+                server = await get_server_by_name(name)
+                if server is None:
+                    server = await register_server(name=name, transport="stdio", command=command, registry=registry)
+                elif server.command != command:
+                    server = await update_server(server.id, command=command, registry=registry)
+                else:
+                    server = await reconnect_server(server.id, registry=registry)
+                entry = registry.servers.get(server.id) if server is not None else None
+                if entry is None or entry.error:
                     raise RuntimeError(f'Ablation MCP startup failed: {name}')
             return registry
         for name, command in launch_table():
@@ -430,6 +443,8 @@ async def _call_agent_uncontrolled(
     from memstara.evaluation import active_plan
     from memstara.pipeline.ablation import enabled, filter_tools, INSTRUCTIONS
     plan = active_plan()
+    from memstara.research_inputs import instructions as research_instructions
+    prompt += research_instructions((plan or {}).get('research_profile'))
     if stage.startswith(("hypothesis", "question")):
         from memstara.pipeline.feature_selection import scoped, hypothesis_tools, instructions as selection_instructions
         wave = max(0, (_CURRENT_LOOP.get() or 1) - 1)
@@ -520,6 +535,9 @@ async def _call_agent_uncontrolled(
     # open `trace/00_hypothesis0.txt` and read what just happened — which tool was
     # called with which arguments and what came back.
     await _trace_one(entry)
+    from memstara.experiment_registry import sync as sync_registry
+    if _TRACE_DIR:
+        await sync_registry(_TRACE_DIR.parent)
 
     # Spell out on screen what that person actually did. The untruncated version is in
     # the file under trace/.
@@ -1301,55 +1319,16 @@ def chosen_playbooks(args: argparse.Namespace) -> dict[str, list[str]]:
 async def run(args: argparse.Namespace, run_dir: Path) -> int:
     """The body of the run. (1) through (6) of "How to read this file" at the top are
     here, in that order."""
-    from memstara.pipeline.snapshot import freeze
+    if getattr(args, 'data_mode', 'dataset') == 'proposal':
+        from memstara.pipeline.proposal import run as run_proposal
+        return await run_proposal(args, run_dir)
     from memstara.pipeline.exploration import ExecutionGate
     global _EXECUTION_GATE
     _EXECUTION_GATE = ExecutionGate(run_dir)
-    combination_plan = json.loads(getattr(args, "combination_plan", "") or "null")
-    if combination_plan:
-        # Enforce the frozen budget for both fresh and checkpoint-restored runs.
-        limit = combination_plan.get('total_loops')
-        if type(limit) is not int or not 1 <= limit <= 10000:
-            raise ValueError('Invalid frozen combination Loop limit')
-        args.waves = limit
-        args.continuous = False
-        args.trials = args.hypothesis_agents = args.interpret_agents = 1
-    if args.pipeline_id and not combination_plan:
-        if args.continuous:
-            args.waves = 10
-        if not 1 <= args.waves <= 10:
-            raise ValueError("Maximum Loops per pipeline must be between 1 and 10")
-        args.continuous = False
-    from memstara.pipeline.runtime import runtime_timeouts
-    args.runtime_timeouts = runtime_timeouts(args.model)
-    runtime_settings = Settings()
-    if args.runtime_timeouts:
-        runtime_settings = runtime_settings.model_copy(update={
-            key: value for key, value in args.runtime_timeouts.items() if key != 'agent_timeout_seconds'})
-    configure(runtime_settings)   # Set up the runtime before provisioning or opening tools.
-    from memstara.pipeline.diagnostics import install
-    install()
-    from memstara.stage_models import resolve_run_profiles
-    frozen_models = None
-    if args.resume:
-        frozen_models = json.loads((run_dir / "config.json").read_text())
-    elif args.report_only:
-        from memstara.paths import RUNS_DIR
-        originals = [json.loads(path.read_text()) for path in RUNS_DIR.glob("*/config.json")]
-        originals = [item for item in originals if item.get("run_tag") == args.run_tag
-                     and item.get("mode") != "report_only"]
-        if len(originals) != 1:
-            raise ValueError("Report recovery requires one unambiguous frozen source execution")
-        frozen_models = originals[0]
-    stage_models = resolve_run_profiles(getattr(args, "stage_models", {}),
-                                       recovering=bool(args.resume or args.report_only), frozen=frozen_models)
-    args.stage_models = stage_models
-    if stage_models:
-        from memstara.stage_models import preflight_profiles
-        await preflight_profiles(stage_models)
-    frozen_configuration = freeze(args, run_dir, chosen_playbooks(args))
-    from memstara.specialist_explanation import preflight as explanation_preflight
-    await explanation_preflight(frozen_configuration, run_dir)
+    from memstara.pipeline.preparation import prepare_execution
+    prepared = await prepare_execution(args, run_dir, chosen_playbooks(args))
+    combination_plan = prepared.combination_plan
+    stage_models = prepared.stage_models
     from memstara.pipeline.checkpoint import Checkpoint, atomic_json
     checkpoint = None if args.report_only else Checkpoint(run_dir, resume=args.resume)
     _EXECUTION_GATE.checkpoint = checkpoint
@@ -1357,6 +1336,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         atomic_json(run_dir / "resume_arguments.json", vars(args))
     from memstara.blackboard import create
     await create()  # Apply additive result/provenance columns before the first tool call.
+    from memstara.experiment_registry import sync as sync_registry
+    await sync_registry(run_dir, evidence=False)
     log_path = setup_logging(level="DEBUG" if args.verbose else "INFO", log_file=run_dir / "run.jsonl")
 
     # Decide where the trace files go first. It has to be made **before** the first agent
@@ -1611,7 +1592,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                     note(f"question #{q['question_id']} {q['text']}"
                          f"  [{'·'.join(q.get('okf_tags') or []) or 'no tags'}]")
                 done("(3')", f"{len(questions)} questions"
-                     + (" · all of them already in the bank" if recycled else ""))
+                     + (" · no executable question saved" if recycled else ""))
 
             # -- stop when it runs dry -----------------------------------
             #
@@ -1624,6 +1605,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 record_round(run_dir, wave + 1, "blocked",
                              "No executable question after bounded recovery; no analysis was completed.")
                 write_progress(run_dir, wave + 1, "hypothesis")
+                from memstara.pipeline.question_repair import require_executable_questions
+                require_executable_questions(questions, run_dir, wave)
             dry_streak = dry_streak + 1 if recycled else 0
             # Workspace exploration keeps searching until the configured Loop ceiling
             # or an explicit stop; two rejected candidates must not silently end it.
@@ -2327,6 +2310,10 @@ async def main() -> int:
     )
     ap.add_argument("--provider", default="", choices=["anthropic", "azure_foundry", "openai"])
     ap.add_argument("--model", default="")
+    ap.add_argument("--stage-models", default="{}",
+                    help="Optional JSON qwen/sonnet profiles: Sonnet for Explanation, Qwen for other stages")
+    ap.add_argument('--controlled-comparison', default='{}',
+                    help='Optional fixed feature count and paired ML plan for matched comparisons')
     ap.add_argument("--run-tag", default=None, help="names this run on the board")
     ap.add_argument("--report-only", action="store_true", help="write the report from what has finished")
     ap.add_argument(
@@ -2375,10 +2362,39 @@ async def main() -> int:
                  f"(default: the prompt as written)",
         )
     ap.add_argument("--combination-plan", default="", help="Frozen Cartesian skill schedule")
+    ap.add_argument("--specialist-pilot-config", type=Path,
+                    help="Complete isolated paired-model specialist study configuration")
+    ap.add_argument("--specialist-execute", action="store_true",
+                    help="Execute the specialist study; without this flag only preflight is performed")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--run-dir", default=None)
+    ap.add_argument("--knowledge-mode", choices=("okf", "llm_only"), default="okf")
+    ap.add_argument("--data-mode", choices=("dataset", "proposal"), default="dataset")
+    ap.add_argument("--research-objective", default="")
+    ap.add_argument("--research-input-id", default="", help="Saved user corpus, dataset and prediction target")
     ap.add_argument("--resume", action="store_true", help="Recover this execution from its durable checkpoint")
     args = ap.parse_args()
+    if args.specialist_pilot_config:
+        from memstara.pipeline.specialist_pilot import preflight as pilot_preflight, run_study
+        config = json.loads(args.specialist_pilot_config.read_text())
+        if config.get('expected_combinations') != 64:
+            raise ValueError('This experimental entry point requires an explicit 64-condition design')
+        conditions, _ = pilot_preflight(config)
+        if not args.specialist_execute:
+            print(json.dumps({'status': 'configuration_valid', 'combinations': len(conditions),
+                              'paid_calls': 0, 'remote_connectivity_verified': False}))
+            return 0
+        if not args.run_dir:
+            raise ValueError('Specialist execution requires an explicit --run-dir under outputs/')
+        from memstara.paths import DEFAULT_OUTPUT_DIR
+        destination = Path(args.run_dir).resolve()
+        destination.relative_to(Path(DEFAULT_OUTPUT_DIR).resolve())
+        configure(Settings())
+        result = await run_study(config, destination, resume=args.resume)
+        print(json.dumps(result))
+        return 0
+    if args.specialist_execute:
+        raise ValueError('--specialist-execute requires --specialist-pilot-config')
     if args.combination_plan and not args.resume:
         from memstara.combinations import validate_plan
         try:
@@ -2404,6 +2420,39 @@ async def main() -> int:
         args = argparse.Namespace(**saved)
         args.resume = True
         args.run_dir = str(root)
+    if getattr(args, 'research_input_id', ''):
+        from memstara.research_inputs import prepare, activate, validate_skills
+        try:
+            books = chosen_playbooks(args)
+            if args.combination_plan:
+                books = {stage: [item['id'] for item in entries] for stage, entries
+                         in json.loads(args.combination_plan)['skills'].items()}
+            validate_skills(books)
+            profile = getattr(args, 'research_profile', None) if args.resume else None
+            args.research_profile = profile or prepare(args.research_input_id)
+            activate(args.research_profile)
+            research = args.research_profile['configuration']
+            args.y_column = research['target']['column'] or 'outcome'
+            args.knowledge_mode, args.data_mode = research['knowledge_mode'], research['data_mode']
+            args.research_objective = research['target']['description']
+        except (ValueError, OSError) as exc:
+            ap.error(str(exc))
+    args.data_mode = getattr(args, 'data_mode', 'dataset')
+    args.knowledge_mode = getattr(args, 'knowledge_mode', 'okf')
+    args.research_objective = getattr(args, 'research_objective', '')
+    args.ablate_okf = args.ablate_okf or args.knowledge_mode == 'llm_only'
+    if args.ablate_okf or args.data_mode == 'proposal':
+        from memstara.research_inputs import validate_skills
+        try:
+            books = chosen_playbooks(args)
+            if args.combination_plan:
+                books = {stage: [item['id'] for item in entries] for stage, entries
+                         in json.loads(args.combination_plan)['skills'].items()}
+            validate_skills(books)
+        except ValueError as exc:
+            ap.error(str(exc))
+    if args.data_mode == 'proposal' and not args.research_objective:
+        ap.error('Proposal mode requires --research-objective or a saved research objective')
     from memstara.env import configured_llm
     args.provider, args.model = configured_llm(args.provider, args.model)
     from memstara.evaluation import validate
@@ -2484,8 +2533,9 @@ async def main() -> int:
     # run** — the means of rescue failing only when rescue is needed.
     problems = await check_environment(
         provider=args.provider,
-        y_column="" if args.report_only else args.y_column,
+        y_column="" if args.report_only or args.data_mode == "proposal" else args.y_column,
         use_okf=not args.ablate_okf,
+        use_data=args.data_mode == "dataset",
     )
     if problems:
         print("Environment is not ready:", file=sys.stderr)
@@ -2558,9 +2608,13 @@ async def main() -> int:
             }, indent=2), encoding="utf-8")
             message = (str(exc) if isinstance(exc, (DataQualityError, PipelineExecutionFailure)) else
                        "Pipeline could not safely continue; inspect console.log and trace/.")
+            from memstara.pipeline.failures import read_failure
+            original_failure = read_failure(run_dir) or {}
+            message = original_failure.get("message", message)
             (run_dir / "pipeline_status.json").write_text(json.dumps({
                 "status": "failed", "error_type": type(exc).__name__,
                 "message": message,
+                **{k: original_failure[k] for k in ("code", "stage", "loop") if k in original_failure},
             }, indent=2), encoding="utf-8")
             print(f"Pipeline failed ({type(exc).__name__}): {message}", file=sys.stderr)
             return 1
@@ -2571,6 +2625,14 @@ async def main() -> int:
             print("  see the state:  python -m memstara.blackboard --show")
             print(f"  report only:    python -m memstara.pipeline.board --report-only --run-tag {args.run_tag}")
             return 130
+        finally:
+            if (run_dir / 'config.json').exists():
+                from memstara.experiment_registry import reconcile
+                synced = await reconcile(run_dir)
+                if not synced:
+                    # Preserve scientific completion, but stop batch continuation
+                    # until durable evidence can be reconciled successfully.
+                    raise RuntimeError('Experiment registry is pending; reconcile before the next execution')
 
 
 if __name__ == "__main__":

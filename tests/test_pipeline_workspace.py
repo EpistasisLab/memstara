@@ -23,7 +23,7 @@ class Manager:
         return []
 
 
-def test_workspace_starts_empty_and_caps_concurrent_adds(tmp_path):
+def test_workspace_preserves_more_than_three_concurrent_adds(tmp_path):
     workspace = PipelineWorkspace(tmp_path / "workspace.json", Manager)
     assert workspace.list() == []
 
@@ -35,10 +35,15 @@ def test_workspace_starts_empty_and_caps_concurrent_adds(tmp_path):
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         added = [p for p in pool.map(add, range(8)) if p]
-    assert len(added) == len(set(added)) == 3
+    assert len(added) == len(set(added)) == 8
     restored = PipelineWorkspace(tmp_path / "workspace.json", Manager)
-    assert len(restored.list()) == 3
-    assert {p["number"] for p in restored.list()} == {1, 2, 3}
+    assert len(restored.list()) == 8
+    assert {p["number"] for p in restored.list()} == set(range(1, 9))
+    removed = restored.items[3]
+    restored.mutate({"action": "remove", "id": removed['id']})
+    replacement = restored.mutate({"action": "add"})
+    assert replacement['number'] == removed['number']
+    assert replacement['id'] != removed['id']
 
 
 def test_independent_edit_launch_lock_and_removal(tmp_path):

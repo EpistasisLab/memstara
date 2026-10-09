@@ -19,12 +19,12 @@ def test_provision_applies_stage_profiles_without_default_deployment(monkeypatch
     monkeypatch.setattr(env, 'configured_llm', lambda *_: pytest.fail('Explicit profiles must not use a fallback'))
     ensure = AsyncMock(return_value=SimpleNamespace(id='agent'))
     monkeypatch.setattr(core, '_ensure_agent_from_file', ensure)
-    profiles = {'qwen': {'provider': 'local', 'model': 'qwen-test', 'max_tokens': 2000},
-                'sonnet': {'provider': 'azure_foundry', 'model': 'claude-sonnet-5', 'max_tokens': 3000}}
+    profiles = {'non_explanation_agents': {'provider': 'local', 'model': 'qwen-test', 'max_tokens': 2000},
+                'explanation_agent': {'provider': 'azure_foundry', 'model': 'claude-sonnet-5', 'max_tokens': 3000}}
     asyncio.run(core.provision_board_agents(stage_models=profiles, namespace='fixture', playbooks=playbooks))
     assert ensure.await_count == count
     for call in ensure.call_args_list:
-        expected = profiles['sonnet' if call.args[1] == 'board/report' else 'qwen']
+        expected = profiles['explanation_agent' if call.args[1] == 'board/report' else 'non_explanation_agents']
         assert call.kwargs['model_config'].model == expected['model']
         assert call.kwargs['model_config'].max_tokens == expected['max_tokens']
 

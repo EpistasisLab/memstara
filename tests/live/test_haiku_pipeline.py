@@ -1,0 +1,242 @@
+"""Real provider, board, tools and persistence: one Loop per supported input mode."""
+
+import asyncio
+from datetime import UTC, datetime
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import time
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+import uuid
+
+import asyncpg
+import pytest
+
+MODEL = "claude-haiku-5-5"
+STAGES = {"question", "hypothesis", "data", "ml", "interpreter", "report"}
+pytestmark = pytest.mark.live
+
+
+def read(path, default=None):
+    return json.loads(path.read_text()) if path.exists() else default
+
+
+def role(stage):
+    match = re.match(r"^(question|hypothesis|data|ml|interpret(?:er)?|report)(?:[#0-9-].*)?$", stage)
+    assert match, f"Unknown saved stage: {stage}"
+    return match[1].replace("interpreter", "interpret")
+
+
+@pytest.fixture(scope="session")
+def live_batch(pytestconfig):
+    from memstara.env import load_env
+    from memstara.paths import DEFAULT_OUTPUT_DIR, REPO_ROOT
+    from memstara.stage_models import deployment_profiles
+
+    load_env()
+    profiles = deployment_profiles()
+    assert profiles and all(p["model"] == MODEL for p in profiles.values()), "All stages must use Haiku 5.5"
+    identifier = "haiku_live_" + datetime.now(UTC).strftime("%Y%m%dt%H%M%S") + "_" + uuid.uuid4().hex[:8]
+    verification = Path(DEFAULT_OUTPUT_DIR).resolve() / "verification"
+    chosen = pytestconfig.getoption("--live-batch")
+    root = Path(chosen).resolve() if chosen else verification / identifier
+    assert root.parent == verification and re.fullmatch(r"haiku_live_[a-z0-9_]+", root.name)
+    identifier = root.name
+    root.mkdir(parents=True, exist_ok=bool(chosen))
+    print(f"\nLIVE BATCH {identifier}: four sequential paid Haiku Loops; evidence {root}", flush=True)
+    return {"root": root, "repo": REPO_ROOT, "profiles": profiles, "id": identifier}
+
+
+@pytest.mark.parametrize("knowledge,data", [
+    ("okf", "dataset"), ("llm_only", "dataset"), ("okf", "proposal"), ("llm_only", "proposal"),
+])
+def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, data):
+    from memstara import blackboard
+    from memstara.research_inputs import register, digest
+
+    case = f"{knowledge}_{data}"
+    area = live_batch["root"] / case
+    completed = [p for p in area.glob("attempt_*")
+                 if read(p / "run" / "pipeline_status.json", {}).get("status") == "completed"
+                 and read(p / "acceptance.json", {}).get("exit_code") == 0]
+    if completed:
+        area = max(completed, key=lambda p: p.stat().st_mtime)
+    old_status = read(area / "run" / "pipeline_status.json", {})
+    failed_exit = read(area / "acceptance.json", {}).get("exit_code") not in (None, 0)
+    if (area / "run").exists() and (old_status.get("status") != "completed" or failed_exit):
+        assert old_status.get("status") != "running", "Do not duplicate an active live execution"
+        assert pytestconfig.getoption("--live-retry-failed"), "Investigate failure before explicitly retrying"
+        area = area / ("attempt_" + uuid.uuid4().hex[:8])
+    area.mkdir(exist_ok=True)
+    monkeypatch.setenv("MEMSTARA_RESEARCH_INPUTS_DIR", str(area / "research_inputs"))
+    config = read(live_batch["repo"] / "examples/research-inputs/research.json")
+    config.update(knowledge_mode=knowledge, data_mode=data)
+    for key in ("dataset_path", "knowledge_path"):
+        config[key] = str(live_batch["repo"] / config[key])
+    source = Path(config["dataset_path"])
+    source_sha = digest(source)
+    run = area / "run"
+    schema = live_batch["id"] + "_" + case
+    parts = urlsplit(blackboard.dsn())
+    query = dict(parse_qsl(parts.query))
+    query["search_path"] = schema
+    database = urlunsplit(parts._replace(query=urlencode(query)))
+    if run.exists():
+        assert read(run / "pipeline_status.json", {}).get("status") == "completed", (
+            "Failed live cases require investigation")
+        frozen = read(run / "config.json")
+        assert frozen["stage_models"] == live_batch["profiles"], "Saved model assignment changed"
+        saved = frozen["research_profile"]
+        assert saved["source_dataset_sha256"] == source_sha if data == "dataset" else True
+        assert saved["configuration"]["knowledge_mode"] == knowledge and saved["configuration"]["data_mode"] == data
+        from memstara.research_inputs import verify_materialized
+        verify_materialized(saved)
+        original = read(area / "acceptance.json")
+        elapsed, exit_code = original["elapsed_seconds"], original["exit_code"]
+        schema = original["database_schema"]
+        query["search_path"] = schema
+        database = urlunsplit(parts._replace(query=urlencode(query)))
+        print(f"AUDIT {case}: reuse completed real Haiku execution; no duplicate inference", flush=True)
+    else:
+        record = register(config)
+        assert record["input_checks_passed"], record["issues"]
+        schema = live_batch["id"] + "_" + case + "_" + uuid.uuid4().hex[:4]
+
+        async def initialize():
+            connection = await asyncpg.connect(blackboard.dsn(), timeout=10)
+            try:
+                await connection.execute(f'CREATE SCHEMA "{schema}"')
+                await connection.execute(f'SET search_path TO "{schema}"')
+                await connection.execute(blackboard.SCHEMA)
+            finally:
+                await connection.close()
+
+        asyncio.run(initialize())
+        parts = urlsplit(blackboard.dsn())
+        query = dict(parse_qsl(parts.query))
+        query["search_path"] = schema
+        database = urlunsplit(parts._replace(query=urlencode(query)))
+        env = {**os.environ, "MEMSTARA_DATABASE_URL": database, "MEMSTARA_OUTPUT_DIR": str(area),
+               "MEMSTARA_LLM_MODEL": MODEL,
+               "MEMSTARA_LLM_PROVIDER": live_batch["profiles"]["non_explanation_agents"]["provider"],
+               "MEMSTARA_ML_ENGINE": "xgboost", "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1",
+               "MKL_NUM_THREADS": "1"}
+        profile = live_batch["profiles"]["non_explanation_agents"]
+        if profile.get("api_base"):
+            env["MEMSTARA_LLM_API_BASE"] = profile["api_base"]
+            if profile["provider"] == "azure_foundry" and not env.get("ANTHROPIC_FOUNDRY_RESOURCE"):
+                host = urlsplit(profile["api_base"]).hostname or ""
+                assert host.endswith(".services.ai.azure.com"), (
+                    "An explicit Foundry resource is required for custom endpoints")
+                env["ANTHROPIC_FOUNDRY_RESOURCE"] = host.split(".")[0]
+        for key in ("MEMSTARA_RUN_CONFIG", "MEMSTARA_COMPARISON_POLICY_PATH", "MEMSTARA_LEAKAGE_RULES_PATH"):
+            env.pop(key, None)
+        argv = [sys.executable, "-m", "memstara.pipeline.board", "--trials", "1", "--waves", "1",
+                "--hypothesis-agents", "1", "--interpret-agents", "1", "--max-attempts", "5",
+                "--run-dir", str(run), "--run-tag", schema, "--pipeline-id", schema,
+                "--pipeline-name", f"Haiku automated acceptance: {case}", "--research-input-id", record["id"],
+                "--stage-models", json.dumps(live_batch["profiles"]), "--baseline-columns", "[]",
+                "--evaluation", json.dumps({"engine": "xgboost", "seed": 42, "test_size": .25,
+                                             "folds": 0, "replicates": 1, "search_trials": 1}),
+                "--playbook-hypothesis", "hypothesis_research", "--playbook-data", "data_exact_features",
+                "--playbook-ml", "ml_governance", "--playbook-interpreter", "interpreter_factual_observations",
+                "--playbook-explanation", "report_clinical_explanations"]
+        started = time.monotonic()
+        previous = None
+        print(f"\nSTART {case}: all model calls use {MODEL}; original files preserved", flush=True)
+        with (area / "driver.log").open("w") as log:
+            process = subprocess.Popen(argv, env=env, cwd=live_batch["repo"], stdout=log, stderr=log)
+            try:
+                while process.poll() is None:
+                    progress = read(run / "progress.json", {})
+                    current = progress.get("stage")
+                    if current != previous:
+                        print(f"{case}: stage={current}; elapsed={time.monotonic()-started:.1f}s", flush=True)
+                        previous = current
+                    if time.monotonic() - started > 2400:
+                        pytest.fail(f"{case} exceeded 40 minutes; inspect {area / 'driver.log'}")
+                    time.sleep(1)
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=20)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=10)
+        elapsed = time.monotonic() - started
+        exit_code = process.returncode
+    status = read(run / "pipeline_status.json", {})
+    calls = read(run / "execution.json", {}).get("calls", [])
+    ledger = [json.loads(line) for line in (run / "cost_ledger.jsonl").read_text().splitlines()] \
+        if (run / "cost_ledger.jsonl").exists() else []
+    summary = {"case": case, "model": MODEL, "exit_code": exit_code,
+               "elapsed_seconds": elapsed, "database_schema": schema, "run_directory": str(run),
+               "status": status, "stages": [{k: c.get(k) for k in ("stage", "status", "duration_seconds")}
+                                             for c in calls], "model_requests": len(ledger),
+               "input_tokens": sum(r.get("prompt_tokens") or 0 for r in ledger),
+               "output_tokens": sum(r.get("completion_tokens") or 0 for r in ledger),
+               "known_estimate_subtotal_usd": sum(r["usd"] for r in ledger if r.get("usd") is not None),
+               "unpriced_requests": sum(r.get("usd") is None for r in ledger),
+               "azure_actual_billed_cost": None, "billing_status": "Not queried; estimates are not actual charges"}
+    (area / "acceptance.json").write_text(json.dumps(summary, indent=2))
+    print(f"FINISH {case}: exit={exit_code}, status={status.get('status')}, {elapsed:.2f}s", flush=True)
+    assert digest(source) == source_sha, "Original CSV changed"
+    assert exit_code == 0, f"Inspect {area / 'driver.log'} and saved traces"
+    assert status.get("status") == "completed" and status.get("report_completed") is True, status
+    assert (run / "report.md").stat().st_size > 100
+    assert read(run / "registry_status.json", {}).get("status") == "synced"
+    roles = {role(c["stage"]) for c in calls if c["status"] == "completed"}
+    assert {r.replace("interpreter", "interpret") for r in STAGES} <= roles
+    assert ledger and all(row["model"] == MODEL for row in ledger)
+    for stage in STAGES:
+        name = role(stage)
+        receipts = [r for r in ledger if role(r["stage"]) == name]
+        assert any((r.get("response_model") or "").split("/")[-1] == MODEL for r in receipts), name
+    frozen = read(run / "config.json")
+    assert frozen["data_mode"] == data and frozen["knowledge_mode"] == knowledge
+    assert frozen["stage_models"] == live_batch["profiles"]
+    assert summary["input_tokens"] > 0 and summary["output_tokens"] > 0
+
+    async def persisted():
+        connection = await asyncpg.connect(database, timeout=10)
+        try:
+            tag = frozen["run_tag"]
+            row = await connection.fetchrow("SELECT status, report FROM memstara_executions WHERE run_tag=$1", tag)
+            assert row and row["status"] == "completed" and row["report"]
+            count = await connection.fetchval("SELECT count(*) FROM memstara_execution_costs WHERE run_tag=$1", tag)
+            assert count == len(ledger)
+        finally:
+            await connection.close()
+    asyncio.run(persisted())
+    if data == "proposal":
+        assert status["empirical_evaluation"]["metrics"] is None
+        assert all(c["computation_status"] == "not_executed" for c in calls)
+        for stage in STAGES:
+            output = read(run / "proposal_io" / "loop-0001" / f"{stage}.output.json")
+            assert output["status"] == "completed" and output["model"] == MODEL
+            if knowledge == "llm_only":
+                assert output["output"]["source_ids"] == []
+    else:
+        tools = [tool for call in read(run / "runs.json", []) for tool in call.get("actual_tools", [])]
+        assert "train_and_score" in tools
+        if knowledge == "llm_only":
+            assert not any(tool.startswith("okf_") for tool in tools), "No-corpus mode invoked retrieval"
+        else:
+            assert "okf_read" in tools, "The supplied corpus was not actually read"
+        async def measured():
+            connection = await asyncpg.connect(database, timeout=10)
+            try:
+                tag = read(run / "config.json")["run_tag"]
+                rows = await connection.fetch("SELECT auc, interpretation FROM memstara_results WHERE run_tag=$1", tag)
+                persisted = await connection.fetchval(
+                    "SELECT count(*) FROM memstara_execution_costs WHERE run_tag=$1", tag)
+                assert rows and all(r["auc"] is not None and r["interpretation"] for r in rows)
+                assert persisted == len(ledger)
+            finally:
+                await connection.close()
+        asyncio.run(measured())
+    # Keep the unique schema and all artifacts as auditable live execution evidence.

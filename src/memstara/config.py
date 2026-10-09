@@ -17,7 +17,8 @@ class Settings(CoreSettings):
 
     mcp_allowed_env_vars: str = (
         "MEMSTARA_DATASET_PATH,MEMSTARA_OUTPUT_DIR,MEMSTARA_ML_ENGINE,MEMSTARA_DATABASE_URL,"
-        "MEMSTARA_OUTCOME_COLUMN,MEMSTARA_OKF_FIELDS,MEMSTARA_RUN_CONFIG,"
+        "MEMSTARA_OUTCOME_COLUMN,MEMSTARA_OKF_FIELDS,MEMSTARA_RUN_CONFIG,MEMSTARA_LEAKAGE_RULES_PATH,"
+        "MEMSTARA_USER_SKILLS_DIR,MEMSTARA_SKILL_ALIASES_PATH,"
         "MEMSTARA_DEBUGPY,MEMSTARA_DEBUGPY_WAIT,"
         # debugpy runs its check and prints its warning **the moment** the child
         # Python starts. Switching it off from inside the code is already too late

@@ -27,6 +27,8 @@ async def database(monkeypatch, tmp_path):
         query["search_path"] = schema
         monkeypatch.setenv("MEMSTARA_DATABASE_URL", urlunsplit(parts._replace(query=urlencode(query))))
         monkeypatch.setenv("MEMSTARA_OUTPUT_DIR", str(tmp_path))
+        # Integration evidence must not depend on a developer's local engine default.
+        monkeypatch.setenv("MEMSTARA_ML_ENGINE", "xgboost")
         monkeypatch.delenv("MEMSTARA_RUN_CONFIG", raising=False)
         yield connection
     finally:

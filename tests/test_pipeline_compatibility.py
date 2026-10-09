@@ -13,6 +13,22 @@ from memstara.pipeline import board
 from memstara.pipeline.core import tools_for, BOARD_TOOLS, QUESTION_TOOLS
 from memstara.pipeline.failures import PipelineExecutionFailure, require_tools, stop_execution, visible_failure
 from memstara.pipeline.llm import PipelineLLMService, provider_messages
+
+
+def test_sampling_policy_uses_adapter_capabilities_and_preserves_input(monkeypatch):
+    from litellm.llms.anthropic.common_utils import AnthropicModelInfo
+    from memstara.pipeline.llm import request_scope, request_options
+    monkeypatch.setattr(AnthropicModelInfo, '_supports_sampling_params', lambda model: False)
+    original = dict(model='azure_ai/claude-haiku-5-5', temperature=.7, top_p=.9,
+                    top_k=10, max_tokens=8192)
+    with request_scope(original['model']):
+        result = request_options(original)
+    assert not {'temperature', 'top_p', 'top_k'} & result.keys()
+    assert result['max_tokens'] == 8192
+    assert original['temperature'] == .7
+    monkeypatch.setattr(AnthropicModelInfo, '_supports_sampling_params', lambda model: True)
+    with request_scope(original['model']):
+        assert request_options(original)['temperature'] == .7
 from memstara.pipeline.recovery import ensure_artifact
 from motoro.mcp.registry import MCPServerRegistry, ServerEntry
 from motoro.services.llm_service import LLMService
@@ -191,8 +207,9 @@ def test_three_loop_driver_stops_on_first_rejection_and_cleans_up(isolated_board
     from memstara.pipeline.core import board_workers
     agents = {key: key for key in board_workers({})}
     registry = NS(disconnect_all=AsyncMock())
-    monkeypatch.setattr(board, 'configure', lambda _: None)
-    monkeypatch.setattr(board, 'Settings', lambda: NS(model_copy=lambda **kw: None))
+    from memstara.pipeline import preparation
+    monkeypatch.setattr(preparation, 'configure', lambda _: None)
+    monkeypatch.setattr(preparation, 'Settings', lambda: NS(model_copy=lambda **kw: None))
     monkeypatch.setattr(snapshot, 'freeze', lambda *args: None)
     monkeypatch.setattr(blackboard, 'create', AsyncMock())
     monkeypatch.setattr(board, 'setup_logging', lambda **kwargs: None)

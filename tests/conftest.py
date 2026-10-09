@@ -70,13 +70,19 @@ def fake_encoder():
 
 def pytest_addoption(parser):
     parser.addoption("--run-integration", action="store_true", help="Run tests against an explicit test database")
+    parser.addoption("--run-live", action="store_true", help="Run paid Haiku 5.5 pipeline acceptance tests")
+    parser.addoption("--live-batch", default="",
+                     help="Audit completed cases and run remaining cases in this live batch")
+    parser.addoption("--live-retry-failed", action="store_true",
+                     help="Keep failed evidence and run a fresh attempt after investigating the failure")
 
 
 def pytest_collection_modifyitems(config, items):
-    if config.getoption("--run-integration"):
-        return
     selected, deselected = [], []
     for item in items:
-        (deselected if item.get_closest_marker("integration") else selected).append(item)
+        excluded = (
+            item.get_closest_marker("integration") and not config.getoption("--run-integration")
+        ) or (item.get_closest_marker("live") and not config.getoption("--run-live"))
+        (deselected if excluded else selected).append(item)
     items[:] = selected
     config.hook.pytest_deselected(items=deselected)

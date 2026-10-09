@@ -6,6 +6,42 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'viewer' / 'api'))
 import run_artifacts
 
 
+def test_first_failure_overrides_generic_group_error_without_mutating_archive(tmp_path):
+    status = {'status': 'failed', 'error_type': 'ExceptionGroup',
+              'message': 'Pipeline could not safely continue; inspect console.log and trace/.'}
+    failure = {'code': 'tool_argument_validation', 'stage': 'question0-1', 'loop': 1,
+               'message': 'Tool argument correction exhausted.', 'exception_types': ['ValueError']}
+    for name, value in [('pipeline_status.json', status), ('pipeline_failure.json', failure)]:
+        (tmp_path / name).write_text(json.dumps(value))
+    state = run_artifacts.pipeline_state(tmp_path)
+    assert state['message'] == failure['message']
+    assert state['stage'] == 'question0-1' and state['loop'] == 1
+    assert state['code'] == 'tool_argument_validation'
+    assert json.loads((tmp_path / 'pipeline_status.json').read_text()) == status
+
+
+def test_failure_visible_before_outer_status_write(tmp_path):
+    (tmp_path / 'pipeline_failure.json').write_text(json.dumps({
+        'message': 'Question generation failed.', 'stage': 'question', 'loop': 1}))
+    assert run_artifacts.pipeline_state(tmp_path)['status'] == 'failed'
+
+
+def test_completed_status_not_replaced_by_stale_failure(tmp_path):
+    (tmp_path / 'pipeline_status.json').write_text(json.dumps({'status': 'completed'}))
+    (tmp_path / 'pipeline_failure.json').write_text(json.dumps({'message': 'Historical failure'}))
+    assert run_artifacts.pipeline_state(tmp_path) == {'status': 'completed'}
+
+
+def test_legacy_provider_exception_is_explained_without_inventing_http_status(tmp_path):
+    (tmp_path / 'pipeline_failure.json').write_text(json.dumps({
+        'message': 'An agent failed.', 'code': 'agent_execution_failed',
+        'exception_types': ['InternalServerError', 'HTTPStatusError'], 'stage': 'hypothesis0'}))
+    state = run_artifacts.pipeline_state(tmp_path)
+    assert state['code'] == 'model_server'
+    assert 'internal server error' in state['message']
+    assert '500' not in state['message']
+
+
 def test_artifacts_are_scoped_and_do_not_expose_prompts(tmp_path, monkeypatch):
     monkeypatch.setattr(run_artifacts, 'ROOT', tmp_path)
     for tag in ('first', 'second'):

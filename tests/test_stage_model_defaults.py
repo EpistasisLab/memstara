@@ -11,8 +11,8 @@ from memstara.control.workspace import PipelineWorkspace
 @pytest.fixture
 def profiles(tmp_path, monkeypatch):
     value = {
-        "qwen": {"provider": "openai", "model": "qwen-test"},
-        "sonnet": {"provider": "azure_foundry", "model": "claude-sonnet-test"},
+        "non_explanation_agents": {"provider": "openai", "model": "qwen-test"},
+        "explanation_agent": {"provider": "azure_foundry", "model": "claude-sonnet-test"},
     }
     path = tmp_path / "profiles.json"
     path.write_text(json.dumps(value))
@@ -28,15 +28,33 @@ def test_new_workspace_and_launch_freeze_deployment_profiles(profiles):
     argv = build_argv({}, [])
     assert json.loads(argv[argv.index("--stage-models") + 1]) == profiles
     for stage in ("hypothesis", "hypothesis#2", "data", "ml", "interpreter", "interpreter#2"):
-        assert stage_models.for_stage(config["stage_models"], stage) == profiles["qwen"]
-    assert stage_models.for_stage(config["stage_models"], "report") == profiles["sonnet"]
+        assert stage_models.for_stage(config["stage_models"], stage) == profiles["non_explanation_agents"]
+    assert stage_models.for_stage(config["stage_models"], "report") == profiles["explanation_agent"]
 
 
 def test_saved_profiles_override_deployment_defaults(profiles):
-    profiles["sonnet"]["model"] = "claude-sonnet-frozen"
+    profiles["explanation_agent"]["model"] = "claude-sonnet-frozen"
     assert PipelineWorkspace.configuration({"stage_models": profiles})["stage_models"] == profiles
     argv = build_argv({"stage_models": profiles}, [])
     assert json.loads(argv[argv.index("--stage-models") + 1]) == profiles
+
+
+def test_azure_deployment_names_need_not_match_legacy_profile_keys(profiles):
+    profiles['non_explanation_agents']['model'] = 'gpt-4o'
+    profiles['explanation_agent']['model'] = 'clinical-explanation-deployment'
+    config = PipelineWorkspace.configuration({'stage_models': profiles})
+    argv = build_argv({'stage_models': config['stage_models']}, [])
+    frozen = json.loads(argv[argv.index('--stage-models') + 1])
+    for stage in ('hypothesis', 'data', 'ml', 'interpreter'):
+        assert stage_models.for_stage(frozen, stage)['model'] == 'gpt-4o'
+    assert stage_models.for_stage(frozen, 'report')['model'] == 'clinical-explanation-deployment'
+
+
+@pytest.mark.parametrize('name', ['', '   ', 42, None])
+def test_invalid_deployment_names_remain_rejected(profiles, name):
+    profiles['non_explanation_agents']['model'] = name
+    with pytest.raises(ValueError):
+        stage_models.validate_profiles(profiles)
 
 
 def test_explicit_missing_file_never_falls_back(tmp_path, monkeypatch):
@@ -47,7 +65,7 @@ def test_explicit_missing_file_never_falls_back(tmp_path, monkeypatch):
 
 def test_invalid_profile_never_falls_back(tmp_path, monkeypatch):
     path = tmp_path / "invalid.json"
-    path.write_text('{"qwen": {"provider": "openai", "model": "qwen-test"}}')
+    path.write_text('{"non_explanation_agents": {"provider": "openai", "model": "qwen-test"}}')
     monkeypatch.setenv("MEMSTARA_STAGE_MODELS_PATH", str(path))
     with pytest.raises(ValueError, match="missing or invalid"):
         stage_models.deployment_profiles()
@@ -64,19 +82,19 @@ def test_recovery_uses_only_frozen_profiles(profiles, monkeypatch):
     assert stage_models.resolve_run_profiles({}, recovering=True, frozen={'stage_models': profiles}) == profiles
     assert stage_models.resolve_run_profiles({}, recovering=True, frozen={}) == {}
     wrong = json.loads(json.dumps(profiles))
-    wrong['sonnet']['model'] = 'claude-sonnet-different'
+    wrong['explanation_agent']['model'] = 'claude-sonnet-different'
     with pytest.raises(ValueError, match='frozen execution'):
         stage_models.resolve_run_profiles(wrong, recovering=True, frozen={'stage_models': profiles})
 
 
 def test_connection_summary_does_not_expose_endpoints(profiles):
-    profiles['qwen']['api_base'] = 'https://private.example.test/v1'
-    assert stage_models.public_profiles(profiles)['qwen'] == {'provider': 'openai', 'model': 'qwen-test'}
+    profiles['non_explanation_agents']['api_base'] = 'https://private.example.test/v1'
+    assert stage_models.public_profiles(profiles)['non_explanation_agents'] == {'provider': 'openai', 'model': 'qwen-test'}
 
 
-@pytest.mark.parametrize('stage,family', [('question0-1','qwen'), ('hypothesis0','qwen'),
-    ('hypothesis#2','qwen'), ('data#3','qwen'), ('ml#2','qwen'), ('interpret#1','qwen'),
-    ('interpreter#2','qwen'), ('report','sonnet')])
+@pytest.mark.parametrize('stage,family', [('question0-1','non_explanation_agents'), ('hypothesis0','non_explanation_agents'),
+    ('hypothesis#2','non_explanation_agents'), ('data#3','non_explanation_agents'), ('ml#2','non_explanation_agents'), ('interpret#1','non_explanation_agents'),
+    ('interpreter#2','non_explanation_agents'), ('report','explanation_agent')])
 def test_every_runtime_stage_refuses_a_wrong_model(profiles, stage, family):
     from types import SimpleNamespace
     config = SimpleNamespace(**profiles[family])
@@ -111,7 +129,7 @@ def test_missing_sonnet_credential_blocks_before_inference(profiles, monkeypatch
     pytest.importorskip('motoro')
     resolver = AsyncMock(side_effect=[{'api_key': 'synthetic'}, {}])
     monkeypatch.setattr('motoro.services.credentials.resolve', resolver)
-    with pytest.raises(ValueError, match='sonnet: runtime credential'):
+    with pytest.raises(ValueError, match='explanation_agent: runtime credential'):
         asyncio.run(stage_models.preflight_profiles(profiles))
     assert resolver.await_count == 2
 
@@ -126,9 +144,45 @@ def test_resolver_cannot_silently_replace_model(profiles, monkeypatch):
         asyncio.run(stage_models.preflight_profiles(profiles))
 
 
-@pytest.mark.parametrize('invalid', [[], False, '[]', {'qwen': {'model': 'qwen-test'}}])
+@pytest.mark.parametrize('invalid', [[], False, '[]', {'non_explanation_agents': {'model': 'qwen-test'}}])
 def test_web_rejects_invalid_profiles_instead_of_using_defaults(profiles, invalid):
     with pytest.raises(ValueError):
         PipelineWorkspace.configuration({'stage_models': invalid})
     with pytest.raises(ValueError):
         build_argv({'stage_models': invalid}, [])
+
+
+def test_legacy_profiles_normalize_without_mutating_saved_evidence(profiles):
+    import copy
+    legacy = {'qwen': profiles['non_explanation_agents'], 'sonnet': profiles['explanation_agent']}
+    before = copy.deepcopy(legacy)
+    assert stage_models.validate_profiles(legacy) == profiles
+    assert legacy == before
+    assert stage_models.resolve_run_profiles(profiles, recovering=True,
+                                            frozen={'stage_models': legacy}) == profiles
+    for role in ('hypothesis', 'data', 'ml', 'interpreter', 'report'):
+        assert stage_models.for_stage(legacy, role) == stage_models.for_stage(profiles, role)
+
+
+def test_mixed_or_duplicate_profile_keys_are_rejected(profiles):
+    with pytest.raises(ValueError, match='do not mix'):
+        stage_models.validate_profiles({**profiles, 'qwen': profiles['non_explanation_agents']})
+    with pytest.raises(ValueError, match='do not mix'):
+        stage_models.validate_profiles({'non_explanation_agents': profiles['non_explanation_agents'], 'sonnet': profiles['explanation_agent']})
+
+
+def test_snapshot_retains_legacy_representation_only_for_same_assignment(profiles):
+    legacy = {'qwen': profiles['non_explanation_agents'], 'sonnet': profiles['explanation_agent']}
+    assert stage_models.snapshot_profiles(profiles, legacy) == legacy
+    assert stage_models.snapshot_profiles(legacy) == profiles
+    changed = {**profiles, 'non_explanation_agents': {**profiles['non_explanation_agents'], 'model': 'different'}}
+    assert stage_models.snapshot_profiles(changed, legacy) == changed
+
+
+def test_intermediate_role_names_preserve_routing_and_snapshot(profiles):
+    old = {'analysis': profiles['non_explanation_agents'], 'explanation': profiles['explanation_agent']}
+    assert stage_models.validate_profiles(old) == profiles
+    assert stage_models.snapshot_profiles(profiles, old) == old
+    assert stage_models.resolve_run_profiles(profiles, recovering=True, frozen={'stage_models': old}) == profiles
+    with pytest.raises(ValueError, match='do not mix'):
+        stage_models.validate_profiles({**profiles, 'analysis': old['analysis']})

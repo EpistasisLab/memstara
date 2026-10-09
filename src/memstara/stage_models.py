@@ -37,7 +37,7 @@ def resolve_run_profiles(raw, *, recovering=False, frozen=None):
         profiles = validate_profiles(profiles)
     if recovering:
         expected = (frozen or {}).get('stage_models', {})
-        if profiles and profiles != expected:
+        if profiles and profiles != (validate_profiles(expected) if expected else {}):
             raise ValueError('Recovery model profiles differ from the frozen execution')
         return validate_profiles(expected) if expected else {}
     return profiles or deployment_profiles()
@@ -61,14 +61,29 @@ def validate_call(config, stage, snapshot):
         raise ValueError('Agent endpoint differs from the frozen stage assignment')
 
 
+def snapshot_profiles(profiles, recorded=None):
+    """Keep the exact historical key representation when the assignment is unchanged."""
+    normalized = validate_profiles(profiles)
+    if recorded and validate_profiles(recorded) == normalized:
+        return deepcopy(recorded)
+    return normalized
+
+
 def validate_profiles(profiles: dict) -> dict:
-    if not isinstance(profiles, dict) or set(profiles) != {"qwen", "sonnet"}:
-        raise ValueError("Provide explicit qwen and sonnet model profiles")
+    if isinstance(profiles, dict) and set(profiles) == {"analysis", "explanation"}:
+        profiles = {"non_explanation_agents": profiles["analysis"], "explanation_agent": profiles["explanation"]}
+    if isinstance(profiles, dict) and set(profiles) == {"qwen", "sonnet"}:
+        profiles = {"non_explanation_agents": profiles["qwen"], "explanation_agent": profiles["sonnet"]}
+    if not isinstance(profiles, dict) or set(profiles) != {"non_explanation_agents", "explanation_agent"}:
+        raise ValueError("Provide explicit non_explanation_agents and explanation_agent model profiles "
+                         "(do not mix legacy keys)")
     for family, profile in profiles.items():
         if not isinstance(profile, dict) or not profile.get("provider") or not profile.get("model"):
             raise ValueError(f"Explicit {family} provider and deployment name are required")
-        if not isinstance(profile["model"], str) or family not in profile["model"].lower():
-            raise ValueError(f"{family} deployment must identify its requested model family")
+        # Historical profile keys identify stage groups, not a model vendor.
+        # Azure deployment names are user-defined and need not contain a family name.
+        if not isinstance(profile["model"], str) or not profile["model"].strip():
+            raise ValueError(f"{family} deployment must have a nonempty model name")
         if profile["provider"] not in ("anthropic", "azure_foundry", "openai", "bedrock", "local", "openrouter"):
             raise ValueError("Unsupported model provider")
         if set(profile) - {"provider", "model", "api_base", "temperature", "max_tokens", "effort"}:
@@ -99,7 +114,7 @@ def for_stage(profiles: dict, stage: str) -> dict:
     base = stage.split("#", 1)[0]
     if base not in ("hypothesis", "data", "ml", "interpreter", "report"):
         raise ValueError("Unknown pipeline stage")
-    return validate_profiles(profiles)["sonnet" if base == "report" else "qwen"]
+    return validate_profiles(profiles)["explanation_agent" if base == "report" else "non_explanation_agents"]
 
 
 async def preflight_profiles(profiles):

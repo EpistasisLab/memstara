@@ -1,4 +1,4 @@
-"""Persist up to three independently configured pipeline definitions."""
+"""Persist independently configured pipeline definitions without a fixed count cap."""
 
 import copy
 import json
@@ -43,7 +43,7 @@ class PipelineWorkspace:
         self.managers = {}
         if path.exists():
             data = json.loads(path.read_text())
-            if not isinstance(data, list) or len(data) > 3:
+            if not isinstance(data, list):
                 raise ValueError("Invalid pipeline workspace; preserve the file and repair it")
             self.items = [{**item, "agent_labels": dict(AGENT_LABELS),
                            "configuration": self.read_configuration(item.get("configuration", {}))[0]}
@@ -105,9 +105,8 @@ class PipelineWorkspace:
         with self.lock:
             action = body.get("action")
             if action == "add":
-                if len(self.items) >= 3:
-                    raise ValueError("At most three pipelines are supported")
-                number = next(n for n in range(1, 4) if all(p["number"] != n for p in self.items))
+                used = {p["number"] for p in self.items}
+                number = next(n for n in range(1, len(used) + 2) if n not in used)
                 name = body.get("name", f"Pipeline {number}")
                 if not isinstance(name, str) or not name.strip() or len(name) > 80:
                     raise ValueError("Pipeline name must contain 1–80 characters")
@@ -166,6 +165,17 @@ class PipelineWorkspace:
             "continuous": value.get("continuous", False),
             "question": "",
         }
+        if config.get('research_input_id'):
+            from memstara.research_inputs import load
+            research = load(config['research_input_id'])['configuration']
+            config.update(knowledge_mode=research['knowledge_mode'], data_mode=research['data_mode'],
+                          research_objective=research['target']['description'],
+                          y_column=research['target']['column'] or 'outcome')
+        if (config.get('knowledge_mode') not in ('okf', 'llm_only')
+                or config.get('data_mode') not in ('dataset', 'proposal')):
+            raise ValueError('Select supported knowledge and data modes')
+        if config.get('data_mode') == 'proposal' and not str(config.get('research_objective', '')).strip():
+            raise ValueError('Proposal mode requires a research objective')
         from memstara.stage_models import resolve_run_profiles
         config['stage_models'] = resolve_run_profiles(config.get('stage_models'))
         from memstara.control.request import _MAX_WAVES

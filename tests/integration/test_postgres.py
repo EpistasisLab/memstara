@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import uuid
 
 import pytest
 
@@ -69,3 +70,33 @@ async def test_pipeline_persists_measured_evidence_and_checks_ownership(database
     result = json.loads(await board.read_results("test-run"))
     assert result["count"] == 1
     assert result["results"][0]["evaluation"]["seed"] == 42
+
+
+async def test_proposal_final_reconciliation_uses_local_stage_evidence(database, tmp_path, monkeypatch):
+    from memstara.experiment_registry import reconcile
+    from motoro import runner
+
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("Proposal adapter IDs are not Motoro agent runs")
+    monkeypatch.setattr(runner, 'get_run', forbidden)
+    monkeypatch.setattr(runner, 'get_run_steps', forbidden)
+    config = {'run_tag': 'proposal-registry', 'mode': 'proposal', 'planning_adapter': 'proposal_v1',
+              'empirical_evaluation': {'status': 'not_executed', 'metrics': None}, 'prompts': {}}
+    call = {'run_id': str(uuid.uuid4()), 'stage': 'report', 'loop': 1, 'mode': 'proposal',
+            'execution_adapter': 'proposal_text', 'core_run_id': None, 'computation_status': 'not_executed',
+            'model': 'fixture', 'provider': 'openai', 'status': 'completed'}
+    io = tmp_path / 'proposal_io' / 'loop-0001'
+    io.mkdir(parents=True)
+    (tmp_path / 'config.json').write_text(json.dumps(config))
+    (tmp_path / 'calls_checkpoint.json').write_text(json.dumps([call]))
+    (tmp_path / 'pipeline_status.json').write_text(json.dumps({'status': 'completed'}))
+    (tmp_path / 'report.md').write_text('Research proposal, not measured findings')
+    (io / 'report.input.json').write_text(json.dumps({'profile': {'model': 'fixture', 'provider': 'openai'}}))
+    (io / 'report.output.json').write_text(json.dumps(call))
+    assert await reconcile(tmp_path)
+    evidence = json.loads(await database.fetchval(
+        "SELECT evidence FROM memstara_execution_agents WHERE run_tag='proposal-registry'"))
+    assert evidence['adapter'] == 'proposal_text'
+    assert evidence['output']['run_id'] == call['run_id']
+    assert await database.fetchval(
+        "SELECT status FROM memstara_executions WHERE run_tag='proposal-registry'") == 'completed'
