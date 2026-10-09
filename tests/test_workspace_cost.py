@@ -50,3 +50,15 @@ def test_database_failure_is_not_reported_as_zero(monkeypatch):
     monkeypatch.setattr(costs.pools,'guarded',AsyncMock(return_value=None))
     with pytest.raises(HTTPException) as err:asyncio.run(costs.workspace_cost(['first']))
     assert err.value.status_code==503
+
+
+def test_partially_priced_positive_subtotal_cannot_be_complete():
+    row={'id':'a','status':'completed','cost_estimate':.25,'tokens':100,'pricing_incomplete':True}
+    result=summarize({'a'},[row])
+    assert result['usd']==.25 and result['status']=='partial' and result['missing_costs']==1
+
+
+def test_invalid_amounts_are_not_reported_as_real_costs():
+    for amount in (float('nan'),float('inf'),-1):
+        result=summarize({'a'},[{'id':'a','status':'completed','cost_estimate':amount,'tokens':1}])
+        assert result['status']=='partial' and result['usd']==0

@@ -60,6 +60,24 @@ def read_json(path):
         return None
 
 
+def pipeline_state(directory):
+    """Read the first recorded cause without rewriting historical run artifacts."""
+    state = read_json(directory / "pipeline_status.json")
+    failure = read_json(directory / "pipeline_failure.json")
+    if (isinstance(failure, dict) and isinstance(failure.get("message"), str)
+            and (not isinstance(state, dict) or state.get("status") != "completed")):
+        result = {**(state if isinstance(state, dict) else {}), "status": "failed",
+                  **{key: failure[key] for key in ("message", "code", "stage", "loop") if key in failure}}
+        # Older records retained the typed provider exception but used a generic
+        # code. Explain only that recorded type; do not infer an HTTP status.
+        if (result.get("code") == "agent_execution_failed"
+                and "InternalServerError" in (failure.get("exception_types") or [])):
+            result.update(code="model_server", message="The model service reported an internal server error. "
+                          "This execution did not complete; saved results remain available.")
+        return result
+    return state
+
+
 def lookup(tag):
     with _index_lock:
         _refresh_index()
@@ -95,7 +113,8 @@ def lookup(tag):
         result = {
             "config": {k: config.get(k) for k in (
                 "hypotheses", "interpreters", "interpretation_mode", "books", "evaluation", "comparison_policy",
-                "pipeline_id", "pipeline_name",
+                "pipeline_id", "pipeline_name", "research_profile", "data_mode", "knowledge_mode",
+                "empirical_evaluation", "research_objective",
                 "trials", "waves", "continuous", "skill", "question", "y_column", "provider", "model",
             )},
             "calls": calls,
@@ -103,7 +122,7 @@ def lookup(tag):
                            "status", "available" if report.strip() else "not_available"),
                        "text": report, "error": (report_status or {}).get("error"),
                        "specialist_explanation": (report_status or {}).get("specialist_explanation")},
-            "pipeline": read_json(directory / "pipeline_status.json"),
+            "pipeline": pipeline_state(directory),
         }
         return result
     return None
