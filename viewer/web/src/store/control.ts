@@ -65,6 +65,10 @@ export type PlaybookStage = (typeof PLAYBOOK_STAGES)[number];
 export type EvaluationPlan = { engine: string; seed: number; test_size: number; folds: number; replicates: number; search_trials: number };
 export type SkillInfo = { evaluation?: Partial<EvaluationPlan>; id: string; title: string; stage: PlaybookStage; description: string; content: string; hash: string; source: string };
 export type RunRequest = {
+  research_input_id?: string;
+  knowledge_mode?: 'okf'|'llm_only';
+  data_mode?: 'dataset'|'proposal';
+  research_objective?: string;
   stage_models?: import("../lib/stageModels").StageProfiles;
   combination_skills?: Partial<Record<PlaybookStage,string[]>>;
   combination_repetitions?: number;
@@ -206,7 +210,7 @@ async function readError(res: Response): Promise<string> {
 }
 
 export function applyRunConfiguration(form: RunRequest, config: RunConfiguration): RunRequest {
-  return { ...form, question: "", ...Object.fromEntries(["skill", "y_column", "provider", "model"].flatMap(k => {
+  return { ...form, research_input_id:config.research_profile?.id??'', knowledge_mode:config.knowledge_mode??'okf', data_mode:config.data_mode??'dataset', research_objective:config.research_objective??'', question: "", ...Object.fromEntries(["skill", "y_column", "provider", "model"].flatMap(k => {
     const value = config[k as keyof RunConfiguration]; return typeof value === "string" ? [[k, value]] : [];
   })), hypothesis_agents: config.hypotheses, interpret_agents: config.interpreters ?? 1, trials: config.trials, waves: config.waves, continuous: config.continuous ?? false,
     baseline_columns: config.comparison_policy?.baseline_columns ?? [],

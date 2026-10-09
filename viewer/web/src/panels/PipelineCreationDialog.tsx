@@ -1,3 +1,5 @@
+import ResearchInputs from '../components/ResearchInputs';
+import ResearchInputSelect from '../components/ResearchInputSelect';
 import CombinationWizard from '../components/CombinationWizard';
 import FloorDetailDialog from '../components/FloorDetailDialog';
 import AgentReferenceKnowledge from '../components/AgentReferenceKnowledge';
@@ -31,11 +33,13 @@ export default function PipelineCreationDialog() {
 }
 
 function ChooseBuildMode() {
-  const [mode,setMode]=useState<'selected'|'all'|null>(null);
+  const [mode,setMode]=useState<'selected'|'all'|'research'|null>(null);
+  if(mode==='research')return <FloorDetailDialog title="Prepare research inputs" close={()=>setMode(null)}><ResearchInputs/></FloorDetailDialog>;
   if(mode==='selected')return <CreationWizard/>;
   if(mode==='all')return <CombinationWizard/>;
   return <FloorDetailDialog title="Build pipelines" close={()=>usePipelines.getState().closeCreation()}>
     <div className="space-y-4 p-3">
+      <button type="button" className="w-full rounded-xl border border-paper-line p-4 text-left" onClick={()=>setMode('research')}><strong>Prepare research inputs</strong><p>Inspect and register your OKF corpus, dataset and target definition before connecting a pipeline.</p></button>
       <button type="button" className="w-full rounded-xl border border-paper-line p-4 text-left" onClick={()=>setMode('selected')}><strong>Selected Pipelines</strong><p>Build one pipeline, then run it when ready. Add more separately.</p></button>
       <button type="button" className="w-full rounded-xl border border-paper-line p-4 text-left" onClick={()=>setMode('all')}><strong>All Combinations</strong><p>Select multiple skills per agent, choose a starting method and set your maximum Loops.</p></button>
     </div>
@@ -61,7 +65,7 @@ function CreationWizard() {
   const sources = useControl(s => s.skills);
   const [sourceReviewed, setSourceReviewed] = useState(false);
   const catalog = useControl(s => s.catalog);
-  const { busy, error, closeCreation, create, items } = usePipelines();
+  const { busy, error, closeCreation, create } = usePipelines();
   const [loading, setLoading] = useState(true);
   const reload = async () => {
     setLoading(true);
@@ -112,7 +116,8 @@ function CreationWizard() {
       <div className="pipeline-creation-body space-y-4">
         <h3 ref={heading} tabIndex={-1} className="text-lg font-semibold">{step + 1}. {labels[step]} <span className="text-xs font-normal text-ink-muted">· Step {step + 1} of {labels.length}</span></h3>
         {step === 0 && <><p className="text-sm text-ink-muted">Choose the evidence this pipeline will explore to generate research questions and hypotheses. Agent skills are configured in the following steps.</p>
-          <KnowledgeSelect value={draft.skill} onChange={value => { setDraft(d => ({...d, skill: value})); setSourceReviewed(false); }} />
+          <ResearchInputSelect value={draft} onChange={patch=>{setDraft(d=>({...d,...patch}));setSourceReviewed(false);}}/>
+          {!draft.research_input_id&&draft.knowledge_mode!=='llm_only'&&<KnowledgeSelect value={draft.skill} onChange={value => { setDraft(d => ({...d, skill: value})); setSourceReviewed(false); }} />}
           <label className="flex items-start gap-3 rounded-lg border border-paper-line bg-paper-panel p-3 text-sm"><input type="checkbox" checked={sourceReviewed} onChange={e => setSourceReviewed(e.target.checked)} className="mt-1"/><span>Use {sourceLabel} for this pipeline.</span></label>
           {!loading && sources.length === 0 && <p className="text-sm text-ink-muted">No source filters are listed. You can use all available knowledge, or <button type="button" className="underline" onClick={() => void reload()}>reload sources</button>.</p>}
         </>}
@@ -165,12 +170,11 @@ function CreationWizard() {
             {setupStages.map((s, index) => <div key={s} className="flex items-start justify-between gap-3 py-3"><div className="min-w-0"><p className="text-xs text-ink-muted">{labels[index + 1]}</p><p className="text-sm">{catalog.find(c => c.stage === s && c.id === draft[`playbook_${s === "report" ? "explanation" : s}`])?.title || 'Select a skill'}{s === 'ml' && ` · ${draft.evaluation.engine}`}</p></div><button type="button" className="shrink-0 text-sm underline" onClick={() => setStep(index + 1)}>Edit</button></div>)}
           </div><p className="text-xs text-ink-muted">This pipeline uses the knowledge sources you confirmed above. Dataset settings are carried over from the current configuration. Data extraction uses the Data skill selected above. Each pipeline has one agent per stage.</p></>}
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-        {items.length >= 3 && <p role="alert" className="text-sm">Three pipelines already exist. Close setup and remove a pipeline before adding another.</p>}
       </div>
       <footer className="pipeline-creation-footer flex flex-wrap items-center justify-between gap-3 border-t border-paper-line">
         <button type="button" disabled={busy || uploading} onClick={closeCreation} className="rounded-lg px-3 py-2 text-sm disabled:opacity-40">Cancel</button>
         <div className="flex gap-2">{step > 0 && <button type="button" disabled={busy || uploading} onClick={() => setStep(step - 1)} className="flex items-center gap-1 rounded-lg border border-paper-line px-3 py-2 text-sm"><ArrowLeft size={16}/>Back</button>}
-          <button type="submit" disabled={!valid || busy || loading || uploading || items.length >= 3} className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-contrast disabled:opacity-40">{busy ? 'Creating…' : step === 7 ? 'Create pipeline' : 'Next'}{step === 7 ? <Check size={16}/> : <ArrowRight size={16}/>}</button></div>
+          <button type="submit" disabled={!valid || busy || loading || uploading} className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-contrast disabled:opacity-40">{busy ? 'Creating…' : step === 7 ? 'Create pipeline' : 'Next'}{step === 7 ? <Check size={16}/> : <ArrowRight size={16}/>}</button></div>
       </footer>
     </form>
   </dialog>;

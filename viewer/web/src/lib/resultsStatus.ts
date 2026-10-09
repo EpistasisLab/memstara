@@ -1,4 +1,4 @@
-interface PipelineStatus {status: string; message?: string}
+interface PipelineStatus {status: string; message?: string; stage?: string; loop?: number | null; code?: string}
 
 /** A running snapshot is progress, not a warning. Stale data must not imply liveness. */
 export function resultsStatus(pipeline?: PipelineStatus | null, stale = false, execution?: {paused:boolean; stopping:boolean}) {
@@ -24,7 +24,16 @@ export function resultsStatus(pipeline?: PipelineStatus | null, stale = false, e
     case 'failed':
     case 'blocked':
     case 'incomplete':
-      return {warning:true, text:`Pipeline needs attention (${pipeline.status}). ${pipeline.message || 'Review the recorded stage details. Saved results remain available.'}`};
+      {
+        const stages:Record<string,string>={question:'Question generation',hypothesis:'Hypothesis generation',
+          data:'Data preparation',ml:'Model training',interpret:'Interpretation',interpreter:'Interpretation',report:'Explanation report',preflight:'Startup checks'};
+        const role=pipeline.stage?.match(/^(question|hypothesis|data|ml|interpreter|interpret|report|preflight)(?:[#\d-].*)?$/)?.[1];
+        const location=role ? ` at ${stages[role]}` : '';
+        const loop=typeof pipeline.loop==='number' && pipeline.loop>0 ? ` (Loop ${pipeline.loop})` : '';
+        const generic=pipeline.message?.includes('Pipeline could not safely continue; inspect console.log and trace/');
+        const reason=generic || !pipeline.message ? 'The saved diagnostic does not identify the cause. Saved results remain available.' : pipeline.message;
+        return {warning:true, text:`This execution ${pipeline.status==='failed'?'failed':pipeline.status==='blocked'?'was blocked':'is incomplete'}${location}${loop}. ${reason}`};
+      }
     default:
       return {warning:true, text:`Recorded pipeline status: ${pipeline.status}. Completion has not been confirmed; review the recorded details.`};
   }

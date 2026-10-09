@@ -1,3 +1,4 @@
+import ResearchInputs from '../components/ResearchInputs';
 import {floorExecutionState, type FloorActivity} from '../lib/floorActivity';
 import {createPortal} from "react-dom";
 import {WorkspaceHeaderContext} from "../components/WorkspaceHeaderContext";
@@ -43,8 +44,10 @@ function Station(props: NodeProps<Node<StationData>>) {
   const active=floorExecutionState(pipeline.running).live && !pipeline.running?.waiting_for_questions && pipeline.progress.stage===stage;
 
   if(stage==='source') return <KnowledgeNode {...props} data={{
-    compact:true,value:pipeline.configuration.skill,locked:!!pipeline.running||busy,saved:false,
-    description:"Evidence used by this pipeline's hypothesis agent.",
+    compact:true,value:pipeline.configuration.skill,locked:!!pipeline.running||busy||!!pipeline.configuration.research_input_id,saved:false,
+    researchId:pipeline.configuration.research_input_id,
+    knowledgeMode:pipeline.configuration.knowledge_mode,
+    description:pipeline.configuration.research_input_id?"This pipeline uses its saved research corpus. Change the research version in Data & target settings.":"Evidence used by this pipeline's hypothesis agent.",
     onChange:(skill:string)=>usePipelines.getState().save(pipeline.id,{...pipeline.configuration,skill})
   }}/>;
   const book=stage==='data'?'':pipeline.configuration[`playbook_${stage === "report" ? "explanation" : stage}`];
@@ -148,6 +151,7 @@ export function PipelineStatus({ids}: {ids?: string[]} = {}){
   </section>;
 }
 export default function PipelineWorkspace(){
+  const [researchOpen,setResearchOpen]=useState(false);
   const {items,selected,loaded,busy,error,add,select}=usePipelines();
   const [comparison,setComparison]=useState<string[]>([]);
   const visibleItems=useMemo(()=>comparison.length?items.filter(p=>comparison.includes(p.id)):items.filter(p=>p.id===(selected??items[0]?.id)),[items,comparison,selected]);
@@ -250,7 +254,8 @@ export default function PipelineWorkspace(){
     <div className="pipeline-global-actions" role="group" aria-label="Controls for all pipelines">
       <span className="pipeline-running-count" data-help="Running pipelines" data-help-description="Number of pipelines currently executing. Paused pipelines are excluded; this is not the number of Loops or combinations." tabIndex={0} title="Pipelines currently executing; paused pipelines are excluded"><Activity size={13}/>{items.filter(p=>floorExecutionState(p.running).live).length} running</span>
       <MasterStop/>
-      <button className="pipeline-add-primary" data-help="Add pipeline" data-help-description={items.length>=3?"The maximum of 3 pipelines has been reached. Delete one before creating another.":"Open the setup wizard to choose knowledge sources, agent skills, execution limits and a pipeline name. Creating a pipeline does not start it."} disabled={!loaded||busy||items.length>=3} title={items.length>=3?'Maximum of 3 pipelines reached. Delete a pipeline to create another.':'Create a pipeline and choose its sources, agents and skills'} onClick={()=>void add()}><Plus size={17}/><span>Add pipeline</span></button>
+      <button className="pipeline-research-inputs" onClick={()=>setResearchOpen(true)}>Prepare research inputs</button>
+      <button className="pipeline-add-primary" data-help="Add pipeline" data-help-description="Open the setup wizard to choose knowledge sources, agent skills, execution limits and a pipeline name. Creating a pipeline does not start it." disabled={!loaded||busy} title="Create a pipeline and choose its sources, agents and skills" onClick={()=>void add()}><Plus size={17}/><span>Add pipeline</span></button>
     </div>
   </div>;
   return <div className={`floor-observatory flex h-full min-h-0 flex-col overflow-hidden bg-paper ${motion?"":"floor-still"} ${expanded?"fixed inset-3 z-50 rounded-xl border border-paper-line shadow-xl":""}`}>
@@ -309,6 +314,7 @@ export default function PipelineWorkspace(){
         <button onClick={()=>{setDetail(null);useViewer.getState().setView('agents');}}>Open Telemetry for history</button>
       </div>
     </FloorDetailDialog>}
+    {researchOpen&&<FloorDetailDialog title="Prepare research inputs" close={()=>setResearchOpen(false)}><ResearchInputs/></FloorDetailDialog>}
     {detail==='progress'&&<FloorDetailDialog title="Pipeline progress" close={()=>setDetail(null)}><PipelineStatus ids={visibleItems.map(p=>p.id)}/></FloorDetailDialog>}
       </div>
       <ClinicalLogPanel pipelines={visibleItems} floorActivity={combinationPipeline && floorActivity?.pipelineId===combinationPipeline.id && floorActivity.runTag===(combinationPipeline.running??combinationPipeline.latest)?.run_tag ? floorActivity : null}/>

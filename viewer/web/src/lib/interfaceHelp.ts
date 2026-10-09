@@ -21,7 +21,7 @@ export const INTERFACE_HELP:Record<string,string>={
   'Run history':'Browse saved executions and choose which analysis to review. Selecting an old execution does not restart it.',
   'System status':'Check connections to the viewer API, analysis database, agent runtime and pipeline control service.',
   'Model connection':'Inspect the configured language model, deployment and connection information used by agents. This is separate from the predictive ML model.',
-  'Add Pipeline':'Open the setup wizard to choose knowledge sources, a name and each agent’s skill. The pipeline is created after you confirm the final review. Up to three pipelines can be configured.',
+  'Add Pipeline':'Open the setup wizard to choose knowledge sources, a name and each agent’s skill. The pipeline is created after you confirm the final review. Creating a pipeline does not start execution.',
   'Pause flow animation':'Pause the moving visual effects in Floor plan. Agents and analyses continue running.',
   'Resume flow animation':'Resume moving visual effects in Floor plan. This does not start or resume an analysis.',
   'Play':'Start a new execution of this pipeline. It continues exploring until stopped or blocked. This can incur language-model usage charges.',

@@ -96,11 +96,11 @@ export const usePipelines = create<{
     useViewer.getState().setRunTag(tag);
   },
   add:async()=>{
-    if(get().busy || get().items.length>=3) return;
+    if(get().busy) return;
     set({creationOpen:true,error:null});
   },
   create:async(name,configuration)=>{
-    if(get().busy || get().items.length>=3) return false;
+    if(get().busy) return false;
     set({busy:true,error:null});
     try {
       const item=await request({action:'add',name,configuration:{...configuration,question:"",

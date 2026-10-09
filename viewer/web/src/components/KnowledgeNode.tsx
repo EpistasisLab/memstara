@@ -6,15 +6,16 @@ import KnowledgeSelect from "./KnowledgeSelect";
 import { useControl } from "../store/control";
 
 export default function KnowledgeNode({ data }: NodeProps) {
-  const { value, locked, saved, onChange, description, compact } = data as {
-    value: string | null; locked: boolean; saved: boolean; description?: string; compact?: boolean; onChange: (value: string) => void;
+  const { value, locked, saved, onChange, description, compact, researchId, knowledgeMode } = data as {
+    value: string | null; locked: boolean; saved: boolean; description?: string; compact?: boolean; researchId?:string; knowledgeMode?:string; onChange: (value: string) => void;
   };
   const dialog = useRef<HTMLDialogElement>(null);
   const skills = useControl(s => s.skills);
   const bundle = useControl(s => s.bundle);
   const selected = skills.find(s => s.skill === value);
-  const label = value === null ? "Not recorded for this run" : value === "" ? "All available knowledge" : selected?.label ?? value;
-  const documents = value === "" ? bundle?.documents : selected?.documents;
+  const modelOnly = knowledgeMode === 'llm_only';
+  const label = modelOnly ? 'Model knowledge · no retrieval' : researchId ? `Research corpus · ${researchId.slice(0,8)}` : value === null ? "Not recorded for this run" : value === "" ? "All available knowledge" : selected?.label ?? value;
+  const documents = modelOnly || researchId ? undefined : value === "" ? bundle?.documents : selected?.documents;
   return <>
     <button type="button" onClick={() => dialog.current?.showModal()}
       aria-label={`Knowledge sources: ${label}. ${locked ? "View details" : "Choose sources"}`}
@@ -32,7 +33,7 @@ export default function KnowledgeNode({ data }: NodeProps) {
       <div className="mb-4 flex items-center justify-between gap-3"><h2 id="knowledge-dialog-title" className="text-lg font-bold">Knowledge sources</h2>
         <button type="button" aria-label="Close knowledge sources" onClick={() => dialog.current?.close()} className="rounded p-2 hover:bg-paper"><X size={18} /></button></div>
       <p className="mb-4 text-sm text-ink-soft">Choose the evidence your hypothesis agents can use. Agent skills separately define how they analyze that evidence.</p>
-      {locked ? <div className="rounded-lg border border-paper-line bg-paper p-4"><p className="font-semibold">{label}</p><p className="mt-2 text-sm text-ink-soft">An analysis is running or starting. Sources can be changed after it stops.</p></div>
+      {modelOnly ? <p>No external corpus is attached. Claims rely on model knowledge and require independent verification. Change the knowledge mode in pipeline settings to attach a corpus.</p> : locked ? <div className="rounded-lg border border-paper-line bg-paper p-4"><p className="font-semibold">{label}</p><p className="mt-2 text-sm text-ink-soft">Change research inputs in pipeline settings after execution stops.</p></div>
         : <>{saved && <p className="mb-3 text-sm text-ink-soft">Changing the source prepares a new analysis. This saved run stays unchanged.</p>}<KnowledgeSelect value={value ?? ""} onChange={onChange} /><p role="status" className="mt-3 text-sm text-ink-soft">Selected: {label}</p></>}
       <button type="button" onClick={() => dialog.current?.close()} className="mt-5 rounded-lg border border-paper-line px-4 py-2 text-sm font-semibold hover:bg-paper">Done</button>
     </dialog>, document.body)}

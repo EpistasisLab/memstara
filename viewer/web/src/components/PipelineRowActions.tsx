@@ -23,13 +23,14 @@ export default function PipelineRowActions({pipeline:p,onSettings,compact=false}
     {!compact&&finished&&<div className="pipeline-execution-summary" role="status">
       <strong>{infrastructure?.status==='interrupted'?'Connection interrupted — results retained':recoverable?'Execution interrupted — checkpoint available':completed?'Execution completed':p.latest?.exit_code===0?'Execution ended':'Execution stopped — review results'}</strong>
       {exploration&&<span>{exploration.completed} Loops completed · {exploration.blocked} blocked</span>}
-      {p.failure&&<span role="alert">{p.failure.message}</span>}
+      {p.failure&&<span>Last execution did not complete. Open Execution details for the saved diagnostic.</span>}
       {p.latest?.recovery_blocked&&<span>Automatic recovery requires review. See execution details.</span>}
     </div>}
     {!compact&&infrastructure&&<p className="pipeline-row-note" role="status">{infrastructure.message}</p>}
     <button className="pipeline-row-primary" disabled={busy} aria-label={`${action} ${p.name}`} onClick={()=>{if(finished&&!recoverable){setAdditionalOpen(true);return;}void(paused||recoverable?usePipelines.getState().pause(p.id,false):p.running?usePipelines.getState().stop(p.id):usePipelines.getState().play(p.id));}}>{action==='Pause'?<Pause size={15}/>:<Play size={15}/>} {action}</button>
     {!compact&&paused&&<p className="pipeline-row-note">{p.running?.execution_state==='paused'?'Paused — ready to resume.':'Pausing after the current agent call.'}</p>}
     {!compact&&<details className="pipeline-card-disclosure"><summary>Execution details</summary>
+      {p.failure&&<p className="pipeline-row-note break-words">Saved diagnostic for {p.latest?.run_tag??p.name}: {p.failure.message}</p>}
     <p className="pipeline-row-limit">{executionConfig?.continuous?'Continuous execution':`Maximum ${executionConfig?.waves??'—'} Loops per execution`}</p>
       {finished&&(recoverable?<p className="pipeline-row-note">Resume restores this execution from its saved checkpoint. Completed Loops and results are retained.</p>:<p className="pipeline-row-note">Results are saved. Additional analysis runs only the extra Loops you approve. Each execution retains its own Loop numbering.</p>)}
       {p.latest?.recovery_blocked&&<p className="pipeline-row-note">Automatic recovery is blocked: {p.latest.recovery_blocked}</p>}

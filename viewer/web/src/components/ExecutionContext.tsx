@@ -11,7 +11,8 @@ export function useExecutionContext() {
   const name = owner?.name || snapshot?.run_configuration?.pipeline_name || 'Archived pipeline';
   const started = owner?.latest?.started;
   const date = started ? new Date(started) : null;
-  const startedLabel = date && !Number.isNaN(date.getTime()) ? date.toLocaleString() : 'Start time unavailable';
+  const savedDate = tag?.match(/(?:^|_)(\d{4})(\d{2})(\d{2})T/)?.slice(1).join('-');
+  const startedLabel = date && !Number.isNaN(date.getTime()) ? date.toLocaleString() : savedDate ? `${savedDate} (saved run date)` : 'Start time unavailable';
   return { tag, name: tag ? name : 'No execution loaded', startedLabel, owner,
     loading: !!requested && requested !== tag,
     label: tag ? `${name} · ${startedLabel}` : 'No execution loaded' };

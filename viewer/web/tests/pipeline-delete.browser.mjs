@@ -78,7 +78,11 @@ try {
   await page.screenshot({path:`/tmp/pipeline-delete-${width}-${theme}.png`});
   while(!release)await new Promise(r=>setTimeout(r,20));release();
   await dialog.waitFor({state:'hidden'});assert.equal(await page.locator('.pipeline-card-delete').count(),2);
-  await page.reload();await showList();await page.locator('.pipeline-card-delete').first().waitFor();assert.equal(await page.locator('.pipeline-card-delete').count(),2);
+  await page.reload();
+  // Wait for loading/layout (including the compact ResizeObserver) before opening the list.
+  await page.getByRole('button',{name:'Select pipeline 2: Running research',exact:true,includeHidden:true}).waitFor({state:'attached'});
+  await page.locator('.pipeline-browser').evaluate(element=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(element.clientWidth)))));
+  await showList();await page.locator('.pipeline-card-delete').first().waitFor();assert.equal(await page.locator('.pipeline-card-delete').count(),2);
   assert.equal(attempts,2);assert.deepEqual(errors,[]);
   console.log(JSON.stringify({width,theme,cancel:'pass',activeGuard:'pass',failure:'pass',pendingEscape:'pass',deleteAndReload:'pass'}));await page.close();
  }

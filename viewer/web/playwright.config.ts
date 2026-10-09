@@ -7,10 +7,15 @@ export default defineConfig({
   fullyParallel: true,
   retries: 0,
   reporter: [['list'], ['html', {open: 'never'}]],
-  webServer: {
+  webServer: [{
     command: 'node scripts/serve-test-ui.mjs',
     url: 'http://127.0.0.1:4175',
     reuseExistingServer: false,
     timeout: 15_000,
-  },
+  }, {
+    command: 'node scripts/serve-test-fixtures.mjs',
+    url: 'http://127.0.0.1:4177',
+    reuseExistingServer: false,
+    timeout: 15_000,
+  }],
 });

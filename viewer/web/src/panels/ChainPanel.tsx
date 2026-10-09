@@ -69,6 +69,7 @@ export default function ChainPanel() {
   const error = useViewer((s) => s.error);
   const newRunMode = useViewer((s) => s.newRunMode);
   const savedKnowledge = useViewer(s => s.snapshot?.run_configuration?.skill);
+  const savedResearch = useViewer(s => s.snapshot?.run_configuration?.research_profile?.id);
   const interpretationMode = useViewer((s) => s.snapshot?.run_configuration?.interpretation_mode);
   // A 200 the API filled from its own previous answer because it gave up waiting for a
   // fresh one. It is not an error — nothing failed — but the picture is older than the
@@ -313,7 +314,8 @@ export default function ChainPanel() {
               id: "stage-knowledge", type: "knowledge", position: { x: -STEP_X, y: 0 },
               selectable: false, draggable: false,
               data: { value: newRunMode ? form.skill : savedKnowledge ?? null,
-                locked: live, saved: !newRunMode,
+                researchId: newRunMode ? form.research_input_id : savedResearch,
+                locked: live || !!(newRunMode ? form.research_input_id : savedResearch), saved: !newRunMode,
                 onChange: (skill: string) => setForm(f => ({ ...f, skill })) },
             }]}
             edges={[...edges, ...(steps[0]?.agents ?? []).map(agent => ({

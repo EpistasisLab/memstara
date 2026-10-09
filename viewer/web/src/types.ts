@@ -308,6 +308,11 @@ export interface Health {
 }
 
 export interface RunConfiguration {
+  knowledge_mode?: 'okf'|'llm_only';
+  data_mode?: 'dataset'|'proposal';
+  research_objective?: string;
+  empirical_evaluation?: {status:string;reason:string;metrics:null};
+  research_profile?: {id:string;fingerprint:string;configuration:{name:string}};
   pipeline_id?: string; pipeline_name?: string;
   skill?: string | null;
   interpretation_mode?: string;
@@ -322,7 +327,7 @@ export interface Snapshot {
   run_configuration?: RunConfiguration | null;
   scene_scope?: string;
   report?: { status: string; text: string; error?: string | null; specialist_explanation?: ExplanationEvidence | null } | null;
-  pipeline?: { status: string; report_completed?: boolean; message?: string; reason?: string } | null;
+  pipeline?: { status: string; report_completed?: boolean; message?: string; reason?: string; code?: string; stage?: string; loop?: number | null } | null;
   run_tag: string;
   runs: RunSummary[];
   /** The API gave up waiting for a fresh computation and re-sent its previous answer.

@@ -9,7 +9,7 @@ if(path==='/control/runs'&&r.request().method()==='POST'){const q=r.request().po
 if(r.request().method()==='POST')throw Error('Unexpected write');return r.continue();});
 await p.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Isolated fixture'}}));
 await p.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');
-for(let i=1;i<=2;i++){
+for(let i=1;i<=4;i++){
 await p.getByRole('button',{name:/Add pipeline/i}).click();await p.getByRole('button',{name:/Selected Pipelines/}).click();const d=p.getByRole('dialog',{name:'Create a pipeline',exact:true});await d.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();await d.getByRole('button',{name:'Next',exact:true}).click();
 for(const label of ['Hypothesis','Data','Machine learning','Interpretation','Explanation']){const c=d.getByRole('combobox',{name:label+' skill',exact:true});const value=await c.inputValue();if(!value){const option=await c.locator('option').evaluateAll(os=>os.find(o=>o.value)?.value);await c.selectOption(option);}await d.getByRole('button',{name:'Next',exact:true}).click();}
 await d.getByLabel('Pipeline name',{exact:true}).fill('Selected '+i);await d.getByRole('button',{name:'Next',exact:true}).click();await d.getByRole('button',{name:'Create pipeline',exact:true}).click();await d.waitFor({state:'hidden'});if(starts.length!==i-1)throw Error('Create started execution');const run=p.getByRole('button',{name:'Run Selected '+i,exact:true});
@@ -18,5 +18,6 @@ if(!await run.evaluate(e=>!!e.closest('.pipeline-selected-controls')&&!e.closest
 await p.locator('.pipeline-browser-list').evaluate(e=>{e.scrollTop=e.scrollHeight;});
 const box=await run.boundingBox();if(!box||box.y<0||box.y+box.height>1000)throw Error('Run is offscreen');
 await run.click();await p.waitForTimeout(300);if(starts.at(-1)!=='selected-'+i)throw Error('Wrong pipeline started');}
-console.log('Selected Pipelines: create A → explicit Run A → create B → explicit Run B; no automatic starts; no combination settings; all writes mocked.');
+if(items.length!==4)throw Error('Fourth pipeline was not created');
+console.log('Four Selected Pipelines created and explicitly started; no automatic starts; all writes mocked.');
 }finally{await b.close();}

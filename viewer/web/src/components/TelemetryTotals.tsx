@@ -1,4 +1,5 @@
 import LoopUsage from "./LoopUsage";
+import CostEvidence from './CostEvidence';
 import { costLabel, usageDuration } from "../lib/loopUsage";
 import { useEffect, useState } from 'react';
 import { usePipelines } from '../store/pipelines';
@@ -36,6 +37,7 @@ export default function TelemetryTotals({data,error,runTag,loop}:{data:Totals|nu
       <h3 className="text-lg font-bold">All pipelines</h3><p className="text-sm text-ink-soft">{data.scope}. Calls are counted once by ID. Updated {new Date(data.updated_at).toLocaleTimeString()}.</p><UsageCards metric={data.total}/>
       <div className="overflow-x-auto"><table className="w-full text-left text-sm"><caption className="pb-2 text-left font-bold">Totals for each pipeline · all saved executions</caption><thead><tr>{['Pipeline','Executions','Agent calls','Tokens','Estimated cost'].map(t=><th key={t} className="p-2">{t}</th>)}</tr></thead><tbody>{data.pipelines.map(p=><tr key={p.id} className="border-t border-paper-line"><td className="p-2"><button className="font-bold text-accent underline" onClick={()=>usePipelines.getState().select(p.id)}>{p.name}</button></td><td className="p-2">{p.executions}</td><td className="p-2">{p.calls}</td><td className="p-2">{p.tokens.toLocaleString()}{p.tokens_status==='partial'?' · partial':''}</td><td className="p-2 whitespace-nowrap">{costLabel(p.cost)}{p.cost.missing_costs>0&&<small className="block text-ink-soft">{p.cost.missing_costs} unpriced calls</small>}</td></tr>)}</tbody></table></div>
       <h3 className="font-bold">Selected execution · {loop===null?'All loops':`Loop ${loop}`}</h3>{metric?<UsageCards metric={metric}/>:<p>No matching usage record is available.</p>}
+      <CostEvidence runTag={runTag}/>
       {execution&&<div>
         <h3 className="font-bold">Execution-wide Loop comparison</h3>
         <p className="mt-1 text-sm text-ink-soft">The cards above follow your Loop selection. The comparison below covers every Loop in this execution, using the same measurements as Final report and Status.</p>

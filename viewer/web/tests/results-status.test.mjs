@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {resultsStatus} from '../src/lib/resultsStatus.ts';
+test('failure identifies the saved stage and loop without implying all pipelines failed',()=>{
+ const notice=resultsStatus({status:'failed',stage:'question0-1',loop:1,message:'Tool correction failed.'});
+ assert.match(notice.text,/This execution failed at Question generation \(Loop 1\)/);
+ assert.match(notice.text,/Tool correction failed/);
+ const legacy=resultsStatus({status:'failed',message:'Pipeline could not safely continue; inspect console.log and trace/.'});
+ assert.match(legacy.text,/does not identify the cause/);
+ assert.doesNotMatch(legacy.text,/console.log/);
+});
 test('active progress is not classified as failure and completion clears the notice',()=>{
  const running=resultsStatus({status:'running'});assert.equal(running.warning,false);assert.match(running.text,/Pipeline is running/);assert.doesNotMatch(running.text,/Check stage|needs attention/);
  for(const status of ['paused','pending','waiting','cancelled','stopped'])assert.equal(resultsStatus({status}).warning,false);

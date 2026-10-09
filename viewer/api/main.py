@@ -85,6 +85,36 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Memstara Viewer", lifespan=lifespan)
+
+
+@app.get('/api/experiments')
+async def experiment_inventory():
+    import experiments
+    return await experiments.inventory()
+
+
+@app.get('/api/experiments/combinations')
+async def experiment_combinations(experiment_id: str = Query(min_length=1, max_length=200)):
+    import experiments
+    return await experiments.experiment(experiment_id)
+
+
+@app.get('/api/experiments/execution')
+async def experiment_execution(run_tag: str = Query(min_length=1, max_length=180)):
+    import experiments
+    return await experiments.execution(run_tag)
+
+
+@app.get('/api/cost-details')
+async def cost_details(run_tag: str = Query(min_length=1, max_length=180)):
+    import cost_details as evidence
+    return await asyncio.to_thread(evidence.details, run_tag)
+
+
+@app.get('/api/azure-costs')
+async def azure_cost_summary():
+    import cost_details as evidence
+    return await asyncio.to_thread(evidence.azure_summary)
 # The app itself. Everything below is GET and nothing else.
 
 # During development the Vite dev server (5173) runs on another port, so CORS has to be

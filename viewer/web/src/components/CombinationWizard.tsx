@@ -3,6 +3,7 @@ import {ArrowRight,ArrowLeft,Check,Layers3,Search,Brain,Database,ChartNoAxesComb
 import './combinations.css';
 import FloorDetailDialog from './FloorDetailDialog';
 import KnowledgeSelect from './KnowledgeSelect';
+import ResearchInputSelect from './ResearchInputSelect';
 import CustomSkillUpload from './CustomSkillUpload';
 import HypothesisSkillWizard from './HypothesisSkillWizard';
 import EvaluationSettings from './EvaluationSettings';
@@ -44,7 +45,7 @@ export default function CombinationWizard(){
    <nav className="comb-steps" aria-label="Combination setup steps">{['Research inputs','Agent skills','Review & create'].map((label,i)=><button key={label} aria-current={step===i?'step':undefined} disabled={busy||uploading||(i===2&&!count)} onClick={()=>setStep(i)}><span>{step>i?<Check size={14}/>:i+1}</span>{label}</button>)}</nav>
    <div className="comb-budget" role="status"><div><strong>{count.toLocaleString()}</strong><span>possible combinations</span></div><ArrowRight size={18} aria-hidden="true"/><div className="comb-total"><strong>{Number.isInteger(total)?total.toLocaleString():'—'}</strong><span>maximum Loops per execution</span></div><div><strong>{randomStart?'Random':'First'}</strong><span>starting combination</span></div></div>
    <div className="comb-step-content">
-   {step===0&&<section className="comb-inputs"><span className="comb-eyebrow">Start with your research context</span><h3>What should the agents explore?</h3><p>Every combination uses the same knowledge selection and model settings, so you can follow how different skills shape the findings.</p><KnowledgeSelect value={draft.skill} onChange={skill=>{setDraft(d=>({...d,skill}));setReviewed(false);}}/></section>}
+   {step===0&&<section className="comb-inputs"><span className="comb-eyebrow">Start with your research context</span><h3>What should the agents explore?</h3><p>Every combination uses the same knowledge selection and model settings, so you can follow how different skills shape the findings.</p><ResearchInputSelect value={draft} onChange={patch=>{setDraft(d=>({...d,...patch}));setReviewed(false);}}/>{!draft.research_input_id&&draft.knowledge_mode!=='llm_only'&&<KnowledgeSelect value={draft.skill} onChange={skill=>{setDraft(d=>({...d,skill}));setReviewed(false);}}/>}</section>}
    {step===1&&<div className="comb-skill-layout">
     <nav className="comb-roles" aria-label="Agent roles">
      <div className="comb-roles-caption">Configure your agents<span>{counts.filter(n=>n>0).length} of 5 ready</span></div>

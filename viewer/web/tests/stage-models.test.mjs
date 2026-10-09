@@ -13,3 +13,16 @@ test('legacy and missing profiles remain explicit',()=>{
  assert(stageModelRows().every(r=>r.model==='Not recorded'));
  assert.equal(stageModelRows({stage_models:{qwen:{model:'qwen-test',provider:'openai'}}})[5].model,'Not recorded');
 });
+
+test('canonical role groups work with the same model in both groups',()=>{
+ const identity={model:'claude-haiku-5-5',provider:'azure_foundry'};
+ const rows=stageModelRows({stage_models:{analysis:identity,explanation:identity}});
+ assert.equal(rows.length,6);
+ assert(rows.every(row=>row.model===identity.model&&row.provider===identity.provider));
+});
+
+test('explicit non-explanation and explanation agent groups route independently',()=>{
+ const rows=stageModelRows({stage_models:{non_explanation_agents:{model:'first',provider:'openai'},explanation_agent:{model:'last',provider:'azure_foundry'}}});
+ assert(rows.slice(0,5).every(row=>row.model==='first'));
+ assert.equal(rows[5].model,'last');
+});

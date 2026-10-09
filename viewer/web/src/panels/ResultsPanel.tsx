@@ -1,5 +1,5 @@
 import SpecialistEvidence from "../components/SpecialistEvidence";
-import { resultsStatus } from "../lib/resultsStatus";
+import ExecutionStatusNotice from "../components/ExecutionStatusNotice";
 import { floorExecutionState } from '../lib/floorActivity';
 import { rankedContributions } from "../lib/featureImportance";
 import ContentOrigin from "../components/ContentOrigin";
@@ -75,7 +75,7 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
   const pipeline = telemetry ? null : snapshot?.pipeline;
   const executionOwner=definitions.find(p=>p.running?.run_tag===savedTag);
   const controlError=usePipelines(s=>s.error);
-  const statusNotice = resultsStatus(pipeline, !!dataUnavailable || !!snapshot?.stale || !!controlError, floorExecutionState(executionOwner?.running));
+  const statusStale = !!dataUnavailable || !!snapshot?.stale || !!controlError;
   const selectedFailed = (useBoard()?.tasks ?? []).filter(task => task.status === "failed");
   const failed = scope==="all" ? (tags && all?.tags===tags?all.failures:[]) : selectedFailed;
 
@@ -84,7 +84,7 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
 
   return (
     <Panel id="results-panel" icon={BarChart3} title="Results">
-      {scope==="selected" && statusNotice && <p role="status" data-testid="results-status" data-tone={statusNotice.warning?"warning":"progress"} className={`m-4 text-sm ${statusNotice.warning?"text-amber-800":"text-ink-soft"}`}>{statusNotice.text}</p>}
+      {scope==="selected" && <ExecutionStatusNotice key={savedTag} pipeline={pipeline} stale={statusStale} execution={floorExecutionState(executionOwner?.running)} label={executionContext.label} runTag={savedTag} loading={executionContext.loading}/>}
       {scope==="selected" && dataUnavailable && <p role="status" className="m-4 text-sm text-amber-800">Connection interrupted. Showing the last available results; this is not an empty or completed run.</p>}
       {!telemetry && <div className="m-4 flex flex-wrap gap-2 text-sm"><button className="rounded border border-paper-line px-3 py-2" aria-pressed={scope==="all"} onClick={()=>setScope("all")}>Latest executions across pipelines</button><button className="rounded border border-paper-line px-3 py-2" aria-pressed={scope==="selected"} onClick={()=>setScope("selected")}>This execution</button></div>}
       {!telemetry && scope==="selected" && <p className="mx-4 text-sm text-ink-soft">Viewing: <strong>{executionContext.label}</strong>. Includes its recorded loops.</p>}
@@ -92,13 +92,13 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
       {scope==="all"&&fetchError&&<p role="alert" className="m-4 text-sm text-amber-800">{fetchError}. Last available results are retained.</p>}
       {failed.length > 0 && <div role="status" className="m-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
         <p className="font-bold">{failed.length} analysis task(s) could not be completed</p>
-        <p>Other loops can continue. Failed tasks have no reported performance.</p>
+        <p>Failed tasks have no reported performance. Check the execution status before continuing.</p>
         {failed.map(task => <p key={task.task_id} className="mt-2">{resultName(task)} · {task.task_type}: {task.error || "No diagnostic recorded"}</p>)}
       </div>}
       {!results ? (
         <EmptyState what="the results" />
       ) : results.length === 0 ? (
-        <div className="p-8 text-ink-faint">No finished results yet.</div>
+        <div className="p-8 text-ink-faint">{savedConfig?.data_mode==='proposal'?'Research proposal mode: no dataset is attached. Training, model metrics and SHAP/LIME computations are not executed. View the proposal report below.':'No finished results yet.'}</div>
       ) : (
         <div className="space-y-5 p-4">
           <ResultExplorer results={results} selected={activeResult ? resultKey(activeResult) : ''} onSelect={setChosenResult} />

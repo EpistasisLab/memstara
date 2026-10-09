@@ -42,14 +42,16 @@ export default function HypothesisSkillWizard({ stage = 'hypothesis', disabled, 
   const [origin, setOrigin] = useState('');
   const [reviewed, setReviewed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [loadingModels, setLoadingModels] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   async function loadModels() {
-    setError('');
+    setError(''); setLoadingModels(true);
     try { const data = await request('/control/skill-drafts/models'); setProvider(data.provider); setModels(data.models); setModel(current => current || data.default_model); }
     catch { setError('Could not load the model connection. Reopen this assistant to retry.'); }
+    finally { if (mounted.current) setLoadingModels(false); }
   }
   async function generate(resume = false) {
     setBusy(true); onBusy(true); setError(''); setSaved(false);
@@ -81,12 +83,13 @@ export default function HypothesisSkillWizard({ stage = 'hypothesis', disabled, 
     } catch(e) { setError(e instanceof Error ? e.message : 'Could not save the skill.'); }
     finally { setBusy(false); onBusy(false); }
   }
-  const locked = busy || !!disabled;
+  const locked = busy || loadingModels || !!disabled;
   return <section className="hypothesis-skill-wizard" aria-label={`AI ${role} skill assistant`}>
     <button type="button" className="skill-assistant-trigger" aria-expanded={open} disabled={locked} onClick={() => {setOpen(!open); if (!open) void loadModels();}}><Sparkles size={17} aria-hidden="true"/> Create a skill with AI</button>
     {open && <div className="skill-assistant-body">
       <p>Turn your clinical expertise into {role} Agent instructions. {multiple ? 'Save a skill, then create another to add different perspectives to your combinations.' : `The saved skill replaces the ${role} skill selected for this pipeline draft.`}</p>
       <p className="text-xs text-ink-muted">Use general research context, not patient details. Generation uses model tokens. It does not run a pipeline.</p>
+      {loadingModels && <p role="status">Loading the model connection…</p>}
       <fieldset disabled={locked}>
         <legend>1. Describe your research perspective</legend>
         {prompts.map(([key, label, placeholder]) => <label key={key}>{label}<textarea rows={2} maxLength={4000} value={answers[key]} placeholder={placeholder} onChange={e => setAnswers(a => ({...a, [key]:e.target.value}))}/></label>)}

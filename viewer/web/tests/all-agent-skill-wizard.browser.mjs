@@ -8,13 +8,17 @@ try {
  for(const mode of ['Selected Pipelines','All Combinations']) {
   const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[],calls=[],saves=[];
   page.on('pageerror',e=>errors.push(e.message));
+  let releaseModels;
   let catalog=roles.map(stage=>({id:stage,stage,title:stage,content:'# Default',hash:stage,source:'Default'}));
   await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Offline fixture'}}));
-  await page.route('**/control/**',r=>{
+  await page.route('**/control/**',async r=>{
    const path=new URL(r.request().url()).pathname;
    if(path==='/control/pipelines')return r.fulfill({json:{pipelines:[]}});
    if(path==='/control/skills')return r.fulfill({json:{skills:[]}});
-   if(path==='/control/skill-drafts/models')return r.fulfill({json:{provider:'openai',default_model:'default-model',models:['default-model']}});
+   if(path==='/control/skill-drafts/models'){
+    await new Promise(resolve=>{releaseModels=resolve;});
+    return r.fulfill({json:{provider:'openai',default_model:'default-model',models:['default-model']}});
+   }
    if(path==='/control/skill-drafts'){calls.push(r.request().postDataJSON());return r.fulfill({status:202,json:{id:String(calls.length),status:'generating'}});}
    if(path.startsWith('/control/skill-drafts/'))return r.fulfill({json:{status:'ready',content:'# Draft',model:'selected-model',provider:'openai'}});
    if(path==='/control/playbooks'){
@@ -39,6 +43,10 @@ try {
    }
    await d.getByRole('button',{name:'Create a skill with AI',exact:true}).click();
    const assistant=d.locator('.hypothesis-skill-wizard:visible');
+   await expect(assistant.getByLabel('Generation model / deployment')).toBeDisabled();
+   await expect.poll(()=>typeof releaseModels).toBe('function');
+   releaseModels();releaseModels=undefined;
+   await expect(assistant.getByLabel('Generation model / deployment')).toBeEnabled();
    for(const input of await assistant.locator('fieldset').first().locator('textarea').all())await input.fill('General research priorities');
    await assistant.getByLabel('Generation model / deployment').fill('selected-model');
    await assistant.getByRole('button',{name:'Generate skill draft',exact:true}).click();
