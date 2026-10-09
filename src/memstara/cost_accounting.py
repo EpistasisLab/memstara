@@ -70,6 +70,7 @@ def estimate(profile, prompt, output, cached=0, written=0):
 
 
 def record_attempt(context, loop, config, record=None, error=False):
+    from memstara.pipeline.diagnostics import request_id
     if not context:
         return
     receipt = price_receipt.get()
@@ -87,6 +88,7 @@ def record_attempt(context, loop, config, record=None, error=False):
         known = False
     row = {
         "id": str(uuid4()),
+        "request_id": request_id.get(),
         "at": datetime.now(UTC).isoformat(),
         "agent_run_id": str(context[1]),
         "stage": context[2],

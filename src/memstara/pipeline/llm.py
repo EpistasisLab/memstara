@@ -2,10 +2,12 @@
 import asyncio
 import copy
 import json
+import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 from motoro.services.llm_service import LLMService
 from memstara.pipeline.runtime import provider_policy, runtime_timeouts, TRANSPORT_RETRY_DELAYS
@@ -20,7 +22,9 @@ def record_response(context, response, max_tokens):
         return
     choices = getattr(response, 'choices', []) or []
     usage = getattr(response, 'usage', None)
+    from memstara.pipeline.diagnostics import request_id
     event = dict(at=datetime.now(UTC).isoformat(), run_id=context[1], stage=context[2],
+                 request_id=request_id.get(),
                  response_id=getattr(response, 'id', None), max_tokens=max_tokens,
                  finish_reasons=[getattr(c, 'finish_reason', None) for c in choices],
                  completion_tokens=getattr(usage, 'completion_tokens', None))
@@ -148,8 +152,10 @@ def record_retry(context, loop, state, attempt, error=None, delay=0):
     if not context:
         return
     from memstara.pipeline.failures import provider_error_details
+    from memstara.pipeline.diagnostics import request_id
     record = dict(at=datetime.now(UTC).isoformat(), run_id=context[1], stage=context[2],
-                  loop=loop, state=state, attempt=attempt, max_attempts=6, delay_seconds=delay,
+                  loop=loop, request_id=request_id.get(), state=state,
+                  attempt=attempt, max_attempts=6, delay_seconds=delay,
                   error_type=type(error).__name__ if error else None,
                   **provider_error_details(error))
     with (Path(context[0]) / 'model_retries.jsonl').open('a') as stream:
@@ -164,7 +170,7 @@ class PipelineLLMService(LLMService):
         super().__init__(*args, **kwargs)
 
     async def _request(self, method, config, messages, *args, **kwargs):
-        from memstara.pipeline.diagnostics import call_context, call_loop
+        from memstara.pipeline.diagnostics import call_context, call_loop, request_id, record_event
         from memstara.pipeline.failures import stop_execution, retryable_model_error
         if getattr(method, '__name__', '') in ('complete', 'complete_with_tools'):
             kwargs['max_retries'] = 0
@@ -178,6 +184,15 @@ class PipelineLLMService(LLMService):
         with request_scope(config.model):
             for attempt in range(6):
                 await request_ready(context)
+                identity_token = request_id.set(str(uuid4()))
+                started = time.monotonic()
+                provider = getattr(getattr(config, 'provider', None), 'value', getattr(config, 'provider', None))
+                record_event(context, 'started', attempt=attempt + 1,
+                             operation=getattr(method, '__name__', 'completion'),
+                             model=config.model, provider=provider,
+                             message_count=len(prepared),
+                             requested_max_tokens=getattr(config, 'max_tokens', None),
+                             timeout_policy=runtime_timeouts(config.model))
                 from memstara.cost_accounting import request_profile, price_receipt, record_attempt
                 profile_token = request_profile.set({
                     'provider': getattr(getattr(config, 'provider', None), 'value', getattr(config, 'provider', None)),
@@ -190,6 +205,10 @@ class PipelineLLMService(LLMService):
                         validate_call(config, context[2], active_plan())
                     result = await method(config, copy.deepcopy(prepared), *args, **kwargs)
                 except Exception as exc:
+                    from memstara.pipeline.failures import provider_error_details, exception_chain
+                    record_event(context, 'failed', duration_seconds=time.monotonic() - started,
+                                 error_types=[type(e).__name__ for e in exception_chain(exc)],
+                                 retryable=retryable_model_error(exc), **provider_error_details(exc))
                     record_attempt(context, call_loop.get(), config, error=True)
                     retryable = retryable_model_error(exc)
                     if retryable and attempt < len(TRANSPORT_RETRY_DELAYS):
@@ -202,16 +221,24 @@ class PipelineLLMService(LLMService):
                     if context:
                         stop_execution(context[0], context[2], call_loop.get(), exc)
                     raise
+                except asyncio.CancelledError:
+                    record_event(context, 'cancelled', duration_seconds=time.monotonic() - started)
+                    raise
                 else:
                     record = getattr(result, 'record', None)
                     if record is None and isinstance(result, tuple):
                         record = next((v for v in result if hasattr(v, 'cost_estimate')), None)
                     record_attempt(context, call_loop.get(), config, record)
+                    record_event(context, 'completed', duration_seconds=time.monotonic() - started,
+                                 response_model=getattr(record, 'model', None),
+                                 prompt_tokens=getattr(record, 'prompt_tokens', None),
+                                 completion_tokens=getattr(record, 'completion_tokens', None))
+                    if attempt:
+                        record_retry(context, call_loop.get(), 'recovered', attempt + 1)
                 finally:
                     request_profile.reset(profile_token)
                     price_receipt.reset(receipt_token)
-                if attempt:
-                    record_retry(context, call_loop.get(), 'recovered', attempt + 1)
+                    request_id.reset(identity_token)
                 return result
 
     async def complete(self, config, messages, *args, **kwargs):
