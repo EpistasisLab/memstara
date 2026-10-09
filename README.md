@@ -146,15 +146,33 @@ outputs/                       Local datasets, caches, and run artifacts (ignore
 
 ## Get started
 
-You need **Git, Conda with Python 3.12, Docker with Compose**, a supported LLM
+You need **Git, Python 3.12 or 3.13, Docker with Compose**, a supported LLM
 credential, and access to the private Memstara repository. Motoro requires its
 own PostgreSQL database and Redis; Memstara's root Compose file starts only its
 own PostgreSQL service.
 
-**1. Prepare the sibling checkouts and Python environment.** For a new workspace:
+**1. Install the Python runtime.** For a reproducible, locked installation, use uv:
 
 ```bash
-git clone https://github.com/EpistasisLab/motoro.git motoro
+git clone https://github.com/HyunjunA/memstara.git
+cd memstara
+# Select the reviewed tag or commit before installing.
+cp .env.example .env
+uv sync --frozen --extra dev --extra runtime --python 3.12
+source .venv/bin/activate
+```
+
+The `runtime` extra installs Motoro v0.10.0 from its immutable release commit and
+LiteLLM 1.97.0. No sibling Motoro checkout is required for this path. Configure
+runtime/provider settings in Memstara's local `.env` or export them separately.
+The existing application environment is not changed when this is run in a new
+checkout. Use the same `--extra dev --extra runtime` flags with subsequent
+`uv run` commands so synchronization retains the runtime.
+
+For editable sibling development with Conda, use this alternative:
+
+```bash
+git clone --branch v0.10.0 https://github.com/EpistasisLab/motoro.git motoro
 git clone https://github.com/HyunjunA/memstara.git
 cd memstara
 cp .env.example .env
@@ -177,7 +195,12 @@ start an experiment; execution uses a separate analysis copy and preserves sourc
 
 **2. Prepare the databases and Redis.** On a new host, follow
 [Motoro's setup](https://github.com/EpistasisLab/motoro#development) to provision
-its services and apply its migrations. Then, from the Memstara checkout:
+its services and apply its migrations. Its database needs the **pgvector**
+extension: plain PostgreSQL alone cannot apply the current Motoro migrations.
+Point `MOTORO_DATABASE_URL` and `MOTORO_REDIS_URL` at those services; do not rely
+on default ports when using an isolated workspace. A package-only installation
+can apply its schema with `python -m motoro.migrations upgrade --url "$MOTORO_DATABASE_URL"`.
+Then, from the Memstara checkout:
 
 ```bash
 docker compose up -d
@@ -185,7 +208,8 @@ docker compose ps
 ```
 
 **3. Configure the connection and research inputs.** Set the deployed provider
-and model in `../motoro/.env`. The board driver resolves the deployment-wide
+and model in the local runtime environment (Memstara `.env`, exported values,
+or `../motoro/.env` when using sibling development). The board driver resolves the deployment-wide
 selection through the control configuration; its legacy `--provider` and
 `--model` flags are not independent overrides. Explicit `stage_models` profiles
 override the agent model assignments; see the [developer guide](DEVELOPER_GUIDE.md#model-profiles-and-their-limits).
@@ -208,7 +232,9 @@ python scripts/build_matcher_cache.py
 
 The matcher needs its catalogue and embeddings built for the selected cohort
 and outcome. Rebuild when the cohort header, matching configuration, or embedding model changes. The first build may need embedding
-model downloads. The synthetic corpus includes absent-variable decoys and
+model downloads. Set `HF_HOME` to an empty dedicated cache when verifying a cold
+installation; Memstara forwards explicit cache paths to its tool subprocesses.
+The synthetic corpus includes absent-variable decoys and
 planted predictive signal for checking the literature-to-column mapping.
 
 **4. Run a pipeline.** With the runtime services and credentials ready:
@@ -348,12 +374,12 @@ Then run:
 
 ```bash
 export UV_PROJECT_ENVIRONMENT=.venv-test
-uv sync --frozen --extra dev
-uv run --frozen ruff check src/
-uv run --frozen lint-imports
-uv run --frozen pytest -q --cov --cov-report=term --cov-report=xml
-uv run --frozen python scripts/check_public_tree.py
-uv run --frozen python scripts/check_markdown.py
+uv sync --frozen --extra dev --extra runtime
+uv run --frozen --extra dev --extra runtime ruff check src/
+uv run --frozen --extra dev --extra runtime lint-imports
+uv run --frozen --extra dev --extra runtime pytest -q --cov --cov-report=term --cov-report=xml
+uv run --frozen --extra dev --extra runtime python scripts/check_public_tree.py
+uv run --frozen --extra dev --extra runtime python scripts/check_markdown.py
 ```
 
 CI runs the following checks on every push and pull request:
