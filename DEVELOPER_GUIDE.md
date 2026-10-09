@@ -433,6 +433,7 @@ stated otherwise.
 | `execution.json`, `calls_checkpoint.json` | Agent run IDs, stage status and timing |
 | `trace/*.txt`, `trace/*.llm.txt` | Saved stage/tool traces and captured model request evidence |
 | `provider_diagnostics.jsonl` | Response finish reasons, token limits, tool-call argument shape |
+| `request_events.jsonl` | Correlated application request starts, terminal outcomes, attempts, configured deadlines and elapsed time |
 | `model_retries.jsonl` | Retry events, when retries occur |
 | `feature_reproduction/` | Local input/corpus archive, selection policy and accepted extraction receipts |
 | `board.json` | Final task/result snapshot, including model evidence references |
@@ -449,6 +450,43 @@ bundles and Interpretation receipts can live outside `run_dir` under the configu
 artifact root; follow their recorded paths. Copying only `report.md` or the run folder
 does not necessarily preserve a complete replay bundle. These artifacts can contain
 sensitive data and prompts; they are not public documentation examples.
+
+For the first debugging pass, inspect a running or finished execution without a
+database connection or another paid model call:
+
+```bash
+python -m memstara.trace.diagnose --from outputs/runs/<execution>
+python -m memstara.trace.diagnose --from outputs/runs/<execution> --json
+```
+
+The summary joins each application model attempt's start and terminal event by
+`request_id`, with its agent `run_id`, stage, Loop, model, elapsed time, safe error
+types and available provider correlation IDs. The same request ID is added to usage
+receipts, provider response diagnostics and retry records. Each retry gets a new ID;
+the agent run ID remains stable. Transport retries do not replay committed tools.
+Start records are appended before awaiting the service, so a slow response can be
+investigated before it finishes. Duration includes service/tool processing in that
+method; it is not a measurement of model inference alone. The recorded timeout policy
+is application configuration, not proof of the provider's internal deadline.
+
+`unresolved` means no terminal record was observed. It can mean a pending request,
+process termination or lost evidence; it does not by itself mean the process is alive.
+Malformed/truncated files, unmatched starts/ends and missing usage receipts are
+reported as incomplete request evidence. Historical executions without the new journal
+remain readable via stage/retry records, with request evidence explicitly unavailable.
+A journal write failure emits a warning rather than masking the provider result or
+original failure. Consult `console.log` for those warnings even when other records
+appear complete. The completeness flag certifies these request records only, not all
+tool payloads, database rows or the entire pipeline audit.
+
+Use the listed evidence files to continue: `config.json`/`prompts.json` for frozen
+inputs and policies; `trace/` and the developer inspector for full model/tool I/O;
+`pipeline_failure.json`/`failure_frames.json` for application failures;
+`registry_status.json` for file/DB synchronization; and reproduction bundles for data
+splits, seeds, fitted models and XAI outputs. The journal omits prompts, tool arguments,
+endpoint URLs, credential values and raw exception messages. It neither captures raw
+HTTP traffic nor exposes Azure's internal failure cause. Cost receipts remain usage
+and estimates; actual billing must be independently verified through Azure APIs.
 
 A rigorous one-route acceptance check includes all of the following:
 
