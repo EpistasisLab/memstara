@@ -75,27 +75,23 @@ jobs:
 
   integration:
     name: PostgreSQL integration
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: memstara_test
-          POSTGRES_PASSWORD: memstara_test
-          POSTGRES_DB: memstara_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U memstara_test -d memstara_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+    # This runner ships PostgreSQL 16. Avoid Docker Hub pulls before test startup.
+    runs-on: ubuntu-24.04
     env:
       MEMSTARA_TEST_DATABASE_URL: postgresql://memstara_test:memstara_test@127.0.0.1:5432/memstara_test
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      - name: Start isolated runner PostgreSQL 16 test database
+        run: |
+          sudo systemctl start postgresql.service
+          test_pg_version=$(sudo -u postgres psql -Atc 'SHOW server_version_num')
+          test "$test_pg_version" -ge 160000
+          test "$test_pg_version" -lt 170000
+          sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE memstara_test LOGIN SUPERUSER PASSWORD 'memstara_test'"
+          sudo -u postgres createdb --owner=memstara_test memstara_test
+          PGPASSWORD=memstara_test psql -h 127.0.0.1 -U memstara_test -d memstara_test -v ON_ERROR_STOP=1 -c 'SELECT version()'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
