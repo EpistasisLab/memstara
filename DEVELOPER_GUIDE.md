@@ -434,6 +434,8 @@ stated otherwise.
 | `trace/*.txt`, `trace/*.llm.txt` | Saved stage/tool traces and captured model request evidence |
 | `provider_diagnostics.jsonl` | Response finish reasons, token limits, tool-call argument shape |
 | `request_events.jsonl` | Correlated application request starts, terminal outcomes, attempts, configured deadlines and elapsed time |
+| `model_io/<request-id>.*.json` | Private, redacted service input/output or safe failure packets, linked by hashes |
+| `trace/<agent-run-id>.steps.json` | Exported public Motoro run/step records, including full tool arguments/results |
 | `model_retries.jsonl` | Retry events, when retries occur |
 | `feature_reproduction/` | Local input/corpus archive, selection policy and accepted extraction receipts |
 | `board.json` | Final task/result snapshot, including model evidence references |
@@ -478,6 +480,36 @@ A journal write failure emits a warning rather than masking the provider result 
 original failure. Consult `console.log` for those warnings even when other records
 appear complete. The completeness flag certifies these request records only, not all
 tool payloads, database rows or the entire pipeline audit.
+
+The diagnosis also exposes `service_io_evidence_complete` and
+`stage_evidence_complete` separately. Service input files are atomically saved and
+flushed before invoking the LLM service, independent of LiteLLM console interception.
+Outputs are saved immediately after return; errors retain a safe failure packet.
+They contain normalized application-service messages, tool schemas/options and returned
+objects, with credential fields and configured secret values redacted. They are not
+the exact wire request after provider adaptation. Cancellation/pending attempts have
+an unobserved response and cannot certify complete input/output coverage. File hashes,
+size and execution identity are checked without printing payload contents. Missing,
+modified, mismatched or unsupported payloads remain explicitly incomplete.
+
+After each board agent, public Motoro run/step records are exported to a private JSON
+file. This includes mapped input/output, model and tool records; ORM relationships are
+not loaded. The stage reference is saved in the execution manifest. Missing or
+unfinished steps cannot certify stage coverage. Proposal execution instead reads its
+existing `proposal_io/` stage input/output files, since no Motoro agent run exists there.
+Evidence file existence or a request-level completeness flag alone does not establish
+that every expected agent/Loop ran. Combine these checks with pipeline outcomes,
+scheduled conditions and registry reconciliation. Original supplied skills are unchanged.
+
+For an explicit paid multi-Loop audit, using both profiles set to Haiku 5.5:
+
+```bash
+python -m pytest tests/live/test_haiku_pipeline.py --run-live --live-loops 2 --live-audit-io -k 'okf-dataset' -x -s
+```
+
+This selects one corpus+CSV case for two Loops; it does not launch the 64-condition
+study. The default live test remains one Loop per selected case. Historical evidence
+without these exports must not be passed as new input/output audit acceptance.
 
 Use the listed evidence files to continue: `config.json`/`prompts.json` for frozen
 inputs and policies; `trace/` and the developer inspector for full model/tool I/O;
