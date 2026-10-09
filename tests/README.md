@@ -6,12 +6,23 @@ will succeed. The tracking issue is [#183](https://github.com/HyunjunA/memstara/
 
 ## Run the checks
 
-From the repository root, after installing the development dependencies:
+From the repository root, use a separate test environment and install the locked
+runtime extra as well as development tools:
 
 ```sh
-uv run --frozen pytest -q --junitxml=test-results/python.xml
-uv run --frozen ruff check tests/test_research_input_matrix.py tests/integration
-uv run --frozen lint-imports
+UV_PROJECT_ENVIRONMENT=.venv-test uv sync --frozen --extra dev --extra runtime
+```
+
+The runtime extra pins Motoro v0.10.0 by commit and LiteLLM 1.97.0, matching the
+provider-adapter acceptance baseline. Linux uv installations select CPU Torch.
+CI installs this extra so runtime-dependent input/contract tests do not silently
+skip for a missing Motoro dependency. It does not modify a sibling checkout.
+Then run:
+
+```sh
+UV_PROJECT_ENVIRONMENT=.venv-test uv run --frozen --extra dev --extra runtime pytest -q --junitxml=test-results/python.xml
+UV_PROJECT_ENVIRONMENT=.venv-test uv run --frozen --extra dev --extra runtime ruff check tests/test_research_input_matrix.py tests/integration
+UV_PROJECT_ENVIRONMENT=.venv-test uv run --frozen --extra dev --extra runtime lint-imports
 ```
 
 The default pytest suite excludes PostgreSQL integration and paid live tests. Some component tests run
@@ -23,7 +34,7 @@ For PostgreSQL, supply `MEMSTARA_TEST_DATABASE_URL` pointing to a **dedicated,
 disposable database whose name ends in `_test`**, then run:
 
 ```sh
-uv run --frozen pytest tests/integration --run-integration -q --junitxml=test-results/postgres.xml
+UV_PROJECT_ENVIRONMENT=.venv-test uv run --frozen --extra dev --extra runtime pytest tests/integration --run-integration -q --junitxml=test-results/postgres.xml
 ```
 
 The fixture creates a unique schema per test, uses real independent connections,
@@ -66,7 +77,7 @@ LLM roles. Both configured stage profiles must be `claude-haiku-5-5`; the test
 rejects a different model before making requests.
 
 ```sh
-uv run --frozen pytest tests/live -q -s -x --run-live --junitxml=test-results/haiku-live.xml
+UV_PROJECT_ENVIRONMENT=.venv-test uv run --frozen --extra dev --extra runtime pytest tests/live -q -s -x --run-live --junitxml=test-results/haiku-live.xml
 ```
 
 This command incurs model charges and requires configured credentials, both
@@ -194,3 +205,27 @@ for the corresponding committed-candidate and GitHub Actions results.
 Actual provider validation in this workstream uses `claude-haiku-5-5` for both
 `non_explanation_agents` and `explanation_agent`. Synthetic model names in unit
 and browser fixtures test routing without contacting any deployment.
+
+## Integrated checkout verification: 2026-10-09
+
+A clean checkout of `9235268` passed **1,105 default backend tests**, with
+16 explicitly deselected PostgreSQL/live tests and 4 passing subtests. The Python
+runtime was the existing verified environment; this was not an isolated new Python
+installation. The historical 1,104-case working-copy count included 17 local-only
+study checks excluded from the public tree. The committed suite adds 18 publication
+and mode-preflight checks: 1,104 - 17 + 18 = 1,105. These excluded study checks are
+not public CI acceptance and no supported public regression was dropped.
+
+A fresh `npm ci` in the clean checkout passed **45 frontend unit tests**, typecheck,
+lint and build, followed by **all 32 browser fixture files in one clean run**.
+Existing lint/bundle warnings remain. The installed Node lockfile also reports
+8 existing dependency advisories (6 high, 2 moderate); dependency-security review
+is tracked as a release gate in #175, not declared resolved by passing UI tests.
+The published candidate contains only the generated synthetic example. Its CLI
+inspection passed: 120 rows, 4 eligible predictors, 1 usable OKF document.
+
+The subsequent CI runtime-extra change keeps Motoro present throughout backend
+and PostgreSQL checks; candidate-specific Actions evidence is recorded in #183.
+The paid four-mode Haiku evidence above remains preserved; these checkout checks
+made no new inference requests. Fresh installed-package, security, contributed
+rights and independent release acceptance remain separate gates.
