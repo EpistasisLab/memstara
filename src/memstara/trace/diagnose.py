@@ -95,6 +95,7 @@ def inspect(directory):
             verify_payload(identity, rows, 'output', end.get('output_evidence'))
         elif end.get('state') == 'failed':
             verify_payload(identity, rows, 'failure', end.get('failure_evidence'))
+            payload_issues.append(f'{identity}: failed service returned no observable output; failure packet only')
         else:
             payload_issues.append(f'{identity}: response unobserved ({end.get("state", "unresolved")})')
         requests.append({

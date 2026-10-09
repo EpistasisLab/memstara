@@ -100,7 +100,7 @@ def test_failure_packet_keeps_type_but_not_exception_body(context):
     with pytest.raises(PipelineExecutionFailure):
         asyncio.run(execute(AsyncMock(side_effect=ValueError('private-error-body'))))
     report = inspect(context)
-    assert report['service_io_evidence_complete']
+    assert not report['service_io_evidence_complete']
     path = context / next(p['path'] for p in report['payloads'] if p['kind'] == 'failure')
     assert 'private-error-body' not in path.read_text()
     assert json.loads(path.read_text())['payload']['error_types'] == ['ValueError']

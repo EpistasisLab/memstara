@@ -485,6 +485,8 @@ The diagnosis also exposes `service_io_evidence_complete` and
 `stage_evidence_complete` separately. Service input files are atomically saved and
 flushed before invoking the LLM service, independent of LiteLLM console interception.
 Outputs are saved immediately after return; errors retain a safe failure packet.
+That packet does not establish a model output: a failed service with no returned
+response remains incomplete output coverage, even if a later retry succeeds.
 They contain normalized application-service messages, tool schemas/options and returned
 objects, with credential fields and configured secret values redacted. They are not
 the exact wire request after provider adaptation. Cancellation/pending attempts have
