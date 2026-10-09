@@ -39,6 +39,17 @@ def enabled(snapshot):
 
 
 def context(snapshot, evaluation):
+    controls = (snapshot or {}).get('controlled_comparison')
+    if controls:
+        base = context({k: v for k, v in snapshot.items() if k != 'controlled_comparison'}, evaluation)
+        base.update(proposal_template=copy.deepcopy(controls['ml_plan']),
+                    editable_parameter_ranges={}, editable_parameter_choices={}, editable_common_settings={},
+                    plan_source='server_frozen',
+                    instructions='Matched comparison: the server applies proposal_template directly. '
+                                 'Call train_and_score with path and y_column; omit ml_plan. '
+                                 'Any supplied ml_plan is recorded but cannot override the frozen plan.')
+        base['fixed']['controlled_comparison'] = True
+        return base
     from memstara.evaluation import model_for
     models = {}
     for name in MODELS:
@@ -70,7 +81,26 @@ def context(snapshot, evaluation):
                             'LR l1 requires liblinear. No hold-out tuning; accepted proposals are immutable.'}
 
 
+def resolve(proposal, snapshot, evaluation):
+    """Fixed experiments execute a server-owned plan, never an LLM transcription."""
+    controls = (snapshot or {}).get('controlled_comparison')
+    chosen = controls['ml_plan'] if controls else proposal
+    effective = validate(chosen, snapshot, evaluation)
+    return effective, {
+        'source': 'server_frozen' if controls else 'agent_proposal',
+        'agent_proposal_supplied': proposal is not None,
+        'agent_proposal': copy.deepcopy(proposal),
+        'agent_proposal_ignored': bool(controls) and proposal is not None,
+        'effective_plan': copy.deepcopy(effective),
+    }
+
+
 def validate(proposal, snapshot, evaluation):
+    controls = (snapshot or {}).get('controlled_comparison')
+    if controls:
+        if proposal != controls['ml_plan']:
+            raise ValueError('ML settings must equal the frozen controlled-comparison plan; no tuning is permitted')
+        snapshot = {k: v for k, v in snapshot.items() if k != 'controlled_comparison'}
     spec = context(snapshot, evaluation)
     if not isinstance(proposal, dict) or set(proposal) != {'primary_model', 'folds', 'models', 'rationale'}:
         raise ValueError('ml_plan requires primary_model, folds, models and rationale')

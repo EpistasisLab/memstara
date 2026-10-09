@@ -6,6 +6,20 @@ import tempfile
 from pathlib import Path
 
 
+def require_executable_questions(questions, run_dir, wave):
+    """Do not turn an empty question bank into a downstream report failure."""
+    if questions:
+        return
+    from memstara.pipeline.failures import stop_execution
+    stop_execution(
+        run_dir, "question", wave + 1, RuntimeError("No executable question"),
+        code="question_generation_exhausted",
+        message="No executable question was saved after bounded recovery. "
+                "Inspect the saved question trace and proposal rejection feedback. "
+                "Downstream agents and report generation were not started.",
+    )
+
+
 def feedback_file(wave, writer):
     config = os.environ.get("MEMSTARA_RUN_CONFIG")
     if not config:

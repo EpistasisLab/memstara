@@ -19,7 +19,7 @@ def request(snapshot, trial):
     skill = books[0]
     low, high = SKILLS[skill]
     prompt = snapshot['prompts'][f'board/data:{skill}']
-    return {'version': VERSION, 'skill': skill,
+    result = {'version': VERSION, 'skill': skill,
             'skill_prompt_sha256': hashlib.sha256(json.dumps(prompt, sort_keys=True).encode()).hexdigest(),
             'minimum_test_size': low, 'maximum_test_size': high, 'stratify': True,
             'population': 'exploration_rows_after_independent_validation_reserve',
@@ -28,11 +28,22 @@ def request(snapshot, trial):
                        'stratify': True},
             'instruction': 'Supply data_plan with these three fields in submit_result. '
                            'Preserve all rows and exact hypothesis predictors. The server performs the split.'}
+    if snapshot.get('controlled_comparison'):
+        fixed = {k: snapshot['evaluation'][k] for k in ('test_size', 'seed')}
+        fixed['stratify'] = True
+        if not low <= fixed['test_size'] <= high:
+            raise ValueError('Controlled split conflicts with the selected Data skill')
+        result.update(required_data_plan=fixed,
+                      instruction='Matched comparison: submit required_data_plan exactly; '
+                                  'no split changes are allowed.')
+    return result
 
 
 def validate(value, specification, shared):
     if not isinstance(value, dict) or set(value) != {'test_size', 'seed', 'stratify'}:
         raise ValueError('Data skill requires data_plan with test_size, seed and stratify')
+    if specification.get('required_data_plan') and value != specification['required_data_plan']:
+        raise ValueError('Data plan must equal the frozen controlled-comparison split')
     fraction = value['test_size']
     if (type(fraction) not in (int, float) or not math.isfinite(fraction)
             or not specification['minimum_test_size'] <= fraction <= specification['maximum_test_size']):

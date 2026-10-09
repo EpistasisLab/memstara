@@ -51,6 +51,38 @@ def experiment(tmp_path, monkeypatch):
     return subset,snapshot,effective,proposal
 
 
+@pytest.mark.parametrize('submission', ['omitted', 'missing_rationale', 'changed_settings'])
+def test_frozen_tool_uses_server_plan_and_saves_resolution(experiment, monkeypatch, submission):
+    from memstara.mcp_servers.ml import train_and_score
+    path, snapshot, effective, proposal = experiment
+    snapshot['controlled_comparison'] = {'ml_plan': copy.deepcopy(proposal)}
+    from memstara import data_allocation
+    monkeypatch.setattr(data_allocation, 'load_effective', lambda *args: (effective, None))
+    supplied = copy.deepcopy(proposal)
+    if submission == 'omitted':
+        supplied = None
+    elif submission == 'missing_rationale':
+        supplied.pop('rationale')
+    else:
+        supplied['models']['xgboost']['parameters']['max_depth'] = 8
+    executed = []
+
+    def execute(*args, **kwargs):
+        executed.append((args, kwargs))
+        return {'model': 'logistic_regression'}
+
+    monkeypatch.setattr(paired_ml, 'execute', execute)
+    result = json.loads(train_and_score(str(path), 'Y', ml_plan=supplied))
+    assert not result.get('error'), result
+    assert len(executed) == 1
+    assert executed[0][0][4] == proposal
+    receipt = result['ml_plan_resolution']
+    assert receipt['source'] == 'server_frozen'
+    assert receipt['effective_plan'] == proposal
+    assert receipt['agent_proposal'] == supplied
+    assert json.loads(path.with_suffix('.evaluation.json').read_text()) == result
+
+
 def test_real_tool_pair_and_replay(experiment, monkeypatch):
     from memstara.mcp_servers.ml import train_and_score, get_ml_configuration
     path,snapshot,effective,proposal=experiment

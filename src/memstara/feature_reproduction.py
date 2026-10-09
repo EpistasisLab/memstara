@@ -17,7 +17,8 @@ from memstara.pipeline.feature_selection import context, validate
 
 VERSION = 1
 SOURCE = Path(__file__).parent
-CODE = ('pipeline/feature_selection.py', 'combinations.py', 'feature_reproduction.py', 'data_allocation.py')
+CODE = ('pipeline/feature_selection.py', 'combinations.py', 'feature_reproduction.py', 'data_allocation.py',
+        'controlled_comparison.py', 'ml_configuration.py')
 
 
 def digest(path):

@@ -28,11 +28,13 @@ def freeze(books, prompts):
         raise ValueError("Expert Explanation requires recorded SHAP/LIME Interpretation skills")
     location = os.environ.get("MEMSTARA_EXPLANATION_SOURCES", "").strip()
     if not location:
-        raise ValueError("Configure MEMSTARA_EXPLANATION_SOURCES with explicit expert database bindings")
-    try:
-        bindings = json.loads(Path(location).read_text())
-    except Exception:
-        raise ValueError("Cannot read the Explanation database binding configuration") from None
+        from memstara.okf_expert import freeze as freeze_okf
+        bindings = {SKILLS[name]: freeze_okf(SKILLS[name]) for name in selected}
+    else:
+        try:
+            bindings = json.loads(Path(location).read_text())
+        except Exception:
+            raise ValueError("Cannot read the Explanation database binding configuration") from None
     if not isinstance(bindings, dict) or set(bindings) - {"addiction", "hiv"}:
         raise ValueError("Explanation source keys must be addiction or hiv")
     skills, sources = {}, {}
@@ -63,7 +65,7 @@ def freeze(books, prompts):
         sources[expert] = dict(binding)
         if binding["kind"] == "sqlite":
             sources[expert]["path"] = str(Path(binding["path"]).resolve())
-    if len(sources) == 2:
+    if len(sources) == 2 and all(b["kind"] != "okf" for b in sources.values()):
         a, b = sources.values()
         if a["database_id"] == b["database_id"]:
             raise ValueError("Each expert requires a distinct logical database identity")
@@ -242,11 +244,17 @@ def finish(prepared, text, entry, directory):
             for d in r["knowledge"]["documents"]
         }
     )
-    mentioned = set(re.findall(r"\[[A-Za-z0-9_.-]+:[^\]\n]+\]", text))
+    # A bracket may contain several complete references separated by semicolons.
+    # Validate every member independently, including unknown members in a group.
+    mentioned = {
+        "[" + member.strip() + "]"
+        for group in re.findall(r"\[([A-Za-z0-9_.-]+:[^\]\n]+)\]", text)
+        for member in group.split(";")
+    }
     if mentioned - set(refs):
         raise ValueError("Explanation cites evidence outside the retrieved source set")
     # Grounding is not established by citation syntax alone; enforce at least a recorded reference.
-    if entry.get("status") != "completed" or not text.strip() or not any(ref in text for ref in refs):
+    if entry.get("status") != "completed" or not text.strip() or not mentioned:
         raise ValueError("Specialist Explanation is incomplete or has no supplied evidence citation")
     record = {
         "input": prepared["receipt"],

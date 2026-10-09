@@ -7,7 +7,7 @@ VERSION = 'original_predictors_4_20_v1'
 
 
 def freeze(plan):
-    """Use only frozen header metadata; never inspect outcomes or model scores."""
+    """Use the frozen eligible catalog; never inspect outcomes or model scores."""
     columns = [r['column'] for r in plan['feature_context']['features']]
     if (len(columns) < 4 or len(set(columns)) != len(columns)
             or plan['y_column'] in columns):
@@ -18,7 +18,11 @@ def freeze(plan):
     return {'version': VERSION, 'minimum': 4, 'maximum': 20,
             'seed': plan['evaluation']['seed'], 'eligible_features': columns,
             'pool_sha256': hashlib.sha256(json.dumps(columns, ensure_ascii=False).encode()).hexdigest(),
-            'pool_source': 'frozen_header_catalog', 'dataset_sha256': plan['dataset_sha256']}
+            'pool_source': ('frozen_complete_predictor_catalog'
+                            if plan['feature_context'].get('eligibility') else 'frozen_header_catalog'),
+            **({'eligibility': plan['feature_context']['eligibility']}
+               if plan['feature_context'].get('eligibility') else {}),
+            'dataset_sha256': plan['dataset_sha256']}
 
 
 def context(plan, wave):
@@ -37,10 +41,14 @@ def context(plan, wave):
     seed = int.from_bytes(hashlib.sha256(f"{policy['seed']}:{wave}".encode()).digest()[:4], 'big')
     pool = policy['eligible_features']
     rng = random.Random(seed)
-    required = rng.sample(pool, rng.randint(4, min(20, len(pool)))) if mode == 'random' else None
-    return {'version': VERSION, 'mode': mode, 'minimum': 4, 'maximum': 20,
+    count = plan.get('controlled_comparison', {}).get('feature_count')
+    required = None
+    if mode == 'random':
+        required = rng.sample(pool, count if count is not None else rng.randint(4, min(20, len(pool))))
+    sampling = 'fixed_count_without_replacement' if count else 'uniform_count_then_without_replacement'
+    return {'version': VERSION, 'mode': mode, 'minimum': count or 4, 'maximum': count or 20,
             'seed': seed if mode == 'random' else None, 'required_features': required,
-            'sampling': 'uniform_count_then_without_replacement' if mode == 'random' else 'llm',
+            'sampling': sampling if mode == 'random' else 'llm',
             'pool_sha256': policy['pool_sha256'], 'pool_size': len(pool),
             'pool_source': policy['pool_source'], 'dataset_sha256': policy['dataset_sha256'],
             'run_tag': plan['run_tag'], 'pipeline_id': plan.get('pipeline_id', ''),
@@ -65,6 +73,8 @@ def validate(columns, plan, trial):
         raise ValueError('Select 4–20 distinct original predictor columns')
     if plan['y_column'] in columns or set(columns) - set(plan['feature_selection_policy']['eligible_features']):
         raise ValueError('Predictors must belong to the frozen eligible pool and exclude the target')
+    if not selected['minimum'] <= len(columns) <= selected['maximum']:
+        raise ValueError('Use the exact feature count frozen for this controlled comparison')
     if selected['mode'] == 'random' and columns != selected['required_features']:
         raise ValueError('Use exactly the server-sampled random predictors in their recorded order')
     return {**selected, 'actual_count': len(columns), 'features': list(columns)}
@@ -85,6 +95,8 @@ def instructions(plan, wave):
                     'okf_concept_ids=[]; map each exact column name to itself with source_id="". '
                     'Do not call knowledge or matcher tools, change the sample, or use feedback to select features. '
                     'These instructions override ordinary knowledge-grounding and clinical-concept instructions. ')
+    if selected['minimum'] == selected['maximum']:
+        message += f"This matched comparison REQUIRES EXACTLY {selected['minimum']} original predictor columns. "
     return message
 
 

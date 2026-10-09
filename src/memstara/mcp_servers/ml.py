@@ -94,10 +94,11 @@ def train_and_score(
         plan = validate(plan)
         from memstara.data_allocation import load_effective
         plan, allocation = load_effective(p, snapshot, plan)
-        from memstara.ml_configuration import enabled, validate as validate_ml
+        from memstara.ml_configuration import enabled, resolve as resolve_ml
+        plan_resolution = None
         if enabled(snapshot):
             # Proposal errors are repairable and cannot start training or freeze a plan.
-            validate_ml(ml_plan, snapshot, plan)
+            ml_plan, plan_resolution = resolve_ml(ml_plan, snapshot, plan)
         elif ml_plan is not None:
             raise ValueError('This frozen run does not support agent-configured paired ML')
         try:
@@ -121,6 +122,8 @@ def train_and_score(
 
         if allocation:
             result["data_allocation"] = allocation
+        if plan_resolution:
+            result['ml_plan_resolution'] = plan_resolution
         result["config_hash"] = snapshot.get("config_hash") if snapshot else None
         result["y_column"] = y_column
         destination = p.with_suffix(".evaluation.json")
@@ -141,7 +144,8 @@ async def train_and_score_async(
 ) -> str:
     """Evaluate a model without blocking MCP. Frozen run settings override these options.
 
-    ml_plan: complete proposal from get_ml_configuration for new paired-model runs.
+    ml_plan: omit when get_ml_configuration returns plan_source=server_frozen.
+    Otherwise submit the complete proposal for new paired-model runs.
     Legacy engine: xgboost, random_forest or logistic_regression; empty uses the default.
     folds: training-only stratified CV (0 off, 2-10 enabled).
     replicates: 1-10 seeded splits. search_trials: 1-10 training-CV candidates.

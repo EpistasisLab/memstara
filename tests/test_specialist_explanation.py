@@ -115,8 +115,14 @@ def test_freeze_current_files_and_required_bindings(frozen, sources, monkeypatch
     assert set(frozen["specialist_explanation_policy"]["skills"]) == set(explanation.SKILLS)
     assert "ARCHIVE" not in json.dumps(frozen)
     monkeypatch.delenv("MEMSTARA_EXPLANATION_SOURCES")
-    with pytest.raises(ValueError, match="Configure"):
-        explanation.freeze({"report": ["shared-anil-hiv"], "interpreter": list(xai.SKILLS)}, {})
+    from memstara import okf_expert
+    binding = dict(sources["hiv"])
+    monkeypatch.setattr(okf_expert, "freeze", lambda expert: binding)
+    policy = explanation.freeze(
+        {"report": ["shared-anil-hiv"], "interpreter": list(xai.SKILLS)},
+        {"board/report:shared-anil-hiv": {"system_prompt": "frozen hiv"}},
+    )
+    assert policy["bindings"]["hiv"] == binding
 
 
 @pytest.fixture
@@ -397,3 +403,19 @@ def test_assembly_rejects_relabelled_expert(frozen, result, tmp_path):
     frozen["combination_plan"] = {"total_loops": 1}
     with pytest.raises(ValueError, match="provenance integrity"):
         explanation.assemble(frozen, directory)
+
+
+@pytest.mark.parametrize('second,valid', [('b', True), ('invented', False), ('', False)])
+def test_grouped_citations_validate_every_document(frozen, result, tmp_path, second, valid):
+    directory = tmp_path / 'run' / 'explanation_io'
+    prepared = asyncio.run(explanation.prepare(frozen, [result], 1, directory))
+    documents = prepared['payload']['results'][0]['knowledge']['documents']
+    documents.append({**documents[0], 'id': 'b'})
+    prepared['receipt'] = explanation.write_record(directory, 'input', prepared['payload'])
+    text = f'Evidence [addiction-fixture:a; addiction-fixture:{second}]'
+    if valid:
+        entry = explanation.finish(prepared, text, {'status': 'completed'}, directory)
+        assert explanation.read_receipt(entry['specialist_explanation']['output'])['output'] == text
+    else:
+        with pytest.raises(ValueError, match='outside'):
+            explanation.finish(prepared, text, {'status': 'completed'}, directory)

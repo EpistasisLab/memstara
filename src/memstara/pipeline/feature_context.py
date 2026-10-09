@@ -1,4 +1,4 @@
-"""Header-only availability context shared by every question writer in a run."""
+"""Frozen predictor metadata, with paired-model eligibility for combination runs."""
 
 import csv
 import json
@@ -7,17 +7,38 @@ from pathlib import Path
 from memstara.matcher.catalog import build_catalog
 
 
-def freeze_feature_context(dataset: Path, target: str) -> dict:
-    """Reuse matcher semantics; never read patient rows or infer clinical units."""
+def freeze_feature_context(dataset: Path, target: str, *, require_complete: bool = False) -> dict:
+    """Expose label meanings and eligibility metadata, never patient values or outcomes."""
     with dataset.open(newline="", encoding="utf-8-sig") as stream:
         columns = next(csv.reader(stream), [])
     if not target or target not in columns:
         raise ValueError("Feature context requires the configured target in the dataset header")
     entries = build_catalog(columns, target)
+    eligibility = None
+    if require_complete:
+        from memstara.evaluation import validate_clean_dataset
+        frame = validate_clean_dataset(dataset, target, allow_missing=True)
+        excluded = [entry.feature_name for entry in entries if frame[entry.feature_name].isna().any()]
+        excluded_set = set(excluded)
+        entries = [entry for entry in entries if entry.feature_name not in excluded_set]
+        eligibility = {
+            "version": "paired_complete_predictors_v1",
+            "rule": "No missing predictor values; required by paired LR/XGBoost without imputation",
+            "excluded_columns": excluded,
+            "excluded_count": len(excluded),
+            "eligible_count": len(entries),
+            "rows_changed": False,
+            "values_changed": False,
+            "outcome_associations_used": False,
+        }
+        if len(entries) < 4:
+            raise ValueError("Paired LR/XGBoost requires at least four complete eligible predictors; "
+                             "no model calls were made and no rows or values were changed")
     if not entries:
         raise ValueError("No predictors available for question generation")
     return {
-        "version": "header_catalog_v1",
+        "version": "paired_complete_catalog_v1" if require_complete else "header_catalog_v1",
+        **({"eligibility": eligibility} if eligibility else {}),
         "meaning_source": "matcher catalog derived from column labels; not a validated clinical data dictionary",
         "features": [
             {"column": entry.feature_name, "meaning": entry.match_text,

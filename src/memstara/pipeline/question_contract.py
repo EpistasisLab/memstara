@@ -37,11 +37,24 @@ def knowledge_text(value, label, limit=4000):
     if not isinstance(value, str) or not value.strip() or len(value) > limit:
         raise ValueError(f"{label} must be non-empty text of at most {limit} characters")
     value = " ".join(value.split())
-    # A conservative additional guard, not a semantic or biomedical proof.
-    if re.search(r"\b(AUC|AUROC|SHAP|feature importances?|permutation importance|"
-                 r"previous trials?|prior trials?|previous experiments?|prior experiments?|"
-                 r"successful features?|negative.importance|positive.importance)\b", value, re.I):
-        raise ValueError(f"{label} contains experimental feedback; primary questions require knowledge-only evidence")
+    # Metric names alone are not experimental evidence: a prospective falsification
+    # criterion may legitimately mention AUC or SHAP. Match explicit feedback cues
+    # instead. This remains a lexical guard, not a proof of scientific provenance;
+    # source IDs and run-local parent-task lineage are validated separately.
+    metric = r"(?:AUC|AUROC|SHAP|feature importances?|permutation importance)"
+    signal = re.search(
+        r"\b(?:previous trials?|prior trials?|previous experiments?|prior experiments?|"
+        r"successful features?|negative.importance|positive.importance)\b"
+        rf"|\b(?:observed|measured|achieved|obtained)\s+(?:an?\s+)?{metric}\b"
+        rf"|\b{metric}\s+(?:was|were|showed|confirmed|demonstrated)\b",
+        value, re.I,
+    )
+    if signal:
+        raise ValueError(
+            f"{label} contains experimental feedback ({signal.group(0)!r}); "
+            "primary questions require knowledge-only evidence. Describe the knowledge-based "
+            "mechanism and prospective evaluation; do not use observed run results without lineage."
+        )
     return value
 
 

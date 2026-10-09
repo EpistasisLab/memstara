@@ -162,6 +162,8 @@ def test_web_launch_freezes_policy_and_delivers_random_input(monkeypatch, tmp_pa
     dataset.write_text('BMI,CURRENT_AGE,DX__A__One,DX__B__Two,Y\n' +
                        ''.join(f'{20+i%5},{30+i%7},{i%2},{(i+1)%2},{i%2}\n' for i in range(100)))
     monkeypatch.setenv('MEMSTARA_DATASET_PATH', str(dataset))
+    monkeypatch.setenv('MEMSTARA_RUN_CONFIG', '')
+    monkeypatch.setenv('MEMSTARA_OUTCOME_COLUMN', '')
     monkeypatch.setattr('memstara.pipeline.snapshot.load_prompt', lambda *a: {'system_prompt': 'test', 'goal': 'test'})
     args = SimpleNamespace(run_tag='test', question='', hypothesis_agents=1, y_column='Y',
                            evaluation=json.dumps({'engine':'logistic_regression'}), trials=1, waves=2,
