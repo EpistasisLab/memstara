@@ -88,15 +88,22 @@ def load_env() -> list[Path]:
     return read
 
 
-def missing_vars(provider: str = "") -> list[str]:
+def missing_vars(provider: str = "", *, knowledge_mode: str = "okf", data_mode: str = "dataset") -> list[str]:
     """Return every missing environment variable **at once**. An empty list means ready.
 
     Reported together so that fixing one and re-running does not simply reveal the
     next one.
     """
+    if knowledge_mode not in ('okf', 'llm_only') or data_mode not in ('dataset', 'proposal'):
+        raise ValueError('Select supported knowledge and data modes')
+    omitted = set()
+    if knowledge_mode == 'llm_only':
+        omitted.add('AGENTIC_OKF_BUNDLE_DIR')
+    if data_mode == 'proposal':
+        omitted.add('MEMSTARA_DATASET_PATH')
     problems = [f"{name} is not set — {hint}"
                 for name, hint in BASE_VARS.items()
-                if not os.environ.get(name, "").strip()]
+                if name not in omitted and not os.environ.get(name, "").strip()]
     problems += [f"{name} is not set — needed for --provider {provider}. Check motoro/.env."
                  for name in PROVIDER_KEYS.get(provider, ())
                  if not os.environ.get(name, "").strip()]

@@ -4,6 +4,7 @@
     python -m memstara.preflight                 # with the default provider
     python -m memstara.preflight --provider openai
     python -m memstara.preflight --quick         # do not start the tool servers (seconds)
+    python -m memstara.preflight --quick --knowledge-mode llm_only --data-mode proposal
 
 Why this file exists
 --------------------
@@ -65,17 +66,19 @@ def check(label: str, passed: bool, detail: str = "", fix: str = "") -> bool:
 
 
 def check_env_files() -> None:
-    """[1] Were both `.env` files found where they are expected."""
+    """[1] Show optional env files; process environment is also supported."""
     print("\n[1] .env")
     for path in ENV_FILES:
-        check(f".env — {path.parent.name}/", path.is_file(), str(path.resolve()),
-              f"create {path} (see .env.example)")
+        if path.is_file():
+            check(f".env — {path.parent.name}/", True, str(path.resolve()))
+        else:
+            print(f"{WARN} .env — {path.parent.name}/: absent; checking process environment instead")
 
 
-def check_vars(provider: str) -> None:
+def check_vars(provider: str, *, knowledge_mode: str = "okf", data_mode: str = "dataset") -> None:
     """[2] Are all required variables set, including this provider's credentials."""
     print("\n[2] environment variables")
-    problems = missing_vars(provider)
+    problems = missing_vars(provider, knowledge_mode=knowledge_mode, data_mode=data_mode)
     check("every required variable is present", not problems,
           "none missing" if not problems else f"{len(problems)} missing",
           "check the two .env files above")
@@ -84,15 +87,18 @@ def check_vars(provider: str) -> None:
     print(f"      provider={provider} → {', '.join(PROVIDER_KEYS.get(provider, ())) or '(no credentials needed)'}")
 
 
-def check_paths() -> None:
+def check_paths(*, knowledge_mode: str = "okf", data_mode: str = "dataset") -> None:
     """[3] Do the knowledge source, dataset and output folder really exist."""
     print("\n[3] does what is pointed at really exist")
     bundle = os.environ.get("AGENTIC_OKF_BUNDLE_DIR", "").strip()
     dataset = os.environ.get("MEMSTARA_DATASET_PATH", "").strip()
     outdir = os.environ.get("MEMSTARA_OUTPUT_DIR", "").strip()
 
-    check("knowledge-source folder", bool(bundle) and Path(bundle).is_dir(), bundle or "(not set)")
-    if bundle and Path(bundle).is_dir():
+    if knowledge_mode == 'okf':
+        check("knowledge-source folder", bool(bundle) and Path(bundle).is_dir(), bundle or "(not set)")
+    else:
+        print("      knowledge source — not selected (llm_only); not accessed")
+    if knowledge_mode == 'okf' and bundle and Path(bundle).is_dir():
         # Do not reimplement the counting here; call the okf server's own `_load`. A
         # separate count is certain to drift, and drift means "the check passes but
         # there are really 0 documents".
@@ -113,8 +119,11 @@ def check_paths() -> None:
                 print(f"      filtered out: {s['path']} — {s['why'][:60]}")
         except Exception as e:  # noqa: BLE001
             check("the knowledge source has documents", False, f"{type(e).__name__}: {e}")
-    check("data csv", bool(dataset) and Path(dataset).is_file(), dataset or "(not set)",
-          "run `python -m memstara.prep.sample` first, or prep.hiv / prep.nhanes")
+    if data_mode == 'dataset':
+        check("data csv", bool(dataset) and Path(dataset).is_file(), dataset or "(not set)",
+              "configure an existing CSV or select --data-mode proposal")
+    else:
+        print("      data csv — not selected (proposal); not accessed")
     check("output folder", bool(outdir) and Path(outdir).is_dir(), outdir or "(not set)")
 
 
@@ -206,13 +215,16 @@ def check_matcher_catalog() -> None:
           stale_matrix or f"{len(entries)} entries")
 
 
-def check_servers() -> None:
+def check_servers(*, knowledge_mode: str = "okf", data_mode: str = "dataset") -> None:
     """[7] Do all five tool server files import cleanly in a fresh process."""
     print("\n[7] do the tool servers really start")
     # Just import each file. Started as a server it would sit waiting on stdio and
     # never return, so **only the import** runs, which catches startup errors — where
     # nearly all the failures happen.
     for server in SERVERS:
+        if data_mode == 'proposal' or (knowledge_mode == 'llm_only' and server.name == 'okf'):
+            print(f"      {server.name} — not used in selected mode; skipped")
+            continue
         r = subprocess.run(
             [sys.executable, "-c",
              f"import importlib;m=importlib.import_module('{server.module}');"
@@ -231,7 +243,10 @@ def main() -> int:
     ap.add_argument("--provider", default="azure_foundry",
                     choices=["anthropic", "azure_foundry", "openai"])
     ap.add_argument("--quick", action="store_true", help="skip the tool-server startup check")
+    ap.add_argument("--knowledge-mode", choices=['okf', 'llm_only'], default='okf')
+    ap.add_argument("--data-mode", choices=['dataset', 'proposal'], default='dataset')
     args = ap.parse_args()
+    _failures.clear()
 
     print("=" * 66)
     print("  pre-run check — calls no LLM and writes nothing to the board")
@@ -240,13 +255,17 @@ def main() -> int:
     print(f"  python:    {sys.executable}")
 
     check_env_files()
-    check_vars(args.provider)
-    check_paths()
+    modes = {'knowledge_mode': args.knowledge_mode, 'data_mode': args.data_mode}
+    check_vars(args.provider, **modes)
+    check_paths(**modes)
     asyncio.run(check_databases())
     check_allowlist()
-    check_matcher_catalog()
+    if args.data_mode == 'dataset':
+        check_matcher_catalog()
+    else:
+        print("\n[6] matcher catalog — not used in proposal mode; skipped")
     if not args.quick:
-        check_servers()
+        check_servers(**modes)
     else:
         print("\n[7] tool servers — skipped (--quick)")
 
@@ -255,7 +274,7 @@ def main() -> int:
         print(f"  {len(_failures)} failed: {', '.join(_failures)}")
         print("  deal with the 'how to fix' lines above first. Run now and it dies partway.")
         return 1
-    print("  everything passed — you can run")
+    print("  environment checks passed; execution still validates inputs, skills and model profiles")
     return 0
 
 
