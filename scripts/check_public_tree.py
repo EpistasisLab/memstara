@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HOME_PATH = re.compile(r'/(?:Users|home)/[A-Za-z0-9_.-]+/')
+LOCAL_CONFIG = re.compile(r'^config/[^/]+\.local[^/]*\.json$', re.IGNORECASE)
 
 
 def main() -> int:
@@ -22,6 +23,8 @@ def main() -> int:
         raise RuntimeError(ignored.stderr)
     errors = [f'{name}: ignored file is tracked' for name in ignored.stdout.split('\0') if name]
     for name in names:
+        if LOCAL_CONFIG.fullmatch(name):
+            errors.append(f'{name}: deployment-local configuration must not be published')
         path = ROOT / name
         if not path.is_file():
             errors.append(f'{name}: tracked file missing')

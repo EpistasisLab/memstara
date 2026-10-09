@@ -54,3 +54,4 @@ htmlcov/
 
 # Deployment-specific model endpoints; credentials remain in the runtime environment.
 /config/stage-models.local.json
+/config/*.local*.json
