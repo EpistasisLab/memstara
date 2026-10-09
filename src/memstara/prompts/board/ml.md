@@ -14,7 +14,11 @@ Your type is "ml".
 
 The task you claim carries the path of a sub-dataset and, in `y_column`, the outcome column. First call get_ml_configuration with that path and target.
 
-When `required` is true, inspect its complete installed-library parameter dictionaries,
+If `plan_source` is `server_frozen`, the server owns the precommitted ML plan.
+Call train_and_score with path and y_column, omitting ml_plan. The server applies the
+frozen parameters and rationale directly; do not reconstruct or tune that plan.
+
+Otherwise, when `required` is true, inspect its complete installed-library parameter dictionaries,
 editable ranges/choices, upstream split and resource limits. You decide the LR and
 XGBoost parameters, numeric scaling, probability cutoffs, training-only CV and primary
 model perspective before either model is trained. Submit the complete proposal template
