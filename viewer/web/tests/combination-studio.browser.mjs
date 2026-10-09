@@ -72,7 +72,8 @@ try{
  }
  liveFixture=true;pipeline.running={run_tag:'fixture-run',execution_state:'running'};pipeline.progress={iteration:1,stage:'ml'};
  await p.reload();await p.getByText('Loop 1 / 48 · Live',{exact:true}).waitFor();
- await studio.locator('.cf-active-room').waitFor();assert.equal(await studio.locator('.cf-active-room h4').innerText(),'Machine learning');
+ await p.waitForFunction(()=>document.querySelector('.cf-active-room h4')?.textContent==='Machine learning');
+ assert.equal(await studio.locator('.cf-active-room h4').innerText(),'Machine learning');
  assert.equal(await studio.locator('.cf-desk.is-selected').count(),5);
  assert.equal(await studio.locator('.cf-desk.cf-unused').count(),5);
  pipeline.progress.iteration=2;pipeline.progress.stage='interpreter';
