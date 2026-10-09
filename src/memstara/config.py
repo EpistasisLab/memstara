@@ -19,6 +19,10 @@ class Settings(CoreSettings):
         "MEMSTARA_DATASET_PATH,MEMSTARA_OUTPUT_DIR,MEMSTARA_ML_ENGINE,MEMSTARA_DATABASE_URL,"
         "MEMSTARA_OUTCOME_COLUMN,MEMSTARA_OKF_FIELDS,MEMSTARA_RUN_CONFIG,MEMSTARA_LEAKAGE_RULES_PATH,"
         "MEMSTARA_USER_SKILLS_DIR,MEMSTARA_SKILL_ALIASES_PATH,"
+        # Keep explicitly selected caches and numerical limits consistent in
+        # tool subprocesses. Provider credentials remain outside this allowlist.
+        "HF_HOME,HF_HUB_CACHE,HF_HUB_OFFLINE,XDG_CACHE_HOME,"
+        "OMP_NUM_THREADS,OPENBLAS_NUM_THREADS,TOKENIZERS_PARALLELISM,"
         "MEMSTARA_DEBUGPY,MEMSTARA_DEBUGPY_WAIT,"
         # debugpy runs its check and prints its warning **the moment** the child
         # Python starts. Switching it off from inside the code is already too late
