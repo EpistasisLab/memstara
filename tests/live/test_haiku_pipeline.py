@@ -46,7 +46,8 @@ def live_batch(pytestconfig):
     assert root.parent == verification and re.fullmatch(r"haiku_live_[a-z0-9_]+", root.name)
     identifier = root.name
     root.mkdir(parents=True, exist_ok=bool(chosen))
-    print(f"\nLIVE BATCH {identifier}: four sequential paid Haiku Loops; evidence {root}", flush=True)
+    print(f"\nLIVE BATCH {identifier}: {pytestconfig.getoption('--live-loops')} paid Haiku Loops "
+          f"per selected case; evidence {root}", flush=True)
     return {"root": root, "repo": REPO_ROOT, "profiles": profiles, "id": identifier}
 
 
@@ -58,6 +59,7 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
     from memstara.research_inputs import register, digest
 
     case = f"{knowledge}_{data}"
+    loops = pytestconfig.getoption('--live-loops')
     area = live_batch["root"] / case
     completed = [p for p in area.glob("attempt_*")
                  if read(p / "run" / "pipeline_status.json", {}).get("status") == "completed"
@@ -95,6 +97,7 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
         from memstara.research_inputs import verify_materialized
         verify_materialized(saved)
         original = read(area / "acceptance.json")
+        assert original.get('loops', 1) == loops, 'Recorded live Loop count differs'
         elapsed, exit_code = original["elapsed_seconds"], original["exit_code"]
         schema = original["database_schema"]
         query["search_path"] = schema
@@ -134,7 +137,7 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
                 env["ANTHROPIC_FOUNDRY_RESOURCE"] = host.split(".")[0]
         for key in ("MEMSTARA_RUN_CONFIG", "MEMSTARA_COMPARISON_POLICY_PATH", "MEMSTARA_LEAKAGE_RULES_PATH"):
             env.pop(key, None)
-        argv = [sys.executable, "-m", "memstara.pipeline.board", "--trials", "1", "--waves", "1",
+        argv = [sys.executable, "-m", "memstara.pipeline.board", "--trials", "1", "--waves", str(loops),
                 "--hypothesis-agents", "1", "--interpret-agents", "1", "--max-attempts", "5",
                 "--run-dir", str(run), "--run-tag", schema, "--pipeline-id", schema,
                 "--pipeline-name", f"Haiku automated acceptance: {case}", "--research-input-id", record["id"],
@@ -173,7 +176,7 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
     calls = read(run / "execution.json", {}).get("calls", [])
     ledger = [json.loads(line) for line in (run / "cost_ledger.jsonl").read_text().splitlines()] \
         if (run / "cost_ledger.jsonl").exists() else []
-    summary = {"case": case, "model": MODEL, "exit_code": exit_code,
+    summary = {"case": case, "loops": loops, "model": MODEL, "exit_code": exit_code,
                "elapsed_seconds": elapsed, "database_schema": schema, "run_directory": str(run),
                "status": status, "stages": [{k: c.get(k) for k in ("stage", "status", "duration_seconds")}
                                              for c in calls], "model_requests": len(ledger),
@@ -200,6 +203,14 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
     assert frozen["data_mode"] == data and frozen["knowledge_mode"] == knowledge
     assert frozen["stage_models"] == live_batch["profiles"]
     assert summary["input_tokens"] > 0 and summary["output_tokens"] > 0
+    if pytestconfig.getoption('--live-audit-io'):
+        from memstara.trace.diagnose import inspect
+        audit = inspect(run)
+        (area / 'input_output_audit.json').write_text(json.dumps(audit, indent=2))
+        assert audit['request_evidence_complete'], audit['issues']
+        assert audit['service_io_evidence_complete'], audit['payload_issues']
+        assert audit['stage_evidence_complete'], audit['stage_issues']
+        assert {r['loop'] for r in audit['requests'] if r['loop'] is not None} >= set(range(1, loops + 1))
 
     async def persisted():
         connection = await asyncpg.connect(database, timeout=10)

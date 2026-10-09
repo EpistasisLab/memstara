@@ -562,7 +562,7 @@ def write_execution_manifest() -> None:
     temporary = root / "execution.json.tmp"
     temporary.write_text(json.dumps({"calls": [
         {k: c.get(k) for k in ("stage", "run_id", "status", "started_at", "duration_seconds", "error",
-                              "loop", "seq", "skill", "combination", "repetition")}
+                              "loop", "seq", "skill", "combination", "repetition", "step_evidence", "trace_status")}
         for c in _CALLS
     ]}), encoding="utf-8")
     temporary.replace(root / "execution.json")
@@ -819,6 +819,19 @@ async def _trace_one(call: dict[str, Any]) -> None:
     path = _TRACE_DIR / f"{stem}.txt"
     llm_path = _TRACE_DIR / f"{stem}.llm.txt"
     try:
+        from motoro.runner import get_run, get_run_steps
+        from memstara.pipeline.request_evidence import write_private
+        identifier = uuid.UUID(call['run_id'])
+        run = await get_run(identifier)
+        steps = await get_run_steps(identifier)
+        if run is None or not steps:
+            raise ValueError('Agent step evidence unavailable')
+        relative = f'trace/{identifier}.steps.json'
+        call['step_evidence'] = {'path': relative, **write_private(_TRACE_DIR.parent / relative, {
+            'schema_version': 1, 'run_id': str(identifier), 'stage': call['stage'], 'loop': call.get('loop'),
+            'input': call.get('prompt'), 'allowed_tools': call.get('allowed_tools', []),
+            'run': run, 'steps': steps,
+        })}
         with path.open("w", encoding="utf-8") as fh:
             # readable=True — it is printed for a person to read. Nothing is truncated.
             # The only thing left out is **what another line already said** (see the
@@ -848,9 +861,16 @@ async def _trace_one(call: dict[str, Any]) -> None:
                     print(f"\n[{i}/{len(requests)}] " + "-" * 88, file=lf)
                     print(body, file=lf)
         call["traced"] = True
+        call['trace_status'] = 'exported'
     except Exception as e:  # noqa: BLE001 - a failure to record must not wreck the run
-        print(f"  trace failed {call['seq']:02d} {call['stage']}: {type(e).__name__}: {e}",
+        call['trace_status'] = 'unavailable'
+        print(f"  trace failed {call['seq']:02d} {call['stage']}: {type(e).__name__}",
               file=sys.stderr)
+    finally:
+        try:
+            write_execution_manifest()
+        except (OSError, TypeError, ValueError):
+            print('Trace manifest write failed; audit evidence is incomplete', file=sys.stderr)
 
 
 async def write_traces(run_dir: Path) -> int:

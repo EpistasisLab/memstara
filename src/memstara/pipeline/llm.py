@@ -193,6 +193,15 @@ class PipelineLLMService(LLMService):
                              message_count=len(prepared),
                              requested_max_tokens=getattr(config, 'max_tokens', None),
                              timeout_policy=runtime_timeouts(config.model))
+                from memstara.pipeline.request_evidence import save
+                input_evidence = save(context, 'input', {
+                    'messages': prepared, 'arguments': args, 'options': kwargs,
+                    'model': config.model, 'provider': provider,
+                    'temperature': getattr(config, 'temperature', None),
+                    'configured_max_tokens': getattr(config, 'max_tokens', None),
+                })
+                record_event(context, 'input_saved' if input_evidence else 'input_unavailable',
+                             evidence=input_evidence)
                 from memstara.cost_accounting import request_profile, price_receipt, record_attempt
                 profile_token = request_profile.set({
                     'provider': getattr(getattr(config, 'provider', None), 'value', getattr(config, 'provider', None)),
@@ -208,7 +217,10 @@ class PipelineLLMService(LLMService):
                     from memstara.pipeline.failures import provider_error_details, exception_chain
                     record_event(context, 'failed', duration_seconds=time.monotonic() - started,
                                  error_types=[type(e).__name__ for e in exception_chain(exc)],
-                                 retryable=retryable_model_error(exc), **provider_error_details(exc))
+                                 retryable=retryable_model_error(exc),
+                                 failure_evidence=save(context, 'failure', {
+                                     'error_types': [type(e).__name__ for e in exception_chain(exc)],
+                                     **provider_error_details(exc)}), **provider_error_details(exc))
                     record_attempt(context, call_loop.get(), config, error=True)
                     retryable = retryable_model_error(exc)
                     if retryable and attempt < len(TRANSPORT_RETRY_DELAYS):
@@ -230,6 +242,7 @@ class PipelineLLMService(LLMService):
                         record = next((v for v in result if hasattr(v, 'cost_estimate')), None)
                     record_attempt(context, call_loop.get(), config, record)
                     record_event(context, 'completed', duration_seconds=time.monotonic() - started,
+                                 output_evidence=save(context, 'output', result),
                                  response_model=getattr(record, 'model', None),
                                  prompt_tokens=getattr(record, 'prompt_tokens', None),
                                  completion_tokens=getattr(record, 'completion_tokens', None))

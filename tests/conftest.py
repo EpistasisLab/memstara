@@ -75,6 +75,10 @@ def pytest_addoption(parser):
                      help="Audit completed cases and run remaining cases in this live batch")
     parser.addoption("--live-retry-failed", action="store_true",
                      help="Keep failed evidence and run a fresh attempt after investigating the failure")
+    parser.addoption("--live-loops", type=int, choices=(1, 2), default=1,
+                     help="Paid Haiku Loops per selected case (default one; two for audit acceptance)")
+    parser.addoption("--live-audit-io", action="store_true",
+                     help="Require verified request payload and stage export evidence in live cases")
 
 
 def pytest_collection_modifyitems(config, items):
