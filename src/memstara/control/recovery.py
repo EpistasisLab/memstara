@@ -4,6 +4,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from memstara.pipeline.checkpoint import atomic_json
+
 
 def identity(pid: int) -> str:
     try:
@@ -39,9 +41,7 @@ class RecoveredProcess:
 def save_record(record: dict):
     data = {k: v for k, v in record.items() if k != 'popen'}
     path = Path(data['run_dir']) / 'control_record.json'
-    temporary = path.with_suffix('.tmp')
-    temporary.write_text(json.dumps(data, indent=2))
-    temporary.replace(path)
+    atomic_json(path, data)
 
 
 def recover(root: Path, pipeline_id=None):

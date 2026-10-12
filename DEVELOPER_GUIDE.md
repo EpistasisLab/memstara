@@ -872,6 +872,33 @@ and output tree, with all execution services disabled. Use `pg_restore
 roles/privileges separately: a single-database dump does not include cluster roles.
 Do not use `--clean` against a live database as a recovery experiment.
 
+Pause is not a backup lock. `POST /control/stop-all` requests a boundary pause for
+resumable drivers; it does not wait for every writer to exit. Paused processes can
+remain alive, retain database ownership and update health/control records. Stopping
+the control server alone also leaves its detached workers alive. Neither a `paused`
+UI label nor a successful stop request proves that DB/file writes have ceased.
+
+For deployment maintenance, first prevent all launch/resume requests and direct CLI
+launches at the deployment boundary. Drain active calls and verify that workers and
+reconciliation jobs have exited; verify process identity rather than signaling an
+unverified saved PID. Stop other file/DB writers, including the control service,
+before taking the paired backup. Record this operator evidence with the backup.
+There is currently no application-wide maintenance lock covering these independent
+entry points; the operator/deployment supervisor must enforce this boundary.
+
+After restore, keep launch access disabled while validating both databases and
+files. Start observation services, inspect retained failures and ownership, and only
+then permit new executions. Resume only if the saved code identity and checkpoint
+checks pass; an interrupted call with unknown effects must not be replayed. A code
+upgrade can intentionally block old checkpoints: keep the matching application
+revision for recovery instead of bypassing the code-hash check.
+
+Control ownership records and workspace definitions use the same unique temporary
+file, file fsync, atomic replacement and directory fsync boundary as checkpoints.
+A failed pre-replacement save preserves old bytes; a failed directory sync after
+replacement reports the durability failure even if the complete new file is visible.
+This does not make a multi-file/DB transaction or provide a maintenance lock.
+
 Registry artifact paths are absolute. Restore to the original paths (on an isolated
 host if needed); moving the tree requires an explicitly reviewed path migration.
 Compare row contents, artifact sizes/hashes, foreign-key constraints and sequence

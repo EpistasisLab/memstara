@@ -9,6 +9,7 @@ from typing import Any
 
 from memstara.control.request import DEFAULTS, normalize_agent_configuration, playbook_field
 from memstara.agent_labels import AGENT_LABELS
+from memstara.pipeline.checkpoint import atomic_json
 
 
 def loop_totals(records):
@@ -56,9 +57,7 @@ class PipelineWorkspace:
 
     def _save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(self.items, indent=2))
-        temporary.replace(self.path)
+        atomic_json(self.path, self.items)
 
     def manager(self, key):
         if not any(p["id"] == key for p in self.items):
