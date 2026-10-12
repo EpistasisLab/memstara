@@ -298,6 +298,16 @@ def load(identifier):
 
 def verify_materialized(profile):
     """A resume uses its frozen files, never current source files or new settings."""
+    configuration = config(profile["configuration"])
+    hashes = profile.get("artifact_hashes")
+    required = {"dataset.csv", "matcher_rules.json"} if configuration["data_mode"] == "dataset" else set()
+    if configuration["knowledge_mode"] == "okf":
+        required.add("okf/index.md")
+    if not isinstance(hashes, dict) or not required.issubset(hashes) or any(
+        not isinstance(name, str) or not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{64}", value)
+        for name, value in hashes.items()
+    ):
+        raise ValueError("Frozen research manifest is incomplete or invalid; restore the original manifest")
     root = (registry_root() / "prepared" / profile["fingerprint"]).resolve()
     if Path(profile["root"]).resolve() != root:
         raise ValueError("Research artifacts are outside their registered location")

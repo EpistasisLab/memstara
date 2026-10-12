@@ -164,6 +164,20 @@ def test_resume_rejects_tampered_prepared_files(sample, change):
         verify_materialized(profile)
 
 
+@pytest.mark.parametrize('relative', ['dataset.csv', 'matcher_rules.json'])
+def test_missing_required_hash_cannot_bypass_frozen_file_validation(sample, relative):
+    record = register(sample)
+    profile = prepare(record['id'])
+    del profile['artifact_hashes'][relative]
+    root = Path(profile['root'])
+    (root / relative).write_text('Changed without a recorded hash')
+    (root / 'manifest.json').write_text(json.dumps(profile))
+    with pytest.raises(ValueError, match='Frozen research manifest'):
+        verify_materialized(profile)
+    with pytest.raises(ValueError, match='Frozen research manifest'):
+        prepare(record['id'])
+
+
 def test_activation_and_target_contract_follow_each_study(sample, monkeypatch):
     first = prepare(register(sample)['id'])
     second_config = {**sample, 'target': {**sample['target'], 'description':'Different research objective'}}
