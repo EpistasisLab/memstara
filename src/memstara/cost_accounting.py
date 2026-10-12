@@ -7,10 +7,11 @@ import os
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
-request_profile = ContextVar("pricing_request_profile", default=None)
-price_receipt = ContextVar("pricing_receipt", default=None)
+request_profile: ContextVar[dict[str, Any] | None] = ContextVar("pricing_request_profile", default=None)
+price_receipt: ContextVar[dict[str, Any] | None] = ContextVar("pricing_receipt", default=None)
 
 
 def catalog_path():

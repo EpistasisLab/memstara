@@ -7,12 +7,13 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from motoro.services.llm_service import LLMService
 from memstara.pipeline.runtime import provider_policy, runtime_timeouts, TRANSPORT_RETRY_DELAYS
 
-_options = ContextVar('memstara_request_options', default=None)
+_options: ContextVar[dict[str, Any] | None] = ContextVar('memstara_request_options', default=None)
 _installed = False
 
 
@@ -126,11 +127,12 @@ def provider_messages(messages, model):
     contents = [m['content'] for m in messages[:end]]
     if all(isinstance(c, str) for c in contents):
         content = '\n\n'.join(contents)
+        return [{'role': 'system', 'content': content}, *messages[end:]]
     else:
-        content = []
+        blocks: list[dict[str, Any]] = []
         for item in contents:
-            content.extend([{'type': 'text', 'text': item}] if isinstance(item, str) else item)
-    return [{'role': 'system', 'content': content}, *messages[end:]]
+            blocks.extend([{'type': 'text', 'text': item}] if isinstance(item, str) else item)
+    return [{'role': 'system', 'content': blocks}, *messages[end:]]
 
 
 async def request_ready(context):

@@ -5,9 +5,9 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
 
-call_context = ContextVar('memstara_call', default=None)
-call_loop = ContextVar('memstara_call_loop', default=None)
-request_id = ContextVar('memstara_request_id', default=None)
+call_context: ContextVar[tuple[str | Path, str, str] | None] = ContextVar('memstara_call', default=None)
+call_loop: ContextVar[int | None] = ContextVar('memstara_call_loop', default=None)
+request_id: ContextVar[str | None] = ContextVar('memstara_request_id', default=None)
 _installed = False
 
 

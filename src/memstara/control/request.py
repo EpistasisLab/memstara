@@ -168,9 +168,9 @@ def build_argv(
         from memstara.research_inputs import load
         profile = load(research_id)
         config = profile['configuration']
-        body.update(knowledge_mode=config['knowledge_mode'], data_mode=config['data_mode'],
-                    research_objective=config['target']['description'],
-                    y_column=config['target']['column'] or 'outcome')
+        body = {**body, 'knowledge_mode': config['knowledge_mode'], 'data_mode': config['data_mode'],
+                'research_objective': config['target']['description'],
+                'y_column': config['target']['column'] or 'outcome'}
     knowledge_mode, data_mode = _text(body, 'knowledge_mode'), _text(body, 'data_mode')
     if knowledge_mode not in ('okf', 'llm_only') or data_mode not in ('dataset', 'proposal'):
         raise ValueError('Select supported knowledge and data modes')

@@ -559,9 +559,9 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/control/health":
             try:
-                root = str(_bundle_root())
+                bundle_root = str(_bundle_root())
                 docs, _ = _load(_bundle_root())
-                bundle: dict[str, Any] = {"path": root, "documents": len(docs)}
+                bundle: dict[str, Any] = {"path": bundle_root, "documents": len(docs)}
             except OKFError as e:
                 # Reported, not raised. A missing bundle is a thing to show on screen
                 # next to a dot, not a reason for this service to be down.
