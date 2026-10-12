@@ -434,8 +434,10 @@ def ensure_matcher(profile):
     import fcntl
     from memstara.matcher.catalog import build_catalog, save_catalog, save_catalog_meta, meta_path
     from memstara.matcher.embedder import embed_catalog, save_embeddings, sentence_transformer_encoder
+    from memstara.matcher.embedder import embeddings_path, embeddings_stamp_path
     from memstara.matcher.service import build_run_config, current_fingerprint, read_columns
     from memstara.matcher.rules import load_rules
+    from memstara.pipeline.checkpoint import atomic_json
 
     root = Path(profile["root"])
     catalog = root / "derived" / "matcher_catalog.json"
@@ -444,15 +446,22 @@ def ensure_matcher(profile):
         rules, run_config = load_rules(), build_run_config()
         expected = current_fingerprint(run_config, rules=rules)
         stamp = catalog.with_suffix(".ready.json")
+        paths = (catalog, meta_path(catalog), embeddings_path(catalog), embeddings_stamp_path(catalog))
         if stamp.exists():
-            receipt = json.loads(stamp.read_text())
+            try:
+                receipt = json.loads(stamp.read_text())
+            except (OSError, ValueError):
+                receipt = None
+            hashes = receipt.get("hashes") if isinstance(receipt, dict) else None
             if (
-                receipt.get("fingerprint") == expected
+                isinstance(receipt, dict)
+                and receipt.get("fingerprint") == expected
+                and isinstance(hashes, dict)
+                and set(hashes) == {path.name for path in paths}
                 and all(
-                    (catalog.parent / name).is_file() and digest(catalog.parent / name) == sha
-                    for name, sha in receipt.get("hashes", {}).items()
+                    path.is_file() and digest(path) == hashes[path.name]
+                    for path in paths
                 )
-                and len(receipt.get("hashes", {})) == 4
             ):
                 return
         entries = build_catalog(
@@ -463,10 +472,7 @@ def ensure_matcher(profile):
         save_catalog(entries, catalog)
         save_embeddings(matrix, catalog, match_texts=texts, cfg=run_config.embedding)
         save_catalog_meta(entries, catalog, expected)
-        from memstara.matcher.embedder import embeddings_path, embeddings_stamp_path
-
-        paths = (catalog, meta_path(catalog), embeddings_path(catalog), embeddings_stamp_path(catalog))
-        stamp.write_text(json.dumps({"fingerprint": expected, "hashes": {p.name: digest(p) for p in paths}}))
+        atomic_json(stamp, {"fingerprint": expected, "hashes": {p.name: digest(p) for p in paths}})
 
 
 def instructions(profile):

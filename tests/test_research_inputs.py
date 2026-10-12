@@ -279,6 +279,48 @@ def test_matcher_caches_are_isolated_and_integrity_checked(sample, monkeypatch):
         assert 'outcome' not in catalog.read_text()
 
 
+@pytest.mark.parametrize('damage', ['truncated', 'nonobject', 'wrong-files', 'invalid-hashes'])
+def test_invalid_matcher_ready_record_rebuilds_once(sample, monkeypatch, damage):
+    import numpy as np
+    from memstara.matcher import embedder
+    from memstara.research_inputs import ensure_matcher, digest
+    calls = []
+
+    def encoder(_):
+        calls.append(True)
+        return lambda texts: np.ones((len(texts), 8), dtype=np.float32)
+
+    monkeypatch.setattr(embedder, 'sentence_transformer_encoder', encoder)
+    monkeypatch.setattr(embedder, 'current_device', lambda: 'cpu')
+    profile = prepare(register(sample)['id'])
+    with monkeypatch.context() as context:
+        context.setattr(os, 'environ', dict(os.environ))
+        activate(profile)
+        ensure_matcher(profile)
+        root = Path(profile['root']) / 'derived'
+        stamp = root / 'matcher_catalog.ready.json'
+        receipt = json.loads(stamp.read_text())
+        if damage == 'truncated':
+            stamp.write_text('{')
+        elif damage == 'nonobject':
+            stamp.write_text('[]')
+        elif damage == 'invalid-hashes':
+            stamp.write_text(json.dumps({**receipt, 'hashes': None}))
+        else:
+            hashes = {}
+            for number in range(4):
+                path = root / f'unrelated-{number}.txt'
+                path.write_text('Unrelated cache file')
+                hashes[path.name] = digest(path)
+            stamp.write_text(json.dumps({**receipt, 'hashes': hashes}))
+            (root / 'matcher_catalog.json').write_text('Broken catalog')
+        ensure_matcher(profile)
+        assert len(calls) == 2
+        ensure_matcher(profile)
+        assert len(calls) == 2
+        assert isinstance(json.loads((root / 'matcher_catalog.json').read_text()), list)
+
+
 def test_generic_profiles_do_not_silently_apply_legacy_domain_skills():
     from memstara.research_inputs import validate_skills
     validate_skills({'hypothesis':['hypothesis_research', 'random_features'],
