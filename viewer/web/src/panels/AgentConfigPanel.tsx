@@ -18,7 +18,7 @@ const descriptions: Record<string, string> = {
   interpreter: "Explain the measured features and model behavior, including evidence and clinical limitations.",
   report: "Compare completed hypotheses and produce the final report, including failed or unsupported hypotheses.",
 };
-const field = "w-full rounded border border-paper-line bg-white px-2 py-1.5 text-sm focus:border-ink focus:outline-none";
+const field = "w-full rounded border border-paper-line bg-white px-2 py-1.5 text-sm focus:border-ink focus:outline-hidden";
 
 export default function AgentConfigPanel() {
   const editor = useControl(s => s.editor);

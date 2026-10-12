@@ -19,7 +19,7 @@ export default function KnowledgeNode({ data }: NodeProps) {
   return <>
     <button type="button" onClick={() => dialog.current?.showModal()}
       aria-label={`Knowledge sources: ${label}. ${locked ? "View details" : "Choose sources"}`}
-      className={compact ? "floor-resource nodrag nopan h-[108px] w-[184px] rounded-xl border border-paper-line bg-white p-3 text-left text-ink" : "nodrag nopan w-[280px] rounded-2xl border border-paper-line bg-white p-4 text-left text-ink shadow-sm transition-shadow hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink"}>
+      className={compact ? "floor-resource nodrag nopan h-[108px] w-[184px] rounded-xl border border-paper-line bg-white p-3 text-left text-ink" : "nodrag nopan w-[280px] rounded-2xl border border-paper-line bg-white p-4 text-left text-ink shadow-xs transition-shadow hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink"}>
       <div className={compact?"mb-2 flex items-center gap-2 text-ink-soft":"mb-3 flex items-center gap-2 text-ink-soft"}><BookOpen size={20} /><span className={compact?"text-sm font-bold":"text-base font-bold"}>Knowledge sources</span></div>
       <p title={label} className={compact?"truncate text-xs font-semibold":"break-words text-sm font-semibold"}>{label}</p>
       {!compact && documents != null && <p className="mt-1 text-xs text-ink-faint">{documents} documents in the current catalog</p>}

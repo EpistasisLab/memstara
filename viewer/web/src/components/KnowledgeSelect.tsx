@@ -13,7 +13,7 @@ export default function KnowledgeSelect({ value, onChange }: { value: string; on
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="mt-1 w-full rounded-md border border-paper-line bg-white px-2 py-1
-                   text-xs focus:border-ink focus:outline-none"
+                   text-xs focus:border-ink focus:outline-hidden"
       >
         <option value="">All available knowledge{documents != null ? ` · ${documents} documents` : ""}</option>
         {skills.map((s) => (

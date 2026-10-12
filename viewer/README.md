@@ -23,6 +23,17 @@ both databases, read-only database accounts, Docker Compose for container mode,
 and the `memstara` Python environment for the host control service. Local frontend
 development uses Node.js 22 and the committed `web/package-lock.json`.
 
+The frontend uses Tailwind CSS 4 through its official PostCSS plugin. Its CSS
+requires Safari 16.4+, Chrome/Edge 111+, or Firefox 128+; older browsers are not
+supported. These are engine requirements, not a claim that every browser/version
+has been tested. Automated browser fixtures currently run in Chromium.
+See the [Tailwind migration guide](https://tailwindcss.com/docs/upgrade-guide).
+CI runs `npm audit --audit-level=moderate` over runtime and build dependencies;
+moderate or higher registry advisories block the frontend job. A passing audit
+is time-specific and does not replace source/security review.
+The existing theme remains in `web/tailwind.config.js`, explicitly loaded by
+`web/src/index.css`; source scanning is restricted to application TS/TSX and HTML.
+
 ### Read-only database access
 
 The observation API reads `MEMSTARA_VIEWER_DSN` and `CORE_VIEWER_DSN`. Its local

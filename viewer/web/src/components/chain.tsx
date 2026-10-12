@@ -100,7 +100,7 @@ export function ChainNode({ data }: NodeProps) {
     <div
       role="group" tabIndex={0} aria-label={`${agent.label}: ${STATE_LABEL[agent.state]}`}
       onKeyDown={event => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onInspect?.(); } }}
-      className={`relative w-[280px] rounded-xl border-2 border-t-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 bg-white px-4 py-3.5 shadow-sm transition
+      className={`relative w-[280px] rounded-xl border-2 border-t-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 bg-white px-4 py-3.5 shadow-xs transition
                   hover:shadow-md ${tone.ring}`}
       style={{ borderTopColor: color, ...(busy ? { borderColor: color } : {}), ...(inspected ? { boxShadow: `0 0 0 3px color-mix(in srgb, ${color} 19%, transparent), 0 8px 24px #00000010` } : {}) }}
     >
@@ -118,7 +118,7 @@ export function ChainNode({ data }: NodeProps) {
           }}
           className="nodrag nopan absolute -right-2 -top-2 flex h-7 w-7 items-center
                      justify-center rounded-full border border-paper-line bg-white
-                     text-ink-faint shadow-sm hover:border-ink hover:text-ink"
+                     text-ink-faint shadow-xs hover:border-ink hover:text-ink"
           aria-label={`Remove ${agentStageLabel(agent.stage)} ${agent.slot + 1}`}
           title={`Remove this ${agentStageLabel(agent.stage)} and its skill from the next run`}
         >

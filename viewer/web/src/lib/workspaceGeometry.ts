@@ -5,7 +5,9 @@ export function workspaceGeometry(width:number, height:number, panels:string[], 
   const minima:Record<string,number>={feed:340,results:440,report:520};
   const tabbed=panels.length>1 && panels.reduce((n,id)=>n+(minima[id]??340),0)+gap*(panels.length-1)>w;
   const start=mobile?174:0;
-  const minimum=w<420?820:w<900?740:640;
+  // Narrow toolbars wrap above the 260px diagram. Reserve this in the
+  // shared geometry so the analysis tabs move with the taller floor panel.
+  const minimum=w<380?860:w<420?820:w<900?740:640;
   const available=Math.max(minimum,height-start-(panels.length?360:0));
   const floor=panels.length?Math.max(minimum,Math.min(1100,available+offset)):Math.max(minimum,height-start);
   const panelY=start+floor+48;

@@ -40,7 +40,7 @@ export default function Panel({
     <section
       id={id}
       className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border
-                 border-paper-line bg-paper-panel shadow-sm"
+                 border-paper-line bg-paper-panel shadow-xs"
     >
       <header
         className="panel-header flex shrink-0 flex-wrap items-center gap-2 border-b border-paper-line

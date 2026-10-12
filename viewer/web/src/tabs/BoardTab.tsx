@@ -31,7 +31,7 @@ function Card({ task }: { task: Task }) {
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ type: "spring", stiffness: 260, damping: 26 }}
       onClick={() => select(task.task_id)}
-      className="w-full rounded-lg border border-paper-line bg-white p-3 text-left shadow-sm
+      className="w-full rounded-lg border border-paper-line bg-white p-3 text-left shadow-xs
                  transition hover:border-ink-faint hover:shadow-md"
     >
       <div className="flex items-center justify-between">

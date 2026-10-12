@@ -26,7 +26,7 @@ export default function PipelineViewport({ expanded, toggle, topology, entryId, 
   }, [viewportInitialized, topology, readable]);
   const button = "flex h-8 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium text-ink-soft hover:bg-paper focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink";
   const controls=<>
-    <Panel position="top-left" className="pipeline-toolbar !m-3 flex flex-wrap items-center gap-1 rounded-xl border border-paper-line bg-white/95 p-1 shadow-sm backdrop-blur">
+    <Panel position="top-left" className="pipeline-toolbar !m-3 flex flex-wrap items-center gap-1 rounded-xl border border-paper-line bg-white/95 p-1 shadow-xs backdrop-blur">
       <button className={button} onClick={() => void zoomOut({ duration: 180 })} aria-label="Zoom out"><Minus size={15} /></button>
       <button className={`${button} min-w-14 font-mono`} onClick={readable} title="Readable size (100%)">{Math.round(zoom * 100)}%</button>
       <button className={button} onClick={() => void zoomIn({ duration: 180 })} aria-label="Zoom in"><Plus size={15} /></button>

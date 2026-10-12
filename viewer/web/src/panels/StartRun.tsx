@@ -27,7 +27,7 @@ function Text_({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="mt-1 w-full rounded-md border border-paper-line bg-white px-2 py-1
-                   font-mono text-xs focus:border-ink focus:outline-none"
+                   font-mono text-xs focus:border-ink focus:outline-hidden"
       />
     </label>
   );
