@@ -7,7 +7,7 @@ export function workspaceGeometry(width:number, height:number, panels:string[], 
   const start=mobile?174:0;
   // Narrow toolbars wrap above the 260px diagram. Reserve this in the
   // shared geometry so the analysis tabs move with the taller floor panel.
-  const minimum=w<420?860:w<900?740:640;
+  const minimum=w<420?940:w<900?740:640;
   const available=Math.max(minimum,height-start-(panels.length?360:0));
   const floor=panels.length?Math.max(minimum,Math.min(1100,available+offset)):Math.max(minimum,height-start);
   const panelY=start+floor+48;
