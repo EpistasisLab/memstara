@@ -7,6 +7,8 @@ import time
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
+import pytest
+
 from memstara.control.recovery import identity, save_record
 
 
@@ -19,10 +21,12 @@ root = Path(sys.argv[1])
 async def main():
     gate = ExecutionGate(root)
     counter = 0
-    while True:
-        await gate.wait()
+    async def tick():
+        nonlocal counter
         counter += 1
         atomic_json(root / 'ticks.json', {'count': counter})
+    while True:
+        await gate.call(tick)
         await asyncio.sleep(.05)
 try:
     asyncio.run(main())
@@ -106,8 +110,9 @@ def exercise_restart(tmp_path, worker_source=WORKER, check=None):
             check('restarted')
         request(second, '/control/runs/synthetic-restart/pause', True)
         wait_for(lambda: request(second)['running']['execution_state'] == 'paused')
-        # Allow a write already past the boundary to finish before comparing counts.
-        time.sleep(.15)
+        control = json.loads((run / 'execution_control.json').read_text())
+        assert control['state'] == 'paused'
+        assert control['active_calls'] == 0
         count = json.loads((run / 'ticks.json').read_text())['count']
         time.sleep(.35)
         assert json.loads((run / 'ticks.json').read_text())['count'] == count
@@ -135,5 +140,10 @@ def exercise_restart(tmp_path, worker_source=WORKER, check=None):
         stop(worker)
 
 
-def test_controller_restart_reattaches_pauses_resumes_and_ends_same_worker(tmp_path):
-    exercise_restart(tmp_path)
+@pytest.mark.parametrize('write_delay', [0, .6])
+def test_controller_restart_reattaches_pauses_resumes_and_ends_same_worker(tmp_path, write_delay):
+    worker = WORKER.replace(
+        "        atomic_json(root / 'ticks.json', {'count': counter})",
+        f"        await asyncio.sleep({write_delay})\n"
+        "        atomic_json(root / 'ticks.json', {'count': counter})")
+    exercise_restart(tmp_path, worker)
