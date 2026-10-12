@@ -953,6 +953,16 @@ verify stopping *all* writers, authentication, cross-host paths/ownership, and
 upgrade compatibility. Keep services disabled until the whole restored bundle
 passes verification; a successful restore of only one database is insufficient.
 
+`tests/test_control_process_restart.py` uses real controller subprocesses and the
+production HTTP handler on ephemeral loopback ports. A synthetic worker uses the
+actual execution gate. The test terminates/restarts the controller, checks that it
+reattaches to the same worker PID, verifies pause/resume progress boundaries, ends
+the worker through HTTP, and confirms finished history after another restart.
+All run paths are temporary and `.env` is not loaded. This verifies control-process
+lifecycle behavior without provider calls or production-service changes. It does
+not exercise the board driver, database ownership, a browser/proxy, or a deployed
+maintenance supervisor; those are separate acceptance boundaries.
+
 ### Schema upgrade checks
 
 `python -m memstara.blackboard --create` applies the current table definitions,
