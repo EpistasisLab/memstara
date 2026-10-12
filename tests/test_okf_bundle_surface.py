@@ -40,6 +40,25 @@ def test_invalid_lock_is_an_error_not_an_unconfined_count(bundle, monkeypatch):
     assert "error" in json.loads(okf.okf_list_domains())
 
 
+def test_search_domain_suggestions_remain_inside_locked_branch(bundle, monkeypatch):
+    monkeypatch.setenv('MEMSTARA_OKF_FIELDS', 'branch=a')
+    result = json.loads(okf.okf_search('synthetic', domain='missing-domain'))
+    assert result['domains'] == ['alpha']
+
+
+def test_invalid_lock_is_checked_before_domain_suggestions(bundle, monkeypatch):
+    monkeypatch.setenv('MEMSTARA_OKF_FIELDS', 'invalid')
+    result = json.loads(okf.okf_search('synthetic', domain='missing-domain'))
+    assert 'not a filter' in result['error']
+    assert 'domains' not in result
+
+
+def test_empty_search_filter_suggestions_remain_inside_locked_branch(bundle, monkeypatch):
+    monkeypatch.setenv('MEMSTARA_OKF_FIELDS', 'branch=a')
+    result = json.loads(okf.okf_search('synthetic', tags='absent-tag'))
+    assert result['values']['branch'] == ['a']
+
+
 def test_failed_read_is_saved_outside_trace_files(bundle, monkeypatch):
     config = bundle / "run-config.json"
     config.write_text("{}")

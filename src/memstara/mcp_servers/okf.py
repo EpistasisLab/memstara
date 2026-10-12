@@ -569,6 +569,8 @@ def okf_search(
     try:
         root = _bundle_root()
         docs, _ = _load(root)
+        locked = _locked_filter()
+        accessible = [doc for doc in docs if matches(doc.fields, locked)]
     except OKFError as e:
         return json.dumps({"error": str(e)})
 
@@ -585,13 +587,13 @@ def okf_search(
         notes.append(f"k={k} was clamped to the ceiling {_MAX_K}.")
 
     # Narrowing what gets searched — by domain, by tags, and by front matter field.
-    pool = docs
+    pool = accessible
     if domain:
         pool = [d for d in pool if d.domain == domain]
         if not pool:
             # When the domain name was mistyped, hand back the list of real names too.
             return json.dumps(
-                {"error": f"no domain {domain!r}", "domains": sorted({d.domain for d in docs})}
+                {"error": f"no domain {domain!r}", "domains": sorted({d.domain for d in accessible})}
             )
     keep_tags = {t.lower() for t in _split(tags)}
     if keep_tags:
@@ -599,7 +601,6 @@ def okf_search(
         pool = [d for d in pool if keep_tags & {t.lower() for t in _tag_list(d.fields.get("tags"))}]
 
     try:
-        locked = _locked_filter()
         # The lock first, so a caller cannot overrule it by passing the same key.
         asked = parse_field_filter(fields)
         for key, value in (filters or {}).items():
@@ -609,7 +610,6 @@ def okf_search(
                 raise ValueError(f"conflicting legacy and structured filter for {key!r}")
             asked[key] = value
         wanted_fields = merge_locked(locked, asked)
-        accessible = [doc for doc in docs if matches(doc.fields, locked)]
         invalid = {key: value for key, value in asked.items()
                    if value.casefold() not in {
                        item.casefold() for item in values_for((doc.fields for doc in accessible), key)}}
@@ -647,7 +647,7 @@ def okf_search(
                 {
                     "error": f"no document matches {_render(wanted_fields)!r}",
                     "values": {
-                        key: values_for((d.fields for d in docs), key)
+                        key: values_for((d.fields for d in accessible), key)
                         for key in wanted_fields
                     },
                 }
