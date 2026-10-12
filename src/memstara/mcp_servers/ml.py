@@ -54,7 +54,7 @@ async def get_ml_configuration(path: str, y_column: str) -> str:
         p = Path(path).resolve()
         p.relative_to(_output_dir())
         snapshot = active_plan()
-        if not enabled(snapshot):
+        if snapshot is None or not enabled(snapshot):
             return json.dumps({"required": False, "instruction": "Use the frozen single-model run policy."})
         if snapshot['y_column'] != y_column:
             raise ValueError('Target differs from the run target')

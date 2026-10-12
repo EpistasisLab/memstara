@@ -41,6 +41,8 @@ def freeze(books, prompts):
     for name in selected:
         expert = SKILLS[name]
         binding = bindings.get(expert)
+        if not isinstance(binding, dict):
+            raise expert_knowledge.KnowledgeError(f"{expert}: an explicit expert database binding is required")
         expert_knowledge.validate(binding, expert)
         item = resolve(name)
         expected = (

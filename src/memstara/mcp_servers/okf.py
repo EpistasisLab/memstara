@@ -210,7 +210,8 @@ def _sections(body: str) -> list[tuple[str, str]]:
     there would be no way to point at it with `section=` either.
     """
     out: list[tuple[str, str]] = []
-    heading, buf = "", []      # the heading and the lines of the section being gathered
+    heading = ""
+    buf: list[str] = []  # Lines of the section being gathered.
     for line in body.splitlines():
         if line.startswith(_HEADING):
             if heading:
@@ -725,7 +726,7 @@ def _read_documents(refs: str, section: str = "", max_chars: int = 0) -> str:
     if not wanted:
         return json.dumps({"error": "refs must not be empty"})
 
-    out = []
+    out: list[dict[str, Any]] = []
     for ref in wanted:
         # One failure does not stop the rest from opening. Only the one that failed
         # gets its reason written in place.
@@ -857,9 +858,12 @@ def register_search_schema() -> None:
     locked = _locked_filter()
     docs = [doc for doc in docs if matches(doc.fields, locked)]
     options = _filter_options(docs)
+    definitions: dict[str, Any] = {
+        key: (Literal[tuple(values)] | None, None) for key, values in options.items()
+    }
     filter_model = create_model(
         "KnowledgeFilters", __config__=ConfigDict(extra="forbid"),
-        **{key: (Literal[tuple(values)] | None, None) for key, values in options.items()},
+        **definitions,
     )
 
     def search(queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = "",
