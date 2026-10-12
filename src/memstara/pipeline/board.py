@@ -1546,6 +1546,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         #
         # Trial numbers that were seeded but left nothing on the board. They accumulate
         # across waves, and at the end they are handed to the explanation agent too.
+        if checkpoint is None:
+            raise RuntimeError("Empirical execution requires a durable checkpoint")
         missing_trials: list[int] = list(checkpoint.state["missing_trials"])
 
         # Before the first wave, take back anything this tag left in_progress last time.
@@ -1714,7 +1716,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 # a slot in a later trial must not create another visible agent.
                 worker_key = "hypothesis" if slot == 0 else f"hypothesis#{slot + 1}"
                 writer = q.get("writer")
-                if writer in agents and writer.startswith("hypothesis"):
+                if isinstance(writer, str) and writer in agents and writer.startswith("hypothesis"):
                     worker_key = writer
                 wid = worker_key
                 agent_id = agents.get(worker_key, agents["hypothesis"])
@@ -1782,7 +1784,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             async def produce_hypotheses(questions=questions, base=base, from_bank=from_bank, seed_one=seed_one):
                 # Keep each question with its author, serializing that author's
                 # calls even when question-bank order differs from slot order.
-                assignments = [[] for _ in range(args.hypothesis_agents)]
+                assignments: list[list[int]] = [[] for _ in range(args.hypothesis_agents)]
                 writer_slots = {("hypothesis" if slot == 0 else f"hypothesis#{slot + 1}"): slot
                                 for slot in range(args.hypothesis_agents)}
                 for index, question in enumerate(questions):
@@ -1854,7 +1856,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                     f"({', '.join(str(i) for i in lost_here)})" if lost_here else ""))
             step("(5)", "run until the board is empty",
                  "stop it with Ctrl-C and the board is still there")
-            rounds = 0
+            polling_laps = 0
             while True:
                 state = await board_state(registry, args.run_tag)
                 current_tasks = [t for t in state["tasks"] if base <= t["trial"] < base + args.trials]
@@ -1880,10 +1882,10 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                     await seed_task  # propagate producer/cleanup errors
                 # Work can arrive while hypotheses are still being generated.
                 if not counts and seed_task.done() and not live_workers.active:
-                    done("(5)", f"the board is empty — after {rounds} laps")
+                    done("(5)", f"the board is empty — after {polling_laps} laps")
                     break
 
-                rounds += 1
+                polling_laps += 1
                 desc = " · ".join(f"{k} {v}" for k, v in sorted(counts.items()))
 
                 # Named, not aggregated: "somewhere retried 5 times" does not tell a person
@@ -1895,7 +1897,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 if retried:
                     worst = sorted(retried, key=lambda p: -p[1])[:3]   # the worst three only
                     stuck = "  ← came back: " + ", ".join(f"#{tid} ×{n}" for tid, n in worst)
-                print(f"   [lap {rounds:>3}] {desc}{stuck}")
+                print(f"   [lap {polling_laps:>3}] {desc}{stuck}")
 
                 # Give up on tasks that keep coming back. `retried` already counts the
                 # extra claims, so this is a decision on a number that was being printed
@@ -2513,31 +2515,31 @@ async def main() -> int:
     # receive a standard says so now rather than provisioning an agent that quietly
     # works to no standard at all. Reading is the check — the result is thrown away and
     # read again at provisioning, which costs a few kilobytes and keeps one loader.
-    for stage, books in chosen_playbooks(args).items():
-        for book in books:
+    for stage, stage_books in chosen_playbooks(args).items():
+        for book in stage_books:
             try:
                 load_prompt(f"board/{stage}", book)
             except (OSError, ValueError) as e:
                 ap.error(f"--playbook-{stage} {book!r}: {e}")
-        if len(books) > 1:
+        if len(stage_books) > 1:
             # Two ways to write more than one name and only one of them is a request.
             # Both are refused here rather than at provisioning, where the first agent
             # would already exist and the extra names would go quietly unused — the same
             # failure `load_prompt` is checked for above, one layer out.
             if stage not in ("hypothesis", "interpreter"):
                 ap.error(
-                    f"--playbook-{stage} takes one name and was given {len(books)} "
-                    f"({', '.join(books)}). Only the hypothesis stage runs a worker per "
+                    f"--playbook-{stage} takes one name and was given {len(stage_books)} "
+                    f"({', '.join(stage_books)}). Only the hypothesis stage runs a worker per "
                     f"standard; the other four run one agent however many workers claim "
                     f"from the board, so a second name there would never be read."
                 )
             count = args.hypothesis_agents if stage == "hypothesis" else args.interpret_agents
-            if len(books) != count:
+            if len(stage_books) != count:
                 ap.error(
-                    f"--playbook-{stage} has {len(books)} names and its worker count "
+                    f"--playbook-{stage} has {len(stage_books)} names and its worker count "
                     f"is {count}. Give one name per worker, or one name "
                     f"for all of them — pairing them by position is the whole point, and "
-                    f"there is no order in which {len(books)} standards fit "
+                    f"there is no order in which {len(stage_books)} standards fit "
                     f"{args.hypothesis_agents} workers that someone would not have to guess at."
                 )
 

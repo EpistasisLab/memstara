@@ -2,6 +2,10 @@
 import asyncio
 import itertools
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from memstara.pipeline.checkpoint import Checkpoint
 
 
 async def rounds(limit: int, continuous: bool, run_dir: Path, *, start=0):
@@ -115,7 +119,7 @@ class ExecutionGate:
     def __init__(self, run_dir: Path):
         self.run_dir = run_dir
         self.active_calls = 0
-        self.checkpoint = None
+        self.checkpoint: Checkpoint | None = None
         self.publish()
 
     def publish(self):
