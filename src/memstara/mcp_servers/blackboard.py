@@ -484,7 +484,7 @@ async def submit_result(task_id: int, subset_path: str = "",
                 if (plan or {}).get("feature_selection_policy"):
                     # Only verified extraction/model artifacts can update these fields.
                     used_json = missing_json = ""
-                if stage == "data" and (plan or {}).get("comparison_policy"):
+                if stage == "data" and plan is not None and plan.get("comparison_policy"):
                     from memstara.comparisons import write_context
                     try:
                         from pathlib import Path
@@ -1105,13 +1105,13 @@ async def claim_question(run_tag: str = "", worker: str = "", stale_after: int =
     out["okf_tags"] = json.loads(out["okf_tags"]) if out["okf_tags"] else []
     from memstara.evaluation import active_plan
     from memstara.pipeline.question_contract import enabled, validate_saved, hypothesis_text
-    plan = active_plan()
+    plan = active_plan() or {}
     if enabled(plan):
         contract = out.get("question_contract")
         if isinstance(contract, str):
             contract = json.loads(contract)
         try:
-            validate_saved(contract, out["text"], plan)
+            contract = validate_saved(contract, out["text"], plan)
         except ValueError as exc:
             return json.dumps({"error": str(exc), "question_id": None})
         out["required_hypothesis"] = hypothesis_text(contract)
@@ -1190,7 +1190,7 @@ async def propose_questions(questions: list[QuestionProposal] | str, origin_run:
         prepared.append(item)
     parsed = prepared
     if not parsed and preflight_rejected:
-        response = {"added": [], "duplicates": [], "skipped": [], "rejected": preflight_rejected}
+        response: dict[str, Any] = {"added": [], "duplicates": [], "skipped": [], "rejected": preflight_rejected}
         save_feedback(plan, origin_wave, writer, response)
         return json.dumps(response, ensure_ascii=False)
     added: list[dict] = []
@@ -1222,7 +1222,7 @@ async def propose_questions(questions: list[QuestionProposal] | str, origin_run:
                         continue
                     from memstara.evaluation import active_plan
                     from memstara.pipeline.question_contract import enabled, make_contract, question_text
-                    plan = active_plan()
+                    plan = active_plan() or {}
                     contract = {}
                     if enabled(plan):
                         try:

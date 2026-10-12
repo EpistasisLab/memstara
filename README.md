@@ -390,7 +390,7 @@ CI runs the following checks on every push and pull request:
 | MCP protocol test | Real subprocess startup, handshake and synthetic data tool calls |
 | PostgreSQL integration | Schema reapplication, concurrent claims, run locks and measured-result persistence |
 | Python import boundaries | Dependency direction between foundational, matching and orchestration modules |
-| Python type and format diagnostics | Mypy and Ruff formatting; advisory while existing findings are addressed |
+| Python type and format diagnostics | Mypy must pass; Ruff formatting remains advisory while existing formatting findings are addressed |
 | Frontend unit tests | Evaluation settings, metrics, loop labels, routing, start behavior and geometry |
 | Frontend type, lint and build | TypeScript project references, Oxlint and production assets |
 | Browser regression tests | Isolated fixtures for pipeline configuration, combinations, navigation and responsive layouts |

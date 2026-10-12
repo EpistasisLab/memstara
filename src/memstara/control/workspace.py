@@ -5,6 +5,7 @@ import json
 import threading
 import uuid
 from pathlib import Path
+from typing import Any
 
 from memstara.control.request import DEFAULTS, normalize_agent_configuration, playbook_field
 from memstara.agent_labels import AGENT_LABELS
@@ -40,7 +41,7 @@ class PipelineWorkspace:
         self.path = path
         self.lock = threading.RLock()
         self.factory = manager_factory
-        self.managers = {}
+        self.managers: dict[str, Any] = {}
         if path.exists():
             data = json.loads(path.read_text())
             if not isinstance(data, list):
@@ -104,6 +105,7 @@ class PipelineWorkspace:
     def mutate(self, body):
         with self.lock:
             action = body.get("action")
+            item: dict[str, Any] | None
             if action == "add":
                 used = {p["number"] for p in self.items}
                 number = next(n for n in range(1, len(used) + 2) if n not in used)

@@ -66,8 +66,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen --extra dev
-      - name: Mypy (advisory)
-        continue-on-error: true
+      - name: Mypy
         run: uv run --frozen mypy src/memstara
       - name: Formatting (advisory)
         continue-on-error: true

@@ -181,10 +181,13 @@ def _resolve(trial: int, stage: str | None, rows_file: Path = ROWS_FILE) -> list
     A trial that died at an earlier stage simply has no later ids, so those are skipped.
     """
     rows = _load_rows(rows_file)
-    match = next((r for r in rows if r.get("trial") == trial), None)
+    match = next((r for r in rows if type(r.get("trial")) is int and r["trial"] == trial), None)
     if match is None:
-        available = sorted(r.get("trial") for r in rows)
+        available = sorted(r["trial"] for r in rows if type(r.get("trial")) is int)
         print(f"!! trial {trial} not found. available: {available}", file=sys.stderr)
+        invalid = len(rows) - len(available)
+        if invalid:
+            print(f"!! trial index contains {invalid} invalid trial identifiers", file=sys.stderr)
         raise SystemExit(1)
 
     run_ids = match.get("run_ids") or {}

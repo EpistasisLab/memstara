@@ -7,7 +7,8 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import Any, Protocol, cast
 from uuid import uuid4
 
 from motoro.services.llm_service import LLMService
@@ -15,6 +16,12 @@ from memstara.pipeline.runtime import provider_policy, runtime_timeouts, TRANSPO
 
 _options: ContextVar[dict[str, Any] | None] = ContextVar('memstara_request_options', default=None)
 _installed = False
+
+
+class _RetryWrapped(Protocol):
+    """Tenacity's runtime extension to Motoro's decorated async methods."""
+
+    def retry_with(self, **kwargs: Any) -> Callable[..., Awaitable[Any]]: ...
 
 
 def record_response(context, response, max_tokens):
@@ -346,13 +353,15 @@ class PipelineLLMService(LLMService):
 
     async def _complete(self, *args, **kwargs):
         from tenacity import stop_after_attempt
-        return await LLMService._complete.retry_with(stop=stop_after_attempt(1))(self, *args, **kwargs)
+        return await cast(_RetryWrapped, LLMService._complete).retry_with(
+            stop=stop_after_attempt(1))(self, *args, **kwargs)
 
     async def _complete_with_tools_once(self, *args, **kwargs):
         from tenacity import stop_after_attempt
-        return await LLMService._complete_with_tools_once.retry_with(stop=stop_after_attempt(1))(
+        return await cast(_RetryWrapped, LLMService._complete_with_tools_once).retry_with(stop=stop_after_attempt(1))(
             self, *args, **kwargs)
 
     async def _complete_text(self, *args, **kwargs):
         from tenacity import stop_after_attempt
-        return await LLMService._complete_text.retry_with(stop=stop_after_attempt(1))(self, *args, **kwargs)
+        return await cast(_RetryWrapped, LLMService._complete_text).retry_with(
+            stop=stop_after_attempt(1))(self, *args, **kwargs)

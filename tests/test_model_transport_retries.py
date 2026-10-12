@@ -13,6 +13,25 @@ from memstara.pipeline.failures import PipelineExecutionFailure, stop_execution
 from memstara.pipeline.runtime import runtime_timeouts, TRANSPORT_RETRY_DELAYS
 
 
+@pytest.mark.parametrize('method', ['_complete', '_complete_with_tools_once', '_complete_text'])
+def test_upstream_retry_wrapper_is_available_and_disabled_per_request(monkeypatch, method):
+    from tenacity import retry, stop_after_attempt, wait_none
+    from motoro.services.llm_service import LLMService
+
+    assert callable(getattr(getattr(LLMService, method), 'retry_with', None))
+    attempts = []
+
+    @retry(stop=stop_after_attempt(3), wait=wait_none(), reraise=True)
+    async def upstream(self, marker):
+        attempts.append(marker)
+        raise ConnectionResetError('synthetic transport failure')
+
+    monkeypatch.setattr(LLMService, method, upstream)
+    with pytest.raises(ConnectionResetError, match='synthetic transport failure'):
+        asyncio.run(getattr(PipelineLLMService(), method)('request'))
+    assert attempts == ['request']
+
+
 @pytest.fixture
 def context(tmp_path, monkeypatch):
     monkeypatch.setattr('memstara.evaluation.active_plan', lambda: None)

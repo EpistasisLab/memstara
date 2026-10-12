@@ -136,12 +136,13 @@ async def run_study(config: dict, output: Path, *, resume=False, invoke=invoke_m
     code_paths = [Path(__file__), *[Path(__file__).parents[1] / name for name in
                   ('pilot_ml.py', 'pilot_final.py', 'pilot_execution.py', 'pilot_handoffs.py',
                    'pilot_knowledge.py', 'pilot_models.py', 'stage_models.py')]]
+    prompts = {stage: load_prompt(f'pilot/{stage}') for stage in ('hypothesis', 'data', 'ml')}
     manifest = {'config': config, 'schedule': rows, 'dataset_sha256': hashlib.sha256(dataset.read_bytes()).hexdigest(),
                 'skills': {name: {'hash': item['hash'], 'content': item['content']} for name, item in skills.items()},
                 'code_hashes': {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in code_paths},
                 'packages': {name: importlib.metadata.version(name) for name in
                              ('numpy', 'pandas', 'scikit-learn', 'xgboost', 'shap', 'lime')},
-                'prompts': {stage: load_prompt(f'pilot/{stage}') for stage in ('hypothesis', 'data', 'ml')}}
+                'prompts': prompts}
     output.mkdir(parents=True, exist_ok=resume)
     with (output / 'execution.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -189,7 +190,7 @@ async def run_study(config: dict, output: Path, *, resume=False, invoke=invoke_m
                                                  'combination': current_loop}) + '\n')
                 async def call(stage, payload, validate, condition=condition, directory=directory, progress=progress):
                     progress(stage)
-                    system = (manifest['prompts'][stage]['system_prompt'] + '\n\nSelected skill:\n' +
+                    system = (prompts[stage]['system_prompt'] + '\n\nSelected skill:\n' +
                               skills[condition[stage]]['content'])
                     # Invalid JSON or semantic output pauses the study; it never silently advances.
                     result = await json_stage(stage, system, payload, for_stage(config['models'], stage), directory,

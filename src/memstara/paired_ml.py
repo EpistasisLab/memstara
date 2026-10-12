@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from typing import Any
 
 from memstara import ml_configuration as config
 
@@ -147,7 +148,7 @@ def fit(request):
         raise ValueError('Paired ML fit count exceeds the resource budget')
     from memstara.specialist_xai import request as xai_request
     specialist = xai_request(snapshot, handoff['trial'])
-    results = {}
+    results: dict[str, Any] = {}
     with threadpool_limits(limits=1):
         for name in config.MODELS:
             atomic(path.with_suffix('.paired-progress.json'), {'phase': name, 'completed_models': results})
