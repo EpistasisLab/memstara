@@ -595,6 +595,15 @@ the candidate wheel and its SHA-256 separately; installers may omit the archive 
 The acceptance record retains this identity; a source-checkout result cannot be reused
 as installed-wheel evidence. This is an opt-in paid check, not part of offline CI.
 
+CI also runs `python scripts/check_source_distribution.py` after building the source
+archive. It extracts the archive outside the checkout, checks the tracked public
+example inventory (allowing Git's CRLF/LF normalization), and runs inspection and
+registration for all four input modes using the extracted code. It verifies the
+120-row/four-predictor fixture, saved registrations and unchanged example bytes.
+This offline check inherits no deployment credentials and makes no model, embedding
+or database calls. It establishes example inclusion and CLI behavior, not a full
+installation, rights clearance, or empirical pipeline acceptance.
+
 Use the listed evidence files to continue: `config.json`/`prompts.json` for frozen
 inputs and policies; `trace/` and the developer inspector for full model/tool I/O;
 `pipeline_failure.json`/`failure_frames.json` for application failures;
