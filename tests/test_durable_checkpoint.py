@@ -1,8 +1,5 @@
 """Offline crash/recovery tests: no model, patient data, or database required."""
 import asyncio
-import json
-import os
-from pathlib import Path
 import subprocess
 import sys
 
@@ -97,8 +94,9 @@ def test_controller_resume_keeps_identity_and_appends_log(tmp_path, monkeypatch)
     pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     from memstara.control import service, recovery
     monkeypatch.setattr(service, 'RUNS_DIR', tmp_path)
-    root = tmp_path/'run'; root.mkdir()
-    cp = Checkpoint(root)
+    root = tmp_path/'run'
+    root.mkdir()
+    Checkpoint(root)
     atomic_json(root/'resume_arguments.json', {'run_tag':'existing', 'pipeline_id':'pipeline-a'})
     recovery.save_record({'run_tag':'existing','pipeline_id':'pipeline-a','run_dir':str(root),
                           'pid':123,'exit_code':1,'started':'original','skill':''})
@@ -132,14 +130,26 @@ def test_changed_code_is_not_silently_used_for_recovery(tmp_path, monkeypatch):
         Checkpoint(tmp_path, resume=True)
 
 
-def test_controller_refuses_unknown_effects_without_spawning(tmp_path, monkeypatch):
+@pytest.mark.parametrize(('damage', 'message'), [
+    ('active_call', 'external effects'),
+    ('missing_result', 'no saved result'),
+    ('missing_identity', 'code identity'),
+])
+def test_controller_refuses_unknown_effects_without_spawning(tmp_path, monkeypatch, damage, message):
     import pytest
     pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     from memstara.control import service, recovery
     monkeypatch.setattr(service, 'RUNS_DIR', tmp_path)
-    root = tmp_path/'run'; root.mkdir()
+    root = tmp_path/'run'
+    root.mkdir()
     cp = Checkpoint(root)
-    cp.call_started('unfinished-model-call')
+    if damage == 'active_call':
+        cp.call_started('unfinished-model-call')
+    elif damage == 'missing_result':
+        cp.state['phases']['completed-without-evidence'] = {'status': 'done'}
+    else:
+        cp.state.pop('code_hash')
+    cp.save()
     atomic_json(root/'resume_arguments.json', {'run_tag':'existing','pipeline_id':'a'})
     recovery.save_record({'run_tag':'existing','pipeline_id':'a','run_dir':str(root),
                           'pid':123,'exit_code':1,'started':'original'})
@@ -148,7 +158,7 @@ def test_controller_refuses_unknown_effects_without_spawning(tmp_path, monkeypat
     monkeypatch.setattr(service.subprocess, 'Popen', forbidden)
     manager = service._Runs('a')
     assert not manager.finished()[0]['recoverable']
-    with pytest.raises(RuntimeError, match='external effects'):
+    with pytest.raises(RuntimeError, match=message):
         manager.pause('existing', False)
 
 
@@ -159,3 +169,44 @@ def test_resume_preserves_console_history(tmp_path):
     with tee_console(path, append=True):
         print('after resume')
     assert path.read_text() == 'before crash\nafter resume\n'
+
+
+@pytest.mark.parametrize(('field', 'value'), [
+    ('version', True),
+    ('code_hash', None),
+    ('code_hash', ''),
+    ('calls', {'unfinished': 'unknown'}),
+    ('phases', {'saved': {'status': 'done'}}),
+    ('phases', {'saved': None}),
+    ('waves_run', '2'),
+    ('seeded_total', -1),
+    ('dry_streak', True),
+    ('missing_trials', None),
+    ('missing_trials', [False]),
+    ('finished', 'false'),
+])
+def test_malformed_saved_state_cannot_be_offered_for_resume(tmp_path, field, value):
+    checkpoint = Checkpoint(tmp_path)
+    checkpoint.state[field] = value
+    checkpoint.save()
+    atomic_json(tmp_path / 'resume_arguments.json', {'run_tag': 'synthetic'})
+    before = checkpoint.path.read_bytes()
+    assert not recovery_status(tmp_path)['recoverable']
+    with pytest.raises(RecoveryBlocked):
+        Checkpoint(tmp_path, resume=True)
+    assert checkpoint.path.read_bytes() == before
+
+
+def test_completed_null_result_is_valid_and_never_replayed(tmp_path):
+    checkpoint = Checkpoint(tmp_path)
+
+    async def work():
+        return None
+
+    asyncio.run(checkpoint.phase('saved', work))
+    restored = Checkpoint(tmp_path, resume=True)
+
+    async def forbidden():
+        raise AssertionError('Completed work must not replay')
+
+    assert asyncio.run(restored.phase('saved', forbidden)) is None

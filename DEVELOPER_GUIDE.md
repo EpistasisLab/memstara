@@ -302,6 +302,11 @@ requested pause from a settled pause. Resume continues the same run when safe; i
 not reload new Python code into a live worker. Checkpoint recovery rejects changed code,
 failed executions, and interrupted operations whose effects cannot be safely replayed.
 Preserve the old evidence and use a fresh execution when recovery is blocked.
+Recovery also rejects incomplete or malformed checkpoint evidence: missing code
+identity, invalid counters/call states, or an operation marked complete without a
+saved result. A saved JSON `null` result is valid; a missing result field is not.
+Legacy checkpoints without code identity cannot bypass this check. Preserve them
+for inspection; do not fill in a new hash or completion field to force a resume.
 
 For CLI operation, `python -m memstara.pipeline.board --help` lists the supported
 options. `--stage-models` takes a JSON object with the same two profiles. It does not

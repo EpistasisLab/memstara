@@ -33,14 +33,9 @@ class Checkpoint:
                 raise RecoveryBlocked(f"{failure['message']} Correct the cause and start a new execution; "
                                       "saved results are retained.")
             self.state = json.loads(self.path.read_text())
-            if not isinstance(self.state, dict) or self.state.get('version') != 1:
-                raise RecoveryBlocked('Unsupported checkpoint version')
-            if type(self.state.get('next_wave')) is not int or self.state['next_wave'] < 0:
-                raise RecoveryBlocked('Invalid saved Loop position')
-            if not isinstance(self.state.get('phases'), dict) or not isinstance(self.state.get('calls'), dict):
-                raise RecoveryBlocked('Invalid checkpoint operations')
-            expected = self.state.get('code_hash')
-            if expected and expected != code_hash():
+            self.validate_saved_state()
+            expected = self.state['code_hash']
+            if expected != code_hash():
                 raise RecoveryBlocked('Memstara code changed since this execution; '
                                       'restore the matching version before recovery')
             problem = self.problem()
@@ -56,6 +51,33 @@ class Checkpoint:
 
     def save(self):
         atomic_json(self.path, self.state)
+
+    def validate_saved_state(self):
+        """Reject incomplete recovery evidence before offering a new worker."""
+        state = self.state
+        if not isinstance(state, dict) or type(state.get('version')) is not int or state['version'] != 1:
+            raise RecoveryBlocked('Unsupported checkpoint version')
+        for field in ('next_wave', 'waves_run', 'seeded_total', 'dry_streak'):
+            if type(state.get(field)) is not int or state[field] < 0:
+                raise RecoveryBlocked(f'Invalid saved checkpoint counter: {field}')
+        if type(state.get('finished')) is not bool:
+            raise RecoveryBlocked('Invalid saved checkpoint completion state')
+        missing = state.get('missing_trials')
+        if not isinstance(missing, list) or any(type(value) is not int or value < 0 for value in missing):
+            raise RecoveryBlocked('Invalid saved missing-trial identifiers')
+        expected = state.get('code_hash')
+        if not isinstance(expected, str) or not expected:
+            raise RecoveryBlocked('Saved code identity is unavailable; recovery cannot verify the original execution')
+        calls, phases = state.get('calls'), state.get('phases')
+        if not isinstance(calls, dict) or not isinstance(phases, dict):
+            raise RecoveryBlocked('Invalid checkpoint operations')
+        if any(not key or status != 'active' for key, status in calls.items()):
+            raise RecoveryBlocked('Invalid saved agent-call state; external effects require review')
+        for key, phase in phases.items():
+            if not key or not isinstance(phase, dict) or phase.get('status') not in ('active', 'done'):
+                raise RecoveryBlocked('Invalid saved checkpoint operation')
+            if phase['status'] == 'done' and 'result' not in phase:
+                raise RecoveryBlocked('Completed checkpoint operation has no saved result; recovery requires review')
 
     def problem(self):
         if self.state.get('finished'):
