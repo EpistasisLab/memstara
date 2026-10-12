@@ -16,6 +16,7 @@ import re
 import tempfile
 import shutil
 import uuid
+from typing import Any
 
 MAX_BYTES = 100 * 1024 * 1024
 MISSING = {"", "?", "na", "nan", "null", "none", "n/a"}
@@ -98,7 +99,9 @@ def inspect(value):
     dataset, before, rows = None, None, 0
     headers, predictors = [], []
     target = value["target"]
-    counts, missing, nonfinite = Counter(), Counter(), Counter()
+    counts: Counter[str] = Counter()
+    missing: Counter[str] = Counter()
+    nonfinite: Counter[str] = Counter()
     if value["data_mode"] == "dataset":
         dataset = Path(value["dataset_path"]).expanduser().resolve()
         if dataset.suffix.lower() != ".csv" or not dataset.is_file():
@@ -172,7 +175,9 @@ def inspect(value):
     elif not target["description"]:
         issue("target_description", "Provide a research objective or target description for proposal mode")
 
-    root, files, hashes, documents = None, [], {}, []
+    root, files = None, []
+    hashes: dict[str, str] = {}
+    documents: list[Any] = []
     if value["knowledge_mode"] == "okf":
         root = Path(value["knowledge_path"]).expanduser().resolve()
         if not root.is_dir():
@@ -321,7 +326,10 @@ def prepare(identifier):
                 (staging / "dataset.csv").open("w", newline="", encoding="utf-8") as outgoing,
             ):
                 reader = csv.DictReader(incoming)
-                fields = [c for c in reader.fieldnames if c not in config["excluded_columns"] or c == target["column"]]
+                headers = reader.fieldnames
+                if not headers or list(headers) != checked["dataset"]["columns"]:
+                    raise ValueError("Dataset changed while preparing the analysis copy")
+                fields = [c for c in headers if c not in config["excluded_columns"] or c == target["column"]]
                 writer = csv.DictWriter(outgoing, fieldnames=fields, extrasaction="ignore")
                 writer.writeheader()
                 for row in reader:

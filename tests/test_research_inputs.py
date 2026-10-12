@@ -27,6 +27,27 @@ def sample(tmp_path, monkeypatch):
                 'positive_label': 'yes', 'negative_label': 'no', 'prediction_time': 'At enrollment'}}
 
 
+@pytest.mark.parametrize('replacement', ['', 'different,outcome\n1,yes\n',
+                                         'a,record_id,b,c,d,outcome\n1,1,2,3,4,yes\n'])
+def test_source_changed_after_inspection_is_not_published(sample, monkeypatch, replacement):
+    from memstara import research_inputs
+
+    record = register(sample)
+    original_inspect = research_inputs.inspect
+
+    def inspect_then_truncate(configuration):
+        checked = original_inspect(configuration)
+        Path(sample['dataset_path']).write_text(replacement)
+        return checked
+
+    monkeypatch.setattr(research_inputs, 'inspect', inspect_then_truncate)
+    with pytest.raises(ValueError, match='Dataset changed'):
+        prepare(record['id'])
+    parent = research_inputs.registry_root() / 'prepared'
+    assert not list(parent.rglob('manifest.json'))
+    assert not list(parent.glob('.preparing-*'))
+
+
 def test_valid_inputs_are_not_falsely_marked_pipeline_ready(sample):
     result = inspect(sample)
     assert result['input_checks_passed']
