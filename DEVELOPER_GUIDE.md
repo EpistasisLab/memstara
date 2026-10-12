@@ -888,6 +888,19 @@ recovery; full Motoro tables, cluster roles/ACLs, upgrades, cross-host path migr
 and a coordinated deployment-wide backup still require release acceptance. The
 test makes no model calls and does not touch live data.
 
+A second rehearsal builds `agents`, `agent_runs` and `run_steps` from the installed
+Motoro ORM metadata and saves
+synthetic agent, run and step records. It retains dump ACLs, recreates an isolated
+NOLOGIN reader role before restoring, then checks data equality, SELECT access,
+rejected writes and default SELECT privileges on a newly created table. This tests
+Motoro model-schema and reader-ACL restoration without editing upstream. It does
+not exercise Alembic upgrades, authentication/password restoration, role membership,
+a different cluster owner, or coordinated snapshots of the two deployed databases.
+Motoro vector-memory tables require the PostgreSQL `vector` extension; this plain
+PostgreSQL rehearsal does not create or certify those tables. Provision and verify
+the matching extension on an isolated restore target before testing a full Motoro
+database backup. Do not replace vector columns with placeholder types to pass tests.
+
 Reconcile an existing run without making any LLM calls:
 
 ```bash
