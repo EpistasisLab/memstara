@@ -154,7 +154,7 @@ jobs:
       - run: uv run --frozen python -m build
       - run: uv run --frozen python scripts/check_distribution.py
       - name: Extracted source example inspection and registration
-        run: uv run --frozen python scripts/check_source_distribution.py
+        run: uv run --frozen --extra runtime python scripts/check_source_distribution.py
       - name: Isolated locked-runtime wheel installation
         run: uv run --frozen python scripts/check_runtime_distribution.py
       - uses: actions/upload-artifact@v4
