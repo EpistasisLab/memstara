@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {workspaceGeometry} from '../src/lib/workspaceGeometry.ts';
 test('all panel subsets keep readable nonoverlapping dock slots',()=>{
- for(const width of [320,760,1024,1440,1920,2560])for(const height of [400,768,1000])for(let mask=0;mask<8;mask++){
+ for(const width of [320,375,390,414,420,760,1024,1440,1920,2560])for(const height of [400,768,1000])for(let mask=0;mask<8;mask++){
   const panels=['feed','results','report'].filter((_,i)=>mask&(1<<i));
   const layout=workspaceGeometry(width,height,panels);
   const floor=layout.boxes.pipeline;assert(floor.h>=520);
