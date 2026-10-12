@@ -896,10 +896,16 @@ rejected writes and default SELECT privileges on a newly created table. This tes
 Motoro model-schema and reader-ACL restoration without editing upstream. It does
 not exercise Alembic upgrades, authentication/password restoration, role membership,
 a different cluster owner, or coordinated snapshots of the two deployed databases.
-Motoro vector-memory tables require the PostgreSQL `vector` extension; this plain
-PostgreSQL rehearsal does not create or certify those tables. Provision and verify
-the matching extension on an isolated restore target before testing a full Motoro
-database backup. Do not replace vector columns with placeholder types to pass tests.
+The vector-memory variant also creates the real `vector` extension and stores two
+synthetic 768-dimensional embeddings using Motoro's `memory_entries` model. It
+compares stored rows and cosine-distance ranking before/after restore and checks
+read-only access. CI installs `postgresql-16-pgvector`; local integration runs need
+the matching server extension package as well as the Python client. Missing server
+extension support fails this test rather than skipping it or substituting types.
+The extension is pre-provisioned in `public` and remains available during the
+schema restore: this does not test extension binary installation from a backup,
+extension-version upgrades, or every Motoro table. Synthetic vectors require no
+embedding provider calls.
 
 Reconcile an existing run without making any LLM calls:
 

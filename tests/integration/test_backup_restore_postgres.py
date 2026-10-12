@@ -92,7 +92,8 @@ async def test_dump_restore_preserves_evidence_and_constraints(database, tmp_pat
             "UPDATE memstara_blackboard SET status='invalid' WHERE task_id=$1", next_id)
 
 
-async def test_motoro_dump_restore_retains_runs_steps_and_readonly_acl(database, tmp_path):
+@pytest.mark.parametrize("with_vectors", [False, True], ids=["run-records", "vector-memory"])
+async def test_motoro_dump_restore_retains_runs_steps_and_readonly_acl(database, tmp_path, with_vectors):
     """Use installed upstream models without configuring or editing upstream."""
     import importlib
     import uuid
@@ -104,20 +105,26 @@ async def test_motoro_dump_restore_retains_runs_steps_and_readonly_acl(database,
     from motoro.models.agent import Agent
     from motoro.models.base import Base
     from motoro.models.run import AgentRun, RunStep
+    from motoro.models.memory import MemoryEntry
 
     schema = await database.fetchval('SELECT current_schema()')
     assert re.fullmatch(r'test_[0-9a-f]{32}', schema)
     parts = urlsplit(os.environ['MEMSTARA_TEST_DATABASE_URL'])
     assert parts.path.endswith('_test')
     reader = 'reader_' + uuid.uuid4().hex
+    tables = [Agent.__table__, AgentRun.__table__, RunStep.__table__]
+    if with_vectors:
+        await database.execute('CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public')
+        await database.execute(f'SET search_path TO {schema}, public')
+        tables.append(MemoryEntry.__table__)
     engine = create_async_engine(
         parts._replace(scheme='postgresql+asyncpg').geturl(),
-        connect_args={'server_settings': {'search_path': schema}})
+        connect_args={'server_settings': {'search_path': f'{schema},public'}})
     agent_id, run_id = uuid.uuid4(), uuid.uuid4()
     try:
         async with engine.begin() as conn:
             await conn.run_sync(lambda sync: Base.metadata.create_all(
-                sync, tables=[Agent.__table__, AgentRun.__table__, RunStep.__table__]))
+                sync, tables=tables))
             await conn.execute(Agent.__table__.insert().values(
                 id=agent_id, name='Synthetic recovery agent', goal='Recovery test'))
             await conn.execute(AgentRun.__table__.insert().values(
@@ -126,6 +133,14 @@ async def test_motoro_dump_restore_retains_runs_steps_and_readonly_acl(database,
             await conn.execute(RunStep.__table__.insert().values(
                 run_id=run_id, sequence=1, phase='act',
                 input_data={'synthetic': True}, output_data={'saved': True}))
+            if with_vectors:
+                for index in range(2):
+                    vector = [float(i == index) for i in range(768)]
+                    await conn.execute(MemoryEntry.__table__.insert().values(
+                        agent_id=agent_id, run_id=run_id, type='episodic',
+                        content=f'Synthetic memory {index}', embedding=vector,
+                        embedding_model='synthetic-basis', embedding_version='1',
+                        embedding_dimensions=768, embedding_status='completed'))
     finally:
         await engine.dispose()
 
@@ -162,7 +177,16 @@ async def test_motoro_dump_restore_retains_runs_steps_and_readonly_acl(database,
         await database.execute(f'GRANT SELECT ON ALL TABLES IN SCHEMA {schema} TO {reader}')
         await database.execute(
             f'ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} GRANT SELECT ON TABLES TO {reader}')
+        async def nearest():
+            query = '[' + ','.join(['1'] + ['0'] * 767) + ']'
+            return await database.fetch(
+                'SELECT content, embedding <=> $1::vector AS distance '
+                'FROM memory_entries ORDER BY distance, content', query)
+
         before = await snapshot()
+        vector_before = await nearest() if with_vectors else []
+        if with_vectors:
+            assert [row['distance'] for row in vector_before] == [0.0, 1.0]
         archive = tmp_path / 'motoro-with-acl.dump'
         # Keep ACLs. Owner remains the dedicated test administrator on this same cluster.
         await run('pg_dump', '--format=custom', f'--schema={schema}', f'--file={archive}')
@@ -173,12 +197,18 @@ async def test_motoro_dump_restore_retains_runs_steps_and_readonly_acl(database,
         await run('pg_restore', '--exit-on-error', '--single-transaction',
                   '--dbname', parts.path.lstrip('/'), str(archive))
         assert await snapshot() == before
+        if with_vectors:
+            assert await nearest() == vector_before
         await database.execute('CREATE TABLE recovery_new_table (id integer)')
         await database.execute(f'SET ROLE {reader}')
         try:
             assert await database.fetchval('SELECT output FROM agent_runs WHERE id=$1', run_id) == 'Synthetic output'
             assert await database.fetchval('SELECT count(*) FROM run_steps WHERE run_id=$1', run_id) == 1
             assert await database.fetchval('SELECT count(*) FROM recovery_new_table') == 0
+            if with_vectors:
+                assert await nearest() == vector_before
+                with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                    await database.execute('DELETE FROM memory_entries')
             with pytest.raises(asyncpg.InsufficientPrivilegeError):
                 await database.execute('DELETE FROM agent_runs WHERE id=$1', run_id)
             with pytest.raises(asyncpg.InsufficientPrivilegeError):
