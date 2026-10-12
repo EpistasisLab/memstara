@@ -89,7 +89,18 @@ def test_missing_root_and_empty_baseline_are_errors(tmp_path):
         integrity.roots_from_options([f"skills={tmp_path / 'missing'}"])
     roots = integrity.roots_from_options([f"skills={tmp_path}"])
     with pytest.raises(ValueError, match="empty"):
-        integrity.inventory(roots)
+        integrity.snapshot(roots, tmp_path.parent / f"{tmp_path.name}-manifest.json")
+
+
+def test_all_deleted_files_are_reported_as_missing(baseline):
+    roots, manifest, digest = baseline
+    for path in roots["skills"].rglob("*.md"):
+        path.unlink()
+    result = integrity.verify(roots, manifest, digest)
+    assert result["status"] == "changed"
+    assert result["checked_files"] == 0
+    assert result["missing"] == ["skills/current.md", "skills/old/previous.md"]
+    assert result["changed"] == result["added"] == []
 
 
 def test_cli_exit_codes_and_required_pin(baseline, capsys):

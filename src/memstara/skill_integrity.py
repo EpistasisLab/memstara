@@ -76,8 +76,6 @@ def inventory(roots: dict[str, Path]) -> dict[str, dict[str, Any]]:
                 if not path.is_file():
                     raise ValueError(f"{alias}: only regular files and directories are supported")
                 files[f"{alias}/{path.relative_to(root).as_posix()}"] = file_record(path)
-    if not files:
-        raise ValueError("An empty inventory cannot establish a baseline")
     return files
 
 
@@ -85,12 +83,15 @@ def snapshot(roots: dict[str, Path], destination: Path) -> str:
     destination = destination.expanduser().absolute()
     if any(destination.resolve().is_relative_to(root) for root in roots.values()):
         raise ValueError("Store the manifest outside the protected roots")
+    files = inventory(roots)
+    if not files:
+        raise ValueError("An empty inventory cannot establish a baseline")
     value = {
         "schema_version": SCHEMA,
         "basis": "observed_snapshot_not_original_authentication",
         "created_at": datetime.now(UTC).isoformat(),
         "roots": sorted(roots),
-        "files": inventory(roots),
+        "files": files,
     }
     raw = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
     # Exclusive creation prevents silently replacing an established baseline.
