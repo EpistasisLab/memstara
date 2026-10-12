@@ -454,8 +454,12 @@ uv run --frozen python scripts/check_distribution.py
 The distribution checker creates a temporary virtual environment, installs the wheel
 with `--no-index --no-deps`, and verifies installed metadata and every packaged file.
 It does not use the editable checkout to satisfy imports. Use `--dist-dir <directory>`
-to inspect a downloaded CI artifact. Runtime dependencies and live pipeline acceptance
-are separate checks; this installation smoke test does not certify them.
+to inspect a downloaded CI artifact. To additionally install the locked runtime dependencies in a fresh environment and
+check dependency compatibility and backend imports, run
+`uv run --frozen python scripts/check_runtime_distribution.py`. This second check
+may download dependencies and the pinned Motoro revision; it does not call a model
+provider or start a database. Both checks run in distribution CI. Neither verifies
+an end-to-end live pipeline or a fully cold dependency cache.
 
 Run Python entry points as `python -m memstara.<module>`. Load configuration
 before runtime use, following the existing entry points. Agent prompts live in

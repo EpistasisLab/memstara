@@ -35,7 +35,7 @@ jobs:
       - name: Required runtime identity
         run: uv run --frozen --extra dev --extra runtime python -c "import importlib.metadata; import motoro; assert importlib.metadata.version('motoro') == '0.10.0'"
       - name: Lint
-        run: uv run --frozen --extra dev --extra runtime ruff check src/ tests/integration tests/live tests/test_mcp_protocol.py tests/test_saved_skill_compatibility.py tests/test_research_input_matrix.py scripts/check_distribution.py
+        run: uv run --frozen --extra dev --extra runtime ruff check src/ tests/integration tests/live tests/test_mcp_protocol.py tests/test_saved_skill_compatibility.py tests/test_research_input_matrix.py scripts/check_distribution.py scripts/check_runtime_distribution.py
       - name: Import boundaries
         run: uv run --frozen --extra dev --extra runtime lint-imports
       - name: Unit, component and MCP protocol tests
@@ -153,6 +153,8 @@ jobs:
       - run: uv sync --frozen --extra dev
       - run: uv run --frozen python -m build
       - run: uv run --frozen python scripts/check_distribution.py
+      - name: Isolated locked-runtime wheel installation
+        run: uv run --frozen python scripts/check_runtime_distribution.py
       - uses: actions/upload-artifact@v4
         with:
           name: distributions
