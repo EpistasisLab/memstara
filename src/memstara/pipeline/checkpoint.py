@@ -3,6 +3,7 @@ import json
 import hashlib
 import os
 from pathlib import Path
+from uuid import uuid4
 
 
 class RecoveryBlocked(RuntimeError):
@@ -10,18 +11,25 @@ class RecoveryBlocked(RuntimeError):
 
 
 def atomic_json(path, value):
+    """Publish one complete document; each writer owns only its temporary file."""
     path = Path(path)
-    temporary = path.with_suffix('.tmp')
-    with temporary.open('w', encoding='utf-8') as stream:
-        json.dump(value, stream, ensure_ascii=False)
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(temporary, path)
-    fd = os.open(path.parent, os.O_RDONLY)
+    temporary = path.with_name(f'.{path.name}.{uuid4().hex}.tmp')
+    created = False
     try:
-        os.fsync(fd)
+        with temporary.open('x', encoding='utf-8') as stream:
+            created = True
+            json.dump(value, stream, ensure_ascii=False)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
     finally:
-        os.close(fd)
+        if created:
+            temporary.unlink(missing_ok=True)
 
 
 class Checkpoint:

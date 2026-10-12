@@ -308,6 +308,15 @@ saved result. A saved JSON `null` result is valid; a missing result field is not
 Legacy checkpoints without code identity cannot bypass this check. Preserve them
 for inspection; do not fill in a new hash or completion field to force a resume.
 
+Checkpoint JSON writes use a unique, exclusively created temporary file beside
+the destination, flush it to disk, then atomically replace the destination and sync
+its directory. Concurrent saves cannot reuse one another's temporary file. A failure
+before replacement preserves the old destination; a directory-sync failure after
+replacement is still reported because durability has not been confirmed. Abrupt
+process termination can leave a temporary file, which later saves do not reuse.
+This protects complete-file publication, not ordering or merging of concurrent
+updates, cross-database transactions, or a tested guarantee against power loss.
+
 For CLI operation, `python -m memstara.pipeline.board --help` lists the supported
 options. `--stage-models` takes a JSON object with the same two profiles. It does not
 read a JSON filename automatically. CLI flags are not a replacement for the control
