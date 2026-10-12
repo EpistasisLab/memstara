@@ -930,6 +930,17 @@ async def write_traces(run_dir: Path) -> int:
     return len(_CALLS)
 
 
+def board_tool_text(raw) -> str:
+    """Validate transport evidence without exposing the provider's error content."""
+    if isinstance(raw, tuple):
+        if len(raw) != 2 or raw[0] is not False:
+            raise RuntimeError("Blackboard tool failed or returned an invalid response envelope")
+        raw = raw[1]
+    if not isinstance(raw, str) or not raw.strip():
+        raise RuntimeError("Blackboard tool returned no response text")
+    return raw
+
+
 async def board_state(registry: MCPServerRegistry, run_tag: str) -> dict:
     """What is on the board right now, straight from the tool the agents use.
 
@@ -938,12 +949,14 @@ async def board_state(registry: MCPServerRegistry, run_tag: str) -> dict:
     board they see.
     """
     server = await get_server_by_name("memstara-blackboard")
+    if server is None:
+        raise RuntimeError("Blackboard server is not registered")
     from motoro.services.mcp_service import call_server_tool
 
     async with asyncio.timeout(30):
         raw = await call_server_tool(server.id, "read_board", {"run_tag": run_tag}, registry=registry)
     # Sometimes the return is a (metadata, body) tuple, sometimes only the body.
-    text = raw[1] if isinstance(raw, tuple) else raw
+    text = board_tool_text(raw)
     return decode_board_state(text)
 
 
@@ -1063,6 +1076,9 @@ async def harvest_match_trace(
 
     server = await get_server_by_name("memstara-blackboard")
     written = 0
+    if server is None:
+        note("(could not attach matcher records: blackboard server is not registered)")
+        return written, refused
     for tid in task_ids:
         try:
             await call_server_tool(
@@ -1087,15 +1103,20 @@ async def call_board_tool(registry: MCPServerRegistry, tool: str, args: dict[str
     from motoro.services.mcp_service import call_server_tool
 
     server = await get_server_by_name("memstara-blackboard")
+    if server is None:
+        raise RuntimeError("Blackboard server is not registered")
     async with asyncio.timeout(30):
         raw = await call_server_tool(server.id, tool, args, registry=registry)
     # Sometimes the return is an (is-it-an-error, body) tuple, sometimes only the body —
     # read_board_via_tool already does the same thing in the same place.
-    text = raw[1] if isinstance(raw, tuple) else raw
+    text = board_tool_text(raw)
     try:
-        return json.loads(text)
-    except (json.JSONDecodeError, TypeError):
-        return {}
+        response = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Blackboard tool returned invalid JSON") from exc
+    if not isinstance(response, dict):
+        raise RuntimeError("Blackboard tool response must be a JSON object")
+    return response
 
 
 async def questions_for_wave(

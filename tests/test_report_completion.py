@@ -9,6 +9,48 @@ from memstara.pipeline import board
 import json
 
 from memstara.pipeline.board import save_report
+from types import SimpleNamespace
+
+
+@pytest.mark.parametrize('raw', [None, (True, '{"tasks": [], "count": 0}'),
+                                (False, None), (False,), 'broken', 'null', '[]'])
+def test_driver_tool_rejects_unavailable_or_invalid_response(monkeypatch, raw):
+    monkeypatch.setattr(board, 'get_server_by_name', AsyncMock(return_value=SimpleNamespace(id='board')))
+    monkeypatch.setattr('motoro.services.mcp_service.call_server_tool', AsyncMock(return_value=raw))
+    with pytest.raises(RuntimeError):
+        asyncio.run(board.call_board_tool(None, 'read_questions', {}))
+
+
+def test_driver_tool_missing_server_is_explicit(monkeypatch):
+    monkeypatch.setattr(board, 'get_server_by_name', AsyncMock(return_value=None))
+    invoke = AsyncMock()
+    monkeypatch.setattr('motoro.services.mcp_service.call_server_tool', invoke)
+    with pytest.raises(RuntimeError, match='not registered'):
+        asyncio.run(board.call_board_tool(None, 'read_questions', {}))
+    invoke.assert_not_awaited()
+
+
+@pytest.mark.parametrize('raw', ['{"questions": []}', (False, '{"questions": []}')])
+def test_driver_tool_accepts_supported_response_envelopes(monkeypatch, raw):
+    monkeypatch.setattr(board, 'get_server_by_name', AsyncMock(return_value=SimpleNamespace(id='board')))
+    monkeypatch.setattr('motoro.services.mcp_service.call_server_tool', AsyncMock(return_value=raw))
+    assert asyncio.run(board.call_board_tool(None, 'read_questions', {})) == {'questions': []}
+
+
+def test_board_state_transport_error_cannot_look_like_an_empty_board(monkeypatch):
+    monkeypatch.setattr(board, 'get_server_by_name', AsyncMock(return_value=SimpleNamespace(id='board')))
+    monkeypatch.setattr('motoro.services.mcp_service.call_server_tool',
+                        AsyncMock(return_value=(True, '{"tasks": [], "count": 0}')))
+    with pytest.raises(RuntimeError, match='tool failed'):
+        asyncio.run(board.board_state(None, 'synthetic'))
+
+
+def test_driver_preserves_application_rejection_for_caller_recovery(monkeypatch):
+    monkeypatch.setattr(board, 'get_server_by_name', AsyncMock(return_value=SimpleNamespace(id='board')))
+    monkeypatch.setattr('motoro.services.mcp_service.call_server_tool',
+                        AsyncMock(return_value=(False, '{"error": "invalid transition"}')))
+    assert asyncio.run(board.call_board_tool(None, 'submit_result', {})) == {
+        'error': 'invalid transition'}
 
 
 def test_report_failure_preserves_previous_report_and_records_failure(tmp_path):
