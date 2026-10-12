@@ -96,6 +96,10 @@ version-file = "src/memstara/_version.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/memstara"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"THIRD_PARTY_NOTICES.md" = "memstara/third_party/THIRD_PARTY_NOTICES.md"
+"licenses/afc-forge-LICENSE.txt" = "memstara/third_party/licenses/afc-forge-LICENSE.txt"
+
 # --------------------------------------------------------------------------- #
 # pytest. This section replaces `pytest.ini`, which is deleted in the same commit.
 # --------------------------------------------------------------------------- #

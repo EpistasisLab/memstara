@@ -16,6 +16,12 @@ def main():
     wheel = wheels[0]
     with zipfile.ZipFile(wheel) as archive:
         names = set(archive.namelist())
+        for source, packaged in (
+            ("THIRD_PARTY_NOTICES.md", "memstara/third_party/THIRD_PARTY_NOTICES.md"),
+            ("licenses/afc-forge-LICENSE.txt", "memstara/third_party/licenses/afc-forge-LICENSE.txt"),
+        ):
+            assert packaged in names, f"Missing third-party notice: {packaged}"
+            assert archive.read(packaged) == (ROOT / source).read_bytes(), packaged
         for directory in ("prompts", "playbooks"):
             for path in (ROOT / "src/memstara" / directory).rglob("*.md"):
                 # Local ignored notes are not required package resources.

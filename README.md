@@ -146,6 +146,10 @@ outputs/                       Local datasets, caches, and run artifacts (ignore
 
 ## Get started
 
+See [third-party notices](THIRD_PARTY_NOTICES.md) for incorporated code and example
+material scope. A project-wide release license and redistribution review remain
+pending; the example-data declaration is not a license for the whole application.
+
 You need **Git, Python 3.12 or 3.13, Docker with Compose**, a supported LLM
 credential, and a checkout of the selected Memstara revision. Motoro requires its
 own PostgreSQL database and Redis; Memstara's root Compose file starts only its
