@@ -123,17 +123,15 @@ class ExecutionGate:
         self.publish()
 
     def publish(self):
-        import json
+        from memstara.pipeline.checkpoint import atomic_json
         requested = (self.run_dir / 'pause.request').exists()
         data = {'resumable': True, 'active_calls': self.active_calls,
                 'state': ('stopping' if self.active_calls else 'paused') if requested else 'running'}
         if data == getattr(self, '_last_state', None):
             return
+        atomic_json(self.run_dir / 'execution_control.json', data)
+        # Cache only confirmed publication; failed writes must be retried.
         self._last_state = data
-        target = self.run_dir / 'execution_control.json'
-        temporary = target.with_suffix('.tmp')
-        temporary.write_text(json.dumps(data))
-        temporary.replace(target)
 
     async def wait(self):
         from memstara.pipeline.run_ownership import require_ownership, await_ownership
