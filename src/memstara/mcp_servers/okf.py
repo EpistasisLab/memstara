@@ -734,6 +734,18 @@ def _read_documents(refs: str, section: str = "", max_chars: int = 0) -> str:
         if not found:
             out.append({"ref": ref, "error": "no document answers to that reference"})
             continue
+        accessible = [doc for doc in found if matches(doc.fields, locked)] if locked else found
+        if not accessible:
+            # Keep an explicit scope error without listing inaccessible candidates.
+            denied: dict[str, Any] = {
+                "ref": ref,
+                "error": f"outside {_render(locked)}, which this run is confined to",
+            }
+            if len(found) == 1:
+                denied["id"] = found[0].address
+            out.append(denied)
+            continue
+        found = accessible
         if len(found) > 1:
             # Two or more documents answer to the same name. Rather than pick one at
             # random, show the candidates.
@@ -742,18 +754,6 @@ def _read_documents(refs: str, section: str = "", max_chars: int = 0) -> str:
             )
             continue
         doc = found[0]
-        if locked and not matches(doc.fields, locked):
-            # Refused by name rather than reported as missing: "that document is not in
-            # your branch" is a fact the caller can act on, while "no such document"
-            # would be a lie about a bundle it can see the rest of.
-            out.append(
-                {
-                    "ref": ref,
-                    "id": doc.address,
-                    "error": f"outside {_render(locked)}, which this run is confined to",
-                }
-            )
-            continue
         sections = _sections(doc.body)
         headings = [name for name, _ in sections]   # the section names this document has
 

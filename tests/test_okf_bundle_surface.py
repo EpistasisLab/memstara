@@ -40,6 +40,34 @@ def test_invalid_lock_is_an_error_not_an_unconfined_count(bundle, monkeypatch):
     assert "error" in json.loads(okf.okf_list_domains())
 
 
+@pytest.mark.parametrize('lock', ['', 'branch=a', 'branch=b', 'branch=absent'])
+def test_reader_resolves_duplicate_names_within_locked_branch(bundle, monkeypatch, lock):
+    (bundle / 'beta/one.md').write_text(
+        '---\ntitle: Other finding\nbranch: b\n---\nOther evidence.\n')
+    if lock:
+        monkeypatch.setenv('MEMSTARA_OKF_FIELDS', lock)
+    row = json.loads(okf._read_documents('one'))['documents'][0]
+    if not lock:
+        assert row['error'] == 'ambiguous'
+        assert set(row['candidates']) == {'alpha/deep/one', 'beta/one'}
+    elif lock == 'branch=absent':
+        assert 'outside' in row['error']
+        assert 'candidates' not in row
+    else:
+        assert 'error' not in row
+        assert row['id'] == ('alpha/deep/one' if lock == 'branch=a' else 'beta/one')
+
+
+def test_reader_ambiguity_lists_only_accessible_candidates(bundle, monkeypatch):
+    for relative, branch in [('alpha/one.md', 'a'), ('beta/one.md', 'b')]:
+        (bundle / relative).write_text(
+            f'---\ntitle: Duplicate\nbranch: {branch}\n---\nSynthetic.\n')
+    monkeypatch.setenv('MEMSTARA_OKF_FIELDS', 'branch=a')
+    row = json.loads(okf._read_documents('one'))['documents'][0]
+    assert row['error'] == 'ambiguous'
+    assert set(row['candidates']) == {'alpha/one', 'alpha/deep/one'}
+
+
 def test_search_domain_suggestions_remain_inside_locked_branch(bundle, monkeypatch):
     monkeypatch.setenv('MEMSTARA_OKF_FIELDS', 'branch=a')
     result = json.loads(okf.okf_search('synthetic', domain='missing-domain'))
