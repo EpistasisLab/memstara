@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from typing import Any
 import time
 import uuid
 
@@ -197,7 +198,7 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
     from memstara.pipeline.exploration import write_progress
 
     for loop in range(checkpoint.state["next_wave"], args.waves):
-        outputs = []
+        outputs: list[dict[str, Any]] = []
         books = state["books"]
         if state["combination_plan"]:
             from memstara.combinations import loop_flavors

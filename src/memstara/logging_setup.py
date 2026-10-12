@@ -406,8 +406,8 @@ def tee_console(path: Path | str, *, append: bool = False) -> Iterator[Path]:
     target.parent.mkdir(parents=True, exist_ok=True)
     saved_out, saved_err = sys.stdout, sys.stderr
     with target.open("a" if append else "w", encoding="utf-8") as sink:
-        sys.stdout = _Tee(saved_out, sink)  # type: ignore[assignment]
-        sys.stderr = _Tee(saved_err, sink)  # type: ignore[assignment]
+        sys.stdout = _Tee(saved_out, sink)
+        sys.stderr = _Tee(saved_err, sink)
         try:
             yield target
         finally:

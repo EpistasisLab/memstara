@@ -10,6 +10,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import Any
 
 
 def validate_baseline(columns, target, dataset=None):
@@ -41,7 +42,7 @@ def write_context(subset_path, task, snapshot, *, data_allocation=None):
     if selected and evaluation.get('feature_selection') != selected:
         raise ValueError('Task feature selection provenance changed before training')
     baseline = validate_baseline(snapshot['comparison_policy']['baseline_columns'], task['y_column'])
-    groups = {}
+    groups: dict[str, list[str]] = {}
     for row in evaluation.get('feature_mapping', []):
         if row.get('column') in columns:
             groups.setdefault(row['concept'], []).append(row['column'])
@@ -93,6 +94,7 @@ def score_comparisons(path, target, plan, snapshot, *, configuration=None, xai_r
 
     def evaluate(key, label, columns, removed=None):
         item = {'id': key, 'label': label, 'features': columns, 'removed_features': removed or []}
+        measured: dict[str, Any]
         try:
             signature = tuple(sorted(columns))
             if not columns:

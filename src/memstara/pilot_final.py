@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 import uuid
 
 from memstara.control.catalog import resolve
@@ -94,7 +95,7 @@ async def run_final_stages(config: dict, bundle: dict, output: Path, *,
     _save(manifest_path, manifest)
     for expert, item in evidence.items():
         _save(output / f'{expert}.knowledge.json', item)
-    reports = []
+    reports: list[dict[str, Any]] = []
     completed = []
     current = None
     try:

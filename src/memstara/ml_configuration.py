@@ -18,9 +18,13 @@ RANGES = {
                 'reg_alpha': (0, 100), 'reg_lambda': (0, 100), 'gamma': (0, 100),
                 'scale_pos_weight': (.01, 100), 'max_bin': (32, 256)},
 }
-CHOICES = {'logistic_regression': {'solver': ['lbfgs', 'liblinear'], 'penalty': ['l2', 'l1'],
-                                  'class_weight': [None, 'balanced'], 'fit_intercept': [True, False]},
-           'xgboost': {}}
+CHOICES: dict[str, dict[str, list[str | bool | None]]] = {
+    'logistic_regression': {
+        'solver': ['lbfgs', 'liblinear'], 'penalty': ['l2', 'l1'],
+        'class_weight': [None, 'balanced'], 'fit_intercept': [True, False],
+    },
+    'xgboost': {},
+}
 INTEGERS = {'max_iter', 'n_estimators', 'max_depth', 'max_bin'}
 
 
