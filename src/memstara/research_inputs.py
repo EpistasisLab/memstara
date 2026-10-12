@@ -273,10 +273,22 @@ def load(identifier):
         raise ValueError("Select a saved research input record")
     try:
         record = json.loads((registry_root() / f"{identifier}.json").read_text())
+        if (
+            not isinstance(record, dict)
+            or record.get("id") != identifier
+            or not isinstance(record.get("fingerprint"), str)
+            or not re.fullmatch(r"[a-f0-9]{64}", record["fingerprint"])
+            or not isinstance(record.get("configuration"), dict)
+        ):
+            raise ValueError("Invalid registration structure")
         record["configuration"] = config(record["configuration"])
         return record
     except FileNotFoundError:
         raise ValueError("Research input record no longer exists") from None
+    except ValueError:
+        raise ValueError(
+            "Research input record is invalid. Restore the original record or inspect and save a new version"
+        ) from None
 
 
 def verify_materialized(profile):

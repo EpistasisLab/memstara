@@ -66,3 +66,34 @@ def test_colliding_identifier_never_overwrites_original(registry, monkeypatch):
     assert (registry / (original['id'] + '.json')).read_bytes() == before
     assert inputs.list_inputs() == [original]
     assert len(list(registry.iterdir())) == 1
+
+
+@pytest.mark.parametrize('replacement', [
+    '[]', 'null', '{}', '{"configuration":null}', '{broken',
+])
+def test_corrupt_record_rejected_before_source_inspection(registry, monkeypatch, replacement):
+    record = inputs.register(PROFILE)
+    path = registry / (record['id'] + '.json')
+    path.write_text(replacement)
+    monkeypatch.setattr(inputs, 'inspect', lambda value: pytest.fail('Source inspection must not run'))
+    with pytest.raises(ValueError, match='Research input record is invalid'):
+        inputs.prepare(record['id'])
+    assert path.read_text() == replacement
+
+
+@pytest.mark.parametrize('field,value', [('id', '0' * 32), ('fingerprint', ''),
+                                         ('fingerprint', 123), ('configuration', [])])
+def test_record_identity_and_structure_checked_before_use(registry, monkeypatch, field, value):
+    record = inputs.register(PROFILE)
+    path = registry / (record['id'] + '.json')
+    path.write_text(json.dumps({**record, field: value}))
+    monkeypatch.setattr(inputs, 'inspect', lambda value: pytest.fail('Source inspection must not run'))
+    with pytest.raises(ValueError, match='Research input record is invalid'):
+        inputs.prepare(record['id'])
+
+
+def test_valid_record_and_missing_record_remain_distinct(registry):
+    record = inputs.register(PROFILE)
+    assert inputs.load(record['id']) == record
+    with pytest.raises(ValueError, match='no longer exists'):
+        inputs.load('0' * 32)

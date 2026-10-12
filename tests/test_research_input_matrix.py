@@ -229,3 +229,18 @@ def test_changed_source_requires_new_registration_in_every_applicable_mode(study
         inputs.prepare(record['id'])
     assert inputs.verify_materialized(frozen) == frozen
     assert inputs.prepare(inputs.register(cfg)['id'])['fingerprint'] != frozen['fingerprint']
+
+
+@pytest.mark.parametrize('damaged', ['[]', '{}', '{broken'])
+def test_corrupt_registration_returns_422_without_launch(study, tmp_path, monkeypatch, damaged):
+    record = inputs.register(select_modes(study, 'llm_only', 'proposal'))
+    path = inputs.registry_root() / (record['id'] + '.json')
+    path.write_text(damaged)
+    service, handler, manager, responses = launch_fixture(tmp_path, monkeypatch)
+    handler._launch({'research_input_id': record['id']}, manager)
+    assert responses[0][0] == 422
+    assert responses[0][1]['code'] == 'input_validation_failed'
+    assert 'Research input record is invalid' in responses[0][1]['error']
+    manager.start.assert_not_called()
+    service.new_run_dir.assert_not_called()
+    assert path.read_text() == damaged
