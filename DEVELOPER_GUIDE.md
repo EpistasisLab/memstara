@@ -583,6 +583,18 @@ This selects one corpus+CSV case for two Loops; it does not launch the 64-condit
 study. The default live test remains one Loop per selected case. Historical evidence
 without these exports must not be passed as new input/output audit acceptance.
 
+To validate an installed distribution, install the candidate wheel and locked runtime
+dependencies in a separate virtual environment, then add
+`--live-installed-python /path/to/environment/bin/python` to the live command. Use
+`--live-loops 1` for a single bounded run. The test controller still reads the local
+configuration and synthetic example, but starts the pipeline using the installed
+interpreter in isolated mode. Before inference it rejects editable/non-wheel installs
+and imports outside the virtual environment. `installed_distribution.json` records
+the installed version, module path and installer-provided wheel provenance. Retain
+the candidate wheel and its SHA-256 separately; installers may omit the archive hash.
+The acceptance record retains this identity; a source-checkout result cannot be reused
+as installed-wheel evidence. This is an opt-in paid check, not part of offline CI.
+
 Use the listed evidence files to continue: `config.json`/`prompts.json` for frozen
 inputs and policies; `trace/` and the developer inspector for full model/tool I/O;
 `pipeline_failure.json`/`failure_frames.json` for application failures;

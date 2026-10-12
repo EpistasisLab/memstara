@@ -79,6 +79,8 @@ def pytest_addoption(parser):
                      help="Paid Haiku Loops per selected case (default one; two for audit acceptance)")
     parser.addoption("--live-audit-io", action="store_true",
                      help="Require verified request payload and stage export evidence in live cases")
+    parser.addoption("--live-installed-python", default="",
+                     help="Run the paid worker with an isolated, non-editable installed-wheel Python")
 
 
 def pytest_collection_modifyitems(config, items):

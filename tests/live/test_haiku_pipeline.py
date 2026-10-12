@@ -46,9 +46,29 @@ def live_batch(pytestconfig):
     assert root.parent == verification and re.fullmatch(r"haiku_live_[a-z0-9_]+", root.name)
     identifier = root.name
     root.mkdir(parents=True, exist_ok=bool(chosen))
+    installed = pytestconfig.getoption("--live-installed-python")
+    worker = [sys.executable]
+    identity = None
+    if installed:
+        # Preserve the venv executable path: resolving its symlink selects base Python.
+        worker = [str(Path(installed).absolute()), "-I"]
+        code = """import json, sys, memstara
+from pathlib import Path
+from importlib.metadata import distribution, version
+dist = distribution('memstara')
+direct = json.loads(dist.read_text('direct_url.json') or '{}')
+assert not direct.get('dir_info', {}).get('editable'), 'Editable installation is not a wheel'
+assert direct.get('url', '').endswith('.whl'), 'Wheel provenance required'
+assert Path(memstara.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())
+print(json.dumps({'version': version('memstara'), 'module': memstara.__file__,
+                  'python': sys.executable, 'distribution': direct}))
+"""
+        identity = json.loads(subprocess.check_output([*worker, "-c", code], cwd=root, text=True))
+        (root / "installed_distribution.json").write_text(json.dumps(identity, indent=2))
     print(f"\nLIVE BATCH {identifier}: {pytestconfig.getoption('--live-loops')} paid Haiku Loops "
           f"per selected case; evidence {root}", flush=True)
-    return {"root": root, "repo": REPO_ROOT, "profiles": profiles, "id": identifier}
+    return {"root": root, "repo": REPO_ROOT, "profiles": profiles, "id": identifier,
+            "worker": worker, "installed_distribution": identity}
 
 
 @pytest.mark.parametrize("knowledge,data", [
@@ -97,6 +117,8 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
         from memstara.research_inputs import verify_materialized
         verify_materialized(saved)
         original = read(area / "acceptance.json")
+        assert original.get("installed_distribution") == live_batch["installed_distribution"], (
+            "Saved execution used a different distribution; select a fresh batch")
         assert original.get('loops', 1) == loops, 'Recorded live Loop count differs'
         elapsed, exit_code = original["elapsed_seconds"], original["exit_code"]
         schema = original["database_schema"]
@@ -137,7 +159,7 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
                 env["ANTHROPIC_FOUNDRY_RESOURCE"] = host.split(".")[0]
         for key in ("MEMSTARA_RUN_CONFIG", "MEMSTARA_COMPARISON_POLICY_PATH", "MEMSTARA_LEAKAGE_RULES_PATH"):
             env.pop(key, None)
-        argv = [sys.executable, "-m", "memstara.pipeline.board", "--trials", "1", "--waves", str(loops),
+        argv = [*live_batch["worker"], "-m", "memstara.pipeline.board", "--trials", "1", "--waves", str(loops),
                 "--hypothesis-agents", "1", "--interpret-agents", "1", "--max-attempts", "5",
                 "--run-dir", str(run), "--run-tag", schema, "--pipeline-id", schema,
                 "--pipeline-name", f"Haiku automated acceptance: {case}", "--research-input-id", record["id"],
@@ -177,6 +199,7 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
     ledger = [json.loads(line) for line in (run / "cost_ledger.jsonl").read_text().splitlines()] \
         if (run / "cost_ledger.jsonl").exists() else []
     summary = {"case": case, "loops": loops, "model": MODEL, "exit_code": exit_code,
+               "installed_distribution": live_batch["installed_distribution"],
                "elapsed_seconds": elapsed, "database_schema": schema, "run_directory": str(run),
                "status": status, "stages": [{k: c.get(k) for k in ("stage", "status", "duration_seconds")}
                                              for c in calls], "model_requests": len(ledger),
