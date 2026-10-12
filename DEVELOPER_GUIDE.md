@@ -855,6 +855,39 @@ The latest registry synchronization is shown in `registry_status.json`; pending 
 reconciliation is required before launching further batch work. During a DB outage,
 existing execution files are retained as a recovery journal, not discarded.
 
+### Backup and restore boundaries
+
+Back up the database **and** referenced output files. A PostgreSQL dump is a
+transaction-consistent database snapshot; it does not freeze external files.
+Before an operational backup, stop new execution launches, let active writes finish,
+and stop all writers (including registry reconciliation). Record the application
+revision, PostgreSQL version, database identity and output-root location. Preserve
+credentials separately in an access-controlled secret store, never in Git.
+
+Use matching PostgreSQL client tools to create a custom-format `pg_dump` archive
+and copy the output tree while writers remain stopped. Preserve a checksummed
+inventory of those files with the backup. Restore first into an isolated database
+and output tree, with all execution services disabled. Use `pg_restore
+--exit-on-error --single-transaction` against that isolated target. Restore required
+roles/privileges separately: a single-database dump does not include cluster roles.
+Do not use `--clean` against a live database as a recovery experiment.
+
+Registry artifact paths are absolute. Restore to the original paths (on an isolated
+host if needed); moving the tree requires an explicitly reviewed path migration.
+Compare row contents, artifact sizes/hashes, foreign-key constraints and sequence
+continuity before enabling services. A restored checkpoint is not permission to
+replay an uncertain external call. Resolve ownership and active-call evidence
+through the recovery checks first.
+
+`tests/integration/test_backup_restore_postgres.py` rehearses custom-format dump and
+transactional restore of a disposable UUID schema, with synthetic task/registry
+rows and output files. It compares every table in that schema, checks artifact
+bytes, sequence continuity and restored constraints. It runs in the PostgreSQL CI
+job and requires `pg_dump`/`pg_restore` on PATH. This covers application-owned schema
+recovery; full Motoro tables, cluster roles/ACLs, upgrades, cross-host path migration,
+and a coordinated deployment-wide backup still require release acceptance. The
+test makes no model calls and does not touch live data.
+
 Reconcile an existing run without making any LLM calls:
 
 ```bash

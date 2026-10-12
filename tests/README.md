@@ -147,7 +147,7 @@ execution and evidence, in addition to these regressions.
 | AC20–AC24 | Universe/memory/scope/ranking/cost/layout/browser regressions | Candidate stress/accessibility and actual billing evidence, where applicable |
 | AC25 | Supplied skill compatibility checks and public-tree CI inspection | Protected-original hash/license and complete artifact publication inspection |
 | AC26 | Distribution checker/build CI | Installed wheel/static artifact smoke acceptance |
-| AC27 | Persistence components | Full upgrade, backup and restore rehearsal remains outstanding |
+| AC27 | PostgreSQL dump/restore of disposable application schema, artifact hashes, sequences and constraints | Full deployment backup/restore, roles, Motoro tables and upgrade rehearsal remain outstanding |
 | AC28 | No publication in this task | Published release download and independent smoke check |
 
 ## Local verification: 2026-10-09
