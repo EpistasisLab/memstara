@@ -1,12 +1,13 @@
 # SOURCE: PORTED FROM afc-forge — NOT sandbox-authored code.
 #   upstream: afc-forge/ade_forge/tools/impl/embedder.py (312 lines)
 # --- PORT NOTE (memstara) -------------------------------------
-# A port of afc-forge `ade_forge/tools/impl/embedder.py`. Four differences:
+# A port of afc-forge `ade_forge/tools/impl/embedder.py`. Five differences:
 #   1. the EmbeddingConfig import points at memstara.matcher.config
 #   2. the device-selection expression is extracted into current_device()
 #      (the selection rule itself is unchanged)
 #   3. the embedding stamp records "device"
 #   4. a device mismatch warns; it does not refuse
+#   5. loader options have explicit device/revision types; values and retries are unchanged
 # torch / sentence_transformers stay imported inside functions, as upstream.
 #
 # The prose below this banner is UPSTREAM'S OWN TEXT, kept verbatim — "FE_Demo2"
@@ -50,7 +51,7 @@ import logging
 import os
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Final
+from typing import Final, NotRequired, TypedDict
 
 import numpy as np
 
@@ -135,6 +136,11 @@ def _restore_online() -> None:
         pass
 
 
+class _LoaderOptions(TypedDict):
+    device: str
+    revision: NotRequired[str]
+
+
 def load_sentence_transformer(config: EmbeddingConfig | None = None):  # noqa: ANN201
     """Load the pinned SentenceTransformer. Imports the heavy stack HERE, not above."""
     cfg = config or EmbeddingConfig()
@@ -155,7 +161,7 @@ def load_sentence_transformer(config: EmbeddingConfig | None = None):  # noqa: A
     from sentence_transformers import SentenceTransformer
 
     device = current_device()
-    kwargs = {"device": device}
+    kwargs: _LoaderOptions = {"device": device}
     if cfg.revision is not None:
         kwargs["revision"] = cfg.revision
     try:

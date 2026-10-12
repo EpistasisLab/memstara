@@ -21,7 +21,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from memstara.matcher import config as cfg_mod
-from memstara.matcher.catalog import catalog_fingerprint
+from memstara.matcher.catalog import CatalogEntry, catalog_fingerprint
 from memstara.matcher.config import RunConfig
 from memstara.matcher.rules import load_rules
 from memstara.matcher.embedder import sentence_transformer_encoder
@@ -55,7 +55,7 @@ class VerifiedMatcher(Matcher):
         results = super().match_many(
             concepts, feature_type=feature_type, top_k=top_k, threshold=threshold,
         )
-        medications = {}
+        medications: dict[str, list[CatalogEntry]] = {}
         for entry in self.entries:
             if entry.feature_type == "medication":
                 medications.setdefault(medication_name(entry.feature_name), []).append(entry)
