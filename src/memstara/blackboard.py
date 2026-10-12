@@ -443,7 +443,7 @@ async def run_lock(run_tag: str, *, on_lost=None, on_health=None) -> AsyncIterat
 
 
 async def create() -> None:
-    """Create the tables. Nothing happens if they already exist (safe to run repeatedly)."""
+    """Create or update tables, including additive columns and result retention constraints."""
     conn = await asyncpg.connect(dsn())
     try:
         # Schema maintenance must never queue behind a reader for an unbounded time.

@@ -953,6 +953,27 @@ verify stopping *all* writers, authentication, cross-host paths/ownership, and
 upgrade compatibility. Keep services disabled until the whole restored bundle
 passes verification; a successful restore of only one database is insufficient.
 
+### Schema upgrade checks
+
+`python -m memstara.blackboard --create` applies the current table definitions,
+adds supported missing columns and updates the result/task foreign key to retain
+results when tasks are deleted. It is not a no-op on an existing database. Run it
+only within the maintenance boundary above, after a verified backup, using a role
+with the required DDL permissions. Startup bounds lock waits to 3 seconds and each
+statement to 10 seconds. Lock failure is an unsuccessful upgrade, not permission
+to start workers; release the competing writer/reader safely before retrying.
+
+`tests/integration/test_schema_upgrade_postgres.py` exercises selected synthetic
+legacy columns and a historical CASCADE/NOT NULL result linkage through the actual
+`blackboard.create()` entry point. It checks preservation of recorded evidence,
+empty defaults for previously unrecorded fields, repeat application, retained
+results after task deletion, all-DDL rollback on an injected final SQL error, and
+bounded lock failure followed by a successful retry. These fixtures are targeted
+legacy shapes, not a named-release migration certification. They do not validate
+Motoro Alembic migrations, PostgreSQL/extension upgrades or downgrade compatibility.
+Before selecting a public release upgrade path, record the actual source revision,
+DB schema/extension versions and destination revision and rehearse that exact pair.
+
 Reconcile an existing run without making any LLM calls:
 
 ```bash

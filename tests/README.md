@@ -147,7 +147,7 @@ execution and evidence, in addition to these regressions.
 | AC20–AC24 | Universe/memory/scope/ranking/cost/layout/browser regressions | Candidate stress/accessibility and actual billing evidence, where applicable |
 | AC25 | Supplied skill compatibility checks and public-tree CI inspection | Protected-original hash/license and complete artifact publication inspection |
 | AC26 | Distribution checker/build CI | Installed wheel/static artifact smoke acceptance |
-| AC27 | PostgreSQL dump/restore of application schema and Motoro agent/run/step/memory models with vector distance checks; artifacts, sequences, constraints and reader ACLs | Quiescent two-DB/file bundle restore also covered; deployed writer shutdown, extension upgrades, authentication, cross-host ownership and upgrades remain outstanding |
+| AC27 | PostgreSQL dump/restore of application schema and Motoro agent/run/step/memory models with vector distance checks; artifacts, sequences, constraints and reader ACLs | Quiescent two-DB/file bundle restore also covered; selected legacy schema/rollback/lock tests also covered; deployed writer shutdown, extension upgrades, authentication, cross-host ownership and named-release upgrades remain outstanding |
 | AC28 | No publication in this task | Published release download and independent smoke check |
 
 ## Local verification: 2026-10-09
