@@ -21,17 +21,26 @@ async def test_restart_pause_end_preserve_database_ownership(database, tmp_path)
     worker = WORKER.replace(
         'from memstara.pipeline.exploration import ExecutionGate',
         'from memstara.pipeline.exploration import ExecutionGate\n'
-        'from memstara.blackboard import run_lock\n'
+        'import asyncpg\n'
+        'from memstara.blackboard import run_lock, dsn\n'
         'from memstara.pipeline.run_ownership import _current')
     worker = worker.replace(
         "        atomic_json(root / 'ticks.json', {'count': counter})",
-        "        await _current.get().connection.execute('INSERT INTO lifecycle_ticks VALUES ($1)', counter)\n"
+        "        await data_connection.execute('INSERT INTO lifecycle_ticks VALUES ($1)', counter)\n"
+        "        await data_connection.execute('SELECT pg_sleep(0.15)')\n"
         "        atomic_json(root / 'ticks.json', {'count': counter})")
     worker = worker.replace(
         'try:\n    asyncio.run(main())',
         'async def owned():\n'
+        '    global data_connection\n'
         "    async with run_lock('synthetic-restart'):\n"
-        '        await main()\n'
+        # Stress overlap with slow writes; heartbeat owns a dedicated connection.
+        "        _current.get().interval = 0.02\n"
+        '        data_connection = await asyncpg.connect(dsn())\n'
+        '        try:\n'
+        '            await main()\n'
+        '        finally:\n'
+        '            await data_connection.close()\n'
         'try:\n    asyncio.run(owned())')
     counts = {}
 
