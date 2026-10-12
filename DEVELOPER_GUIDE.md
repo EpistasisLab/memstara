@@ -907,6 +907,25 @@ schema restore: this does not test extension binary installation from a backup,
 extension-version upgrades, or every Motoro table. Synthetic vectors require no
 embedding provider calls.
 
+`tests/integration/test_paired_database_restore.py` extends this to two real source
+and two fresh target databases on an isolated PostgreSQL instance. Synthetic writers
+are closed before the two dumps and file copy; archive/file SHA-256 values form a
+single backup manifest. After removing the synthetic source databases, the test
+restores the pair, compares all populated table contents, and resolves the
+Memstara agent-run UUID in the restored Motoro database. The restored report must
+match both Motoro output and the registry artifact path, size and digest.
+
+This test requires a dedicated test administrator with CREATEDB privileges (CI uses
+an isolated superuser). It creates and removes only its UUID-named databases. Never
+point integration tests at a production cluster. The pair rehearsal uses ordinary
+agent/run/step tables; vector restoration and reader ACLs are separate cases above.
+It models quiescence by closing its own writers; it does not stop deployed services
+or prove a runtime maintenance lock. Independent `pg_dump` calls do not provide a
+shared snapshot across active databases and files. Deployment acceptance must still
+verify stopping *all* writers, authentication, cross-host paths/ownership, and
+upgrade compatibility. Keep services disabled until the whole restored bundle
+passes verification; a successful restore of only one database is insufficient.
+
 Reconcile an existing run without making any LLM calls:
 
 ```bash

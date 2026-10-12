@@ -1,4 +1,4 @@
-"""Each test uses a disposable schema and genuine, independent connections."""
+"""Shared schema fixture uses genuine connections; paired recovery creates disposable databases."""
 
 import os
 import uuid
