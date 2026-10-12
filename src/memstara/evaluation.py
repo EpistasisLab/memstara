@@ -6,6 +6,7 @@ import json
 import os
 import time
 from pathlib import Path
+from typing import Any
 
 MODELS = ('xgboost', 'random_forest', 'logistic_regression')
 DEFAULTS = {'engine': 'xgboost', 'seed': 42, 'test_size': 0.25, 'folds': 0, 'replicates': 1, 'search_trials': 1}
@@ -191,7 +192,7 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     if (X.nunique(dropna=True) <= 1).any():
         warnings.append('Some predictors are constant or entirely missing and provide little or no information.')
     threshold = configuration['threshold'] if configuration else .5
-    runs = []
+    runs: list[dict[str, Any]] = []
     artifacts = []
     last = None
     # Replicates share their split across hypotheses; only feature sets change.
@@ -201,7 +202,7 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
              ('passthrough' if plan['engine'] == 'xgboost' else StandardScaler()), numeric),
             ('categorical', OneHotEncoder(handle_unknown='ignore', sparse_output=False), categorical),
         ], verbose_feature_names_out=False)
-        best, best_cv, best_params, selected_trial = None, None, None, 0
+        best, best_cv, best_params, selected_trial = None, float('-inf'), None, 0
         fold_count = plan['folds'] or (3 if plan['search_trials'] > 1 else 0)
         requested_folds = fold_count
         fold_count = min(fold_count, int(y.iloc[train].value_counts().min()))
@@ -233,6 +234,8 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                 # XGBoost's missing-value sentinel is NaN. Persist it symbolically;
                 # PostgreSQL JSONB and browser JSON require finite JSON numbers.
                 best_params = json.loads(json.dumps(model.get_params(), default=str), parse_constant=str)
+        if best is None:
+            raise DataQualityError('Evaluation requires at least one candidate model')
         best.fit(X.iloc[train], y.iloc[train])
         probability = best.predict_proba(X.iloc[test])[:, 1]
         artifacts.append((best, train.copy(), test.copy(), probability.copy()))
@@ -267,6 +270,8 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                             f1=float(f1_score(y.iloc[test], probability >= threshold, zero_division=0)),
                             pr_auc=float(area(recall, precision)))
         last = (best, train, test)
+    if last is None:
+        raise DataQualityError('Evaluation requires at least one train/test split')
     best, train, test = last
     try:
         importance, explanation = (_explain(best, X, y, train, test, numeric, plan, runs) if explain else

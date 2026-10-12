@@ -158,7 +158,7 @@ def _lime(model, X, train, explained, background, seed, name, samples):
         weights.append(weight)
         locals_.append({'intercept': float(local.intercept[1]), 'fidelity_r2': float(local.score),
                         'surrogate_prediction': float(np.asarray(local.local_pred).reshape(-1)[0])})
-    weights = np.asarray(weights)
+    weight_matrix = np.asarray(weights)
     return {'method': 'lime', 'explainer': 'LimeTabularExplainer', 'output_scale': 'positive-class probability',
             'representation': 'Original predictors: numeric units standardized by training distribution; '
                               'categorical weights describe matching the explained category.',
@@ -166,13 +166,13 @@ def _lime(model, X, train, explained, background, seed, name, samples):
             'kernel_width': float(np.sqrt(len(features)) * .75), 'distance_metric': 'euclidean',
             'discretize_continuous': False, 'sampling_method': 'gaussian',
             'surrogate': 'LIME default weighted Ridge(alpha=1), all original predictors',
-            'values_original': weights.tolist(), 'local_diagnostics': locals_,
+            'values_original': weight_matrix.tolist(), 'local_diagnostics': locals_,
             'categorical_codebook': categories, 'categorical_indices': categorical,
             'numeric_center': explainer.scaler.mean_.tolist(),
             'numeric_scale': explainer.scaler.scale_.tolist(),
             'model_outputs': expected.tolist(),
-            'feature_summary': {feature: {'mean_absolute': float(np.abs(weights[:, i]).mean()),
-                                         'mean_signed': float(weights[:, i].mean())}
+            'feature_summary': {feature: {'mean_absolute': float(np.abs(weight_matrix[:, i]).mean()),
+                                         'mean_signed': float(weight_matrix[:, i].mean())}
                                 for i, feature in enumerate(features)},
             'fidelity_r2': {'minimum': min(v['fidelity_r2'] for v in locals_),
                             'mean': float(np.mean([v['fidelity_r2'] for v in locals_]))},

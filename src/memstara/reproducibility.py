@@ -75,7 +75,7 @@ def save_bundle(source, target, plan, predictors, fixed_trials, partition, artif
         from memstara.specialist_xai import save
         save(directory, X, artifacts, result, xai_request)
     code = {}
-    sources = ('evaluation.py', 'reproducibility.py')
+    sources: tuple[str, ...] = ('evaluation.py', 'reproducibility.py')
     if agent_plan:
         sources += ('ml_configuration.py', 'paired_ml.py', 'comparisons.py', 'data_allocation.py')
     if xai_request:

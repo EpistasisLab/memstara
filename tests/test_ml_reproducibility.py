@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from memstara.evaluation import discovery_partition, score
+from memstara.evaluation import DataQualityError, discovery_partition, score
 from memstara.reproducibility import replay
 
 
@@ -21,6 +21,15 @@ def cohort(tmp_path, monkeypatch):
     pd.DataFrame({'a': rng.normal(size=80), 'category': ['a', 'b', 'c', 'a'] * 20,
                   'target': [0, 1] * 40}).to_csv(path, index=False)
     return path
+
+
+def test_missing_evaluation_splits_fail_before_persisting_results(cohort, monkeypatch):
+    from memstara import evaluation
+
+    monkeypatch.setattr(evaluation, 'evaluation_splits', lambda *args, **kwargs: iter(()))
+    with pytest.raises(DataQualityError, match='at least one train/test split'):
+        score(cohort, 'target', {'engine': 'logistic_regression'}, explain=False)
+    assert not (cohort.parent / 'outputs').exists()
 
 
 @pytest.mark.parametrize('engine', ['xgboost', 'random_forest', 'logistic_regression'])
