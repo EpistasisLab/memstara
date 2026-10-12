@@ -10,7 +10,7 @@ class RecoveryBlocked(RuntimeError):
     pass
 
 
-def atomic_json(path, value):
+def atomic_json(path, value, *, overwrite=True):
     """Publish one complete document; each writer owns only its temporary file."""
     path = Path(path)
     temporary = path.with_name(f'.{path.name}.{uuid4().hex}.tmp')
@@ -21,7 +21,11 @@ def atomic_json(path, value):
             json.dump(value, stream, ensure_ascii=False)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        if overwrite:
+            os.replace(temporary, path)
+        else:
+            # Publish exclusively: an existence check followed by replace races.
+            os.link(temporary, path)
         fd = os.open(path.parent, os.O_RDONLY)
         try:
             os.fsync(fd)

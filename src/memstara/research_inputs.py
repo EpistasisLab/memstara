@@ -254,12 +254,13 @@ def inspect(value):
 
 
 def register(value):
+    from memstara.pipeline.checkpoint import atomic_json
+
     result = inspect(value)
     result["id"] = uuid.uuid4().hex
     root = registry_root()
     root.mkdir(parents=True, exist_ok=True)
-    with (root / (result["id"] + ".json")).open("x") as stream:
-        json.dump(result, stream, indent=2)
+    atomic_json(root / (result["id"] + ".json"), result, overwrite=False)
     return result
 
 
