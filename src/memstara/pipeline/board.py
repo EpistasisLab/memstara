@@ -1858,13 +1858,10 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             while True:
                 state = await board_state(registry, args.run_tag)
                 current_tasks = [t for t in state["tasks"] if base <= t["trial"] < base + args.trials]
-                active = [t for t in current_tasks if t.get("status") == "in_progress"]
-                ready = [t for t in current_tasks if t.get("status") == "ready"]
-                observed = (active or ready)
-                current_stage = (observed[0]["task_type"] if observed else
-                                 "hypothesis" if not seed_task.done() else "report")
+                current_stage = live_workers.progress_stage(
+                    current_tasks, seed_done=seed_task.done())
                 write_progress(run_dir, wave + 1,
-                               "interpreter" if current_stage == "interpret" else current_stage, current_tasks)
+                               current_stage, current_tasks)
                 # Observe this run only.
                 counts, retried = summarise(state["tasks"])            # status · what came back
 

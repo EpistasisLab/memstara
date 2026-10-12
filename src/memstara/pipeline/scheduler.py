@@ -7,6 +7,26 @@ class StageWorkers:
         self.active = {}
         self.last_slot = {}
 
+    def progress_stage(self, tasks, *, seed_done):
+        """Keep submitted work active until its agent invocation has settled.
+
+        A tool can finish its board row before the model returns its final
+        acknowledgement. Pending downstream rows are not evidence of activity.
+        For overlapping workers, retain the earliest active pipeline stage.
+        """
+        order = ("hypothesis", "data", "ml", "interpreter")
+        active = {stage for stage, _ in self.active}
+        if not seed_done:
+            active.add("hypothesis")
+        if active:
+            return next(stage for stage in order if stage in active)
+        observed = ([task for task in tasks if task.get("status") == "in_progress"]
+                    or [task for task in tasks if task.get("status") == "ready"])
+        if observed:
+            stage = observed[0]["task_type"]
+            return "interpreter" if stage == "interpret" else stage
+        return "report"
+
     def available(self, stage, capacity, waiting, eligible=None):
         occupied = {slot for (kind, slot) in self.active if kind == stage}
         if capacity < 1 or waiting < 1:
