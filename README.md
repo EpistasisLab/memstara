@@ -147,7 +147,7 @@ outputs/                       Local datasets, caches, and run artifacts (ignore
 ## Get started
 
 You need **Git, Python 3.12 or 3.13, Docker with Compose**, a supported LLM
-credential, and access to the private Memstara repository. Motoro requires its
+credential, and a checkout of the selected Memstara revision. Motoro requires its
 own PostgreSQL database and Redis; Memstara's root Compose file starts only its
 own PostgreSQL service.
 
@@ -192,6 +192,14 @@ pipeline or in **Data & target** settings. See the
 [synthetic research walkthrough](examples/research-inputs/README.md) for supported
 input formats, label mapping, versioning and CLI usage. Registration does not
 start an experiment; execution uses a separate analysis copy and preserves sources.
+
+Research profiles support four combinations: OKF + CSV, CSV without OKF,
+OKF without CSV, or neither source. With a CSV, the pipeline can train and evaluate
+models. Without a CSV, it produces a research proposal and future analysis plan;
+it does not produce fitted models, measured scores, confusion matrices or computed
+SHAP/LIME results. A research objective is still required. See the walkthrough's
+[input-mode guide](examples/research-inputs/README.md#choose-the-input-mode) for
+the exact configuration fields and expected outputs.
 
 **2. Prepare the databases and Redis.** On a new host, follow
 [Motoro's setup](https://github.com/EpistasisLab/motoro#development) to provision

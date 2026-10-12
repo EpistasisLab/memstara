@@ -815,7 +815,7 @@ separately from any reserved validation evaluation.
 ## Research input preparation (issue #166)
 
 The local **Floor plan → Prepare research inputs** screen can inspect and
-register an analysis CSV, an OKF bundle folder and a user-defined binary target.
+register selected CSV/OKF inputs and a user-defined target or research objective.
 Paths refer to the server's local filesystem; this is not browser file upload or
 remote file fetching. The source CSV and original knowledge/skill files remain
 unchanged. Current CSV inspection is limited to 100 MiB and returns schema and
@@ -827,8 +827,18 @@ The control API exposes:
 - `POST /control/research-inputs/inspect`: inspect without saving a record.
 - `POST /control/research-inputs/register`: inspect and save a new immutable record.
 
-POST bodies contain `name`, `dataset_path`, `knowledge_path`, `target`,
-`excluded_columns` and `missing_policy`. The target object accepts `column`,
+POST bodies accept `name`, `knowledge_mode`, `data_mode`, `dataset_path`,
+`knowledge_path`, `target`, `excluded_columns` and `missing_policy`.
+`knowledge_mode` is `okf` (default) or `llm_only`; `data_mode` is `dataset`
+(default) or `proposal`. All four combinations are supported. Only selected
+sources are required and inspected; a missing selected source fails validation.
+`llm_only` clears the knowledge path. `proposal` clears the dataset path and
+exclusions and requires `target.description` as the research objective. It runs
+planning stages without fitting models or creating measured metrics. See the
+[input-mode walkthrough](examples/research-inputs/README.md#choose-the-input-mode)
+for a complete no-source configuration and the output distinctions.
+
+The target object accepts `column`,
 `description`, `positive_label`, `negative_label`, `prediction_time` and optional
 `horizon`; all are strings. Missing target definitions produce actionable issues.
 `excluded_columns` is a list of exact column names. Only `missing_policy: "reject"`
