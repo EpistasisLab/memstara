@@ -20,6 +20,8 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
+import numpy as np
+
 from memstara.matcher import config as cfg_mod
 from memstara.matcher.catalog import CatalogEntry, catalog_fingerprint
 from memstara.matcher.config import RunConfig
@@ -50,6 +52,15 @@ class VerifiedMatcher(Matcher):
     classes and unregistered synonyms require an explicit mapping, not a guess.
     Diagnosis/lab/demographic candidate ranking is unchanged.
     """
+
+    def __init__(self, entries, embeddings, *, encoder, config=None):
+        matrix = np.asarray(embeddings, dtype=np.float32)
+        if matrix.ndim != 2 or matrix.shape[1] == 0 or not np.isfinite(matrix).all():
+            raise ValueError(
+                "Invalid matcher embedding matrix: expected finite two-dimensional vectors. "
+                "Rebuild the matcher cache before running."
+            )
+        super().__init__(entries, matrix, encoder=encoder, config=config)
 
     def match_many(self, concepts, *, feature_type=None, top_k=None, threshold=None):
         results = super().match_many(
