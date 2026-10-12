@@ -17,6 +17,7 @@ def freeze_feature_context(dataset: Path, target: str, *, require_complete: bool
     eligibility = None
     if require_complete:
         from memstara.evaluation import validate_clean_dataset
+
         frame = validate_clean_dataset(dataset, target, allow_missing=True)
         excluded = [entry.feature_name for entry in entries if frame[entry.feature_name].isna().any()]
         excluded_set = set(excluded)
@@ -32,8 +33,10 @@ def freeze_feature_context(dataset: Path, target: str, *, require_complete: bool
             "outcome_associations_used": False,
         }
         if len(entries) < 4:
-            raise ValueError("Paired LR/XGBoost requires at least four complete eligible predictors; "
-                             "no model calls were made and no rows or values were changed")
+            raise ValueError(
+                "Paired LR/XGBoost requires at least four complete eligible predictors; "
+                "no model calls were made and no rows or values were changed"
+            )
     if not entries:
         raise ValueError("No predictors available for question generation")
     return {
@@ -41,15 +44,15 @@ def freeze_feature_context(dataset: Path, target: str, *, require_complete: bool
         **({"eligibility": eligibility} if eligibility else {}),
         "meaning_source": "matcher catalog derived from column labels; not a validated clinical data dictionary",
         "features": [
-            {"column": entry.feature_name, "meaning": entry.match_text,
-             "kind": entry.feature_type}
-            for entry in entries
+            {"column": entry.feature_name, "meaning": entry.match_text, "kind": entry.feature_type} for entry in entries
         ],
     }
 
 
 def instructions(snapshot: dict | None) -> str:
-    context = (snapshot or {}).get("feature_context")
+    if snapshot is None:
+        return ""
+    context = snapshot.get("feature_context")
     if context is None:
         return ""  # Historical snapshots retain their original experimental conditions.
     features = context.get("features")
@@ -61,11 +64,14 @@ def instructions(snapshot: dict | None) -> str:
     return (
         "\nAVAILABLE PREDICTORS (frozen for this run; metadata only):\n"
         + json.dumps(context, ensure_ascii=False, separators=(",", ":"))
-        + ("\nFIXED BASELINE PREDICTORS (added separately by extraction): "
-           + json.dumps(snapshot["comparison_policy"].get("baseline_columns", []))
-           + ". Propose justified predictor concepts whose incremental value can be tested beyond this baseline. "
-           "An empty list means no clinical baseline is configured. "
-           if snapshot.get("comparison_policy") else "")
+        + (
+            "\nFIXED BASELINE PREDICTORS (added separately by extraction): "
+            + json.dumps(snapshot["comparison_policy"].get("baseline_columns", []))
+            + ". Propose justified predictor concepts whose incremental value can be tested beyond this baseline. "
+            "An empty list means no clinical baseline is configured. "
+            if snapshot.get("comparison_policy")
+            else ""
+        )
         + "\nBefore proposing a question, check every required predictor concept against this list. "
         "Choose a KG/OKF-supported mechanism whose necessary predictors have clinically defensible "
         "representations here. State the intended concept-to-column correspondence in the rationale. "
