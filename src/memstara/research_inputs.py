@@ -112,32 +112,37 @@ def inspect(value):
         target = value["target"]
         counts, missing, nonfinite = Counter(), Counter(), Counter()
         rows = 0
-        with dataset.open(newline="", encoding="utf-8-sig") as stream:
-            reader = csv.reader(stream)
-            headers = next(reader, [])
-            if not headers or len(headers) != len(set(headers)) or any(not h.strip() for h in headers):
-                raise ValueError("CSV requires nonempty, unique column names")
-            for row in reader:
-                if len(row) != len(headers):
-                    raise ValueError("CSV contains a row with a different number of fields than its header")
-                rows += 1
-                for key, raw in zip(headers, row, strict=True):
-                    if raw.strip().lower() in MISSING:
-                        missing[key] += 1
-                    else:
-                        try:
-                            if not math.isfinite(float(raw)):
-                                nonfinite[key] += 1
-                        except ValueError:
-                            pass
-                    if key == target["column"]:
-                        # Never expose label values until the user provides their mapping.
-                        if raw == target["positive_label"] and raw not in MISSING:
-                            counts["positive"] += 1
-                        elif raw == target["negative_label"] and raw not in MISSING:
-                            counts["negative"] += 1
+        try:
+            with dataset.open(newline="", encoding="utf-8-sig") as stream:
+                reader = csv.reader(stream, strict=True)
+                headers = next(reader, [])
+                if not headers or len(headers) != len(set(headers)) or any(not h.strip() for h in headers):
+                    raise ValueError("CSV requires nonempty, unique column names")
+                for row in reader:
+                    if len(row) != len(headers):
+                        raise ValueError("CSV contains a row with a different number of fields than its header")
+                    rows += 1
+                    for key, raw in zip(headers, row, strict=True):
+                        if raw.strip().lower() in MISSING:
+                            missing[key] += 1
                         else:
-                            counts["unmapped"] += 1
+                            try:
+                                if not math.isfinite(float(raw)):
+                                    nonfinite[key] += 1
+                            except ValueError:
+                                pass
+                        if key == target["column"]:
+                            # Never expose label values until the user provides their mapping.
+                            if raw == target["positive_label"] and raw not in MISSING:
+                                counts["positive"] += 1
+                            elif raw == target["negative_label"] and raw not in MISSING:
+                                counts["negative"] += 1
+                            else:
+                                counts["unmapped"] += 1
+        except csv.Error:
+            raise ValueError(
+                "CSV parsing failed. Check CSV quoting and field lengths; no source values were changed"
+            ) from None
         if digest(dataset) != before:
             raise ValueError("Dataset changed during inspection; inspect a stable file again")
         if not rows:

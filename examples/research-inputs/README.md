@@ -88,7 +88,10 @@ For selected inputs, the pipeline revalidates source fingerprints, copies the se
 only explicitly excluded columns from an analysis copy, and maps the supplied
 positive/negative labels to 1/0. Original files are never modified. Missing values
 are rejected; no implicit imputation, row deletion or label inference occurs.
-Evaluation preflight can reject inadequate class counts or unsupported data types.
+CSV inspection rejects malformed quoting and fields exceeding the Python CSV parser's
+field-size limit. Fix the source explicitly and register a new version; inspection
+does not repair quoting or truncate cells. Evaluation preflight can reject inadequate
+class counts or unsupported data types.
 
 Derived inputs and matcher artifacts live under the local, ignored
 `outputs/research_inputs/prepared/<fingerprint>/`. The matcher builds embeddings

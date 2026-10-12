@@ -78,6 +78,23 @@ def test_missing_cells_block_without_rewriting_source(sample):
     assert p.read_bytes() == before
 
 
+@pytest.mark.parametrize('cell', ['"1"unexpected', '"' + 'x' * 150000 + '"'],
+                         ids=['invalid-quote', 'oversized-field'])
+def test_malformed_or_oversized_csv_cells_are_input_errors(sample, cell):
+    path = Path(sample['dataset_path'])
+    path.write_text(path.read_text().replace('1,1,2,3,4,yes', f'1,{cell},2,3,4,yes'))
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match='CSV parsing failed'):
+        inspect(sample)
+    assert path.read_bytes() == before
+
+
+def test_valid_quoted_csv_fields_remain_supported(sample):
+    path = Path(sample['dataset_path'])
+    path.write_text(path.read_text().replace('1,1,2,3,4,yes', '1,"1",2,3,4,"yes"'))
+    assert inspect(sample)['input_checks_passed']
+
+
 def test_fingerprint_tracks_data_target_and_knowledge_changes(sample):
     from pathlib import Path
     first = inspect(sample)['fingerprint']
