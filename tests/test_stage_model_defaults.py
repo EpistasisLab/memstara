@@ -57,6 +57,25 @@ def test_invalid_deployment_names_remain_rejected(profiles, name):
         stage_models.validate_profiles(profiles)
 
 
+@pytest.mark.parametrize('endpoint', [
+    'https://model.example:invalid', 'https://model.example:65536',
+    'https://model.example:0', 'https://model example/v1',
+    ' https://model.example/v1', 'https://model.example/\napi',
+    'https://model.example/\tapi', 'https://model.example/\x00api',
+])
+def test_malformed_endpoint_rejected_by_workspace_and_launch(profiles, endpoint):
+    profiles['non_explanation_agents']['api_base'] = endpoint
+    for validate in (PipelineWorkspace.configuration, lambda body: build_argv(body, [])):
+        with pytest.raises(ValueError, match='Model endpoints'):
+            validate({'stage_models': profiles})
+
+
+@pytest.mark.parametrize('endpoint', ['https://model.example:8443/v1', 'https://[::1]:443/v1'])
+def test_valid_explicit_endpoint_port_is_preserved(profiles, endpoint):
+    profiles['non_explanation_agents']['api_base'] = endpoint
+    assert stage_models.validate_profiles(profiles)['non_explanation_agents']['api_base'] == endpoint
+
+
 def test_explicit_missing_file_never_falls_back(tmp_path, monkeypatch):
     monkeypatch.setenv("MEMSTARA_STAGE_MODELS_PATH", str(tmp_path / "missing.json"))
     with pytest.raises(ValueError, match="missing or invalid"):
@@ -89,11 +108,14 @@ def test_recovery_uses_only_frozen_profiles(profiles, monkeypatch):
 
 def test_connection_summary_does_not_expose_endpoints(profiles):
     profiles['non_explanation_agents']['api_base'] = 'https://private.example.test/v1'
-    assert stage_models.public_profiles(profiles)['non_explanation_agents'] == {'provider': 'openai', 'model': 'qwen-test'}
+    assert stage_models.public_profiles(profiles)['non_explanation_agents'] == {
+        'provider': 'openai', 'model': 'qwen-test'}
 
 
-@pytest.mark.parametrize('stage,family', [('question0-1','non_explanation_agents'), ('hypothesis0','non_explanation_agents'),
-    ('hypothesis#2','non_explanation_agents'), ('data#3','non_explanation_agents'), ('ml#2','non_explanation_agents'), ('interpret#1','non_explanation_agents'),
+@pytest.mark.parametrize('stage,family', [
+    ('question0-1','non_explanation_agents'), ('hypothesis0','non_explanation_agents'),
+    ('hypothesis#2','non_explanation_agents'), ('data#3','non_explanation_agents'),
+    ('ml#2','non_explanation_agents'), ('interpret#1','non_explanation_agents'),
     ('interpreter#2','non_explanation_agents'), ('report','explanation_agent')])
 def test_every_runtime_stage_refuses_a_wrong_model(profiles, stage, family):
     from types import SimpleNamespace
@@ -168,7 +190,9 @@ def test_mixed_or_duplicate_profile_keys_are_rejected(profiles):
     with pytest.raises(ValueError, match='do not mix'):
         stage_models.validate_profiles({**profiles, 'qwen': profiles['non_explanation_agents']})
     with pytest.raises(ValueError, match='do not mix'):
-        stage_models.validate_profiles({'non_explanation_agents': profiles['non_explanation_agents'], 'sonnet': profiles['explanation_agent']})
+        stage_models.validate_profiles({
+            'non_explanation_agents': profiles['non_explanation_agents'],
+            'sonnet': profiles['explanation_agent']})
 
 
 def test_snapshot_retains_legacy_representation_only_for_same_assignment(profiles):
