@@ -14,7 +14,7 @@ RETRYABLE_SERVER_STATUSES = frozenset({500, 502, 503, 504, 529})
 
 def provider_error_details(error):
     """Extract bounded correlation metadata, never response text or request contents."""
-    details = {}
+    details: dict[str, int | str] = {}
     for item in exception_chain(error):
         response = getattr(item, 'response', None)
         status = getattr(item, 'status_code', None)

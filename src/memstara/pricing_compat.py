@@ -40,9 +40,9 @@ def calculate_cost(model, prompt_tokens, completion_tokens, completion_response=
     if cached or written:
         return None, 'unavailable'
     try:
-        incoming, outgoing = litellm.cost_per_token(
+        input_cost, output_cost = litellm.cost_per_token(
             model=model, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
-        cost = float(incoming + outgoing)
+        cost = float(input_cost + output_cost)
         if math.isfinite(cost) and cost >= 0:
             return cost, 'litellm'
     except Exception:

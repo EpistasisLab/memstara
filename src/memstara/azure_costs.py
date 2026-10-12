@@ -21,7 +21,8 @@ def fetch_meters(query, fetch=None):
 
     fetch = fetch or get
     url = RETAIL + "?" + urlencode({"$filter": query, "currencyCode": "USD"})
-    items, seen = [], set()
+    items = []
+    seen: set[str] = set()
     while url:
         parsed = urlsplit(url)
         if parsed.scheme != "https" or parsed.hostname != "prices.azure.com" or parsed.path != "/api/retail/prices":
@@ -128,7 +129,7 @@ def query_costs(scope, start, end, destination):
     }
     url = "https://management.azure.com" + scope + "/providers/Microsoft.CostManagement/query?api-version=2025-03-01"
     pages = []
-    seen = set()
+    seen: set[str] = set()
     while url:
         if url in seen or len(seen) >= 100 or urlsplit(url).hostname != "management.azure.com":
             raise ValueError("Invalid cost API pagination")
@@ -146,7 +147,7 @@ def query_costs(scope, start, end, destination):
         page = json.loads(result.stdout)["properties"]
         pages.append(page)
         url = page.get("nextLink")
-    totals = {}
+    totals: dict[str, float] = {}
     for page in pages:
         names = [c["name"] for c in page["columns"]]
         for row in page["rows"]:

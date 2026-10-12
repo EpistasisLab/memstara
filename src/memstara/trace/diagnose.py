@@ -50,7 +50,7 @@ def inspect(directory):
     events = read('request_events.jsonl', True)
     if not events:
         issues.append('Request start/terminal evidence unavailable (historical run or recording failure)')
-    groups = {}
+    groups: dict[str, list[dict]] = {}
     for event in events:
         identity = event.get('request_id')
         if not isinstance(identity, str) or not identity:
