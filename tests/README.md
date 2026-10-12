@@ -143,7 +143,7 @@ execution and evidence, in addition to these regressions.
 | AC07–AC09 | Feature reproduction, allocations, paired ML, specialist XAI | Candidate execution evidence of selected routes |
 | AC10 | Stage routing unit tests and browser settings | UI/API/request/response identity on a live candidate |
 | AC11–AC14 | Input rejection, tool correction, output repair and transport fault injection | Candidate-level fault checks; supported real-provider request behavior |
-| AC15–AC19 | Recovery/checkpoint/control/ownership/artifact tests, DB integration and real HTTP controller restart with a synthetic worker | Live lifecycle timing, worker loss, partial storage and command race exercises |
+| AC15–AC19 | Recovery/checkpoint/control/ownership/artifact tests, DB integration and real HTTP controller restart with synthetic workers, DB ownership and post-commit crash blocking | Live lifecycle timing, worker loss, partial storage and command race exercises |
 | AC20–AC24 | Universe/memory/scope/ranking/cost/layout/browser regressions | Candidate stress/accessibility and actual billing evidence, where applicable |
 | AC25 | Supplied skill compatibility checks and public-tree CI inspection | Protected-original hash/license and complete artifact publication inspection |
 | AC26 | Distribution checker/build CI | Installed wheel/static artifact smoke acceptance |

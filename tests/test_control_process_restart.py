@@ -67,12 +67,12 @@ def stop(process):
             process.wait(timeout=5)
 
 
-def test_controller_restart_reattaches_pauses_resumes_and_ends_same_worker(tmp_path):
+def exercise_restart(tmp_path, worker_source=WORKER, check=None):
     run = tmp_path / 'run'
     run.mkdir()
     controllers = []
     with (tmp_path / 'worker.log').open('w') as log:
-        worker = subprocess.Popen([sys.executable, '-u', '-c', WORKER, str(run)],
+        worker = subprocess.Popen([sys.executable, '-u', '-c', worker_source, str(run)],
                                   stdout=log, stderr=log, start_new_session=True)
     try:
         wait_for(lambda: (run / 'ticks.json').exists())
@@ -102,6 +102,8 @@ def test_controller_restart_reattaches_pauses_resumes_and_ends_same_worker(tmp_p
         assert worker.poll() is None
         second = start_controller(2)
         assert request(second)['running']['pid'] == worker.pid
+        if check:
+            check('restarted')
         request(second, '/control/runs/synthetic-restart/pause', True)
         wait_for(lambda: request(second)['running']['execution_state'] == 'paused')
         # Allow a write already past the boundary to finish before comparing counts.
@@ -110,11 +112,15 @@ def test_controller_restart_reattaches_pauses_resumes_and_ends_same_worker(tmp_p
         time.sleep(.35)
         assert json.loads((run / 'ticks.json').read_text())['count'] == count
         assert worker.poll() is None
+        if check:
+            check('paused')
         request(second, '/control/runs/synthetic-restart/resume', True)
         wait_for(lambda: json.loads((run / 'ticks.json').read_text())['count'] > count)
         assert request(second)['running']['pid'] == worker.pid
         request(second, '/control/runs/synthetic-restart/end', True)
         assert worker.wait(timeout=10) == 0
+        if check:
+            check('ended')
         status = wait_for(lambda: (result if (result := request(second))['running'] is None else None))
         assert status['finished'][0]['exit_code'] == 0
         stop(controllers[1])
@@ -127,3 +133,7 @@ def test_controller_restart_reattaches_pauses_resumes_and_ends_same_worker(tmp_p
         for controller in controllers:
             stop(controller)
         stop(worker)
+
+
+def test_controller_restart_reattaches_pauses_resumes_and_ends_same_worker(tmp_path):
+    exercise_restart(tmp_path)

@@ -963,6 +963,17 @@ lifecycle behavior without provider calls or production-service changes. It does
 not exercise the board driver, database ownership, a browser/proxy, or a deployed
 maintenance supervisor; those are separate acceptance boundaries.
 
+`tests/integration/test_control_database_lifecycle.py` combines that same HTTP
+restart harness with real PostgreSQL ownership and synthetic DB writes. It checks
+that controller restart and Pause retain the exclusive run lock, that paused DB
+writes stop, and that End releases ownership while retaining committed rows. A
+separate worker commits a DB effect and exits abruptly before completing its saved
+call; the database row remains and checkpoint recovery refuses automatic replay.
+These tests use the production gate, lock and recovery boundaries, but the work is
+synthetic. They do not substitute for full board/provider, browser/proxy or deployed
+supervisor acceptance. In particular, refusing unknown effects is safe blocking,
+not automatic completion or an exactly-once guarantee for external services.
+
 ### Schema upgrade checks
 
 `python -m memstara.blackboard --create` applies the current table definitions,
