@@ -451,6 +451,12 @@ uv run --frozen python -m build
 uv run --frozen python scripts/check_distribution.py
 ```
 
+The distribution checker creates a temporary virtual environment, installs the wheel
+with `--no-index --no-deps`, and verifies installed metadata and every packaged file.
+It does not use the editable checkout to satisfy imports. Use `--dist-dir <directory>`
+to inspect a downloaded CI artifact. Runtime dependencies and live pipeline acceptance
+are separate checks; this installation smoke test does not certify them.
+
 Run Python entry points as `python -m memstara.<module>`. Load configuration
 before runtime use, following the existing entry points. Agent prompts live in
 `src/memstara/prompts/`; prompt changes are experimental conditions and should

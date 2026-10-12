@@ -146,7 +146,7 @@ execution and evidence, in addition to these regressions.
 | AC15–AC19 | Recovery/checkpoint/control/ownership/artifact tests, DB integration and real HTTP controller restart with synthetic workers, DB ownership and post-commit crash blocking | Live lifecycle timing, worker loss, partial storage and command race exercises |
 | AC20–AC24 | Universe/memory/scope/ranking/cost/layout/browser regressions | Candidate stress/accessibility and actual billing evidence, where applicable |
 | AC25 | Supplied skill compatibility checks and public-tree CI inspection | Protected-original hash/license and complete artifact publication inspection |
-| AC26 | Distribution checker/build CI | Installed wheel/static artifact smoke acceptance |
+| AC26 | Distribution build and actual no-dependency wheel install in a fresh venv; metadata and all package bytes verified | Full runtime-dependency/static artifact acceptance on the selected release candidate |
 | AC27 | PostgreSQL dump/restore of application schema and Motoro agent/run/step/memory models with vector distance checks; artifacts, sequences, constraints and reader ACLs | Quiescent two-DB/file bundle restore also covered; selected legacy schema/rollback/lock tests also covered; deployed writer shutdown, extension upgrades, authentication, cross-host ownership and named-release upgrades remain outstanding |
 | AC28 | No publication in this task | Published release download and independent smoke check |
 
