@@ -308,6 +308,62 @@ options. `--stage-models` takes a JSON object with the same two profiles. It doe
 read a JSON filename automatically. CLI flags are not a replacement for the control
 workspace's stored definition; choose one launch path and record it.
 
+## Preserve contributed skill originals
+
+Treat supplied skill and reference files, including archived versions, as immutable.
+Adapt behavior in Memstara-owned adapters or separate instructions. A runtime hash
+computed after reading a file does not prove that the original was preserved.
+
+Use a dedicated protected directory for each contributor's supplied files. Include
+archived files in that directory; the verifier recursively covers all regular files
+without filtering by extension. List every applicable directory explicitly. Roots
+must not overlap, and symlinks, missing roots and unreadable directories are errors.
+This check protects the listed inventory, not unlisted folders or all repository
+history. It does not prevent a filesystem write or replace source-access controls.
+
+Create a baseline once, outside those directories:
+
+```sh
+mkdir -p outputs/skill-integrity
+python -m memstara.skill_integrity snapshot \
+  --root contributor_a=/path/to/contributor-a-originals \
+  --root contributor_b=/path/to/contributor-b-originals \
+  --manifest outputs/skill-integrity/baseline-v1.json
+```
+
+The command refuses to overwrite an existing manifest. Save its returned
+`manifest_sha256` in an independent trusted review record. Do not calculate a new
+digest from the current manifest every time you verify: that would hide replacement
+of the baseline itself. The manifest contains aliases, relative filenames, byte
+sizes and hashes, not source contents or absolute source paths. Keep real contributor
+inventories local unless redistribution of that metadata is approved.
+
+Before and after a workflow or release check, use the same manifest and retained
+digest:
+
+```sh
+python -m memstara.skill_integrity verify \
+  --root contributor_a=/path/to/contributor-a-originals \
+  --root contributor_b=/path/to/contributor-b-originals \
+  --manifest outputs/skill-integrity/baseline-v1.json \
+  --manifest-sha256 REPLACE_WITH_THE_INDEPENDENTLY_RETAINED_SHA256
+```
+
+Exit status is **0** for unchanged files, **1** for changed/added/missing files,
+and **2** for invalid input or an unavailable/unverifiable inventory. A baseline
+digest mismatch is an error. Verification does not rewrite any source or baseline.
+Run this command as a required pre/post step in environments holding the originals;
+public CI tests the verifier with synthetic fixtures, not absent private originals.
+The pipeline does not automatically invoke this deployment-specific command.
+
+An observed snapshot only establishes **unchanged since that snapshot**. Authenticity
+of the original requires comparison with a trusted delivery/archive or contributor
+confirmation; neither a self-generated hash nor a passing check proves it. Record
+that provenance and reviewer separately. If a contributor supplies a new version,
+retain the old file and manifest, store the new delivery under a new version identity,
+review the differences, and create a new manifest and separately retained digest.
+Never regenerate the old baseline merely to make a failure pass.
+
 ## Motoro release compatibility
 
 This checkout uses Motoro `v0.10.0`. Use Python 3.12 or 3.13;
