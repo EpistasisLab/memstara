@@ -75,6 +75,7 @@ from memstara.pipeline.board import PLAYBOOK_STAGES
 from memstara.pipeline.prompts import accepts_playbook
 from memstara.paths import REPO_ROOT, RUNS_DIR
 from memstara.control.recovery import identity, recover, save_record
+from memstara.control.recovery import record_snapshot, records as control_records
 
 _SKILL_FIELDS = ("terminus_kind", "mechanism_family")
 
@@ -193,9 +194,8 @@ class _Runs:
     def history_records(self):
         """All owned executions for cumulative counts, beyond the recent-runs menu."""
         records = []
-        for path in RUNS_DIR.glob("**/control_record.json"):
+        for path, record in control_records(RUNS_DIR):
             try:
-                record = json.loads(path.read_text())
                 if record.get("pipeline_id") == self.pipeline_id:
                     records.append({"run_tag": record.get("run_tag"), "run_dir": str(path.parent)})
             except (OSError, ValueError):
@@ -625,7 +625,9 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/control/pipelines":
-            self._send(200, {"pipelines": WORKSPACE.list()})
+            with record_snapshot():
+                pipelines = WORKSPACE.list()
+            self._send(200, {"pipelines": pipelines})
             return
 
         if path == "/control/skills":
