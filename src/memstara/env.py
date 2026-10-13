@@ -167,15 +167,15 @@ def configured_llm(provider: str, model: str) -> tuple[str, str]:
 
 def configured_api_base(provider: str) -> str | None:
     """Pass the configured endpoint to Motoro's existing ModelConfig."""
-    from urllib.parse import urlsplit
+    from memstara.stage_models import validate_endpoint
     base = os.environ.get("MEMSTARA_LLM_API_BASE", "").strip()
     if not base:
         return None
     selected = os.environ.get("MEMSTARA_LLM_PROVIDER", "").strip()
     if selected and selected != provider:
         return None
-    parsed = urlsplit(base)
-    if (parsed.scheme != "https" or not parsed.hostname or parsed.username
-            or parsed.password or parsed.query or parsed.fragment):
-        raise ValueError("MEMSTARA_LLM_API_BASE must be an HTTPS endpoint without credentials or query parameters")
+    try:
+        validate_endpoint(base)
+    except ValueError as exc:
+        raise ValueError(f"MEMSTARA_LLM_API_BASE: {exc}") from None
     return base

@@ -100,25 +100,29 @@ def validate_profiles(profiles: dict) -> dict:
             type(profile["temperature"]) not in (int, float) or not 0 <= profile["temperature"] <= 2
         ):
             raise ValueError("temperature must be between 0 and 2")
-    from urllib.parse import urlsplit
-
     for profile in profiles.values():
         if profile.get("api_base"):
-            endpoint = profile["api_base"]
-            message = ("Model endpoints require a valid HTTPS URL and port (1-65535), "
-                       "without whitespace, control characters, embedded credentials or query parameters")
-            # urlsplit silently removes some control characters and defers port validation.
-            if any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in endpoint):
-                raise ValueError(message)
-            try:
-                url = urlsplit(endpoint)
-                port = url.port
-            except ValueError:
-                raise ValueError(message) from None
-            if (url.scheme != "https" or not url.hostname or url.username or url.password
-                    or url.query or url.fragment or port == 0):
-                raise ValueError(message)
+            validate_endpoint(profile["api_base"])
     return deepcopy(profiles)
+
+
+def validate_endpoint(endpoint: str) -> None:
+    """Apply the same endpoint contract to profiles and environment defaults."""
+    from urllib.parse import urlsplit
+
+    message = ("Model endpoints require a valid HTTPS URL and port (1-65535), "
+               "without whitespace, control characters, embedded credentials or query parameters")
+    # urlsplit silently removes some control characters and defers port validation.
+    if any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in endpoint):
+        raise ValueError(message)
+    try:
+        url = urlsplit(endpoint)
+        port = url.port
+    except ValueError:
+        raise ValueError(message) from None
+    if (url.scheme != "https" or not url.hostname or url.username or url.password
+            or url.query or url.fragment or port == 0):
+        raise ValueError(message)
 
 
 def for_stage(profiles: dict, stage: str) -> dict:

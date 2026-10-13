@@ -41,3 +41,27 @@ def test_invalid_endpoint_rejected(monkeypatch, base):
     monkeypatch.setenv('MEMSTARA_LLM_API_BASE', base)
     with pytest.raises(ValueError):
         configured_api_base('openai')
+
+
+@pytest.mark.parametrize('base', [
+    'https://model.example:invalid', 'https://model.example:65536',
+    'https://model.example:0', 'https://model example/v1',
+    'https://model.example/\napi', 'https://model.example/\tapi',
+    'https://model.example/\x00api',
+])
+def test_environment_endpoint_rejects_invalid_ports_and_control_characters(monkeypatch, base):
+    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
+    # NUL cannot be placed in an OS environment; emulate a supplied mapping value.
+    monkeypatch.setattr('memstara.env.os.environ', {
+        'MEMSTARA_LLM_PROVIDER': 'openai', 'MEMSTARA_LLM_API_BASE': base,
+    })
+    with pytest.raises(ValueError, match='MEMSTARA_LLM_API_BASE'):
+        configured_api_base('openai')
+
+
+@pytest.mark.parametrize('base', ['https://model.example:8443/v1', 'https://[::1]:443/v1'])
+def test_environment_endpoint_preserves_valid_ports_and_provider_scope(monkeypatch, base):
+    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
+    monkeypatch.setenv('MEMSTARA_LLM_API_BASE', ' ' + base + ' ')
+    assert configured_api_base('openai') == base
+    assert configured_api_base('anthropic') is None
