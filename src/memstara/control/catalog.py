@@ -67,6 +67,12 @@ def canonical_name(name: str) -> str:
     if not path.is_file():
         return name
     aliases = json.loads(path.read_text(encoding='utf-8'))
+    if not isinstance(aliases, dict) or any(
+        not isinstance(key, str) or not key.strip() or
+        not isinstance(value, str) or not value.strip()
+        for key, value in aliases.items()
+    ):
+        raise ValueError('Skill aliases must map nonempty names to nonempty strings')
     target = aliases.get(name, name)
     if not isinstance(target, str):
         raise ValueError('Skill aliases must map names to strings')
@@ -90,7 +96,16 @@ def catalog() -> list[dict]:
                  'report' if path.stem.startswith('report_') else 'hypothesis')
         items.append(_entry(path.stem, content, stage, 'Project default'))
     for path in sorted(user_dir().glob('*.json')):
-        item = json.loads(path.read_text(encoding='utf-8'))
+        try:
+            item = json.loads(path.read_text(encoding='utf-8'))
+            if (not isinstance(item, dict) or item.get('stage') not in ROLES
+                    or any(not isinstance(item.get(key), str)
+                           for key in ('id', 'title', 'description', 'content', 'hash', 'source'))
+                    or item['id'] != path.stem or not item['content'].strip()):
+                raise ValueError('Invalid skill record')
+        except (ValueError, UnicodeError):
+            raise ValueError('Invalid saved user skill record; restore the original '
+                             'record or register a new version') from None
         item['stage_label'] = agent_label(item['stage'])
         items.append(item)
     return items

@@ -409,9 +409,10 @@ def playbooks() -> dict[str, Any]:
     because a branch with nothing in it is a filter that returns nothing; a playbook has
     no such property, it is one file that is either attached or not.
     """
+    entries = catalog()
     return {
-        "playbooks": [x["id"] for x in catalog()],
-        "catalog": catalog(),
+        "playbooks": [x["id"] for x in entries],
+        "catalog": entries,
         "references": reference_knowledge(),
         "agent_labels": AGENT_LABELS,
         "max_hypotheses": _MAX_HYPOTHESIS_AGENTS,
@@ -635,11 +636,11 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/control/playbooks":
-            # No try/except around it, unlike /control/skills. That one reads the OKF
-            # bundle, which is a path out of the environment and can genuinely be absent;
-            # this reads a directory inside the installed package, and `playbook_names`
-            # already answers `[]` for a checkout that has none.
-            self._send(200, playbooks())
+            try:
+                self._send(200, playbooks())
+            except (ValueError, OSError):
+                self._send(503, {"error": "Skill catalog is unavailable. Check saved user skills "
+                                 "and configured shared files; restore invalid records before retrying."})
             return
 
         if path == "/control/runs":
@@ -835,7 +836,12 @@ class Handler(BaseHTTPRequestHandler):
         # the service is running makes it startable without a restart. It is a directory
         # listing and a handful of small files; the bundle read above is the expensive
         # half of this handler and it was already being done per request.
-        menu = playbooks()
+        try:
+            menu = playbooks()
+        except (ValueError, OSError):
+            self._send(503, {"error": "Run not started. Skill catalog is unavailable; "
+                             "check saved user skills and configured shared files."})
+            return
         try:
             argv = build_argv(body, offered, menu["playbooks"], menu["stages"])
             validate_selection(body)
