@@ -5,8 +5,21 @@ import pytest
 
 from memstara.pipeline.failures import (
     PipelineExecutionFailure, exception_chain, failure_summary, stop_execution,
-    provider_error_details, retryable_model_error,
+    provider_error_details, retryable_model_error, visible_failure,
 )
+
+
+def test_historical_429_display_is_corrected_without_changing_evidence(tmp_path):
+    path = tmp_path / 'pipeline_failure.json'
+    original = json.dumps({'code': 'model_request_rejected', 'http_status': 429,
+                           'message': 'The model rejected the request settings.',
+                           'stage': 'hypothesis0', 'loop': 1})
+    path.write_text(original)
+    shown = visible_failure(tmp_path)
+    assert shown['code'] == 'model_rate_limit'
+    assert 'does not establish' in shown['message']
+    assert shown['stage'] == 'hypothesis0'
+    assert path.read_text() == original
 
 
 def provider_error(status, message='private payload'):
@@ -80,3 +93,24 @@ def test_failure_chain_is_safe_and_cycle_bounded(tmp_path):
 ])
 def test_nontransport_failures_keep_their_meaning(message, code):
     assert failure_summary(RuntimeError(message))[0] == code
+
+
+@pytest.mark.parametrize('wrapped_json', [False, True])
+def test_azure_lookup_failure_is_retryable_without_claiming_bad_settings(wrapped_json):
+    error = provider_error(429)
+    body = {'error': {'code': 'rate_limiting_lookup_failed', 'message': 'private'}}
+    if wrapped_json:
+        error = provider_error(429, 'Azure_aiException - ' + json.dumps(body))
+    else:
+        error.body = body
+    assert retryable_model_error(error)
+    code, message = failure_summary(error)
+    assert code == 'model_service_unavailable'
+    assert 'private' not in message
+
+
+def test_ordinary_quota_failure_is_not_misclassified_as_bad_settings():
+    error = provider_error(429)
+    error.body = {'error': {'code': 'insufficient_quota'}}
+    assert not retryable_model_error(error)
+    assert failure_summary(error)[0] == 'model_rate_limit'

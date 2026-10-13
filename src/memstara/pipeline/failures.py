@@ -12,6 +12,31 @@ class PipelineExecutionFailure(RuntimeError):
 RETRYABLE_SERVER_STATUSES = frozenset({500, 502, 503, 504, 529})
 
 
+def rate_limit_lookup_failed(error):
+    """Recognize Azure's internal lookup failure, not ordinary quota exhaustion."""
+    for item in exception_chain(error):
+        candidates = [getattr(item, 'body', None)]
+        response = getattr(item, 'response', None)
+        if response is not None:
+            try:
+                candidates.append(response.json())
+            except (ValueError, AttributeError):
+                pass
+        # Anthropic/LiteLLM wrappers sometimes retain only the JSON error message.
+        candidates.append(str(item))
+        for body in candidates:
+            if isinstance(body, str):
+                try:
+                    body = json.loads(body[body.index('{'):])
+                except (ValueError, TypeError):
+                    continue
+            if isinstance(body, dict):
+                detail = body.get('error', {})
+                if isinstance(detail, dict) and detail.get('code') == 'rate_limiting_lookup_failed':
+                    return True
+    return False
+
+
 def provider_error_details(error):
     """Extract bounded correlation metadata, never response text or request contents."""
     details: dict[str, int | str] = {}
@@ -41,6 +66,8 @@ def provider_error_details(error):
 def retryable_model_error(error):
     """Retry only a failed provider request, not a whole agent or its tools."""
     status = provider_error_details(error).get('http_status')
+    if status == 429:
+        return rate_limit_lookup_failed(error)
     if status is not None:
         return status in RETRYABLE_SERVER_STATUSES or status == 408
     return failure_summary(error)[0] in ('model_connection', 'model_server')
@@ -57,6 +84,14 @@ def exception_chain(error):
 
 def failure_summary(error):
     status = provider_error_details(error).get('http_status')
+    if status == 429:
+        if rate_limit_lookup_failed(error):
+            return 'model_service_unavailable', (
+                'The model service could not retrieve its rate-limit data. '
+                'Saved results are retained; further execution was stopped.')
+        return 'model_rate_limit', (
+            'The model service returned HTTP 429. Check deployment rate limits and quota. '
+            'Saved results are retained; further execution was stopped.')
     if status in RETRYABLE_SERVER_STATUSES:
         return 'model_server', ('The model service returned a server error. '
                                 'Saved results are retained; further execution was stopped.')
@@ -139,6 +174,11 @@ def require_tools(by_stage, required, run_dir=None):
 def visible_failure(run_dir, *, include_legacy=True):
     """Surface an older failed run's cause without altering its original artifacts."""
     if failure := read_failure(run_dir):
+        if failure.get('http_status') == 429 and failure.get('code') == 'model_request_rejected':
+            return {**failure, 'code': 'model_rate_limit', 'message': (
+                'The model service returned HTTP 429. This response does not establish '
+                'a request-settings error; inspect the saved provider response. '
+                'Saved results are retained; further execution was stopped.')}
         return failure
     if not include_legacy:
         return None

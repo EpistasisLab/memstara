@@ -68,6 +68,11 @@ def pipeline_state(directory):
             and (not isinstance(state, dict) or state.get("status") != "completed")):
         result = {**(state if isinstance(state, dict) else {}), "status": "failed",
                   **{key: failure[key] for key in ("message", "code", "stage", "loop") if key in failure}}
+        if failure.get("http_status") == 429 and result.get("code") == "model_request_rejected":
+            result.update(code="model_rate_limit", message=(
+                "The model service returned HTTP 429. This response does not establish "
+                "a request-settings error; inspect the saved provider response. "
+                "Saved results are retained; further execution was stopped."))
         # Older records retained the typed provider exception but used a generic
         # code. Explain only that recorded type; do not infer an HTTP status.
         if (result.get("code") == "agent_execution_failed"

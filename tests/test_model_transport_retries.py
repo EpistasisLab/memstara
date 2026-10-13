@@ -181,3 +181,28 @@ def test_retry_cannot_switch_to_another_stage_model(context, monkeypatch):
     with pytest.raises(PipelineExecutionFailure):
         asyncio.run(PipelineLLMService()._request(invoke, config, []))
     assert invoke.await_count == 1
+
+
+def azure_lookup_error():
+    import httpx
+    from openai import APIStatusError
+    return APIStatusError('Azure lookup failure',
+        response=httpx.Response(429, request=httpx.Request('POST', 'https://example.invalid')),
+        body={'error': {'code': 'rate_limiting_lookup_failed'}})
+
+
+def test_lookup_failure_recovers_without_replaying_agent(context):
+    invoke = AsyncMock(side_effect=[azure_lookup_error(), 'result'])
+    assert asyncio.run(request(invoke)) == 'result'
+    assert invoke.await_count == 2
+    assert not (context / 'pipeline_failure.json').exists()
+
+
+def test_persistent_lookup_failure_stops_after_five_retries(context):
+    invoke = AsyncMock(side_effect=azure_lookup_error())
+    with pytest.raises(PipelineExecutionFailure):
+        asyncio.run(request(invoke))
+    assert invoke.await_count == 6
+    failure = json.loads((context / 'pipeline_failure.json').read_text())
+    assert failure['code'] == 'model_service_unavailable'
+    assert failure['http_status'] == 429

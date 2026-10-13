@@ -6,6 +6,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'viewer' / 'api'))
 import run_artifacts
 
 
+def test_historical_429_matches_control_projection_and_preserves_archive(tmp_path):
+    from memstara.pipeline.failures import visible_failure
+    path = tmp_path / 'pipeline_failure.json'
+    original = json.dumps({'code': 'model_request_rejected', 'http_status': 429,
+                           'message': 'The model rejected the request settings.',
+                           'stage': 'hypothesis0', 'loop': 1})
+    path.write_text(original)
+    result = run_artifacts.pipeline_state(tmp_path)
+    assert result['code'] == 'model_rate_limit'
+    assert result['message'] == visible_failure(tmp_path)['message']
+    assert path.read_text() == original
+
+
 def test_first_failure_overrides_generic_group_error_without_mutating_archive(tmp_path):
     status = {'status': 'failed', 'error_type': 'ExceptionGroup',
               'message': 'Pipeline could not safely continue; inspect console.log and trace/.'}
@@ -47,7 +60,8 @@ def test_artifacts_are_scoped_and_do_not_expose_prompts(tmp_path, monkeypatch):
     for tag in ('first', 'second'):
         directory = tmp_path / tag
         directory.mkdir()
-        (directory / 'config.json').write_text(json.dumps({'run_tag': tag, 'hypotheses': 3, 'skill': tag + '-source', 'prompts': 'private'}))
+        (directory / 'config.json').write_text(json.dumps({
+            'run_tag': tag, 'hypotheses': 3, 'skill': tag + '-source', 'prompts': 'private'}))
         (directory / 'execution.json').write_text(json.dumps({'calls': [{'run_id': tag}]}))
         (directory / 'report.md').write_text(tag + ' report')
     selected = run_artifacts.lookup('first')
@@ -125,7 +139,8 @@ def test_pipeline_results_keeps_all_outputs_and_run_identity(monkeypatch):
 
 def test_specialist_report_provenance_survives_api(tmp_path,monkeypatch):
     monkeypatch.setattr(run_artifacts,'ROOT',tmp_path)
-    directory=tmp_path/'expert';directory.mkdir()
+    directory=tmp_path/'expert'
+    directory.mkdir()
     (directory/'config.json').write_text(json.dumps({'run_tag':'expert'}))
     metadata={'status':'completed','expert':'hiv','database_ids':['hiv-fixture'],
               'interpretation_methods':['shap'],'task_ids':[12]}
