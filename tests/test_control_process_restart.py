@@ -110,9 +110,13 @@ def exercise_restart(tmp_path, worker_source=WORKER, check=None):
             check('restarted')
         request(second, '/control/runs/synthetic-restart/pause', True)
         wait_for(lambda: request(second)['running']['execution_state'] == 'paused')
-        control = json.loads((run / 'execution_control.json').read_text())
-        assert control['state'] == 'paused'
-        assert control['active_calls'] == 0
+        # The controller can infer paused from the marker and zero active calls
+        # before the worker publishes its own acknowledgement. Wait for both.
+        def worker_paused():
+            control = json.loads((run / 'execution_control.json').read_text())
+            return control['state'] == 'paused' and control['active_calls'] == 0
+
+        wait_for(worker_paused)
         count = json.loads((run / 'ticks.json').read_text())['count']
         time.sleep(.35)
         assert json.loads((run / 'ticks.json').read_text())['count'] == count
