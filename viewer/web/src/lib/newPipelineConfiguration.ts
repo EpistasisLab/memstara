@@ -11,5 +11,22 @@ export function newPipelineRequest(configuration: RunRequest): NewPipelineConfig
 
 /** Editor placeholders are separate from the model-free creation request. */
 export function newPipelineConfiguration(configuration: RunRequest): RunRequest {
-  return {...newPipelineRequest(configuration), provider: '', model: ''};
+  const draft = {...newPipelineRequest(configuration), provider: '', model: ''};
+  if (['hypothesis_research','comorbidity','drug-class-effect','shared-anatomy',
+    'shared-pharmacology','symptom-bridge','taxonomic','treatment-toxicity'].includes(draft.playbook_hypothesis)) {
+    draft.playbook_hypothesis = 'addiction-psychiatric';
+  }
+  if (draft.playbook_data === 'data_exact_features') draft.playbook_data = 'data_training_heavy';
+  if (['ml_governance','ml_pilot_lr_focus','ml_reporting','ml_results_presenter','ml_scikit_knowledge'].includes(draft.playbook_ml)) draft.playbook_ml = 'ml_logistic_regression';
+  if (draft.playbook_ml === 'ml_pilot_xgb_focus') draft.playbook_ml = 'ml_xgboost';
+  if (['interpreter_actionability','interpreter_attribution','interpreter_clinical',
+    'interpreter_factual_observations','interpreter_review_pending','interpreter_robustness'].includes(draft.playbook_interpreter)) {
+    draft.playbook_interpreter = 'shared-anil-shap';
+  }
+  if (['shared-ml-results','report_clinical_explanations','report_clinician_summary',
+    'report_evidence','report_loop_learning','report_ml_results','report_research_priority',
+    'report_team_briefing','report_validation_audit'].includes(draft.playbook_explanation)) {
+    draft.playbook_explanation = 'shared-anil-addiction';
+  }
+  return draft;
 }

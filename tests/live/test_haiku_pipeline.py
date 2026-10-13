@@ -166,9 +166,9 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
                 "--stage-models", json.dumps(live_batch["profiles"]), "--baseline-columns", "[]",
                 "--evaluation", json.dumps({"engine": "xgboost", "seed": 42, "test_size": .25,
                                              "folds": 0, "replicates": 1, "search_trials": 1}),
-                "--playbook-hypothesis", "hypothesis_research", "--playbook-data", "data_exact_features",
-                "--playbook-ml", "ml_governance", "--playbook-interpreter", "interpreter_factual_observations",
-                "--playbook-explanation", "report_clinical_explanations"]
+                "--playbook-hypothesis", "addiction-psychiatric", "--playbook-data", "data_training_heavy",
+                "--playbook-ml", "ml_logistic_regression", "--playbook-interpreter", "interpreter_factual_observations",
+                "--playbook-explanation", "shared-anil-addiction"]
         started = time.monotonic()
         previous = None
         print(f"\nSTART {case}: all model calls use {MODEL}; original files preserved", flush=True)

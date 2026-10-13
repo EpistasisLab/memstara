@@ -9,6 +9,29 @@ from pathlib import Path
 
 from memstara.paths import PLAYBOOKS_DIR, PROMPTS_DIR
 
+# Retained only to load historical configurations; not offered in new skill menus.
+LEGACY_PLAYBOOKS = {'data_exact_features': 'legacy/data_exact_features.md'}
+LEGACY_PLAYBOOKS.update({name: f'legacy/{name}.md' for name in (
+    'ml_governance', 'ml_pilot_lr_focus', 'ml_pilot_xgb_focus',
+    'ml_reporting', 'ml_results_presenter', 'ml_scikit_knowledge')})
+
+# Temporarily hidden from selection only. Keep files and saved configurations intact.
+HIDDEN_PLAYBOOKS = frozenset({
+    'interpreter_actionability', 'interpreter_attribution', 'interpreter_clinical',
+    'interpreter_factual_observations', 'interpreter_review_pending', 'interpreter_robustness',
+})
+DISABLED_EXPLANATION_SKILLS = frozenset({
+    'shared-ml-results', 'report_clinical_explanations', 'report_clinician_summary',
+    'report_evidence', 'report_loop_learning', 'report_ml_results',
+    'report_research_priority', 'report_team_briefing', 'report_validation_audit',
+})
+HIDDEN_PLAYBOOKS = HIDDEN_PLAYBOOKS | DISABLED_EXPLANATION_SKILLS
+DISABLED_HYPOTHESIS_SKILLS = frozenset({
+    'hypothesis_research', 'comorbidity', 'drug-class-effect', 'shared-anatomy',
+    'shared-pharmacology', 'symptom-bridge', 'taxonomic', 'treatment-toxicity',
+})
+HIDDEN_PLAYBOOKS = HIDDEN_PLAYBOOKS | DISABLED_HYPOTHESIS_SKILLS
+
 #: A whole `<!-- ... -->` block plus the newlines directly after it. Removing the
 #: trailing newlines as part of the match is what keeps the paragraph spacing of the
 #: remaining text intact: a comment sitting between two paragraphs leaves exactly the
@@ -103,7 +126,7 @@ def playbook_names() -> list[str]:
     """
     if not PLAYBOOKS_DIR.is_dir():
         return []
-    return sorted(p.stem for p in PLAYBOOKS_DIR.glob("*.md"))
+    return sorted(p.stem for p in PLAYBOOKS_DIR.glob("*.md") if p.stem not in HIDDEN_PLAYBOOKS)
 
 
 def accepts_playbook(name: str) -> bool:
@@ -166,18 +189,19 @@ def load_prompt(name: str, playbook: str = "") -> dict[str, str]:
                 f"{path}: asked for the {playbook!r} playbook and has no "
                 f"{{{{playbook}}}} line to put it on"
             )
-        book = (PLAYBOOKS_DIR / playbook).with_suffix(".md")
+        book = (PLAYBOOKS_DIR / LEGACY_PLAYBOOKS[playbook] if playbook in LEGACY_PLAYBOOKS
+                else (PLAYBOOKS_DIR / playbook).with_suffix(".md"))
         from memstara.control.catalog import resolve
         item = resolve(playbook)
         if playbook == "shared-ml-reference":
             raise ValueError(
                 "ML reference knowledge is not a selectable skill. "
-                "Select an ML skill such as ml_governance."
+                "Select an ML skill such as ml_logistic_regression."
             )
         if playbook == "shared-ml-results" and name != "board/report":
             raise ValueError(
                 "ML Results Presenter is an Explanation agent skill. "
-                "Select an ML skill such as ml_governance for the ML agent."
+                "Select an ML skill such as ml_logistic_regression for the ML agent."
             )
         if playbook.startswith("shared-anil-") and item and name != f"board/{item['stage']}":
             raise ValueError(f"{playbook}: skill belongs to {item['stage']}, not {name}")
@@ -207,6 +231,8 @@ def load_prompt(name: str, playbook: str = "") -> dict[str, str]:
         raise ValueError(f"{path}: the prompt body is empty")
 
     if name == "board/ml":
+        if playbook in ('ml_logistic_regression', 'ml_xgboost'):
+            body += '\n\n' + _read(PROMPTS_DIR / 'board/_ml_common.md')[1]
         from memstara.control.catalog import reference_knowledge
         for reference in reference_knowledge():
             body += (

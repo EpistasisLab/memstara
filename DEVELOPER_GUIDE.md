@@ -242,7 +242,7 @@ configuration.update({
     "combination_skills": {
         "hypothesis": ["addiction-psychiatric"],
         "data": ["data_training_heavy"],
-        "ml": ["ml_pilot_lr_focus"],
+        "ml": ["ml_logistic_regression"],
         "interpreter": ["shared-anil-shap"],
         "report": ["shared-anil-addiction"]
     },
@@ -467,8 +467,26 @@ Here "balanced" means equal train/evaluation sizes, not class oversampling. A se
 validation reserve is removed before this allocation. Counts, indices and seeds are
 saved so both learners use the same partition.
 
-`ml_pilot_lr_focus` and `ml_pilot_xgb_focus` both fit LR and XGBoost; they differ in the
-primary modeling perspective. The LLM does not have unrestricted control over compute:
+These are the two built-in selectable Data skills. Exact feature extraction,
+target preservation, missing-column reporting and the saved handoff to ML are
+common instructions in `prompts/board/data.md`, independent of the allocation
+skill. `data_exact_features` is retired from new skill menus; its unchanged text
+is kept under `playbooks/legacy/` solely for loading old configurations and
+reproducing historical prompts. Selecting research inputs preserves the selected
+Data strategy, or defaults to `data_training_heavy` when none is selected or the
+retired extraction choice was inherited. Existing saved runs are not migrated.
+
+`ml_logistic_regression` (Logistic Regression) and `ml_xgboost` (XGBoost) are the
+two built-in selectable ML skills. The selection fixes the primary model before
+fitting; the tool rejects an agent proposal that changes it. Both models are still
+trained and saved so SHAP/LIME can inspect both. Selecting either skill enables
+the paired policy even outside All Combinations.
+
+Training safety, evaluation and structured-result reporting are common instructions
+in `prompts/board/_ml_common.md`. Clinical presentation belongs downstream. The
+six former ML playbooks remain under `playbooks/legacy/` for saved configurations
+and are not offered in new menus. New creation drafts translate old choices into
+LR or XGBoost; historical run settings and frozen prompts are not rewritten. The LLM does not have unrestricted control over compute:
 server-owned parameter ranges, data splits, fit budgets, CPU/thread and memory limits
 still apply. See [ml_configuration.py](src/memstara/ml_configuration.py) and
 [paired_ml.py](src/memstara/paired_ml.py). Existing single-model paths and their engine
@@ -1124,3 +1142,37 @@ input example and commands. It contains generated numbers and invented education
 knowledge, not patient data or clinical evidence. HeartFailure originals are not
 part of the public example. A paid run and clinical target validation are separate
 from the offline input/dispatch/cache tests.
+
+
+### Interpretation menu visibility
+
+The six project-default `interpreter_*` playbooks are temporarily hidden by
+`HIDDEN_PLAYBOOKS` in `pipeline/prompts.py`. The menu retains the current Anil
+SHAP and LIME skills. Hidden files remain unchanged and resolve for saved
+configurations; frozen execution prompts are not rewritten. New UI drafts use
+SHAP when inheriting a hidden default. This visibility change does not alter
+Anil/Phil source documents or merge their instructions.
+
+
+### Explanation execution choices
+
+Only the current Anil Addiction and HIV expert choices are offered from the
+existing built-in Explanation catalog. The nine alternative reporting skills in
+`DISABLED_EXPLANATION_SKILLS` are hidden and rejected at control validation and
+the board execution entrypoint, including proposal and combination runs. Their
+original files and historical prompt loading remain available for inspection.
+A saved design containing a disabled choice must select an enabled expert before
+starting again. New UI drafts use Addiction when inheriting a disabled choice.
+The current shared expert files are required; there is no fallback to a disabled
+reporting skill. This change does not rewrite Anil/Phil source documents.
+
+
+### Hypothesis experiment choices
+
+The current built-in menu retains addiction-psychiatric, addiction-sdoh,
+addiction-substance-use and random_features. Eight other choices listed in
+`DISABLED_HYPOTHESIS_SKILLS` are hidden and rejected before board execution,
+including combination runs. Files and historical prompt loading remain intact.
+New UI drafts inheriting a disabled choice use addiction-psychiatric; review its
+domain compatibility with the selected research inputs before starting. Existing
+run configurations are not rewritten.

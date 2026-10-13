@@ -84,12 +84,14 @@ def user_dir() -> Path:
                 (Path(os.environ.get('MEMSTARA_OUTPUT_DIR') or DEFAULT_OUTPUT_DIR) / 'skills'))
 
 
-def catalog() -> list[dict]:
+def catalog(*, include_hidden: bool = False) -> list[dict]:
     items = anil_skills()
     path = document_path('MEMSTARA_RESULTS_SKILL_PATH', 'ml-results.md')
-    if path is not None and path.is_file():
+    if include_hidden and path is not None and path.is_file():
         items.append(_external_entry('shared-ml-results', path, 'report'))
     for path in sorted(prompts.PLAYBOOKS_DIR.glob('*.md')):
+        if not include_hidden and path.stem in prompts.HIDDEN_PLAYBOOKS:
+            continue
         content = prompts._body(path.read_text(encoding='utf-8'))
         stage = ('data' if path.stem.startswith('data_') else 'ml' if path.stem.startswith('ml_') else
                  'interpreter' if path.stem.startswith('interpreter_') else
@@ -139,7 +141,11 @@ def _entry(name: str, content: str, stage: str, source: str) -> dict:
 
 def resolve(name: str) -> dict:
     name = canonical_name(name)
-    item = next((x for x in catalog() if x['id'] == name), {})
+    item = next((x for x in catalog(include_hidden=True) if x['id'] == name), {})
+    if not item and name in prompts.LEGACY_PLAYBOOKS:
+        path = prompts.PLAYBOOKS_DIR / prompts.LEGACY_PLAYBOOKS[name]
+        item = _entry(name, prompts._body(path.read_text(encoding='utf-8')),
+                      'ml' if name.startswith('ml_') else 'data', 'Legacy compatibility only')
     if name in ANIL_SKILLS and not item:
         raise FileNotFoundError(
             f'{ANIL_SKILLS[name][0]} is missing from the current shared folder; no archive fallback')
@@ -184,6 +190,20 @@ def register(body: dict) -> dict:
     return item
 
 
+def ensure_explanation_enabled(names) -> None:
+    for name in names:
+        if canonical_name(name) in prompts.DISABLED_EXPLANATION_SKILLS:
+            raise ValueError(f'{name}: this Explanation skill is disabled for execution. '
+                             'Select Anil Addiction or HIV Expert Explanation.')
+
+
+def ensure_hypothesis_enabled(names) -> None:
+    for name in names:
+        if canonical_name(name) in prompts.DISABLED_HYPOTHESIS_SKILLS:
+            raise ValueError(f'{name}: this Hypothesis skill is disabled for execution. '
+                             'Select an Addiction specialty or Random-feature hypothesis generation.')
+
+
 def validate_selection(body: dict) -> None:
     from memstara.control.request import normalize_agent_configuration, playbook_field
     body = normalize_agent_configuration(body)
@@ -193,6 +213,10 @@ def validate_selection(body: dict) -> None:
         raise ValueError('Give every hypothesis at least one trial')
     for stage in ROLES:
         names = body.get(playbook_field(stage), '').split(',')
+        if stage == 'report':
+            ensure_explanation_enabled(names)
+        if stage == 'hypothesis':
+            ensure_hypothesis_enabled(names)
         for name in names:
             if not name:
                 continue

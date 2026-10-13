@@ -118,11 +118,11 @@ export const DEFAULT_REQUEST: RunRequest = {
   y_column: "HIV_DETECTABLE",
   provider: "",
   model: "",
-  playbook_hypothesis: "treatment-toxicity",
+  playbook_hypothesis: "addiction-psychiatric",
   playbook_data: "",
-  playbook_ml: "ml_governance",
-  playbook_interpreter: "interpreter_factual_observations",
-  playbook_explanation: "report_clinical_explanations",
+  playbook_ml: "ml_logistic_regression",
+  playbook_interpreter: "shared-anil-shap",
+  playbook_explanation: "shared-anil-addiction",
 };
 
 interface ControlState {

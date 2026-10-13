@@ -1359,6 +1359,13 @@ def chosen_playbooks(args: argparse.Namespace) -> dict[str, list[str]]:
 async def run(args: argparse.Namespace, run_dir: Path) -> int:
     """The body of the run. (1) through (6) of "How to read this file" at the top are
     here, in that order."""
+    from memstara.control.catalog import ensure_explanation_enabled, ensure_hypothesis_enabled
+    ensure_hypothesis_enabled(chosen_playbooks(args).get('hypothesis', []))
+    ensure_explanation_enabled(chosen_playbooks(args).get('report', []))
+    schedule = json.loads(getattr(args, 'combination_plan', '') or 'null')
+    if schedule:
+        ensure_hypothesis_enabled([item['id'] for item in schedule.get('skills', {}).get('hypothesis', [])])
+        ensure_explanation_enabled([item['id'] for item in schedule.get('skills', {}).get('report', [])])
     if getattr(args, 'data_mode', 'dataset') == 'proposal':
         from memstara.pipeline.proposal import run as run_proposal
         return await run_proposal(args, run_dir)

@@ -170,7 +170,10 @@ def fit(request):
     result = {**results[proposal['primary_model']], 'model_results': results,
               'ml_configuration': request['record'], 'paired_models': {
                   'version': config.VERSION, 'primary_model': proposal['primary_model'],
-                  'primary_selection': 'Declared by the ML Agent before either model was fitted',
+                  'primary_selection': (
+                      'Precommitted controlled-comparison plan' if snapshot.get('controlled_comparison') else
+                      'Fixed by the selected ML skill before fitting' if snapshot.get('_selected_ml_primary') else
+                      'Declared by the ML Agent before either model was fitted'),
                   'same_features': True, 'same_splits': True,
                   'xgboost_minus_lr_auc': xgb['auc'] - lr['auc']}}
     if specialist and any(row.get('specialist_xai', {}).get('status') != 'completed' for row in results.values()):

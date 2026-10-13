@@ -49,7 +49,7 @@ async def get_ml_configuration(path: str, y_column: str) -> str:
     """
     from memstara.evaluation import active_plan
     from memstara.data_allocation import load_effective
-    from memstara.ml_configuration import context, enabled
+    from memstara.ml_configuration import context, enabled, for_dataset
     try:
         p = Path(path).resolve()
         p.relative_to(_output_dir())
@@ -59,7 +59,7 @@ async def get_ml_configuration(path: str, y_column: str) -> str:
         if snapshot['y_column'] != y_column:
             raise ValueError('Target differs from the run target')
         plan, _ = load_effective(p, snapshot, snapshot['evaluation'])
-        return json.dumps(context(snapshot, plan))
+        return json.dumps(context(for_dataset(snapshot, p), plan))
     except Exception as exc:
         return json.dumps({'error': str(exc) if isinstance(exc, ValueError) else type(exc).__name__})
 
@@ -94,9 +94,10 @@ def train_and_score(
         plan = validate(plan)
         from memstara.data_allocation import load_effective
         plan, allocation = load_effective(p, snapshot, plan)
-        from memstara.ml_configuration import enabled, resolve as resolve_ml
+        from memstara.ml_configuration import enabled, resolve as resolve_ml, for_dataset
         plan_resolution = None
         if enabled(snapshot):
+            snapshot = for_dataset(snapshot, p)
             # Proposal errors are repairable and cannot start training or freeze a plan.
             ml_plan, plan_resolution = resolve_ml(ml_plan, snapshot, plan)
         elif ml_plan is not None:

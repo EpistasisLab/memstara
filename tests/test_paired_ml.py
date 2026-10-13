@@ -230,3 +230,27 @@ def test_second_model_failure_preserves_first_model_artifact(experiment,monkeypa
     progress=json.loads(path.with_suffix('.paired-progress.json').read_text())
     assert progress['phase']=='xgboost'
     assert progress['completed_models']['logistic_regression']['artifact']=='synthetic-bundle-reference'
+
+
+@pytest.mark.parametrize('skill,primary', [('ml_logistic_regression', 'logistic_regression'),
+                                          ('ml_xgboost', 'xgboost')])
+def test_selected_model_contract_reaches_tool_and_keeps_both_models(experiment, skill, primary):
+    from memstara.mcp_servers.ml import get_ml_configuration, train_and_score
+    path, snapshot, _, _ = experiment
+    snapshot['books']['ml'] = [skill]
+    spec = json.loads(asyncio.run(get_ml_configuration(str(path), 'Y')))
+    assert spec['fixed']['primary_model'] == primary
+    plan = spec['proposal_template']
+    assert set(plan['models']) == {'logistic_regression', 'xgboost'}
+    plan['rationale'] = 'Synthetic selected-model contract'
+    plan['models']['xgboost']['parameters']['n_estimators'] = 10
+    plan['models']['xgboost']['parameters']['max_depth'] = 2
+    wrong = copy.deepcopy(plan)
+    wrong['primary_model'] = 'xgboost' if primary == 'logistic_regression' else 'logistic_regression'
+    rejected = json.loads(train_and_score(str(path), 'Y', ml_plan=wrong))
+    assert 'selected ML skill' in rejected['error']
+    assert not path.with_suffix('.ml-plan.json').exists()
+    result = json.loads(train_and_score(str(path), 'Y', ml_plan=plan))
+    assert set(result.get('model_results', {})) == {'logistic_regression', 'xgboost'}, result
+    assert result['ml_configuration']['requested']['primary_model'] == primary
+    assert result['model'] == primary

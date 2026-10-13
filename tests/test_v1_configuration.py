@@ -296,3 +296,14 @@ def test_custom_markdown_reaches_each_configurable_agent(stage, tmp_path, monkey
     catalog.validate_selection({f'playbook_{stage}': item['id']})
     assert instructions in load_prompt(f'board/{stage}', item['id'])['system_prompt']
     assert (tmp_path / 'skills' / f'{item["id"]}.json').is_file()
+
+
+@pytest.mark.parametrize('skill', ['ml_logistic_regression', 'ml_xgboost'])
+def test_model_skill_enables_paired_policy_without_all_combinations(clean_data, tmp_path, skill):
+    from memstara.ml_configuration import enabled
+    args = SimpleNamespace(run_tag='selected-model', question='Synthetic', hypothesis_agents=1,
+                           y_column='outcome', evaluation=json.dumps({'engine': 'xgboost', 'seed': 7}),
+                           trials=1, waves=1)
+    snapshot = freeze(args, tmp_path, {'ml': [skill]})
+    assert enabled(snapshot)
+    assert 'Common training, evaluation and result contract' in snapshot['prompts'][f'board/ml:{skill}']['system_prompt']

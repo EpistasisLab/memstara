@@ -113,6 +113,9 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         prior_path = run_dir / "config.json"
         prior_profiles = json.loads(prior_path.read_text()).get("stage_models") if prior_path.exists() else None
         state["stage_models"] = snapshot_profiles(args.stage_models, prior_profiles)
+    if any(book in ('ml_logistic_regression', 'ml_xgboost') for book in books.get('ml', [])):
+        from memstara.ml_configuration import policy
+        state['ml_configuration_policy'] = policy()
     knowledge = Path(os.environ.get("AGENTIC_OKF_BUNDLE_DIR", "/nonexistent"))
     state["knowledge_hashes"] = (
         {

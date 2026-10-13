@@ -9,6 +9,21 @@ from pathlib import Path
 
 VERSION = 'agent_paired_ml_v1'
 MODELS = ('logistic_regression', 'xgboost')
+MODEL_SKILLS = {'ml_logistic_regression': 'logistic_regression', 'ml_xgboost': 'xgboost'}
+
+
+def for_dataset(snapshot, path):
+    """Resolve the selected model from this task's saved combination, not another loop."""
+    if not snapshot:
+        return snapshot
+    from memstara.combinations import task_books
+    handoff = path.with_suffix('.comparison.json')
+    record = json.loads(handoff.read_text()) if handoff.exists() else {}
+    names = task_books(snapshot, record.get('trial', 0)).get('ml', [])
+    primary = next((MODEL_SKILLS[name] for name in names if name in MODEL_SKILLS), None)
+    if primary and snapshot.get('combination_plan') and 'trial' not in record:
+        raise ValueError('Selected ML skill requires the saved task trial identity')
+    return {**snapshot, '_selected_ml_primary': primary}
 # All other installed-library parameters are explicitly returned as fixed defaults.
 # Arbitrary callbacks, GPU execution and unconstrained parallelism are never accepted.
 RANGES = {
@@ -53,6 +68,7 @@ def context(snapshot, evaluation):
                                  'Call train_and_score with path and y_column; omit ml_plan. '
                                  'Any supplied ml_plan is recorded but cannot override the frozen plan.')
         base['fixed']['controlled_comparison'] = True
+        base['fixed']['primary_model'] = controls['ml_plan']['primary_model']
         return base
     from memstara.evaluation import model_for
     models = {}
@@ -68,12 +84,14 @@ def context(snapshot, evaluation):
         models[name] = {'parameters': params, 'scale_numeric': name == 'logistic_regression',
                         'threshold': .5}
     return {'version': VERSION, 'required': enabled(snapshot),
-            'proposal_template': {'primary_model': 'logistic_regression', 'folds': 0,
+            'proposal_template': {'primary_model': snapshot.get('_selected_ml_primary') or 'logistic_regression',
+                                  'folds': 0,
                                   'models': models, 'rationale': ''},
             'editable_parameter_ranges': RANGES, 'editable_parameter_choices': CHOICES,
             'editable_common_settings': {'scale_numeric': [True, False], 'threshold': [.05, .95],
                                          'folds': [0, 2, 3, 4, 5]},
-            'fixed': {'data_seed': evaluation['seed'], 'test_size': evaluation['test_size'],
+            'fixed': {'primary_model': snapshot.get('_selected_ml_primary'),
+                      'data_seed': evaluation['seed'], 'test_size': evaluation['test_size'],
                       'replicates': evaluation['replicates'], 'search_trials': 1,
                       'resource_limits': (snapshot or {}).get('ml_configuration_policy'),
                       'other_parameters': 'Keep all parameters outside the editable lists exactly as returned.'},
@@ -110,6 +128,9 @@ def validate(proposal, snapshot, evaluation):
         raise ValueError('ml_plan requires primary_model, folds, models and rationale')
     if proposal['primary_model'] not in MODELS:
         raise ValueError('primary_model must be logistic_regression or xgboost')
+    if not controls and snapshot.get('_selected_ml_primary') and (
+            proposal['primary_model'] != snapshot['_selected_ml_primary']):
+        raise ValueError('primary_model must match the selected ML skill')
     if type(proposal['folds']) is not int or proposal['folds'] not in (0, 2, 3, 4, 5):
         raise ValueError('folds must be 0 or 2–5')
     if not isinstance(proposal['rationale'], str) or not 1 <= len(proposal['rationale'].strip()) <= 8000:

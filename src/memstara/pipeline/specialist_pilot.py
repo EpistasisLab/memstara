@@ -59,7 +59,8 @@ def preflight(config: dict) -> tuple[list[dict], dict]:
             skills[skill_id] = item
     if not set(config['choices']['data']) <= {'data_training_heavy', 'data_balanced_stratified'}:
         raise ValueError('Select the training-heavy and/or balanced-stratified data skills')
-    if not set(config['choices']['ml']) <= {'ml_pilot_lr_focus', 'ml_pilot_xgb_focus'}:
+    if not set(config['choices']['ml']) <= {
+            'ml_logistic_regression', 'ml_xgboost', 'ml_pilot_lr_focus', 'ml_pilot_xgb_focus'}:
         raise ValueError('Select the paired-model ML skills; legacy fixed-policy skills are incompatible')
     if not set(config['choices']['interpreter']) <= {'shared-anil-shap', 'shared-anil-lime'}:
         raise ValueError('This pilot requires the current Anil interpretation skills')
