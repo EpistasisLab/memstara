@@ -25,10 +25,10 @@ export default function PipelineSettings({id,section,close}:{id:string;section:'
       <p>A saved research version supplies its own dataset, corpus, target meaning and label mapping. Edit the version to change these together.</p>
       <label>Target column (Y)<input className="workspace-input" value={target} onChange={e=>setTarget(e.target.value)} disabled={locked||!!research.research_input_id}/></label>
     </>:<>
-      <p>The language model is configured centrally in motoro/.env and applies to every pipeline. Predictive models and evaluation settings are configured on the ML agent card.</p>
+      <p>The fields below show deployment defaults. Saved stage-model profiles can assign different models to non-Explanation agents and the Explanation agent. Configure deployment defaults in Memstara's .env or the process environment; restart the services after changing them. Predictive models and evaluation settings are configured on the ML agent card.</p>
       <LoopLimitSettings value={limit} disabled={locked} onChange={setLimit}/>
-      <label>Provider<input className="workspace-input" value={provider} readOnly aria-readonly="true" placeholder="Loading configured provider…"/></label>
-      <label>LLM model<input className="workspace-input" value={model} readOnly aria-readonly="true" placeholder="Loading configured model…"/></label>
+      <label>Default provider<input className="workspace-input" value={provider} readOnly aria-readonly="true" placeholder="Loading configured provider…"/></label>
+      <label>Default LLM model<input className="workspace-input" value={model} readOnly aria-readonly="true" placeholder="Loading configured model…"/></label>
     </>}
     {pipeline.running&&<p>End this execution before changing its settings. Stopped executions retain their original settings for Resume.</p>}
     <footer><button className="workspace-action" onClick={close}>Cancel</button><button className="workspace-action" disabled={locked||(!Number.isInteger(limit)||limit<1||limit>10)||!(section==='data'?target.trim():provider.trim()&&model.trim())} onClick={()=>{

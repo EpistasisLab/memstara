@@ -119,7 +119,8 @@ def configured_llm() -> tuple[str, str]:
     provider = os.environ.get("MEMSTARA_LLM_PROVIDER", "").strip()
     model = os.environ.get("MEMSTARA_LLM_MODEL", "").strip()
     if not provider or not model:
-        raise ValueError("Set MEMSTARA_LLM_PROVIDER and MEMSTARA_LLM_MODEL in motoro/.env before starting a pipeline")
+        raise ValueError("Set MEMSTARA_LLM_PROVIDER and MEMSTARA_LLM_MODEL in Memstara's .env "
+                         "or the process environment before starting a pipeline")
     if provider not in PROVIDERS:
         raise ValueError("MEMSTARA_LLM_PROVIDER is unsupported")
     if not _MODEL.fullmatch(model):

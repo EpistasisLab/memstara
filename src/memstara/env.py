@@ -20,15 +20,15 @@ So it is gathered here. `src/memstara/pipeline/mvp.py`, `src/memstara/pipeline/b
 `debug_harness.py` and `preflight.py` all call this file, and a new entry point
 needs a single line: `load_env()`.
 
-Why there are two `.env` files
-------------------------------
-    memstara/.env   MEMSTARA_* — this product's paths and settings
-    motoro/.env           LLM credentials, MOTORO_DATABASE_URL — core's own
+Configuration sources and precedence
+------------------------------------
+All settings and credentials may be configured in Memstara's .env or exported
+in the process environment. Sibling development optionally reads motoro/.env
+as a fallback; a sibling checkout is not required for the locked runtime install.
+Existing process values win, then Memstara's .env, then the optional sibling file.
+`memstara.paths.ENV_FILES` defines file order; `load_env()` skips missing files
+and never overwrites an existing value. It does not track each value's origin.
 
-They are not merged. Merging would put secrets in two places, and the copy would
-fall behind whenever the original changed. **Both are read instead.** Where they
-are is `memstara.paths.ENV_FILES`; `load_env()` below is the only thing that reads
-them, and four other copies of that pair have been deleted in its favour.
 """
 
 from __future__ import annotations
@@ -104,7 +104,8 @@ def missing_vars(provider: str = "", *, knowledge_mode: str = "okf", data_mode: 
     problems = [f"{name} is not set — {hint}"
                 for name, hint in BASE_VARS.items()
                 if name not in omitted and not os.environ.get(name, "").strip()]
-    problems += [f"{name} is not set — needed for --provider {provider}. Check motoro/.env."
+    problems += [f"{name} is not set — needed for --provider {provider}. "
+                 "Check Memstara's .env or the process environment."
                  for name in PROVIDER_KEYS.get(provider, ())
                  if not os.environ.get(name, "").strip()]
     return problems
@@ -160,7 +161,7 @@ def allowlist_gaps() -> list[str]:
 
 
 def configured_llm(provider: str, model: str) -> tuple[str, str]:
-    """Deployment-wide selection from motoro/.env; overrides stale browser drafts."""
+    """Deployment-wide selection from the process environment; overrides stale browser drafts."""
     from memstara.control.request import configured_llm as deployment_llm
     return deployment_llm()
 

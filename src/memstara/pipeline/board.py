@@ -239,13 +239,12 @@ async def check_environment(provider: str = "", y_column: str = "", *,
     # requests require an api_base" — after one seeding has already been spent. Caught
     # here, it stops without spending anything.
     #
-    # These values live in `motoro/.env`. main() reads that file, so if they are
-    # still empty by the time execution gets here, they really are not in it.
+    # main() loads optional environment files before checking effective values.
     for name in _PROVIDER_KEYS.get(provider, ()):
         if not os.environ.get(name, "").strip():
             problems.append(
                 f"{name} is not set — needed for --provider {provider}. "
-                "Check motoro/.env."
+                "Check Memstara's .env or the process environment."
             )
 
     # Reachability, not just presence. An unreachable board fails later as an opaque
@@ -2284,30 +2283,8 @@ async def give_up_on(task_ids: list[int]) -> list[int]:
 async def main() -> int:
     """The door in from the command line. Reads the arguments, checks them, takes the
     lock and calls run()."""
-    # This project has **two** `.env` files, and they hold different things.
-    #
-    #     memstara/.env   the MEMSTARA_* paths
-    #     motoro/.env           LLM credentials · MOTORO_DATABASE_URL
-    #
-    # But `env_file=".env"` in `src/memstara/config.py:27` reads **only the current folder.** So
-    # unless core's file is read separately the LLM credentials never arrive, and the
-    # result is this error, which blows up on the first call:
-    #
-    #     ValueError: Azure Anthropic requests require an api_base.
-    #
-    # `source` both in a shell and it does not happen, but VS Code's `envFile` takes only
-    # one file, so starting with F5 does hit it. That amounts to behaving differently
-    # depending on how it was started, so **the program reads them itself** and comes out
-    # the same wherever it was launched from.
-    #
-    # The sandbox one is read first. `load_dotenv` does not overwrite a value that is
-    # already there (override=False is the default), so whichever is read first wins, and
-    # a value given by the shell or by launch.json comes ahead of both — which keeps the
-    # intent of "a different bundle for this run only" working.
-    #
-    # `load_env` is `memstara.env`'s, and it is now the only reader of those two files. This
-    # was one of four hand-written copies of the same pair, and they had already drifted:
-    # debug_harness.py read core's first, giving it priority over the sandbox's.
+    # Preserve exported values, then load Memstara's .env and optional sibling
+    # defaults in that order. A locked runtime install needs no sibling checkout.
     load_env()
 
     ap = argparse.ArgumentParser()

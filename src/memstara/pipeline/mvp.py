@@ -155,12 +155,12 @@ def check_environment(provider: str = "") -> list[str]:
     """
     problems: list[str] = []
 
-    # LLM credentials. These live in `motoro/.env` and main() reads them in.
+    # LLM credentials from the effective process environment after load_env().
     for name in _PROVIDER_KEYS.get(provider, ()):
         if not os.environ.get(name, "").strip():
             problems.append(
                 f"{name} is not set — needed for --provider {provider}. "
-                "Check motoro/.env."
+                "Check Memstara's .env or the process environment."
             )
 
     # The three below are this sandbox's path settings. "not set" and "set but pointing
@@ -303,22 +303,8 @@ async def main() -> int:
     Returns:
         The exit code. 0 means at least one trial succeeded.
     """
-    # This project has **two** `.env` files and they hold different things.
-    #
-    #     memstara/.env   the MEMSTARA_* paths
-    #     motoro/.env           LLM credentials · MOTORO_DATABASE_URL
-    #
-    # `env_file=".env"` at `src/memstara/config.py:27` reads the current folder only, so without
-    # reading core's separately the first LLM call dies with "Azure Anthropic requests
-    # require an api_base". Running `source` on both in the shell avoids it, but that
-    # varies with how it is launched, so the program reads them itself.
-    #
-    # `load_dotenv` does not overwrite a value that is already there (override=False is
-    # the default). So whatever the shell or launch.json gave takes precedence over both
-    # — the intent of using a different bundle for that one run is preserved.
-    #
-    # `load_env` is `memstara.env`'s, and it is now the only reader of those two files. This
-    # was one of four hand-written copies of the same pair.
+    # Preserve exported values, then load Memstara's .env and optional sibling
+    # defaults in that order. A locked runtime install needs no sibling checkout.
     load_env()
 
     ap = argparse.ArgumentParser()
