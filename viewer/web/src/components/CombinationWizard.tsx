@@ -10,11 +10,12 @@ import EvaluationSettings from './EvaluationSettings';
 import {evaluationPlanError} from '../lib/evaluationPlan';
 import {useControl,PLAYBOOK_STAGES,type PlaybookStage,type RunRequest} from '../store/control';
 import {usePipelines} from '../store/pipelines';
+import {newPipelineConfiguration} from '../lib/newPipelineConfiguration';
 export const flavorNames:Record<PlaybookStage,string>={hypothesis:'Hypothesis',data:'Data',ml:'Machine learning',interpreter:'Interpretation',report:'Explanation'};
 export default function CombinationWizard(){
  const {catalog,form,loadPlaybooks,loadSkills}=useControl();
  const {create,closeCreation,busy,error}=usePipelines();
- const [draft,setDraft]=useState<RunRequest>(()=>({...structuredClone(form),combination_skills:{},combination_repetitions:1,combination_random_start:false,combination_max_loops:10,trials:1,hypothesis_agents:1,interpret_agents:1,continuous:false,waves:1}));
+ const [draft,setDraft]=useState<RunRequest>(()=>({...newPipelineConfiguration(form),combination_skills:{},combination_repetitions:1,combination_random_start:false,combination_max_loops:10,trials:1,hypothesis_agents:1,interpret_agents:1,continuous:false,waves:1}));
  const [skillMode,setSkillMode]=useState<'library'|'custom'|'ai'>('library');
  const [step,setStep]=useState(0);const [activeRole,setActiveRole]=useState<PlaybookStage>('hypothesis');const [search,setSearch]=useState('');
  const icons={hypothesis:Brain,data:Database,ml:ChartNoAxesCombined,interpreter:ScanSearch,report:Lightbulb};

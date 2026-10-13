@@ -100,6 +100,16 @@ The control request still validates the deployment-wide model even when profiles
 present. Keep valid deployment defaults configured. Changing only
 `MEMSTARA_LLM_MODEL` does not replace explicit `stage_models` profiles.
 
+Creating a workspace pipeline (`POST /control/pipelines`, `action: "add"`) uses
+the current server model defaults. Browser creation requests omit `provider`,
+`model` and `stage_models` entirely; the creation draft excludes inherited profiles.
+As a compatibility guard, model fields copied from a selected pipeline
+or browser draft are discarded, including nonempty `stage_models`. Both Selected
+Pipelines and All Combinations follow this rule. Creation is not model-profile
+cloning. Saved pipelines retain their assignments; an explicit configuration
+update can change the next execution's profiles. Historical execution snapshots
+and recovery assignments remain unchanged.
+
 `outputs/runs/pipeline_workspace.json` stores editable pipeline definitions. The
 control service also keeps them in memory: update them through its API. Per-execution
 `config.json`, `prompts.json`, and `resume_arguments.json` are historical evidence,

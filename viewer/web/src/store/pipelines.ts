@@ -3,6 +3,7 @@ import { useControl, type RunRequest, type RunningRun } from "./control";
 import { useViewer } from "./viewer";
 import { usePipelineSetup } from "./pipelineSetup";
 import {startPipelines, type StartOutcome} from '../lib/startPipelines';
+import {newPipelineRequest} from '../lib/newPipelineConfiguration';
 
 export interface PipelineDefinition {
   id: string; number: number; name: string; configuration: RunRequest;
@@ -103,7 +104,7 @@ export const usePipelines = create<{
     if(get().busy) return false;
     set({busy:true,error:null});
     try {
-      const item=await request({action:'add',name,configuration:{...configuration,question:"",
+      const item=await request({action:'add',name,configuration:{...newPipelineRequest(configuration),question:"",
         hypothesis_agents:1,interpret_agents:1,trials:1}});
       set({items:[...get().items,{...item,running:null,latest:null,progress:{}}],creationOpen:false});
       get().select(item.id);

@@ -111,12 +111,19 @@ class PipelineWorkspace:
                 name = body.get("name", f"Pipeline {number}")
                 if not isinstance(name, str) or not name.strip() or len(name) > 80:
                     raise ValueError("Pipeline name must contain 1–80 characters")
+                # Creating a pipeline is not cloning the selected pipeline's model
+                # assignment. Resolve current server defaults even for older clients
+                # that submit a previously selected run's frozen profiles.
+                configuration = copy.deepcopy(body.get("configuration", {}))
+                if not isinstance(configuration, dict):
+                    raise ValueError("Invalid pipeline configuration fields")
+                configuration.update(provider="", model="", stage_models={})
                 item = {
                     "id": uuid.uuid4().hex,
                     "agent_labels": dict(AGENT_LABELS),
                     "number": number,
                     "name": name.strip(),
-                    "configuration": self.configuration(body.get("configuration", {})),
+                    "configuration": self.configuration(configuration),
                 }
                 self.items.append(item)
             else:

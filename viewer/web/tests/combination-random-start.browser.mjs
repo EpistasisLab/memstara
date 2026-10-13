@@ -5,6 +5,7 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.PL
 try {
  for(const width of [1440,390]) for(const theme of ['light','dark']) {
   const page=await browser.newPage({viewport:{width,height:1000}});page.setDefaultTimeout(20000);
+  await page.addInitScript(()=>localStorage.setItem('memstara-draft-v1',JSON.stringify({stage_models:{non_explanation_agents:{provider:'openai',model:'qwen-old'},explanation_agent:{provider:'azure_foundry',model:'sonnet-old'}}})));
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   const roles=['hypothesis','data','ml','interpreter','report'],counts=[2,3,2,2,1];
   const skills=roles.flatMap((stage,i)=>Array.from({length:counts[i]},(_,n)=>({id:`${stage}_${n}`,stage,title:`${stage} flavor ${n+1}`,hash:`${stage}-${n}`,content:'# Fixture',description:'Test instructions',source:'fixture'})));
@@ -15,7 +16,7 @@ try {
    if(path==='/control/skills')return route.fulfill({json:{skills:[]}});
    if(path==='/control/pipelines') {
     if(route.request().method()==='GET')return route.fulfill({json:{pipelines:rows}});
-    posted=route.request().postDataJSON();assert.equal(posted.action,'add');
+    posted=route.request().postDataJSON();assert.equal(posted.action,'add');for(const key of ['provider','model','stage_models'])assert.equal(Object.hasOwn(posted.configuration,key),false);
     const item={id:'fixture-design',number:1,name:posted.name,configuration:posted.configuration};rows=[{...item,running:null,latest:null,progress:{}}];return route.fulfill({json:item});
    }
    if(path.endsWith('/combinations')) {
