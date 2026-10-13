@@ -156,11 +156,16 @@ def register(body: dict) -> dict:
     item['id'] = f'user-{stage}-{name}-{item["hash"][:12]}'
     directory = user_dir()
     directory.mkdir(parents=True, exist_ok=True)
-    import tempfile
-    with tempfile.NamedTemporaryFile(mode='w', dir=directory, suffix='.tmp', delete=False) as stream:
-        json.dump(item, stream, indent=2)
-        temporary = Path(stream.name)
-    temporary.replace(directory / f'{item["id"]}.json')
+    from memstara.pipeline.checkpoint import atomic_json
+    destination = directory / f'{item["id"]}.json'
+    try:
+        atomic_json(destination, item, overwrite=False)
+    except FileExistsError:
+        # Concurrent identical submissions are idempotent; a conflicting version
+        # must never replace the evidence already referenced by a saved pipeline.
+        if json.loads(destination.read_text(encoding='utf-8')) != item:
+            raise ValueError('This skill version already exists with different content; '
+                             'use a different name and retain the existing record') from None
     return item
 
 
