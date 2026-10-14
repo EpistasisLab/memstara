@@ -27,6 +27,29 @@ def test_environment_mode_is_explicit_and_does_not_read_file(tmp_path):
     assert 'OPENAI_API_KEY' not in values
 
 
+def test_relative_file_settings_survive_relocation_and_foreign_launch_directory(tmp_path, monkeypatch):
+    from memstara.operational import PATH_KEYS
+    original = tmp_path / 'first installation'
+    relocated = tmp_path / 'another installation'
+    elsewhere = tmp_path / 'unrelated terminal'
+    for directory in (original, relocated, elsewhere):
+        directory.mkdir()
+    content = ''.join(f'{key}=resources/{key.lower()}\n' for key in sorted(PATH_KEYS))
+    content += 'MEMSTARA_LLM_API_BASE=https://example.services.ai.azure.com\n'
+    content += 'MEMSTARA_DATABASE_URL=postgresql://example:example@127.0.0.1:55641/example\n'
+    for directory in (original, relocated):
+        (directory / '.env').write_text(content)
+    monkeypatch.chdir(elsewhere)
+    before, _ = resolve({}, file=original / '.env')
+    after, _ = resolve({}, file=relocated / '.env')
+    for key in PATH_KEYS:
+        expected = 'resources/' + key.lower()
+        assert before[key] == str(original / expected)
+        assert after[key] == str(relocated / expected)
+    for key in ('MEMSTARA_LLM_API_BASE', 'MEMSTARA_DATABASE_URL'):
+        assert before[key] == after[key]
+
+
 def test_missing_file_does_not_fall_back_to_shell(tmp_path):
     with pytest.raises(ValueError, match='Project .env is missing'):
         resolve({'OPENAI_API_KEY': 'SENTINEL'}, file=tmp_path / '.env')

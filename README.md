@@ -261,6 +261,31 @@ configuration and credentials. Local file settings override managed shell values
 omissions are not silently filled from shell or sibling files. Relative paths
 resolve from the `.env` location, not from the launching terminal directory.
 
+Use **relative filesystem paths** in `.env` so moving or cloning the installation
+does not retain another computer's home directory. For example:
+
+```dotenv
+MEMSTARA_OUTPUT_DIR=outputs
+HF_HOME=outputs/huggingface
+# Optional deployment inputs, if not using a saved research profile:
+# MEMSTARA_DATASET_PATH=outputs/heart-failure-demo/dataset.csv
+# AGENTIC_OKF_BUNDLE_DIR=examples/heart-failure/okf
+# MEMSTARA_OUTCOME_COLUMN=chronic_heart_failure
+```
+
+Create the HeartFailure analysis CSV with the preparation command in step 4 before
+enabling its dataset default; the supplied raw CSV is not the prepared analysis
+CSV. Custom input and skill paths follow the same rule. Keep those files inside
+the checkout when portability is required. Do not copy private HIV data or API
+credentials into Git. A fresh clone includes the tracked examples and packaged
+skills, but not your ignored files, saved research registrations, or execution
+history; prepare/register the chosen study again on the new installation.
+
+API endpoints and database/Redis connection strings are **URLs**, not filesystem
+paths; retain their full scheme and address and configure them for the new machine.
+The application resolves filesystem paths to absolute paths internally for child
+processes and execution records. That does not require absolute paths in `.env`.
+
 The default file is this checkout's `.env`. `MEMSTARA_ENV_FILE=/absolute/path/.env`
 explicitly selects another installation file. For CI or supervised deployment,
 `MEMSTARA_CONFIG_MODE=environment` explicitly selects injected environment values
@@ -791,14 +816,43 @@ prediction timing; the column name alone does not establish those semantics.
 HeartFailure uses the prepared demonstration contract described above. There is no
 automatic inference of a study from a disease name or folder name.
 
-Switching research inputs clears source filters and baseline columns, replaces
-incompatible domain choices while retaining technical skill combinations, and selects `hypothesis_general` / `report_general`. These are separate
-project skills; Anil/Phil originals remain unchanged. Random features, the two Data
-skills, LR/XGBoost and SHAP/LIME remain available. Registered studies currently do
-not have a verified specialist-domain binding, so HIV/Addiction specialists are
-excluded even for a study named HIV. Use the general explanation or a reviewed
-custom skill; a custom skill's clinical appropriateness is a human review decision.
-The general explanation does not claim specialist clinical competence.
+Open **Selected CSV and OKF files** in the research selector to inspect this
+server's registered source paths. The pipeline list also displays the configured
+corpus profile and target; a pipeline name does not select either. Returning to
+Deployment inputs restores the deployment target instead of a placeholder target.
+Choose the Data agent on the floor plan to edit its allocation skill; Knowledge
+sources and the dataset resource open the separate CSV/corpus/target contract.
+
+The selected corpus determines the available Hypothesis skills in both Selected
+Pipelines and All Combinations, including the agent settings editor:
+
+| Corpus | Hypothesis skills |
+|---|---|
+| Supplied HIV / Addiction corpus | Substance use disorders; Social determinants of health; Psychiatric disorders; Random features |
+| Supplied HeartFailure corpus | Cardiovascular disease and cardiac function; Metabolic, renal and other comorbidities; Lifestyle and social-psychological factors; Random features |
+| Other corpus or LLM knowledge only | General research hypothesis; Random features; supplied custom hypothesis skills |
+
+HeartFailure's three project-owned skills are separate files named
+`heart-failure-cardiovascular.md`, `heart-failure-metabolic-renal.md` and
+`heart-failure-lifestyle-social.md` in `src/memstara/playbooks/`. They preserve the
+existing hypothesis output and feature-selection contracts, use only available
+predictors and retrieved evidence, and retain the study's fixed target. The original
+HIV and Anil/Phil skill files are unchanged. HIV offers Anil's Addiction and HIV
+Explanation skills; HeartFailure uses General research explanation.
+
+Source-to-skill bindings live in `src/memstara/corpus_skills.py`. They match the
+supplied corpus index SHA-256, including copies in independent installations,
+rather than guessing from a research name, target or folder. A changed or new corpus
+uses the general profile until its explicit binding is added. The index identifies
+the supplied corpus; registered research inputs still verify all frozen knowledge
+files. A matching profile does not establish clinical validation.
+
+Switching research inputs clears source filters and baseline columns, maps
+incompatible Hypothesis/Explanation selections to the destination corpus profile,
+and retains compatible choices such as Random and the technical Data, ML and
+Interpretation combinations. Review the new skill schedule before execution.
+Source selection does not rewrite previous execution records or reports. General
+skills in existing saved runs remain executable for compatibility.
 
 For LR/XGBoost skills, both models are trained and the skill selects the primary
 model. The ML Agent chooses supported parameters, scaling, threshold and training
@@ -806,6 +860,52 @@ CV within server limits. Random Forest and preset candidate-search controls belo
 to the legacy evaluation mode and are not shown for this paired mode. Data skills
 choose the split policy and seed; split evaluations add fits within a Loop. Review
 actual applied values in saved results, not just the initial defaults.
+
+Open **Advanced model settings** below ML evaluation to fix individual parameters.
+Blank inputs and **Auto — ML Agent** leave that setting automatic. Selecting LR
+shows its C, solver, penalty, weighting, iteration and tolerance settings. Selecting
+XGBoost shows its tree, learning-rate, sampling, regularization and histogram settings.
+Each model also has separate numeric scaling and prediction-threshold controls.
+Training CV folds are shared to preserve the paired comparison. With both ML skills
+selected in All Combinations, both model panels appear; a model's overrides apply
+consistently to that model in every Loop, including when it is the comparator.
+Deselecting a model removes its hidden overrides. Reset returns all settings to Auto.
+
+Existing designs can be edited through **Settings and more → ML evaluation and
+advanced settings**, including All Combinations. The active execution must end before
+settings can change. Edits affect future executions; they never rewrite old results.
+The normal ML agent settings editor also exposes the selected model's advanced panel.
+The UI reads parameter ranges from the same backend contract that validates saves
+and launches. CPU-only execution, bounded memory/time, parallelism limits and split
+seeds remain server/Data-owned and cannot be overridden here. Unsupported values,
+LR l1 with lbfgs, and an excessive minimum fit count are rejected. Further checks use
+the actual dataset, class counts and comparison workload before fitting.
+
+The optional pipeline field `ml_overrides` is versioned JSON, for example:
+
+```json
+{
+  "version": 1,
+  "models": {
+    "logistic_regression": {"parameters": {"C": 0.25}, "threshold": 0.6},
+    "xgboost": {"parameters": {"n_estimators": 100, "learning_rate": 0.05}}
+  },
+  "folds": 3
+}
+```
+
+This example requires both ML skills to be selected. The CLI equivalent is
+`--ml-overrides '<JSON>'`. Empty `{}` preserves automatic configuration. Controlled
+comparison experiments cannot combine their frozen ML plan with user overrides.
+Proposal mode records these as planned settings without fitting a model.
+
+Run configuration and ML reproduction receipts retain user overrides, the original
+agent proposal, the effective complete model settings and parameter-level sources
+(`user`, `agent`, or `server`). Reproduction bundles retain these receipts alongside
+input data, exact splits, models, predictions, software environment and code hashes.
+The saved `bundle_path` can be replayed with
+`python -m memstara.reproducibility <bundle_path>` without a model API call.
+
 
 Creating a design is not execution readiness. With no deployment input paths, select
 a registered research version before Run. Missing inputs produce an actionable
