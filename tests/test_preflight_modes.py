@@ -29,7 +29,7 @@ def test_required_sources_depend_on_modes(monkeypatch, knowledge, data):
 
 
 def test_missing_env_files_do_not_reject_process_configuration(monkeypatch, tmp_path):
-    monkeypatch.setattr(preflight, 'ENV_FILES', (tmp_path / 'absent.env',))
+    monkeypatch.setattr(env, '_provenance', {'mode': 'environment'})
     preflight.check_env_files()
     assert preflight._failures == []
 

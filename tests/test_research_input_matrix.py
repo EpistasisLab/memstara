@@ -31,6 +31,10 @@ def study(tmp_path, monkeypatch):
     monkeypatch.setattr(stage_models, 'deployment_profiles', lambda: {})
     monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
     monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'offline-fixture')
+    monkeypatch.setenv('MEMSTARA_DATABASE_URL', 'postgresql://test:secret@localhost:15501/board')
+    monkeypatch.setenv('MOTORO_DATABASE_URL', 'postgresql://test:secret@localhost:15502/runtime')
+    monkeypatch.setenv('MOTORO_REDIS_URL', 'redis://localhost:16380/0')
+    monkeypatch.setenv('OPENAI_API_KEY', 'fixture-key')
     monkeypatch.setenv('MEMSTARA_RESEARCH_INPUTS_DIR', str(tmp_path / 'registry'))
     cfg = json.loads((REPO_ROOT / 'examples/research-inputs/research.json').read_text())
     dataset = tmp_path / 'source.csv'

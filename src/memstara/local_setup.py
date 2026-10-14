@@ -10,7 +10,7 @@ import subprocess
 import sys
 from urllib.parse import unquote, urlsplit
 
-from memstara.operational import PORT_DEFAULTS, check, managed, resolve
+from memstara.operational import PORT_DEFAULTS, check, database_errors, managed, resolve
 from memstara.paths import REPO_ROOT
 
 
@@ -48,6 +48,9 @@ def assert_free(ports):
 def compose_definition(values):
     """Construct a new local stack from database URLs; refuse remote destinations."""
     import re
+    errors = database_errors(values)
+    if errors:
+        raise ValueError('; '.join(errors))
     project = values.get('MEMSTARA_COMPOSE_PROJECT', 'memstara-local')
     if not re.fullmatch('[a-z0-9][a-z0-9_-]*', project):
         raise ValueError('MEMSTARA_COMPOSE_PROJECT must be a lowercase Compose project identifier')
@@ -161,8 +164,9 @@ def main():
                 json.dump(definition, stream, indent=2)
             return subprocess.call(['docker', 'compose', '-f', str(path), 'up', '-d'], env=environment)
         if args.command == 'init':
-            if not values.get('MOTORO_DATABASE_URL') or not values.get('MEMSTARA_DATABASE_URL'):
-                raise ValueError('Configure both database URLs in project .env first')
+            errors = database_errors(values)
+            if errors:
+                raise ValueError('; '.join(errors))
             subprocess.run([sys.executable, '-m', 'motoro.migrations', 'upgrade',
                             '--url', values['MOTORO_DATABASE_URL']],
                            env=environment, cwd=REPO_ROOT, check=True)

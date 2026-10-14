@@ -341,6 +341,10 @@ def test_control_launch_uses_selected_inputs_without_changing_server_environment
     monkeypatch.setenv('MEMSTARA_DATASET_PATH', str(tmp_path / 'unrelated-missing.csv'))
     monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
     monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'test-model')
+    monkeypatch.setenv('MEMSTARA_DATABASE_URL', 'postgresql://test:secret@localhost:15501/board')
+    monkeypatch.setenv('MOTORO_DATABASE_URL', 'postgresql://test:secret@localhost:15502/runtime')
+    monkeypatch.setenv('MOTORO_REDIS_URL', 'redis://localhost:16380/0')
+    monkeypatch.setenv('OPENAI_API_KEY', 'fixture-key')
     monkeypatch.setattr(stage_models, 'resolve_run_profiles', lambda _: {})
     scopes, launches, responses = [], [], []
     def skills(root=None):

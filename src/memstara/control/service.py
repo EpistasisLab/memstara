@@ -884,6 +884,21 @@ class Handler(BaseHTTPRequestHandler):
             self._send(422, {"error": f"Run not started. {e}", "code": "input_validation_failed"})
             return
 
+        # A healthy web service is not permission to create a paid worker. Apply
+        # operational readiness after research-specific input validation; registered
+        # inputs supersede unused legacy dataset/corpus defaults.
+        from memstara.operational import check
+        effective = dict(os.environ)
+        if research or body.get('data_mode') == 'proposal':
+            effective.pop('MEMSTARA_DATASET_PATH', None)
+        if research or body.get('knowledge_mode') == 'llm_only':
+            effective.pop('AGENTIC_OKF_BUNDLE_DIR', None)
+        readiness = check(effective)
+        if not readiness['configuration_valid']:
+            self._send(422, {'error': 'Run not started. ' + '; '.join(readiness['errors']),
+                             'code': 'configuration_invalid'})
+            return
+
         started = datetime.now()
         # The same two names `board.py:1912-1915` would have chosen for itself. They are
         # passed explicitly so that this service can answer with the tag in the same

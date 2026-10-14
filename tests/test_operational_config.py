@@ -217,3 +217,53 @@ def test_migration_preserves_profiles_without_pinning_redundant_overrides(tmp_pa
         assert not any(k.startswith(('MEMSTARA_NON_EXPLANATION_', 'MEMSTARA_EXPLANATION_')) for k in values)
         values['MEMSTARA_LLM_MODEL'] = 'changed'
         assert {p['model'] for p in model_profiles(values).values()} == {'changed'}
+
+
+@pytest.mark.parametrize('command', ['init', 'services'])
+def test_storage_commands_reject_same_database_before_subprocess(tmp_path, monkeypatch, capsys, command):
+    from unittest.mock import Mock
+    from memstara import local_setup
+    file = tmp_path / '.env'
+    file.write_text(
+        'MEMSTARA_DATABASE_URL=postgresql://owner:SECRET_SENTINEL@localhost:15501/shared\n'
+        'MOTORO_DATABASE_URL=postgresql+asyncpg://other:SECRET_SENTINEL@127.0.0.1:15501/shared\n'
+        'MOTORO_REDIS_URL=redis://127.0.0.1:16380/0\n')
+    monkeypatch.setenv('MEMSTARA_CONFIG_MODE', 'project')
+    monkeypatch.setenv('MEMSTARA_ENV_FILE', str(file))
+    monkeypatch.setattr('sys.argv', ['local_setup', command])
+    run = Mock(side_effect=AssertionError('No subprocess may start'))
+    monkeypatch.setattr(local_setup.subprocess, 'run', run)
+    monkeypatch.setattr(local_setup.subprocess, 'call', run)
+    monkeypatch.setattr(local_setup.subprocess, 'check_output', run)
+    assert local_setup.main() == 1
+    output = capsys.readouterr().out
+    assert 'different databases' in output
+    assert 'SECRET_SENTINEL' not in output
+    run.assert_not_called()
+
+
+def test_control_refuses_invalid_storage_before_creating_worker(monkeypatch):
+    from unittest.mock import Mock
+    from memstara.control import service
+    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
+    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'fixture-model')
+    monkeypatch.setenv('OPENAI_API_KEY', 'fixture-key')
+    monkeypatch.setenv('MEMSTARA_DATABASE_URL', 'postgresql://test:SECRET_SENTINEL@localhost/shared')
+    monkeypatch.setenv('MOTORO_DATABASE_URL', 'postgresql://test:SECRET_SENTINEL@localhost/shared')
+    monkeypatch.setenv('MOTORO_REDIS_URL', 'redis://localhost:6379/0')
+    monkeypatch.setattr(service, 'playbooks', lambda: {'playbooks': [], 'stages': []})
+    monkeypatch.setattr(service, 'build_argv', lambda *args: [])
+    monkeypatch.setattr(service, 'validate_selection', lambda *args: None)
+    create = Mock(side_effect=AssertionError('No run directory may be created'))
+    monkeypatch.setattr(service, 'new_run_dir', create)
+    handler = object.__new__(service.Handler)
+    responses = []
+    handler._send = lambda status, payload: responses.append((status, payload))
+    manager = Mock()
+    handler._launch({'knowledge_mode': 'llm_only', 'data_mode': 'proposal'}, manager)
+    assert responses[0][0] == 422
+    assert responses[0][1]['code'] == 'configuration_invalid'
+    assert 'different databases' in responses[0][1]['error']
+    assert 'SECRET_SENTINEL' not in json.dumps(responses)
+    create.assert_not_called()
+    manager.start.assert_not_called()

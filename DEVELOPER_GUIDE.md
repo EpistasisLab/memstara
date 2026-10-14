@@ -102,6 +102,13 @@ continues using its frozen assignment. Import old deployment JSON explicitly wit
 creates a restricted backup before editing `.env`. Never place credentials in
 profiles or research definitions.
 
+Storage initialization and local provisioning validate the Memstara/Motoro database
+separation before launching migrations or Docker. New web executions also apply
+static operational validation before creating a run directory or worker. Registered
+research inputs supersede unused legacy CSV/OKF defaults during that check. These
+checks do not prove provider connectivity; actual execution remains the inference
+check. Design saving does not require these execution checks.
+
 `outputs/runs/pipeline_workspace.json` stores editable pipeline definitions. The
 control service also keeps them in memory: update them through its API. Per-execution
 `config.json`, `prompts.json`, and `resume_arguments.json` are historical evidence,

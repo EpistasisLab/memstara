@@ -183,8 +183,8 @@ def migrate_models(path: Path, destination: Path) -> Path:
     return backup
 
 
-def check(values: dict) -> dict:
-    """Static readiness, deliberately not a successful network or model probe."""
+def database_errors(values: dict) -> list[str]:
+    """Validate storage destinations before provisioning or schema mutations."""
     errors = []
     for name in ('MEMSTARA_DATABASE_URL', 'MOTORO_DATABASE_URL', 'MOTORO_REDIS_URL'):
         if not values.get(name):
@@ -208,6 +208,12 @@ def check(values: dict) -> dict:
         _ = redis.port
     except ValueError:
         errors.append('MOTORO_REDIS_URL must identify a Redis service')
+    return errors
+
+
+def check(values: dict) -> dict:
+    """Static readiness, deliberately not a successful network or model probe."""
+    errors = database_errors(values)
     for name in PATH_KEYS - set(PATH_DEFAULTS) - {'HF_HUB_CACHE', 'MEMSTARA_USER_SKILLS_DIR'}:
         if values.get(name) and not Path(values[name]).exists():
             errors.append(f'{name} does not exist; correct the selected project .env')
@@ -225,7 +231,7 @@ def check(values: dict) -> dict:
         if key and (not values.get(key) or values[key].startswith(('YOUR_', 'REPLACE_'))):
             errors.append(f'{role}: configure {key} in the selected source')
     return {'configuration_valid': not errors, 'errors': errors,
-            'models': profiles, 'ports': {k: values[k] for k in PORT_DEFAULTS},
+            'models': profiles, 'ports': {k: values.get(k, str(v)) for k, v in PORT_DEFAULTS.items()},
             'database_connection': 'not_tested', 'model_call': 'not_tested'}
 
 

@@ -46,7 +46,7 @@ from pathlib import Path
 
 # **First of all.** The imports below read the environment, so it must be set up first.
 from memstara.env import PROVIDER_KEYS, allowlist_gaps, load_env, missing_vars
-from memstara.paths import ENV_FILES, REPO_ROOT
+from memstara.paths import REPO_ROOT
 from memstara.servers import BY_NAME, SERVERS
 
 _LOADED = load_env()
@@ -66,13 +66,17 @@ def check(label: str, passed: bool, detail: str = "", fix: str = "") -> bool:
 
 
 def check_env_files() -> None:
-    """[1] Show optional env files; process environment is also supported."""
-    print("\n[1] .env")
-    for path in ENV_FILES:
-        if path.is_file():
-            check(f".env — {path.parent.name}/", True, str(path.resolve()))
-        else:
-            print(f"{WARN} .env — {path.parent.name}/: absent; checking process environment instead")
+    """[1] Report the actual selected source, without inspecting sibling files."""
+    from memstara.env import configuration_source
+    source = configuration_source()
+    print("\n[1] configuration source")
+    if source.get('mode') == 'environment':
+        print("      explicit environment injection; no .env fallback")
+    elif source.get('mode') == 'project':
+        check("selected project .env", True, source.get('file', ''))
+    else:
+        check("configuration loaded", False, "source is not initialized",
+              "load the selected project configuration first")
 
 
 def check_vars(provider: str, *, knowledge_mode: str = "okf", data_mode: str = "dataset") -> None:
@@ -81,7 +85,7 @@ def check_vars(provider: str, *, knowledge_mode: str = "okf", data_mode: str = "
     problems = missing_vars(provider, knowledge_mode=knowledge_mode, data_mode=data_mode)
     check("every required variable is present", not problems,
           "none missing" if not problems else f"{len(problems)} missing",
-          "check the two .env files above")
+          "check the selected configuration source above")
     for p in problems:
         print(f"      - {p}")
     print(f"      provider={provider} → {', '.join(PROVIDER_KEYS.get(provider, ())) or '(no credentials needed)'}")

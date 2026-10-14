@@ -2290,8 +2290,8 @@ async def give_up_on(task_ids: list[int]) -> list[int]:
 async def main() -> int:
     """The door in from the command line. Reads the arguments, checks them, takes the
     lock and calls run()."""
-    # Preserve exported values, then load Memstara's .env and optional sibling
-    # defaults in that order. A locked runtime install needs no sibling checkout.
+    # Resolve the selected project source before runtime initialization.
+    # Shell injection is supported only in explicit environment mode.
     load_env()
 
     ap = argparse.ArgumentParser()
