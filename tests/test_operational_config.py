@@ -298,3 +298,17 @@ def test_port_probe_rejects_listener_and_allows_closed_connection_restart():
             accepted.close()
             assert client.recv(1) == b''
     assert_free([port])
+
+
+def test_absent_deployment_corpus_has_empty_knowledge_menu(monkeypatch):
+    from memstara.control import service
+    monkeypatch.delenv('AGENTIC_OKF_BUNDLE_DIR', raising=False)
+    h = object.__new__(service.Handler)
+    h.path = '/control/skills'
+    h._refuse_stranger = lambda: False
+    sent = []
+    h._send = lambda code, body: sent.append((code, body))
+    h.do_GET()
+    assert sent[0][0] == 200
+    assert sent[0][1]['skills'] == []
+    assert sent[0][1]['configured'] is False

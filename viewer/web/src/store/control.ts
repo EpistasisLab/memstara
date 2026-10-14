@@ -124,6 +124,7 @@ interface ControlState {
   up: boolean | null;
   bundle: { path?: string; documents?: number; error?: string } | null;
   skills: Skill[];
+  skillsLoaded: boolean;
   /** Every playbook on disk, by stem. **Null until the first answer** — a checkout with
    *  no playbooks answers `[]`, and the two have to be told apart or the poll re-asks on
    *  every tick. */
@@ -219,7 +220,7 @@ export const useControl = create<ControlState>((set, get) => ({
   closeEditor: () => set({ editor: null }),
   up: null,
   bundle: null,
-  skills: [],
+  skills: [], skillsLoaded: false,
   playbooks: null,
   playbookStages: [],
   running: null,
@@ -273,7 +274,7 @@ export const useControl = create<ControlState>((set, get) => ({
       set({ up: true, bundle: body.bundle ?? null, running: selectedPipeline ? selectedPipeline.running : body.running ?? null });
       // Only when it comes back, not on every tick: the branch list is one read of a
       // 312-document bundle and it does not change while a service is up.
-      if (wasDown || get().skills.length === 0) void get().loadSkills();
+      if (wasDown || !get().skillsLoaded) void get().loadSkills();
       // Asked on the same edge, and the condition is `null` rather than `length === 0`
       // for a reason the skills do not have: a checkout with no playbooks answers `[]`
       // legitimately, and re-asking on an empty list would be a directory read every two
@@ -292,7 +293,7 @@ export const useControl = create<ControlState>((set, get) => ({
       const res = await fetch("/control/skills");
       if (!res.ok) throw new Error(await readError(res));
       const body = await res.json();
-      set({ skills: body.skills ?? [] });
+      set({ skills: body.skills ?? [], skillsLoaded: true });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e) });
     }

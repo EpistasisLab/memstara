@@ -568,9 +568,10 @@ class Handler(BaseHTTPRequestHandler):
                 docs, _ = _load(_bundle_root())
                 bundle: dict[str, Any] = {"path": bundle_root, "documents": len(docs)}
             except OKFError as e:
-                # Reported, not raised. A missing bundle is a thing to show on screen
-                # next to a dot, not a reason for this service to be down.
-                bundle = {"error": str(e)}
+                # Registered studies carry their own corpus. An absent deployment
+                # default is normal; an explicitly configured broken corpus is not.
+                bundle = ({"configured": False, "documents": 0}
+                          if not os.environ.get('AGENTIC_OKF_BUNDLE_DIR') else {"error": str(e)})
             from memstara.control.request import configured_llm
             try:
                 provider, model = configured_llm()
@@ -647,6 +648,10 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/control/skills":
+            if not os.environ.get('AGENTIC_OKF_BUNDLE_DIR'):
+                self._send(200, {"skills": [], "configured": False,
+                                 "note": "Select a registered research input to use its corpus."})
+                return
             try:
                 self._send(200, {"skills": skills()})
             except OKFError as e:
