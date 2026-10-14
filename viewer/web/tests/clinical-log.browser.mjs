@@ -44,8 +44,8 @@ try {
   if(combination){
    const row=panel.locator('[data-role=ml]');
    assert.equal(await row.locator('.clinical-agent-status').innerText(),'Running');
-   assert.match(await row.innerText(),/Recorded agent: ml#1/);
-   assert.match(await panel.locator('[data-role=data]').innerText(),/Planned; not yet called/);
+   assert.equal(await row.locator('.clinical-agent-link').count(),1);
+   assert.match(await panel.locator('[data-role=data]').innerText(),/Not started/);
    await page.getByRole('button',{name:'Preview combinations',exact:true}).click();
    await panel.getByText('Configuration preview',{exact:true}).waitFor();
    assert.equal(await panel.locator('[data-role=ml]').count(),0);
@@ -107,12 +107,11 @@ try {
   await panel.getByText('MATCHED HYPOTHESIS OUTPUT',{exact:true}).first().waitFor();
   assert(!((await panel.innerText()).includes('OTHER STAGE OUTPUT')));
   assert.equal(await panel.locator('.clinical-log-detail-view').evaluate(e=>e.scrollWidth>e.clientWidth+1),false);
-  await panel.getByLabel('Filter activity by agent').selectOption('HypothesisAgent');
-  await panel.getByLabel('Filter activity by type').selectOption('tool');
-  assert.equal(await panel.locator('[data-activity-kind=text]').count(),0);
-  await panel.getByLabel('Filter activity by type').selectOption('text');
-  await panel.getByLabel('Search activity').fill('not present');
-  await panel.getByText('No matching activity.',{exact:false}).waitFor();
+  assert.equal(await panel.getByLabel('Filter activity by agent').count(),0);
+  assert.equal(await panel.getByLabel('Filter activity by type').count(),0);
+  assert.equal(await panel.getByLabel('Search activity').count(),0);
+  assert.equal(await panel.locator('[data-activity-kind=text]').count(),1);
+  assert.equal(await panel.getByText('No matching activity.',{exact:false}).count(),0);
   await panel.getByRole('button',{name:'Back to live updates'}).click();
   await panel.getByRole('tab',{name:'Agent activity',exact:true}).click();
   await panel.getByRole('button',{name:'Browse activity'}).click();

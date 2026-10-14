@@ -37,13 +37,12 @@ export default function ActivityDetails({event}: {event: ActivityScope}) {
   }, [event.run_tag, loop]);
   return <section aria-label="Activity details">
     <h4>{event.pipeline_name} · {clinicalRoles[event.stage] ?? (event.stage || 'All activity')}</h4>
-    <p>{loop === null ? 'All loops' : `Loop ${loop}`} · <code>{event.run_tag}</code></p>
-    <p>Recent records within the scope shown above. These may include multiple actions; they are not proof that a particular action produced this update.</p>
+    <p>{loop === null ? 'All loops' : `Loop ${loop}`} · Latest activity first</p>
     {event.detail && <details><summary>Saved output excerpt</summary><p>{event.detail}</p></details>}
     {error && <p role="status">{error}</p>}
     {!snapshot && !error && <p role="status">Loading detailed activity…</p>}
     <SnapshotScope.Provider value={snapshot}>
-      {snapshot && <FeedPanel stage={event.stage || undefined}/>}
+      {snapshot && <FeedPanel compact stage={event.stage || undefined}/>}
     </SnapshotScope.Provider>
   </section>;
 }

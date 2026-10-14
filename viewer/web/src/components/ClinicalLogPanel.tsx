@@ -75,15 +75,12 @@ function ClinicalLogBody({pipelines, live, pipelineError, floorActivity}: {
           <small>{floorActivity.mode==='preview'?'Configuration preview':`Loop ${floorActivity.loop} · ${floorActivity.mode==='history'?'Historical records':'Following floor plan'}`}</small>
           {owner && floorActivity.mode==='live' && (pipelineError || owner.failure || !owner.running || owner.running.pause_requested || owner.running.execution_state==='paused' || owner.running.execution_state==='stopping' || owner.running.connection_health?.state==='verifying') && <p role="status">{pipelineError?'Current execution status is unavailable.':clinicalPipelineStatus(owner)}</p>}
           {floorActivity.mode==='preview'?<p>This view shows possible skills, not executing agents. Follow execution to see current activity.</p>:<>
-            <p className="clinical-log-caption">Recorded agents and skills for the displayed Loop.</p>
             {floorActivity.error && <p role="status">Updates unavailable. Showing last recorded calls for this Loop.</p>}
             {!floorActivity.trace?<p>Waiting for this Loop’s agent records.</p>:<ol className="clinical-agent-list" aria-label="Floor plan agent activity">{floorActivityRows(floorActivity).map(row=><li className="clinical-agent-card" key={row.role} data-role={row.role} data-state={row.status.toLowerCase()}>
-              <div className="clinical-agent-heading"><strong>{clinicalRoles[row.role]}</strong><span className="clinical-agent-status">{row.status==='Waiting · no call recorded'?'Not started':row.status}</span></div>
-              <p className="clinical-agent-skill">{row.skill?.title??row.skill?.id??'Skill not recorded'}</p>{!row.call&&row.skill&&<small>Planned; not yet called</small>}
-              {row.call&&<small>Recorded agent: {row.call.stage}</small>}
+              <div className="clinical-agent-heading">{row.call?<button className="clinical-agent-link" aria-label={`View ${clinicalRoles[row.role]} activity`} onClick={()=>{setFollowing(false);setDetail({run_tag:floorActivity.runTag!,iteration:floorActivity.loop,stage:row.role,pipeline_name:owner?.name??'',detail:''});}}>{clinicalRoles[row.role]} <span aria-hidden="true">›</span></button>:<strong>{clinicalRoles[row.role]}</strong>}<span className="clinical-agent-status">{row.status==='Waiting · no call recorded'?'Not started':row.status}</span></div>
+              <p className="clinical-agent-skill">{row.skill?.title??row.skill?.id??'Skill not recorded'}</p>
               {row.status==='Call still open'&&<p>This agent call has not returned yet. It may be finishing after handing off its result; this does not confirm that its main task is still running.</p>}
               {row.status==='Running'&&<p>{({hypothesis:row.call?.stage.startsWith('question')?'Developing a research question.':'Developing a testable hypothesis.',data:'Preparing the selected measurements for analysis.',ml:'The task board is at model evaluation.',interpreter:'The task board is at interpretation of the analysis.',report:'Preparing an explanation of the findings and their limitations.'})[row.role]}</p>}
-              {row.call&&<button className="clinical-log-details-button" onClick={()=>{setFollowing(false);setDetail({run_tag:floorActivity.runTag!,iteration:floorActivity.loop,stage:row.role,pipeline_name:pipelines.find(p=>p.id===floorActivity.pipelineId)?.name??'',detail:''});}}>View recorded activity</button>}
             </li>)}</ol>}
           </>}
         </article>}
@@ -100,6 +97,5 @@ function ClinicalLogBody({pipelines, live, pipelineError, floorActivity}: {
       })}</ol></section>
     </div>
     {tab==='outputs' && !following && !detail && <button className="clinical-log-latest" onClick={() => setFollowing(true)}><ArrowDown size={14}/> Follow latest updates</button>}
-    <footer>{tab==='agents'?'Stage summaries · See details for recorded actions.':'Recent saved outputs · Received order.'}</footer>
   </>;
 }

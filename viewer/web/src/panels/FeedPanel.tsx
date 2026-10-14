@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { agentDisplayName, TOOL_ACTIONS } from '../lib/telemetry';
 import { Radio, ChevronDown, Search } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
@@ -8,6 +8,7 @@ import { useExecutionContext } from '../components/ExecutionContext';
 import { STAGE_COLOR, STORE_LABEL } from '../lib/stage';
 import { useFeed, useSnapshot } from '../store/viewer';
 import { useAgentConversation, type AgentMessage } from '../lib/useAgentConversation';
+import { matchesActivityStage } from '../lib/activityScope';
 import type { FeedEvent } from '../types';
 
 const ReportBody=lazy(()=>import('../components/ReportBody'));
@@ -62,7 +63,7 @@ function Row({ event }: { event: FeedEvent }) {
   </li>;
 }
 
-export default function FeedPanel({stage}: {stage?: string} = {}) {
+export default function FeedPanel({stage, compact = false}: {stage?: string; compact?: boolean} = {}) {
   const feed = useFeed();
   const snapshot=useSnapshot();
   const loop=(snapshot as (typeof snapshot & {telemetry?:{loop:number|null}}))?.telemetry?.loop??null;
@@ -74,27 +75,30 @@ export default function FeedPanel({stage}: {stage?: string} = {}) {
   const records=[...(feed??[]).map(event=>({kind:'tool' as const,key:event.key,at:event.at,name:event.name,label:event.label,event})),
     ...(conversation.data?.messages??[]).map(message=>({kind:'text' as const,key:`text:${message.id}`,at:message.at,name:message.name,label:message.label,message}))]
     .sort((a,b)=>(b.at?Date.parse(b.at):0)-(a.at?Date.parse(a.at):0)||a.key.localeCompare(b.key));
-  const names=[...new Set(records.map(e=>e.name||'Unknown agent'))];
-  const needle=query.trim().toLowerCase();
-  const activeAgent=names.includes(agent)?agent:'';
-  const normalize=(value:string|null)=>value==='interpretation'?'interpreter':value==='explanation'?'report':value==='result'?'ml':value==='question'?'curator':value;
-  const matching=records.filter(e=>(!stage || (e.kind==='text'?normalize(e.message.stage)===normalize(stage):normalize(e.event.agent)===(stage==='question'?'hypothesis':normalize(stage))))&&(!activeAgent||(e.name||'Unknown agent')===activeAgent)&&
-    (kind==='all'||e.kind===kind)&&[e.name,e.label,...(e.kind==='text'?[e.message.text,e.message.kind_label,e.message.stage]:[e.event.tool,e.event.server,STORE_LABEL[e.event.store],TOOL_ACTIONS[e.event.tool]])].join(' ').toLowerCase().includes(needle));
+  useEffect(()=>{setQuery('');setAgent('');setKind('all');},[snapshot?.run_tag,loop,stage]);
+  const scoped=records.filter(e=>matchesActivityStage(e.kind==='text'?e.message.stage:e.event.agent,stage,e.kind));
+  const names=[...new Set(scoped.map(e=>e.name||'Unknown agent'))];
+  const needle=compact?'':query.trim().toLowerCase();
+  const activeAgent=!compact&&names.includes(agent)?agent:'';
+  const activeKind=compact?'all':kind;
+  const matching=scoped.filter(e=>(!activeAgent||(e.name||'Unknown agent')===activeAgent)&&
+    (activeKind==='all'||e.kind===activeKind)&&[e.name,e.label,...(e.kind==='text'?[e.message.text,e.message.kind_label,e.message.stage]:[e.event.tool,e.event.server,STORE_LABEL[e.event.store],TOOL_ACTIONS[e.event.tool]])].join(' ').toLowerCase().includes(needle));
   return <Panel icon={Radio} title="Activity" bodyClassName="p-0">
     <div className="telemetry-activity-controls">
-      {stage==='question'&&<p className="text-sm">Question-generation tool calls share the Hypothesis agent identity. Related Hypothesis tool calls in this loop are included; agent text is restricted to question generation.</p>}
-      <p className="text-sm"><strong>{context.name}</strong> · {context.startedLabel} · {loop===null?'All loops':`Loop ${loop}`}</p>
+      {!compact&&stage==='question'&&<p className="text-sm">Question-generation tool calls share the Hypothesis agent identity. Related Hypothesis tool calls in this loop are included; agent text is restricted to question generation.</p>}
+      {!compact&&<><p className="text-sm"><strong>{context.name}</strong> · {context.startedLabel} · {loop===null?'All loops':`Loop ${loop}`}</p>
       <p className="text-sm text-ink-soft">Tool actions and actual agent text, newest first. Expand an entry to read its full output. Text appears when recorded, rather than token by token.</p>
       <div className="telemetry-filter-row">
         <label><span><Search size={15}/>Search activity</span><input aria-label="Search activity" placeholder="Agent text, action, agent or resource" value={query} onChange={e=>setQuery(e.target.value)}/></label>
         <label><span>Agent</span><select aria-label="Filter activity by agent" value={names.includes(agent)?agent:''} onChange={e=>setAgent(e.target.value)}><option value="">All agents in this scope</option>{names.map(name=><option key={name} value={name}>{agentDisplayName(records.find(e=>e.name===name)?.label || name)}</option>)}</select></label>
         <label><span>Activity type</span><select aria-label="Filter activity by type" value={kind} onChange={e=>setKind(e.target.value)}><option value="all">All activity</option><option value="tool">Tool actions</option><option value="text">Agent text</option></select></label>
       </div>
+      </>}
       {conversation.error&&<p role="alert" className="text-sm text-ink-soft">{conversation.error}. Tool actions remain available.{conversation.data?' Showing last available text for this scope.':''}</p>}
       {!conversation.data&&!conversation.error&&snapshot?.run_tag&&<p className="text-xs text-ink-soft">Loading recorded agent text…</p>}
       {conversation.data?.limited&&<p className="text-xs text-ink-soft">{conversation.data.note || 'Agent text is limited to recent message-bearing steps.'}</p>}
-      {feed && <p className="text-xs text-ink-soft">Showing {matching?.length ?? 0} of {records.length} recent records · times are local. This list is a recent window, not the full history for this scope.</p>}
+      {!compact && feed && <p className="text-xs text-ink-soft">Showing {matching?.length ?? 0} of {scoped.length} recent records · times are local. This list is a recent window, not the full history for this scope.</p>}
     </div>
-    {!feed&&!conversation.data ? <EmptyState what="the activity records"/> : !matching.length ? <div className="p-6 text-sm text-ink-soft">{query || agent || kind!=='all' ? <>No matching activity. <button className="underline" onClick={()=>{setQuery('');setAgent('');setKind('all');}}>Clear filters</button></> : 'No tool actions or agent text have been recorded for this scope yet.'}</div> : <ul aria-label="Recorded activities">{matching.map(e=>e.kind==='tool'?<Row key={e.key} event={e.event}/>:<TextRow key={e.key} message={e.message}/>)}</ul>}
+    {!feed&&!conversation.data ? <EmptyState what="the activity records"/> : !matching.length ? <div className="p-6 text-sm text-ink-soft">{!compact&&(needle || activeAgent || activeKind!=='all') ? <>No matching activity. <button className="underline" onClick={()=>{setQuery('');setAgent('');setKind('all');}}>Clear filters</button></> : 'No tool actions or agent text have been recorded for this scope yet.'}</div> : <ul aria-label="Recorded activities">{matching.map(e=>e.kind==='tool'?<Row key={e.key} event={e.event}/>:<TextRow key={e.key} message={e.message}/>)}</ul>}
   </Panel>;
 }
