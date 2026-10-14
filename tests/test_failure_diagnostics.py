@@ -114,3 +114,18 @@ def test_ordinary_quota_failure_is_not_misclassified_as_bad_settings():
     error.body = {'error': {'code': 'insufficient_quota'}}
     assert not retryable_model_error(error)
     assert failure_summary(error)[0] == 'model_rate_limit'
+@pytest.mark.parametrize('detail,code', [
+    ('heart-failure-cardiovascular: Hypothesis skill does not match the selected corpus (general).',
+     'startup_corpus_mismatch'),
+    ('unrecognized arguments: PRIVATE_SENTINEL', 'startup_configuration_rejected'),
+])
+def test_startup_rejection_visible_without_execution_file_and_without_raw_values(tmp_path, detail, code):
+    log = tmp_path / 'control.log'
+    original = 'usage: board.py\nboard.py: error: ' + detail + '\n'
+    log.write_text(original)
+    result = visible_failure(tmp_path)
+    assert result['code'] == code
+    assert result['stage'] == 'preflight'
+    assert 'PRIVATE_SENTINEL' not in str(result)
+    assert visible_failure(tmp_path, include_legacy=False) is None
+    assert log.read_text() == original

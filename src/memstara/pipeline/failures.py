@@ -182,6 +182,26 @@ def visible_failure(run_dir, *, include_legacy=True):
         return failure
     if not include_legacy:
         return None
+    # CLI validation can exit before execution.json or console.log exists.
+    # Classify the captured startup log without exposing its raw arguments.
+    if not (Path(run_dir) / 'execution.json').exists():
+        try:
+            with (Path(run_dir) / 'control.log').open('rb') as log:
+                log.seek(0, 2)
+                log.seek(max(0, log.tell() - 16384))
+                tail = log.read().decode('utf-8', errors='replace')
+            if 'board.py: error:' in tail:
+                if 'skill does not match the selected corpus' in tail:
+                    return {'code': 'startup_corpus_mismatch', 'stage': 'preflight', 'loop': None,
+                            'message': 'Start validation rejected a skill/corpus mismatch before agent execution. '
+                                       'Review the selected research source and matching skills. '
+                                       'After correcting the configuration or application, start a new execution; '
+                                       'this saved failed attempt remains in history.'}
+                return {'code': 'startup_configuration_rejected', 'stage': 'preflight', 'loop': None,
+                        'message': 'Start validation rejected the execution settings before agent execution. '
+                                   'Review the saved control.log and correct the settings before starting again.'}
+        except OSError:
+            pass
     try:
         calls = json.loads((Path(run_dir) / 'execution.json').read_text()).get('calls', [])
         for call in calls:
