@@ -138,8 +138,8 @@ bytes instead of silently substituting the donor dataset. Existing saved researc
 versions and run snapshots retain their original provenance; register a new version
 with the internal paths to use them for a new study.
 
-Specialist skills default to `src/memstara/resources/contributed/anil/` and ML
-reference documents to `src/memstara/resources/contributed/phil/`. No sibling skill
+Specialist skills default to `src/memstara/resources/contributed/specialists/` and ML
+reference documents to `src/memstara/resources/contributed/machine-learning/`. No sibling skill
 folder is automatically selected. Explicit environment overrides remain supported.
 Changing `.env` affects newly started processes; an already running control service
 or worker retains its loaded settings. Restart it between executions to adopt new

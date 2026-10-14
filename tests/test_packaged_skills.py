@@ -48,7 +48,7 @@ def test_default_is_internal_even_when_sibling_exists(standalone, monkeypatch):
     local.mkdir()
     (local / 'SHAP-Interpretation.md').write_text('# External content must not win')
     monkeypatch.setattr(paths, 'WORKSPACE_ROOT', standalone)
-    assert catalog.anil_dir() == PACKAGE_ROOT / 'resources/contributed/anil'
+    assert catalog.anil_dir() == PACKAGE_ROOT / 'resources/contributed/specialists'
     assert len(catalog.anil_skills()) == 4
 
 
@@ -75,6 +75,6 @@ def test_release_content_and_publication_gates(tmp_path):
             shutil.copytree(ROOT / path, tmp_path / path)
     assert module.check(tmp_path) == []
     assert module.check(tmp_path, publication=True)
-    skill = tmp_path / 'src/memstara/resources/contributed/anil/SHAP-Interpretation.md'
+    skill = tmp_path / 'src/memstara/resources/contributed/specialists/SHAP-Interpretation.md'
     skill.write_text('modified')
     assert any('hash mismatch' in e for e in module.check(tmp_path))

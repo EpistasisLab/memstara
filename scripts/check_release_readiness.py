@@ -8,9 +8,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED = {
-    'anil/SHAP-Interpretation.md', 'anil/LIME-Interpretation.md',
-    'anil/Addiction-Expert-Explanation.md', 'anil/HIV-Expert-Explanation.md',
-    'phil/ML Knowledge (1).md', 'phil/ML Skill (1).md',
+    'specialists/SHAP-Interpretation.md', 'specialists/LIME-Interpretation.md',
+    'specialists/Addiction-Expert-Explanation.md', 'specialists/HIV-Expert-Explanation.md',
+    'machine-learning/ML Knowledge (1).md', 'machine-learning/ML Skill (1).md',
 }
 DECISIONS = {
     'toy_dataset_and_knowledge_source', 'project_license',

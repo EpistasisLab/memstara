@@ -4,37 +4,37 @@
   "publication_status": "pending_rights_confirmation",
   "files": [
     {
-      "path": "anil/SHAP-Interpretation.md",
+      "path": "specialists/SHAP-Interpretation.md",
       "sha256": "b876d6a83a45285f3a7984c5f024becc64db05f44cbb36d8b3c745dbfb1c1e02",
       "role": "specialist",
       "redistribution_approval": "pending"
     },
     {
-      "path": "anil/LIME-Interpretation.md",
+      "path": "specialists/LIME-Interpretation.md",
       "sha256": "48639f4149e19825bc05672ff7cbc1244d030bf6bfc55d25c5b7616d71032772",
       "role": "specialist",
       "redistribution_approval": "pending"
     },
     {
-      "path": "anil/Addiction-Expert-Explanation.md",
+      "path": "specialists/Addiction-Expert-Explanation.md",
       "sha256": "617a974ad38ee6f012c197b6d514ab7ea19e665b0a24262d9a962ef3cd31343b",
       "role": "specialist",
       "redistribution_approval": "pending"
     },
     {
-      "path": "anil/HIV-Expert-Explanation.md",
+      "path": "specialists/HIV-Expert-Explanation.md",
       "sha256": "d2a2e918ed721a00a2d197c8cf49aa076e7a4e1e4b6b88e667466b840db574dd",
       "role": "specialist",
       "redistribution_approval": "pending"
     },
     {
-      "path": "phil/ML Knowledge (1).md",
+      "path": "machine-learning/ML Knowledge (1).md",
       "sha256": "db10efc1bbfaff580a5c8e93ea8068c31738a8cc92f10c735d32b5cbe045ec67",
       "role": "reference",
       "redistribution_approval": "pending"
     },
     {
-      "path": "phil/ML Skill (1).md",
+      "path": "machine-learning/ML Skill (1).md",
       "sha256": "df23c7954d283dcc1ca709cf80005d82f14ddeeafe3f077a9238949d10de584a",
       "role": "legacy_report",
       "redistribution_approval": "pending"

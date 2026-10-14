@@ -196,7 +196,7 @@ required = [
     'examples/research-inputs/research.json',
     'examples/research-inputs/skills/hypothesis.md',
     'examples/research-inputs/skills/explanation.md',
-    'src/memstara/resources/contributed/anil',
+    'src/memstara/resources/contributed/specialists',
 ]
 missing = [name for name in required if not Path(name).exists()]
 if missing:
@@ -701,8 +701,12 @@ for Hypothesis and Explanation. It does not enable retired skills or edit origin
 | Explanation | Anil Addiction or HIV | User research tutorial, from `examples/research-inputs/skills/explanation.md` |
 
 Project skills are under `src/memstara/playbooks/`; common system prompts are under
-`src/memstara/prompts/`. The four Anil originals and two Phil documents have internal
-copies under `src/memstara/resources/contributed/`. Phil's ML Knowledge is additive
+`src/memstara/prompts/`. The four specialist documents have internal copies under
+`src/memstara/resources/contributed/specialists/`; the two ML documents are under
+`src/memstara/resources/contributed/machine-learning/`. These role-based paths do
+not identify individual contributors. Existing `shared-anil-*` skill IDs remain
+stable for saved designs and run compatibility; document contents are unchanged.
+ML Knowledge is additive
 background; the legacy ML Skill report selection remains disabled. No adjacent
 contributor folders are discovered automatically. Explicit skill-path overrides
 remain supported. If a required packaged document is missing, install a complete

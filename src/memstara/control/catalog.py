@@ -26,7 +26,7 @@ def anil_dir() -> Path:
     configured = os.environ.get('MEMSTARA_SPECIALIST_SKILLS_DIR', '').strip()
     if configured:
         return Path(configured).expanduser()
-    return PACKAGE_ROOT / 'resources/contributed/anil'
+    return PACKAGE_ROOT / 'resources/contributed/specialists'
 
 
 def anil_skills() -> list[dict]:
@@ -64,7 +64,7 @@ def document_path(variable: str, filename: str) -> Path | None:
         return directory / filename
     bundled = {'ml-reference.md': 'ML Knowledge (1).md', 'ml-results.md': 'ML Skill (1).md'}
     name = bundled.get(filename)
-    return PACKAGE_ROOT / 'resources/contributed/phil' / name if name else None
+    return PACKAGE_ROOT / 'resources/contributed/machine-learning' / name if name else None
 
 
 def canonical_name(name: str) -> str:

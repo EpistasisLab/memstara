@@ -1180,14 +1180,14 @@ run configurations are not rewritten.
 ## Portable contributed documents
 
 Current specialist documents are preserved byte-for-byte under
-`src/memstara/resources/contributed/anil/`. The loader uses an explicit
+`src/memstara/resources/contributed/specialists/`. The loader uses an explicit
 `MEMSTARA_SPECIALIST_SKILLS_DIR`, otherwise the packaged directory. Sibling
 folders are never discovered automatically. Missing files in an explicitly
 selected directory are not filled from another source. Archived
 files and symlinks outside the selected root remain rejected.
 
 Phil's ML reference and legacy results instructions are included unchanged under
-`src/memstara/resources/contributed/phil/`. Explicit document paths and
+`src/memstara/resources/contributed/machine-learning/`. Explicit document paths and
 `MEMSTARA_SHARED_SKILLS_DIR` take precedence over packaged defaults. The ML
 reference is additive background, not a selectable ML skill; the legacy results
 skill remains hidden/disabled for new experiments. Adding the packaged reference

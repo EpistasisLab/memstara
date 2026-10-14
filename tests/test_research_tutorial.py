@@ -18,7 +18,7 @@ def test_fresh_user_modes(tmp_path, monkeypatch, knowledge, data):
     monkeypatch.chdir(ROOT)
     monkeypatch.setenv('MEMSTARA_RESEARCH_INPUTS_DIR', str(tmp_path / 'registry'))
     monkeypatch.setenv('MEMSTARA_USER_SKILLS_DIR', str(tmp_path / 'skills'))
-    monkeypatch.setenv('MEMSTARA_SPECIALIST_SKILLS_DIR', str(ROOT / 'src/memstara/resources/contributed/anil'))
+    monkeypatch.setenv('MEMSTARA_SPECIALIST_SKILLS_DIR', str(ROOT / 'src/memstara/resources/contributed/specialists'))
     config = json.loads((ROOT / 'examples/research-inputs/research.json').read_text())
     config.update(knowledge_mode=knowledge, data_mode=data)
     result = tutorial.prepare(config)
