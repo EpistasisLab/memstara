@@ -110,6 +110,10 @@ def test_compose_uses_configured_ports_and_rejects_remote_database():
     assert config['name'] == 'isolated-example'
     assert config['services']['board']['ports'] == ['127.0.0.1:15501:5432']
     assert config['services']['runtime']['environment']['POSTGRES_DB'] == 'runtime'
+    assert '$$POSTGRES_USER' in config['services']['board']['healthcheck']['test'][1]
+    values['MEMSTARA_DATABASE_URL'] = 'postgresql://a:literal%24password@127.0.0.1:15501/board'
+    escaped, _ = compose_definition(values)
+    assert escaped['services']['board']['environment']['POSTGRES_PASSWORD'] == 'literal$$password'
     values['MOTORO_DATABASE_URL'] = 'postgresql://c:d@remote.example:15502/runtime'
     with pytest.raises(ValueError, match='local provisioning'):
         compose_definition(values)

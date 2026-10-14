@@ -62,9 +62,11 @@ def compose_definition(values):
         ports.append(url.port)
         user, password, db = unquote(url.username), unquote(url.password), unquote(url.path.strip('/'))
         services[name] = {'image': image, 'ports': [f'127.0.0.1:{url.port}:5432'],
-                          'environment': {'POSTGRES_USER': user, 'POSTGRES_PASSWORD': password, 'POSTGRES_DB': db},
+                          'environment': {k: v.replace('$', '$$') for k, v in
+                                          {'POSTGRES_USER': user, 'POSTGRES_PASSWORD': password,
+                                           'POSTGRES_DB': db}.items()},
                           'volumes': [f'{name}-data:/var/lib/postgresql/data'],
-                          'healthcheck': {'test': ['CMD-SHELL', 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'],
+                          'healthcheck': {'test': ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'],
                                           'interval': '2s', 'timeout': '5s', 'retries': 30}}
     redis = urlsplit(values.get('MOTORO_REDIS_URL', ''))
     if redis.hostname not in ('localhost', '127.0.0.1') or not redis.port or redis.password or redis.username:
