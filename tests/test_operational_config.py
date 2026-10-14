@@ -196,3 +196,24 @@ def test_connection_probe_rejects_viewer_with_write_privileges(monkeypatch):
     monkeypatch.setattr(asyncpg, 'connect', connect)
     result = asyncio.run(probe_connections({'MEMSTARA_VIEWER_DSN': 'postgresql://test/db'}))
     assert result['services']['MEMSTARA_VIEWER_DSN'] == 'unsafe_write_privileges'
+
+
+@pytest.mark.parametrize('same', [True, False])
+def test_migration_preserves_profiles_without_pinning_redundant_overrides(tmp_path, same):
+    from dotenv import dotenv_values
+    from memstara.operational import migrate_models
+    (tmp_path / 'outputs').mkdir()
+    env = tmp_path / '.env'
+    env.write_text('OPENAI_API_KEY=PRIVATE_SENTINEL\n')
+    profiles = {'non_explanation_agents': {'provider': 'openai', 'model': 'base', 'temperature': 1},
+                'explanation_agent': {'provider': 'openai', 'model': 'base', 'temperature': 1}
+                if same else {'provider': 'openai', 'model': 'other'}}
+    source = tmp_path / 'models.json'
+    source.write_text(json.dumps(profiles))
+    migrate_models(source, env)
+    values = dotenv_values(env, interpolate=False)
+    assert model_profiles(values) == profiles
+    if same:
+        assert not any(k.startswith(('MEMSTARA_NON_EXPLANATION_', 'MEMSTARA_EXPLANATION_')) for k in values)
+        values['MEMSTARA_LLM_MODEL'] = 'changed'
+        assert {p['model'] for p in model_profiles(values).values()} == {'changed'}

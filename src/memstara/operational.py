@@ -156,20 +156,26 @@ def migrate_models(path: Path, destination: Path) -> Path:
     try:
         shutil.copyfile(destination, temporary)
         existing = dotenv_values(temporary, interpolate=False)
+        fields = ('provider', 'model', 'api_base', 'temperature', 'max_tokens', 'effort')
+        primary, explanation = profiles['non_explanation_agents'], profiles['explanation_agent']
+        base = {key: value for key, value in primary.items()
+                if key in ('provider', 'model') or explanation.get(key) == value}
+        groups = [('MEMSTARA_LLM_', base)]
         for family, prefix in (('non_explanation_agents', 'MEMSTARA_NON_EXPLANATION_'),
                                ('explanation_agent', 'MEMSTARA_EXPLANATION_')):
-            for key in ('provider', 'model', 'api_base', 'temperature', 'max_tokens', 'effort'):
-                if prefix + key.upper() in existing:
-                    unset_key(str(temporary), prefix + key.upper())
-                if key in profiles[family]:
-                    set_key(str(temporary), prefix + key.upper(), str(profiles[family][key]))
-        for key in ('provider', 'model', 'api_base', 'temperature', 'max_tokens', 'effort'):
-            if 'MEMSTARA_LLM_' + key.upper() in existing:
-                unset_key(str(temporary), 'MEMSTARA_LLM_' + key.upper())
-            if key in profiles['non_explanation_agents']:
-                set_key(str(temporary), 'MEMSTARA_LLM_' + key.upper(), str(profiles['non_explanation_agents'][key]))
+            groups.append((prefix, {k: v for k, v in profiles[family].items() if base.get(k) != v}))
+        for prefix, assignments in groups:
+            for key in fields:
+                name = prefix + key.upper()
+                if name in existing:
+                    unset_key(str(temporary), name)
+                if key in assignments:
+                    set_key(str(temporary), name, str(assignments[key]))
         if 'MEMSTARA_STAGE_MODELS_PATH' in existing:
             unset_key(str(temporary), 'MEMSTARA_STAGE_MODELS_PATH')
+        imported, _ = resolve({}, file=temporary)
+        if model_profiles(imported) != profiles:
+            raise ValueError('Legacy assignments cannot be reproduced exactly; original .env was preserved')
         temporary.chmod(0o600)
         os.replace(temporary, destination)
     finally:
