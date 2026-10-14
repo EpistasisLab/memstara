@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -57,7 +58,9 @@ print(json.dumps({'version': memstara.__version__, 'motoro': version('motoro'),
                   'imported_modules': modules, 'runtime_dependencies': 'compatible'}))
 '''
         subprocess.run([str(python), '-I', '-c', code, json.dumps(MODULES)],
-                       cwd=root, check=True)
+                       cwd=root, check=True,
+                       env={**{k: os.environ[k] for k in ('PATH', 'SYSTEMROOT', 'HOME') if k in os.environ},
+                            'MEMSTARA_CONFIG_MODE': 'environment'})
     print('Runtime wheel installation/import smoke passed; no provider or database calls were made.')
 
 

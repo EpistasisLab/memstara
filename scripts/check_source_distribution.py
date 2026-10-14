@@ -36,6 +36,7 @@ def verify(sdist):
             original[name] = packaged
         # No inherited deployment settings, credentials or checkout PYTHONPATH.
         env = {key: os.environ[key] for key in ('PATH', 'SYSTEMROOT') if key in os.environ}
+        env['MEMSTARA_CONFIG_MODE'] = 'environment'
         registry = work / 'registry'
         env['MEMSTARA_RESEARCH_INPUTS_DIR'] = str(registry)
         code = """import runpy, sys
