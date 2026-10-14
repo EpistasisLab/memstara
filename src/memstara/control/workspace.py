@@ -184,8 +184,10 @@ class PipelineWorkspace:
             raise ValueError('Select supported knowledge and data modes')
         if config.get('data_mode') == 'proposal' and not str(config.get('research_objective', '')).strip():
             raise ValueError('Proposal mode requires a research objective')
-        from memstara.stage_models import resolve_run_profiles
-        config['stage_models'] = resolve_run_profiles(config.get('stage_models'))
+        from memstara.stage_models import validate_profiles
+        # Design persistence validates supplied identities but does not require a live deployment.
+        if config.get('stage_models') != {}:
+            config['stage_models'] = validate_profiles(config['stage_models'])
         from memstara.control.request import _MAX_WAVES
         if config.get('combination_skills'):
             from memstara.combinations import build_plan

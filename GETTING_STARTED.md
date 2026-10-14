@@ -58,8 +58,8 @@ embedding operations may incur costs or download model files. A selected researc
 profile prepares a separate analysis copy and matcher; do not build a cache for an
 unrelated legacy cohort. The initial preparation may be slower than subsequent runs.
 
-For the browser, follow [the viewer setup](viewer/README.md) and README step 5.
-Keep the host control service running, then open `http://localhost:8070`.
+For the browser, follow [the viewer setup](viewer/README.md) and README step 7.
+Keep the host control service running, then open the configured web port (default `http://localhost:5173`).
 Choose the returned research version in Add pipeline and the returned custom skill
 IDs, training-heavy Data, LR ML, SHAP Interpretation, and one Loop. Start only once;
 do not also execute the CLI command for the same intended test.
@@ -167,7 +167,8 @@ installation acceptance, not a clinically validated risk model. Complete-case
 selection can bias the sample, and the supplied endpoint's prediction horizon and
 ascertainment timing require review. Do not claim prospective performance.
 
-In an independent checkout, set `MEMSTARA_DISABLE_SIBLING_ENV=1` to disable the
-optional adjacent Motoro `.env` fallback. Provide your own explicit model credentials,
-two separate database URLs and Redis URL. Exported environment values still win.
-Use separate database instances/volumes and output/cache directories for acceptance.
+In an independent checkout, configure its own `.env`. Adjacent Motoro files and
+exported operational settings are not fallback sources. Provide model credentials,
+two separate database URLs and Redis URL. Use separate database instances/volumes
+and output/cache directories for acceptance. Follow README steps 2–3 and 7; the
+`memstara.local_setup` commands use the ports from this file.

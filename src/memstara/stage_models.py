@@ -4,21 +4,12 @@ from copy import deepcopy
 
 
 def deployment_profiles() -> dict:
-    """Read deployment defaults; an explicitly configured missing file is an error."""
-    import json
+    """Build profiles from the authoritative process settings, never a JSON file."""
     import os
-    from pathlib import Path
-
-    configured = os.environ.get("MEMSTARA_STAGE_MODELS_PATH", "").strip()
-    path = Path(configured) if configured else (
-        Path(__file__).resolve().parents[2] / "config" / "stage-models.local.json"
-    )
-    if not configured and not path.exists():
-        return {}
-    try:
-        return validate_profiles(json.loads(path.read_text(encoding="utf-8")))
-    except (OSError, ValueError) as exc:
-        raise ValueError("Deployment stage model profiles are missing or invalid") from exc
+    if os.environ.get('MEMSTARA_STAGE_MODELS_PATH', '').strip():
+        raise ValueError('Legacy model JSON must be migrated into project .env; unset MEMSTARA_STAGE_MODELS_PATH')
+    from memstara.operational import model_profiles
+    return model_profiles()
 
 
 def public_profiles(profiles):
@@ -40,7 +31,11 @@ def resolve_run_profiles(raw, *, recovering=False, frozen=None):
         if profiles and profiles != (validate_profiles(expected) if expected else {}):
             raise ValueError('Recovery model profiles differ from the frozen execution')
         return validate_profiles(expected) if expected else {}
-    return profiles or deployment_profiles()
+    current = deployment_profiles()
+    if profiles and profiles != current:
+        raise ValueError('Saved model profiles differ from project .env. Explicitly clear stage_models '
+                         'on the saved design to adopt project models, or use historical resume.')
+    return current
 
 
 def validate_call(config, stage, snapshot):

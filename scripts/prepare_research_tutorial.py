@@ -46,6 +46,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("configuration", type=Path)
     args = parser.parse_args()
+    from memstara.env import load_env
+    load_env()
     print(json.dumps(prepare(json.loads(args.configuration.read_text())), indent=2))
 
 

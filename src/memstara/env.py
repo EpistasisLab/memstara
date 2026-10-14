@@ -22,12 +22,10 @@ needs a single line: `load_env()`.
 
 Configuration sources and precedence
 ------------------------------------
-All settings and credentials may be configured in Memstara's .env or exported
-in the process environment. Sibling development optionally reads motoro/.env
-as a fallback; a sibling checkout is not required for the locked runtime install.
-Existing process values win, then Memstara's .env, then the optional sibling file.
-`memstara.paths.ENV_FILES` defines file order; `load_env()` skips missing files
-and never overwrites an existing value. It does not track each value's origin.
+Local execution reads the selected project's .env as the authoritative source.
+Shell values for managed keys and sibling files cannot fill omissions. Explicit
+MEMSTARA_CONFIG_MODE=environment supports CI and supervised child processes.
+The first load freezes process settings; restart to adopt later file changes.
 
 """
 
@@ -37,7 +35,6 @@ import os
 import re
 from pathlib import Path
 
-from dotenv import load_dotenv
 
 from memstara.paths import ENV_FILES
 from memstara.servers import SCANNED_MODULES, source_of
@@ -75,19 +72,32 @@ PROVIDER_KEYS = {
 }
 
 
-def load_env() -> list[Path]:
-    """Read the `.env` files and return the ones that were actually read.
+_loaded_source = None
+_provenance: dict = {}
 
-    Safe to call repeatedly — existing values are never overwritten.
-    """
-    read: list[Path] = []
-    for index, path in enumerate(ENV_FILES):
-        if index and os.environ.get("MEMSTARA_DISABLE_SIBLING_ENV") == "1":
-            continue
-        if path.is_file():
-            load_dotenv(path)
-            read.append(path.resolve())
-    return read
+
+def load_env() -> list[Path]:
+    """Load one explicit source once, before clients are initialized."""
+    global _loaded_source, _provenance
+    from memstara.operational import managed, resolve
+    mode = os.environ.get('MEMSTARA_CONFIG_MODE', 'project')
+    path = Path(os.environ.get('MEMSTARA_ENV_FILE') or ENV_FILES[0]).expanduser().resolve()
+    identity = (mode, str(path))
+    if identity == _loaded_source:
+        return [path] if mode == 'project' else []
+    values, provenance = resolve(file=path)
+    if mode == 'project':
+        for name in list(os.environ):
+            if managed(name):
+                os.environ.pop(name, None)
+    os.environ.update(values)
+    _loaded_source, _provenance = identity, provenance
+    return [path] if mode == 'project' else []
+
+
+def configuration_source() -> dict:
+    """Safe source metadata, never values or credentials."""
+    return dict(_provenance)
 
 
 def missing_vars(provider: str = "", *, knowledge_mode: str = "okf", data_mode: str = "dataset") -> list[str]:

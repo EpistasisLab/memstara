@@ -154,6 +154,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     else:
         with location.open("x", encoding="utf-8") as stream:
             json.dump(state, stream, indent=2)
+        from memstara.operational import save_source
+        save_source(run_dir)
     if state.get("feature_selection_policy"):
         from memstara.feature_reproduction import archive
         archive(state, dataset, knowledge, run_dir)

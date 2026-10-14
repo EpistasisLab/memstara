@@ -528,6 +528,8 @@ if __name__ == "__main__":
     parser.add_argument("action", choices=("inspect", "register", "prepare"))
     parser.add_argument("input", help="Configuration JSON path, or saved record ID for prepare")
     args = parser.parse_args()
+    from memstara.env import load_env
+    load_env()
     try:
         result = (
             prepare(args.input)

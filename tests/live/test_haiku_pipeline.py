@@ -144,7 +144,8 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
         query = dict(parse_qsl(parts.query))
         query["search_path"] = schema
         database = urlunsplit(parts._replace(query=urlencode(query)))
-        env = {**os.environ, "MEMSTARA_DATABASE_URL": database, "MEMSTARA_OUTPUT_DIR": str(area),
+        env = {**os.environ, "MEMSTARA_CONFIG_MODE": "environment",
+               "MEMSTARA_DATABASE_URL": database, "MEMSTARA_OUTPUT_DIR": str(area),
                "MEMSTARA_LLM_MODEL": MODEL,
                "MEMSTARA_LLM_PROVIDER": live_batch["profiles"]["non_explanation_agents"]["provider"],
                "MEMSTARA_ML_ENGINE": "xgboost", "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1",

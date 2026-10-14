@@ -16,7 +16,9 @@ def profiles(tmp_path, monkeypatch):
     }
     path = tmp_path / "profiles.json"
     path.write_text(json.dumps(value))
-    monkeypatch.setenv("MEMSTARA_STAGE_MODELS_PATH", str(path))
+    monkeypatch.delenv("MEMSTARA_STAGE_MODELS_PATH", raising=False)
+    monkeypatch.setenv("MEMSTARA_EXPLANATION_PROVIDER", "azure_foundry")
+    monkeypatch.setenv("MEMSTARA_EXPLANATION_MODEL", "claude-sonnet-test")
     monkeypatch.setenv("MEMSTARA_LLM_PROVIDER", "openai")
     monkeypatch.setenv("MEMSTARA_LLM_MODEL", "qwen-test")
     return value
@@ -24,27 +26,26 @@ def profiles(tmp_path, monkeypatch):
 
 def test_new_workspace_and_launch_freeze_deployment_profiles(profiles):
     config = PipelineWorkspace.configuration({})
-    assert config["stage_models"] == profiles
+    assert config["stage_models"] == {}
     argv = build_argv({}, [])
     assert json.loads(argv[argv.index("--stage-models") + 1]) == profiles
     for stage in ("hypothesis", "hypothesis#2", "data", "ml", "interpreter", "interpreter#2"):
-        assert stage_models.for_stage(config["stage_models"], stage) == profiles["non_explanation_agents"]
-    assert stage_models.for_stage(config["stage_models"], "report") == profiles["explanation_agent"]
+        assert stage_models.for_stage(profiles, stage) == profiles["non_explanation_agents"]
+    assert stage_models.for_stage(profiles, "report") == profiles["explanation_agent"]
 
 
 def test_saved_profiles_override_deployment_defaults(profiles):
     profiles["explanation_agent"]["model"] = "claude-sonnet-frozen"
     assert PipelineWorkspace.configuration({"stage_models": profiles})["stage_models"] == profiles
-    argv = build_argv({"stage_models": profiles}, [])
-    assert json.loads(argv[argv.index("--stage-models") + 1]) == profiles
+    with pytest.raises(ValueError, match="Explicitly clear"):
+        build_argv({"stage_models": profiles}, [])
 
 
 def test_azure_deployment_names_need_not_match_legacy_profile_keys(profiles):
     profiles['non_explanation_agents']['model'] = 'gpt-4o'
     profiles['explanation_agent']['model'] = 'clinical-explanation-deployment'
     config = PipelineWorkspace.configuration({'stage_models': profiles})
-    argv = build_argv({'stage_models': config['stage_models']}, [])
-    frozen = json.loads(argv[argv.index('--stage-models') + 1])
+    frozen = config['stage_models']
     for stage in ('hypothesis', 'data', 'ml', 'interpreter'):
         assert stage_models.for_stage(frozen, stage)['model'] == 'gpt-4o'
     assert stage_models.for_stage(frozen, 'report')['model'] == 'clinical-explanation-deployment'
@@ -78,7 +79,7 @@ def test_valid_explicit_endpoint_port_is_preserved(profiles, endpoint):
 
 def test_explicit_missing_file_never_falls_back(tmp_path, monkeypatch):
     monkeypatch.setenv("MEMSTARA_STAGE_MODELS_PATH", str(tmp_path / "missing.json"))
-    with pytest.raises(ValueError, match="missing or invalid"):
+    with pytest.raises(ValueError, match="must be migrated"):
         stage_models.deployment_profiles()
 
 
@@ -86,7 +87,7 @@ def test_invalid_profile_never_falls_back(tmp_path, monkeypatch):
     path = tmp_path / "invalid.json"
     path.write_text('{"non_explanation_agents": {"provider": "openai", "model": "qwen-test"}}')
     monkeypatch.setenv("MEMSTARA_STAGE_MODELS_PATH", str(path))
-    with pytest.raises(ValueError, match="missing or invalid"):
+    with pytest.raises(ValueError, match="must be migrated"):
         stage_models.deployment_profiles()
 
 

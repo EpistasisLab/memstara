@@ -30,17 +30,13 @@ def test_new_design_discards_copied_models_but_preserves_research(tmp_path, monk
         old = dict(zip(('qwen', 'sonnet'), old.values(), strict=True))
     request = {'waves': 4, 'provider': 'openai', 'model': 'qwen--qwen38-27b', 'stage_models': old}
     added = workspace.mutate({'action': 'add', 'configuration': request})
-    assert added['configuration']['stage_models'] == profiles('claude-haiku-5-5')
+    assert added['configuration']['stage_models'] == {}
     assert added['configuration']['provider'] == added['configuration']['model'] == ''
     assert added['configuration']['waves'] == 4
     assert request['model'] == 'qwen--qwen38-27b'
-    # Changing defaults affects only newly created designs, not saved ones/recovery.
-    path.write_text(json.dumps(profiles('future-explicit-deployment')))
-    newer = workspace.mutate({'action': 'add', 'configuration': request})
-    assert newer['configuration']['stage_models'] == profiles('future-explicit-deployment')
     restored = PipelineWorkspace(workspace.path, Idle)
-    assert restored.items[0]['configuration']['stage_models'] == profiles('claude-haiku-5-5')
-    # An explicit update remains possible; no permanent Haiku hard-coding.
+    assert restored.items[0]['configuration']['stage_models'] == {}
+    # Existing explicit profiles are preserved for review, not silently changed.
     updated = restored.mutate({'action': 'update', 'id': added['id'],
                               'configuration': {**added['configuration'], 'stage_models': profiles('custom-model')}})
     assert updated['configuration']['stage_models'] == profiles('custom-model')
@@ -51,7 +47,6 @@ def test_invalid_defaults_do_not_fall_back_to_copied_models(tmp_path, monkeypatc
     path.write_text('broken')
     monkeypatch.setenv('MEMSTARA_STAGE_MODELS_PATH', str(path))
     workspace = PipelineWorkspace(tmp_path / 'workspace.json', Idle)
-    with pytest.raises(ValueError, match='missing or invalid'):
-        workspace.mutate({'action': 'add', 'configuration': {'stage_models': profiles('old')}})
-    assert workspace.items == []
-    assert not workspace.path.exists()
+    item = workspace.mutate({'action': 'add', 'configuration': {'stage_models': profiles('old')}})
+    assert item['configuration']['stage_models'] == {}
+    assert workspace.path.exists()

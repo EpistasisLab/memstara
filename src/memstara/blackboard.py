@@ -693,6 +693,8 @@ async def close_run(run_tag: str) -> int:
 
 def main() -> int:
     """The entry point when called from the command line. Returning 0 means fine, 1 means cancelled."""
+    from memstara.env import load_env
+    load_env()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     # **Exactly one** of these has to be chosen. Choosing none is not allowed either.
     g = ap.add_mutually_exclusive_group(required=True)

@@ -5,7 +5,7 @@ model results, and explanations. It has three services with distinct responsibil
 
 | Service | Local address | Responsibility |
 |---|---|---|
-| Web | <http://localhost:8070> | React application served by nginx |
+| Web | <http://localhost:5173> | React development workspace |
 | Observation API | <http://localhost:8071> | Reads Memstara and Motoro records |
 | Host control | <http://127.0.0.1:8072> | Saves configurations and starts, pauses, resumes, or ends executions |
 
@@ -80,29 +80,26 @@ customizations local and never commit real credentials.
 
 ## Start the workspace
 
-From the repository root:
+Follow [README step 7](../README.md#7-open-the-browser-workspace-optional-after-cli-acceptance)
+to install dependencies and create read-only database roles first. In three
+terminals with the root Python environment activated, run:
 
 ```bash
-docker compose -f viewer/docker-compose.yml up -d --build
+python -m memstara.local_setup control
+python -m memstara.local_setup api
+python -m memstara.local_setup web
 ```
 
-In another terminal with the pipeline environment active:
+Run one command per terminal. The project `.env` configures all three ports and
+Vite's API/control proxy targets. The web process receives ports only; the API
+receives read-only connection strings, not provider keys or database-owner
+credentials. The legacy Docker viewer is an independently configured deployment,
+not the project `.env` installation walkthrough.
 
-```bash
-conda activate memstara
-python -m memstara.control
-```
-
-Open <http://localhost:8070>. Creating a configuration does not run it; use its
-explicit Run action. Selected Pipelines configures individual pipelines;
-All Combinations executes a bounded schedule of skill combinations. AI skill
-drafting currently supports Hypothesis only. All roles support custom Markdown
-skills subject to their role's execution constraints.
-
-The control service binds to loopback and validates requests. The workspace has
-no application login or production authentication layer. The supplied Compose
-port mappings do not themselves restrict listening to loopback; use an appropriate
-host firewall or loopback-only mappings when restricting access to this machine.
+Open the configured web port (default <http://localhost:5173>). Creating a design
+does not execute it. A design can be saved without model connectivity, while Run
+validates deployment configuration. All Combinations schedules skill combinations.
+The services bind to loopback. There is no production authentication layer.
 
 ## Views
 

@@ -11,7 +11,11 @@ mock cohort out of the descriptor system, which this sandbox does not carry.
 
 from __future__ import annotations
 
+import os
 import re
+
+# Tests explicitly inject settings; never load a developer's project credentials.
+os.environ.setdefault('MEMSTARA_CONFIG_MODE', 'environment')
 from collections.abc import Sequence
 
 import numpy as np

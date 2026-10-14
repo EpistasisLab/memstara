@@ -56,10 +56,10 @@ are described in the viewer README.
 
 ## Environment and configuration precedence
 
-[env.py](src/memstara/env.py) reads Memstara's `.env`, then the sibling Motoro `.env`.
-Values already present in the process are preserved. Thus exported values win, and
-when a key occurs in both files the first loaded value wins. Editing a file does not
-replace values already loaded into a running process or its child environment.
+[env.py](src/memstara/env.py) loads the selected project `.env` before runtime
+initialization. Managed shell values and sibling files are not fallback sources.
+Explicit environment injection is a separate mode, described below. Editing a
+file does not replace settings already loaded into a running process.
 
 | Setting | Purpose |
 |---|---|
@@ -82,33 +82,25 @@ runtime environment; never put them in `stage_models`, a request JSON file, or a
 configuration: inspect the explicit profile and resolver rather than assuming that
 any environment variable with a similar name is consumed.
 
-Model selection has two paths:
+The selected project `.env` is the operational source. No sibling `.env`, shell
+fallback or automatic model JSON loading is used. Explicit
+`MEMSTARA_CONFIG_MODE=environment` supports CI and supervised processes. File mode
+resolves paths relative to the selected file, independently of the launch directory.
+`MEMSTARA_ENV_FILE` can select a different project file. Restart after edits.
 
-1. With nonempty `configuration.stage_models`, the five agent roles receive the
-   explicit profiles described below.
-2. Without those profiles, new launches use `config/stage-models.local.json` when
-   present, or the file explicitly selected by `MEMSTARA_STAGE_MODELS_PATH`.
-   This deployment-local JSON uses the two-profile structure below and is not committed.
-   An explicitly selected missing or invalid file fails validation; it never silently
-   falls back. Saved nonempty profiles take precedence. Resume and report recovery
-   retain their frozen profiles rather than importing new deployment defaults.
-3. Without either profile source, agents use the deployment-wide model. Legacy top-level
-   `provider`/`model` fields and board CLI flags do not independently override that
-   deployment selection.
+`MEMSTARA_LLM_*` defines the default profile; `MEMSTARA_NON_EXPLANATION_*` and
+`MEMSTARA_EXPLANATION_*` override the corresponding role group. See `.env.example`
+for supported fields. `python -m memstara.local_setup check` performs static checks,
+not network, database or inference validation.
 
-The control request still validates the deployment-wide model even when profiles are
-present. Keep valid deployment defaults configured. Changing only
-`MEMSTARA_LLM_MODEL` does not replace explicit `stage_models` profiles.
-
-Creating a workspace pipeline (`POST /control/pipelines`, `action: "add"`) uses
-the current server model defaults. Browser creation requests omit `provider`,
-`model` and `stage_models` entirely; the creation draft excludes inherited profiles.
-As a compatibility guard, model fields copied from a selected pipeline
-or browser draft are discarded, including nonempty `stage_models`. Both Selected
-Pipelines and All Combinations follow this rule. Creation is not model-profile
-cloning. Saved pipelines retain their assignments; an explicit configuration
-update can change the next execution's profiles. Historical execution snapshots
-and recovery assignments remain unchanged.
+Design creation and saving do not require model connectivity. Execution does:
+new launches resolve project settings and freeze them. A legacy nonempty
+`stage_models` different from project defaults must be reviewed and explicitly
+cleared through the configuration API before a new launch. Historical recovery
+continues using its frozen assignment. Import old deployment JSON explicitly with
+`python -m memstara.operational migrate-models --from-json <path>`; the command
+creates a restricted backup before editing `.env`. Never place credentials in
+profiles or research definitions.
 
 `outputs/runs/pipeline_workspace.json` stores editable pipeline definitions. The
 control service also keeps them in memory: update them through its API. Per-execution

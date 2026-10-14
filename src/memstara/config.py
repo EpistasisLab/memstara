@@ -13,7 +13,7 @@ class Settings(CoreSettings):
     Apart from the four fields below, every value is core's default, untouched.
     """
 
-    model_config = SettingsConfigDict(env_prefix="MOTORO_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="MOTORO_", env_file=None, extra="ignore")
 
     mcp_allowed_env_vars: str = (
         "MEMSTARA_DATASET_PATH,MEMSTARA_OUTPUT_DIR,MEMSTARA_ML_ENGINE,MEMSTARA_DATABASE_URL,"

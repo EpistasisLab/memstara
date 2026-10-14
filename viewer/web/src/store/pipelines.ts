@@ -69,7 +69,8 @@ export const usePipelines = create<{
           return previous&&JSON.stringify(previous)===JSON.stringify(item)?previous:item;
         });
         const unchanged=refreshedItems.length===previousItems.length&&refreshedItems.every((item,i)=>item===previousItems[i]);
-        if(!unchanged||!get().loaded||get().error)set({items:unchanged?previousItems:refreshedItems,loaded:true,error:null});
+        const pollingError = get().error === 'Error: Pipeline workspace is unavailable; last settings are retained.';
+        if(!unchanged||!get().loaded||pollingError)set({items:unchanged?previousItems:refreshedItems,loaded:true,...(pollingError?{error:null}:{})});
         const restored = remembered();
         if(firstLoad && restored) get().select(restored);
         const refreshed=get().items.find(p=>p.id===get().selected);
@@ -79,7 +80,11 @@ export const usePipelines = create<{
       }
       const selected=get().items.find(p=>p.id===get().selected);
       if(selected&&JSON.stringify(useControl.getState().running)!==JSON.stringify(selected.running)) useControl.setState({running:selected.running});
-    } catch(e){if(revision === workspaceRevision)set({error:String(e)});} finally{inFlight=false;}
+    } catch {
+      // A background refresh must not replace a failed user action's diagnosis.
+      if(revision === workspaceRevision && !get().error)
+        set({error:'Error: Pipeline workspace is unavailable; last settings are retained.'});
+    } finally{inFlight=false;}
   },
   select:id=>{
     const pipeline=get().items.find(p=>p.id===id); if(!pipeline) return;

@@ -168,6 +168,8 @@ def freeze(args, root, books):
         raise ValueError("Proposal configuration changed; start a new execution")
     if not prior:
         atomic_json(root / "config.json", state)
+        from memstara.operational import save_source
+        save_source(root)
     os.environ["MEMSTARA_RUN_CONFIG"] = str((root / "config.json").resolve())
     return state
 

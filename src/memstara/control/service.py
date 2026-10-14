@@ -266,6 +266,7 @@ class _Runs:
                 [sys.executable, "-u", "-m", "memstara.pipeline.board",
                  "--run-tag", run_tag, "--run-dir", str(run_dir), *argv],
                 cwd=REPO_ROOT,
+                env={**os.environ, "MEMSTARA_CONFIG_MODE": "environment"},
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL,
@@ -319,6 +320,7 @@ class _Runs:
             popen = subprocess.Popen(
                 [sys.executable, "-u", "-m", "memstara.pipeline.board", "--resume",
                  "--run-tag", run_tag, "--run-dir", str(root)], cwd=REPO_ROOT,
+                env={**os.environ, "MEMSTARA_CONFIG_MODE": "environment"},
                 stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
         self._live = {k: v for k, v in record.items()
                       if k not in ("exit_code", "ended", "recoverable", "recovery_blocked")}
@@ -492,7 +494,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(403, {"error": f"this service does not answer to the name {host!r}"})
             return True
         origin = self.headers.get("Origin")
-        if origin is not None and origin not in _ALLOWED_ORIGINS:
+        configured_origins = {f'http://{host}:{os.environ.get("MEMSTARA_WEB_PORT", "5173")}'
+                              for host in ('localhost', '127.0.0.1')}
+        if origin is not None and origin not in (_ALLOWED_ORIGINS | configured_origins):
             self._send(403, {"error": f"{origin} is not the viewer"})
             return True
         return False
@@ -580,7 +584,7 @@ class Handler(BaseHTTPRequestHandler):
                 is_azure = host.endswith((".services.ai.azure.com", ".openai.azure.com"))
                 llm = {"provider": provider, "model": model, "endpoint": endpoint,
                        "resource": host.split(".")[0] if is_azure else None,
-                       "source": "process environment (including loaded .env defaults)",
+                       "source": "project .env" if os.environ.get('MEMSTARA_CONFIG_MODE') == 'project' else "explicit process environment",
                        "restart_required_after_edit": True}
             except ValueError as exc:
                 llm = {"provider": "", "model": "", "error": str(exc)}
@@ -591,7 +595,11 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 stage_models = {}
                 stage_model_error = "Deployment stage model profiles are missing or invalid"
+            from memstara.env import configuration_source
+            from memstara.operational import check
             self._send(200, {"ok": True, "bundle": bundle, "running": RUNS.running(), "llm": llm,
+                             "configuration_source": configuration_source(),
+                             "configuration_check": check(dict(os.environ)),
                              "stage_models": stage_models, "stage_model_error": stage_model_error})
             return
 

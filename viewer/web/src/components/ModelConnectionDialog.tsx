@@ -77,7 +77,7 @@ export default function ModelConnectionDialog() {
                 <Assignment configuration={p.running ? p.running.configuration : p.configuration}/>
               </div>)}
           </section>
-          <p className="text-sm text-ink-soft">The provider “openai” denotes OpenAI-compatible transport. Assignments identify configured deployments, not independently verified model versions. Active runs retain frozen settings; saved pipeline profiles override deployment defaults. Call traces record the model actually invoked.</p>
+          <p className="text-sm text-ink-soft">Designs can be saved before a model is connected. A configured assignment does not prove connection success or execution completion. New executions use project .env settings; conflicting legacy profiles must be explicitly migrated. Restart services after editing .env. Active runs retain frozen settings. Call traces record the model actually invoked; “openai” denotes OpenAI-compatible transport.</p>
         </>}
         <button type="button" disabled={loading} onClick={() => setRevision(v => v + 1)} className="flex items-center gap-2 rounded-lg border border-paper-line px-3 py-2 text-sm disabled:opacity-50"><RefreshCw size={15} /> Refresh status</button>
       </div>
