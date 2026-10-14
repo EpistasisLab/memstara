@@ -44,10 +44,11 @@ function Station(props: NodeProps<Node<StationData>>) {
   const active=floorExecutionState(pipeline.running).live && !pipeline.running?.waiting_for_questions && pipeline.progress.stage===stage;
 
   if(stage==='source') return <KnowledgeNode {...props} data={{
-    compact:true,value:pipeline.configuration.skill,locked:!!pipeline.running||busy||!!pipeline.configuration.research_input_id,saved:false,
+    compact:true,value:pipeline.configuration.skill,locked:!!pipeline.running||busy,saved:false,
     researchId:pipeline.configuration.research_input_id,
+    pipelineId:pipeline.id,
     knowledgeMode:pipeline.configuration.knowledge_mode,
-    description:pipeline.configuration.research_input_id?"This pipeline uses its saved research corpus. Change the research version in Data & target settings.":"Evidence used by this pipeline's hypothesis agent.",
+    description:pipeline.configuration.research_input_id?"Choose the study corpus here; its dataset and target change together.":"Evidence used by this pipeline's hypothesis agent.",
     onChange:(skill:string)=>usePipelines.getState().save(pipeline.id,{...pipeline.configuration,skill})
   }}/>;
   const book=stage==='data'?'':pipeline.configuration[`playbook_${stage === "report" ? "explanation" : stage}`];

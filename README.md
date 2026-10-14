@@ -764,6 +764,25 @@ separately. This README does not claim a fresh interactive browser acceptance of
 the custom-port stack. The workspace has no production login/authentication layer;
 these instructions bind development services to loopback.
 
+### Select HIV or HeartFailure from Knowledge sources
+
+In Add pipeline, the **Knowledge sources · research study** selector lists saved
+research versions. In an existing Selected Pipeline, open its Knowledge sources card;
+in All Combinations, use the Knowledge sources button. Select a study and save.
+Its corpus, dataset, outcome column and label mapping move together. Corpus scope
+is a separate optional filter within the deployment default corpus.
+
+The included HeartFailure files become a selectable study after the documented
+preparation and registration commands above. HIV files remain local/private; their
+study must be registered on the machine that has them. A private study registration
+is not distributed by Git. Input checks do not certify clinical timing or target
+semantics. Retain explicit unknowns and review them for a clinical experiment.
+
+Changing the study does not alter historical execution results. Compatible Data,
+ML and Interpretation choices remain in a combination design; unsupported domain
+Hypothesis/Explanation choices are replaced with general research choices. Review
+the resulting combination count before the next execution.
+
 ### Research changes and ML settings in Add pipeline
 
 Register CSV, OKF and the target definition together, then select that saved version
@@ -772,8 +791,8 @@ prediction timing; the column name alone does not establish those semantics.
 HeartFailure uses the prepared demonstration contract described above. There is no
 automatic inference of a study from a disease name or folder name.
 
-Switching research inputs clears source filters, baseline columns and combination
-selections and selects `hypothesis_general` / `report_general`. These are separate
+Switching research inputs clears source filters and baseline columns, replaces
+incompatible domain choices while retaining technical skill combinations, and selects `hypothesis_general` / `report_general`. These are separate
 project skills; Anil/Phil originals remain unchanged. Random features, the two Data
 skills, LR/XGBoost and SHAP/LIME remain available. Registered studies currently do
 not have a verified specialist-domain binding, so HIV/Addiction specialists are

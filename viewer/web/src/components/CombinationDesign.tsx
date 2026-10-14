@@ -1,3 +1,4 @@
+import PipelineSettings from './PipelineSettings';
 import {floorCallRole as callRole, type FloorTrace as Trace, type FloorActivity, floorCallStatus, floorExecutionState} from '../lib/floorActivity';
 import {createPortal} from "react-dom";
 import {memo,useEffect,useState,useRef,lazy,Suspense,type CSSProperties} from 'react';
@@ -24,6 +25,7 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
  const board=useRef<HTMLDivElement>(null);
  const [view,setView]=useState<'floor'|'design'|'loop'>('floor'),[role,setRole]=useState<PlaybookStage|'all'>('all');
  const [search,setSearch]=useState(''),[detail,setDetail]=useState<Flavor|null>(null);
+ const [editingSources,setEditingSources]=useState(false);
  const [preview,setPreview]=useState(false),[showGuide,setShowGuide]=useState(false);
  const [loop,setLoop]=useState(1),[retry,setRetry]=useState(0);
  const [response,setResponse]=useState<{key:string;data:Trace}|null>(null),[failure,setFailure]=useState<{key:string;message:string}|null>(null);
@@ -66,7 +68,7 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
   <header className="cs-unified-header" aria-label="Combination workspace controls">
    <div className="cs-heading-row">
     <div className="cs-compact-identity"><h3 title={p.name}>{p.name}</h3><span>All Combinations</span></div>
-    <div className="cs-heading-actions">
+    <div className="cs-heading-actions"><button type="button" className="cs-info-button" onClick={()=>setEditingSources(true)}>Knowledge sources</button>
      {view==='floor'&&(p.running||p.latest)&&<span className="cs-loop-status" data-live={following&&live&&!error} title="Updates every 0.5 seconds · recorded skills and call status">{following?`Loop ${requestedLoop} / ${historyTotal} · ${p.running?(error?'Updates unavailable':paused?'Paused':stopping?'Pausing':live?'Live':'Waiting'):'Latest execution'}`:'Combination preview'}</span>}
      {!p.latest&&!p.running&&<button className="cs-run" data-help="Run combinations" data-help-description="Start this pipeline using one skill from each agent role per Loop, up to its configured maximum Loops." disabled={busy||!count} onClick={()=>void usePipelines.getState().play(p.id)}><Play size={16}/>Run combinations</button>}
      <button className="cs-info-button" aria-label="Combination schedule and map guide" data-help="Pipeline details" data-help-description="Review the combination count, maximum Loops, start policy and the meaning of connections in the diagram." onClick={()=>setShowGuide(true)}>Details</button>
@@ -83,6 +85,7 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
   </header>
  );
  return <section className={`combination-studio ${view==='floor'?'cs-floor-view':''}`} aria-label="Combination design">
+  {editingSources&&<PipelineSettings id={p.id} section="data" title="Knowledge sources" close={()=>setEditingSources(false)}/>}
   {headerHost?createPortal(header,headerHost):header}
   {showGuide&&<FloorDetailDialog title="Combination schedule & map guide" close={()=>setShowGuide(false)}><dl className="cs-schedule-details"><dt>Possible combinations</dt><dd>{count.toLocaleString()}</dd><dt>Start policy</dt><dd>{p.configuration.combination_random_start?'Random Start':'Ordered start'} · then fixed-order cycles</dd><dt>Maximum Loops</dt><dd>{total.toLocaleString()}</dd><dt>Refresh interval</dt><dd>Every 0.5 seconds while viewing execution records.</dd></dl><p>One skill per role forms one complete path per Loop. Previewing does not change the execution plan.</p><p>Solid links indicate calls recorded at both stages. Dashed links indicate planned connections, not confirmed execution.</p></FloorDetailDialog>}
   {view==='floor'?<>

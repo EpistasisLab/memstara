@@ -1,0 +1,45 @@
+import {chromium} from '@playwright/test';
+import assert from 'node:assert/strict';
+const browser=await chromium.launch({headless:true});
+try {
+ for(const combined of [false,true]) {
+ const page=await browser.newPage({viewport:{width:1400,height:1000}});const errors=[],writes=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ let item={id:'fixture',number:1,name:'Study switch fixture',configuration:{research_input_id:'hiv',knowledge_mode:'okf',data_mode:'dataset',y_column:'HIV_DETECTABLE',skill:'',waves:1,trials:1,continuous:false,hypothesis_agents:1,interpret_agents:1,baseline_columns:['old_predictor'],combination_skills:{},evaluation:{engine:'xgboost',seed:42,test_size:.25,folds:0,replicates:1,search_trials:1},playbook_hypothesis:'hypothesis_general',playbook_data:'data_training_heavy',playbook_ml:'ml_logistic_regression',playbook_interpreter:'shared-anil-shap',playbook_explanation:'report_general'},running:null,latest:null,progress:{}};
+ if(combined){item.configuration.combination_skills={hypothesis:['addiction-psychiatric','random_features'],data:['data_training_heavy'],ml:['ml_logistic_regression'],interpreter:['shared-anil-shap'],report:['shared-anil-hiv']};item.configuration.combination_max_loops=2;}
+ const inputs=[['hiv','HIV study','HIV_DETECTABLE'],['heart','HeartFailure study','chronic_heart_failure']].map(([id,name,column])=>({id,input_checks_passed:true,configuration:{name,knowledge_mode:'okf',data_mode:'dataset',target:{column,description:name,prediction_time:'Unverified',positive_label:'1',negative_label:'0'}}}));
+ await page.route('**/control/**',async r=>{
+  const path=new URL(r.request().url()).pathname;
+  if(path==='/control/pipelines') {
+   if(r.request().method()==='GET')return r.fulfill({json:{pipelines:[item]}});
+   const body=r.request().postDataJSON();assert.equal(body.action,'update');writes.push(body);item={...item,configuration:body.configuration};return r.fulfill({json:item});
+  }
+  if(r.request().method()!=='GET')throw Error('Unexpected write or execution');
+  if(path==='/control/research-inputs')return r.fulfill({json:{inputs}});
+  if(path==='/control/health')return r.fulfill({json:{ok:true,bundle:{configured:false,documents:0},llm:{provider:'openai',model:'fixture'},input_defaults:{dataset_available:false,knowledge_available:false,target_column:''}}});
+  return r.fulfill({json:{skills:[],catalog:[],stages:[],playbooks:[],runs:[]}});
+ });
+ await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Fixture'}}));
+ await page.addInitScript(()=>localStorage.setItem('memstara.pipelineSelection','fixture'));
+ await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
+ await page.getByRole('button',{name:'Select pipeline 1: Study switch fixture',exact:true}).click();
+ await (combined?page.getByRole('button',{name:'Knowledge sources',exact:true}):page.getByRole('button',{name:/Knowledge sources: HIV study/})).click();
+ let dialog=page.getByRole('dialog',{name:/Knowledge sources$/});
+ await dialog.getByRole('combobox',{name:'Research inputs',exact:true}).selectOption('heart');
+ await dialog.getByText(/Target: chronic_heart_failure/).waitFor();assert.equal(writes.length,0);
+ await dialog.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(writes.length,0);
+ await (combined?page.getByRole('button',{name:'Knowledge sources',exact:true}):page.getByRole('button',{name:/Knowledge sources: HIV study/})).click();
+ dialog=page.getByRole('dialog',{name:/Knowledge sources$/});
+ await dialog.getByRole('combobox',{name:'Research inputs',exact:true}).selectOption('heart');
+ await dialog.getByRole('button',{name:'Save settings',exact:true}).click();
+ await dialog.waitFor({state:'hidden'});
+ assert.equal(writes.length,1);
+ assert.equal(item.configuration.research_input_id,'heart');assert.equal(item.configuration.y_column,'chronic_heart_failure');
+ assert.deepEqual(item.configuration.baseline_columns,[]);
+ if(combined){assert.deepEqual(item.configuration.combination_skills.hypothesis,['hypothesis_general','random_features']);assert.deepEqual(item.configuration.combination_skills.report,['report_general']);assert.deepEqual(item.configuration.combination_skills.ml,['ml_logistic_regression']);assert.equal(item.configuration.combination_max_loops,2);}else assert.deepEqual(item.configuration.combination_skills,{});
+ await page.reload();if(combined){await page.getByRole('button',{name:'Knowledge sources',exact:true}).click();await page.getByRole('dialog',{name:/Knowledge sources$/}).getByText(/Target: chronic_heart_failure/).waitFor();}else await page.getByRole('button',{name:/Knowledge sources: HeartFailure study/}).waitFor();
+ assert.deepEqual(errors,[]);
+ await page.close();
+ }
+ console.log('Selected and All Combinations Knowledge sources switch HIV to HeartFailure with its target; cancel preserves settings, save/reload persists the whole study, no execution submitted. HTTP mocked.');
+} finally {await browser.close();}

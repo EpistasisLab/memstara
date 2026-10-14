@@ -1,4 +1,5 @@
-import { useRef } from "react";
+import PipelineSettings from './PipelineSettings';
+import { useRef, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { BookOpen, Lock, X } from "lucide-react";
@@ -6,18 +7,20 @@ import KnowledgeSelect from "./KnowledgeSelect";
 import { useControl } from "../store/control";
 
 export default function KnowledgeNode({ data }: NodeProps) {
-  const { value, locked, saved, onChange, description, compact, researchId, knowledgeMode } = data as {
-    value: string | null; locked: boolean; saved: boolean; description?: string; compact?: boolean; researchId?:string; knowledgeMode?:string; onChange: (value: string) => void;
+  const { value, locked, saved, onChange, description, compact, researchId, knowledgeMode, pipelineId } = data as {
+    value: string | null; locked: boolean; saved: boolean; description?: string; compact?: boolean; researchId?:string; knowledgeMode?:string; onChange: (value: string) => void; pipelineId?:string;
   };
+  const [editing,setEditing]=useState(false),[researchName,setResearchName]=useState('');
+  useEffect(()=>{let current=true;setResearchName('');if(researchId)void fetch('/control/research-inputs').then(r=>r.json()).then(d=>{if(current)setResearchName(d.inputs?.find((i:{id:string})=>i.id===researchId)?.configuration?.name||'');}).catch(()=>{});return()=>{current=false;};},[researchId]);
   const dialog = useRef<HTMLDialogElement>(null);
   const skills = useControl(s => s.skills);
   const bundle = useControl(s => s.bundle);
   const selected = skills.find(s => s.skill === value);
   const modelOnly = knowledgeMode === 'llm_only';
-  const label = modelOnly ? 'Model knowledge · no retrieval' : researchId ? `Research corpus · ${researchId.slice(0,8)}` : value === null ? "Not recorded for this run" : value === "" ? "All available knowledge" : selected?.label ?? value;
+  const label = modelOnly ? 'Model knowledge · no retrieval' : researchId ? researchName||`Research corpus · ${researchId.slice(0,8)}` : value === null ? "Not recorded for this run" : value === "" ? "All available knowledge" : selected?.label ?? value;
   const documents = modelOnly || researchId ? undefined : value === "" ? bundle?.documents : selected?.documents;
   return <>
-    <button type="button" onClick={() => dialog.current?.showModal()}
+    <button type="button" onClick={() => pipelineId?setEditing(true):dialog.current?.showModal()}
       aria-label={`Knowledge sources: ${label}. ${locked ? "View details" : "Choose sources"}`}
       className={compact ? "floor-resource nodrag nopan h-[108px] w-[184px] rounded-xl border border-paper-line bg-white p-3 text-left text-ink" : "nodrag nopan w-[280px] rounded-2xl border border-paper-line bg-white p-4 text-left text-ink shadow-xs transition-shadow hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink"}>
       <div className={compact?"mb-2 flex items-center gap-2 text-ink-soft":"mb-3 flex items-center gap-2 text-ink-soft"}><BookOpen size={20} /><span className={compact?"text-sm font-bold":"text-base font-bold"}>Knowledge sources</span></div>
@@ -27,7 +30,8 @@ export default function KnowledgeNode({ data }: NodeProps) {
       <span className={compact?"mt-2 flex items-center gap-1 text-xs font-semibold":"mt-4 flex items-center gap-1 text-xs font-semibold"}>{locked ? <><Lock size={12} />View sources</> : "Choose sources →"}</span>
     </button>
     <Handle type="source" position={Position.Right} isConnectable={false} className="!border-paper-line !bg-ink-faint" />
-    {createPortal(<dialog ref={dialog} aria-labelledby="knowledge-dialog-title"
+    {editing&&pipelineId&&<PipelineSettings id={pipelineId} section="data" title="Knowledge sources" close={()=>setEditing(false)}/>}
+    {!pipelineId&&createPortal(<dialog ref={dialog} aria-labelledby="knowledge-dialog-title"
       className="w-[min(480px,calc(100vw-32px))] max-h-[90dvh] overflow-auto rounded-2xl border border-paper-line bg-white p-6 text-ink shadow-xl backdrop:bg-black/40"
       onClick={event => { if (event.target === event.currentTarget) dialog.current?.close(); }}>
       <div className="mb-4 flex items-center justify-between gap-3"><h2 id="knowledge-dialog-title" className="text-lg font-bold">Knowledge sources</h2>

@@ -7,7 +7,7 @@ export default function KnowledgeSelect({ value, onChange }: { value: string; on
 
   return (
     <label className="block">
-      <span className="text-[12px] font-bold uppercase tracking-wider text-ink-faint">Knowledge sources <Help topic="Skill" /></span>
+      <span className="text-[12px] font-bold uppercase tracking-wider text-ink-faint">Corpus scope <Help topic="Skill" /></span>
       <select
         aria-label="Knowledge sources"
         value={value}
@@ -22,7 +22,7 @@ export default function KnowledgeSelect({ value, onChange }: { value: string; on
           </option>
         ))}
       </select>
-      <span className="mt-1 block text-[12px] font-normal leading-relaxed text-ink-faint">Choose the evidence agents can explore. Configure their instructions in Agent settings or the pipeline.</span>
+      <span className="mt-1 block text-[12px] font-normal leading-relaxed text-ink-faint">Choose a filter within the selected deployment corpus. To switch disease studies, select a registered study above.</span>
     </label>
   );
 }
