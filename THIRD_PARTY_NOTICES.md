@@ -46,3 +46,12 @@ It does not apply to user datasets, clinical data, supplied corpora, contributed
 skills, external papers or archived research projects. Preserve their original
 files and obtain applicable redistribution clearance before including them in a
 public release. Successful hash verification establishes integrity, not permission.
+
+
+## Contributed specialist and ML documents
+
+Six current documents are included byte-for-byte in
+`src/memstara/resources/contributed/`, with source-relative names and SHA-256
+hashes in its manifest. These copies do not modify contributor originals and do
+not include archived skill editions. Their redistribution approval is pending;
+this inventory does not grant a license. Resolve that gate before a public release.

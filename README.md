@@ -49,6 +49,9 @@ version is not an independent application release number.
 Validate the pair of revisions before using it for a study, and preserve prompt
 snapshots and data provenance alongside each run.
 
+For file/function review, use [REVIEW_GUIDE.md](REVIEW_GUIDE.md). Release content
+and remaining approval gates are tracked in [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
+
 ## Features
 
 | Area | What Memstara provides |
@@ -74,8 +77,9 @@ snapshots and data provenance alongside each run.
 | Explanation | Synthesizes findings with literature and labels proposed next steps | `report` |
 
 The Explanation Agent retains `report` identifiers for saved-run compatibility.
-Its default skill is `report_clinical_explanations`; Interpretation defaults to
-`interpreter_factual_observations`. Existing saved selections are retained.
+New workspace designs use `shared-anil-addiction` for Explanation and
+`shared-anil-shap` for Interpretation. Historical configurations remain readable;
+disabled selections may require updating before a new execution.
 Instructions guide model behavior and do not guarantee compliant output.
 
 The agent-configured paired workflow adds Data allocation skills (training-heavy
@@ -125,6 +129,9 @@ under a supervisor instead of the board scheduler.
 
 ## Layout
 
+Repository-local study inputs use the [resource layout](resources/README.md).
+Agent instructions remain package resources; generated artifacts remain in `outputs/`.
+
 ```text
 src/memstara/
   config.py, env.py, paths.py   Settings, environment loading, repository paths
@@ -146,134 +153,520 @@ outputs/                       Local datasets, caches, and run artifacts (ignore
 
 ## Get started
 
-See [third-party notices](THIRD_PARTY_NOTICES.md) for incorporated code and example
-material scope. A project-wide release license and redistribution review remain
-pending; the example-data declaration is not a license for the whole application.
+This section contains the complete local setup: install Memstara and Motoro,
+start two databases and Redis, configure your model, select data and knowledge,
+register skills, run one pipeline, and open the browser workspace. Run commands
+from the repository root unless a step says otherwise. Do not use the authors'
+private folders or copy an existing database to complete this procedure.
 
-You need **Git, Python 3.12 or 3.13, Docker with Compose**, a supported LLM
-credential, and a checkout of the selected Memstara revision. Motoro requires its
-own PostgreSQL database and Redis; Memstara's root Compose file starts only its
-own PostgreSQL service.
+**Current distribution boundary:** the synthetic CSV/OKF is included under
+`examples/research-inputs/`. HeartFailure inputs under `resources/` are currently
+local, Git-ignored material, not automatically downloaded by cloning. Obtain the
+approved input bundle separately for that route. Contributed documents and the
+latest setup changes must exist in the revision you install; older revisions do
+not contain them. A local working-tree acceptance run is not proof that GitHub
+already contains those changes. Project licensing and contributed-document
+redistribution remain pending; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-**1. Install the Python runtime.** For a reproducible, locked installation, use uv:
+### 1. Install a pinned checkout and Python environment
+
+Prerequisites: Git, uv, Python 3.12 or 3.13, Docker with Compose, internet access
+for dependency/model downloads, and credentials for your own LLM deployment.
+Node.js 22 is needed only for the local browser setup below. The examples use a
+POSIX shell on macOS/Linux. Keep the code, data and cache on a local writable disk.
 
 ```bash
-git clone https://github.com/HyunjunA/memstara.git
+git clone --branch experiment/agent-combinations-pilot https://github.com/HyunjunA/memstara.git
 cd memstara
-# Select the reviewed tag or commit before installing.
-cp .env.example .env
+git rev-parse HEAD
 uv sync --frozen --extra dev --extra runtime --python 3.12
 source .venv/bin/activate
+python -c "from importlib.metadata import version; print('Memstara:', version('memstara')); print('Motoro:', version('motoro'))"
 ```
 
-The `runtime` extra installs Motoro v0.10.0 from its immutable release commit and
-LiteLLM 1.97.0. No sibling Motoro checkout is required for this path. Configure
-runtime/provider settings in Memstara's local `.env` or export them separately.
-The existing application environment is not changed when this is run in a new
-checkout. Use the same `--extra dev --extra runtime` flags with subsequent
-`uv run` commands so synchronization retains the runtime.
-
-For editable sibling development with Conda, use this alternative:
+If you already cloned the intended branch, enter that checkout and start at
+`git rev-parse HEAD`; do not clone a second nested copy. Before continuing, confirm
+that the installed revision includes the files used by this walkthrough:
 
 ```bash
-git clone --branch v0.10.0 https://github.com/EpistasisLab/motoro.git motoro
-git clone https://github.com/HyunjunA/memstara.git
-cd memstara
-cp .env.example .env
-conda env create -f environment.yml
-conda activate memstara
+python - <<'PYCODE'
+from pathlib import Path
+required = [
+    'scripts/prepare_research_tutorial.py',
+    'scripts/prepare_heart_failure_demo.py',
+    'examples/research-inputs/research.json',
+    'examples/research-inputs/skills/hypothesis.md',
+    'examples/research-inputs/skills/explanation.md',
+    'src/memstara/resources/contributed/anil',
+]
+missing = [name for name in required if not Path(name).exists()]
+if missing:
+    raise SystemExit('Incomplete installation revision: ' + ', '.join(missing))
+print('Walkthrough files present')
+PYCODE
 ```
 
-On an existing workspace, use its checkouts and environment; keep the existing
-`.env`. Set product paths in Memstara's `.env` and runtime/provider settings in
-`../motoro/.env`, using the corresponding `.env.example` files as templates.
-Pipeline environment loading reads both files and preserves exported values.
-Use absolute paths for datasets and bundles so subprocesses resolve them consistently.
+If this fails, stop and obtain the complete reviewed revision. Copying only this
+README into an older checkout does not supply the required code or skills.
 
-To use your own corpus, dataset and prediction target, open **Floor plan → Prepare
-research inputs**, inspect and save a version, then select it when creating a
-pipeline or in **Data & target** settings. See the
-[synthetic research walkthrough](examples/research-inputs/README.md) for supported
-input formats, label mapping, versioning and CLI usage. Registration does not
-start an experiment; execution uses a separate analysis copy and preserves sources.
+Record the printed commit. For a released version, select its reviewed tag instead
+of the development branch. `uv sync` installs Motoro **v0.10.0**, pinned to commit
+`bd0b461c3b2eaef1b1f5c54cc18027647d01cb58`, and LiteLLM **1.97.0**.
+No sibling Motoro source checkout is needed. Keep the same extras if using `uv run`;
+otherwise synchronization can remove runtime dependencies. Do not run `uv sync` in
+an existing environment that you intend to preserve.
 
-Research profiles support four combinations: OKF + CSV, CSV without OKF,
-OKF without CSV, or neither source. With a CSV, the pipeline can train and evaluate
-models. Without a CSV, it produces a research proposal and future analysis plan;
-it does not produce fitted models, measured scores, confusion matrices or computed
-SHAP/LIME results. A research objective is still required. See the walkthrough's
-[input-mode guide](examples/research-inputs/README.md#choose-the-input-mode) for
-the exact configuration fields and expected outputs.
+### 2. Start independent PostgreSQL and Redis services
 
-**2. Prepare the databases and Redis.** On a new host, follow
-[Motoro's setup](https://github.com/EpistasisLab/motoro#development) to provision
-its services and apply its migrations. Its database needs the **pgvector**
-extension: plain PostgreSQL alone cannot apply the current Motoro migrations.
-Point `MOTORO_DATABASE_URL` and `MOTORO_REDIS_URL` at those services; do not rely
-on default ports when using an isolated workspace. A package-only installation
-can apply its schema with `python -m motoro.migrations upgrade --url "$MOTORO_DATABASE_URL"`.
-Then, from the Memstara checkout:
+Memstara owns the analysis board. Motoro owns its execution database and Redis
+working memory. These database URLs must point to different databases. The Motoro
+server needs pgvector; use the image below rather than plain PostgreSQL.
+
+The following creates an ignored local Compose file. The passwords are local
+development values, with ports bound only to loopback. It neither starts nor
+modifies the repository's legacy Compose stack. On a host already using these
+ports, select free ports and change every matching URL below before starting.
+This procedure supplies all three services directly; no separate Motoro setup
+instructions or source checkout are required.
+
+First inspect existing containers and check that the proposed ports are available:
 
 ```bash
-docker compose up -d
-docker compose ps
+docker ps --format '{{.Names}}\t{{.Ports}}'
+python - <<'PYCODE'
+import socket
+ports = (55641, 55642, 56391)
+listeners = []
+try:
+    for port in ports:
+        sock = socket.socket()
+        listeners.append(sock)
+        try:
+            sock.bind(('127.0.0.1', port))
+        except OSError as exc:
+            raise SystemExit(f'Port {port} unavailable: {exc}. Choose unused ports first.')
+    print('Database and Redis ports available')
+finally:
+    for sock in listeners:
+        sock.close()
+PYCODE
 ```
 
-**3. Configure the connection and research inputs.** Set the deployed provider
-and model in the local runtime environment (Memstara `.env`, exported values,
-or `../motoro/.env` when using sibling development). The board driver resolves the deployment-wide
-selection through the control configuration; its legacy `--provider` and
-`--model` flags are not independent overrides. Explicit `stage_models` profiles
-override the agent model assignments; see the [developer guide](DEVELOPER_GUIDE.md#model-profiles-and-their-limits).
-Keep deployment defaults configured for control validation. Provide the credentials required
-by that connection: `ANTHROPIC_API_KEY`, both `ANTHROPIC_FOUNDRY_API_KEY` and
-`ANTHROPIC_FOUNDRY_RESOURCE`, or `OPENAI_API_KEY`.
+The port check is for initial creation; an existing instance of this same stack
+will occupy its own ports. Inspect it instead of creating another one. If Docker
+already shows a different installation named `memstara-local-*`, choose a unique
+Compose project name in the YAML below. A unique project name isolates containers
+and named volumes, but does not free occupied host ports. Deleting a checkout does
+not delete its Docker containers or volumes.
 
-For a synthetic example in a fresh checkout, the following creates
-`outputs/dataset.csv` and `outputs/okf_synthetic_sample`. It overwrites those
-sample paths, so use it only when they are not holding data you need to retain.
+Do not substitute bare `docker compose up -d`: the repository-root Compose file
+uses the fixed `memstara-postgres` name, port 5463 and a shared named volume. It is
+not the independent stack described here.
 
 ```bash
-python -m memstara.prep.sample
-export AGENTIC_OKF_BUNDLE_DIR="$PWD/outputs/okf_synthetic_sample"
-export MEMSTARA_DATASET_PATH="$PWD/outputs/dataset.csv"
+mkdir -p outputs/local-runtime
+cat > outputs/local-runtime/compose.yml <<'YAML'
+name: memstara-local
+services:
+  board:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cleancheck
+      POSTGRES_PASSWORD: cleancheck
+      POSTGRES_DB: memstara
+    ports: ['127.0.0.1:55641:5432']
+    volumes: ['board-data:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U cleancheck -d memstara']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  runtime:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: cleancheck
+      POSTGRES_PASSWORD: cleancheck
+      POSTGRES_DB: motoro
+    ports: ['127.0.0.1:55642:5432']
+    volumes: ['runtime-data:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U cleancheck -d motoro']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  redis:
+    image: redis:7-alpine
+    ports: ['127.0.0.1:56391:6379']
+volumes:
+  board-data:
+  runtime-data:
+YAML
+docker compose -f outputs/local-runtime/compose.yml up -d
+docker compose -f outputs/local-runtime/compose.yml ps
+```
+
+Wait for both PostgreSQL services to be healthy. Keep volumes for subsequent
+runs; changing a password in Compose does not change an existing database password.
+Use `docker compose -f outputs/local-runtime/compose.yml stop` to stop this stack
+without deleting data. Do not use `down -v` unless you intend to delete its databases.
+
+### 3. Configure your own model connection and local paths
+
+In a **new checkout only**, create `.env` with the following contents. Do not
+overwrite an existing `.env`. If you already copied `.env.example`, edit that file:
+replace the matching assignments below and remove duplicate assignments; do not
+append a second conflicting set. Replace both `YOUR_...` values before continuing.
+These settings use Claude on Azure Foundry; they do not authorize access to the
+authors' deployment. The resource name is the hostname prefix, not a URL.
+
+```dotenv
+MEMSTARA_DISABLE_SIBLING_ENV=1
+MOTORO_DATABASE_URL=postgresql+asyncpg://cleancheck:cleancheck@127.0.0.1:55642/motoro
+MEMSTARA_DATABASE_URL=postgresql://cleancheck:cleancheck@127.0.0.1:55641/memstara
+MOTORO_REDIS_URL=redis://127.0.0.1:56391/0
+MEMSTARA_LLM_PROVIDER=azure_foundry
+MEMSTARA_LLM_MODEL=claude-haiku-5-5
+ANTHROPIC_FOUNDRY_RESOURCE=YOUR_RESOURCE_NAME
+ANTHROPIC_FOUNDRY_API_KEY='YOUR_API_KEY'
+OMP_NUM_THREADS=1
+OPENBLAS_NUM_THREADS=1
+MKL_NUM_THREADS=1
+TOKENIZERS_PARALLELISM=false
+```
+
+Use your actual deployed model identifier if it differs. Keep `.env` private.
+Load only your own trusted shell-compatible configuration into each terminal:
+
+```bash
+set -a
+source .env
+set +a
 export MEMSTARA_OUTPUT_DIR="$PWD/outputs"
-export MEMSTARA_OUTCOME_COLUMN=outcome
-python scripts/build_matcher_cache.py
+export MOTORO_DATA_DIR="$PWD/outputs/motoro"
+export HF_HOME="$PWD/outputs/huggingface"
+export MEMSTARA_STAGE_MODELS_PATH="$PWD/config/stage-models.local.json"
+mkdir -p outputs config
 ```
 
-The matcher needs its catalogue and embeddings built for the selected cohort
-and outcome. Rebuild when the cohort header, matching configuration, or embedding model changes. The first build may need embedding
-model downloads. Set `HF_HOME` to an empty dedicated cache when verifying a cold
-installation; Memstara forwards explicit cache paths to its tool subprocesses.
-The synthetic corpus includes absent-variable decoys and
-planted predictive signal for checking the literature-to-column mapping.
+`MEMSTARA_DISABLE_SIBLING_ENV=1` prevents automatic reading of an adjacent
+`motoro/.env`. Already exported values take precedence over `.env`; open a clean
+terminal or unset stale variables when changing configurations. The embedding
+model is `pritamdeka/S-PubMedBert-MS-MARCO`, revision
+`96786c7024f95c5aac7f2b9a18086c7b97b23036`; its first download/build can take time.
+The explicit `HF_HOME` above keeps this installation's model cache separate.
 
-**4. Run a pipeline.** With the runtime services and credentials ready:
+Generate the two stage profiles from those explicit settings. Run this only when
+creating or deliberately replacing the local model configuration:
 
 ```bash
-python -m memstara.pipeline.board --trials 3 --waves 1 --y-column outcome
-# Alternative supervisor-driven example:
-python -m memstara.pipeline.mvp --trials 3 --y-column outcome --trace
+python - <<'PY'
+import json, os
+from pathlib import Path
+resource = os.environ['ANTHROPIC_FOUNDRY_RESOURCE']
+assert resource and resource != 'YOUR_RESOURCE_NAME', 'Set your resource first'
+profile = {
+    'provider': 'azure_foundry',
+    'model': os.environ['MEMSTARA_LLM_MODEL'],
+    'api_base': f'https://{resource}.services.ai.azure.com',
+}
+Path(os.environ['MEMSTARA_STAGE_MODELS_PATH']).write_text(json.dumps({
+    'non_explanation_agents': profile,
+    'explanation_agent': profile,
+}, indent=2) + '\n')
+PY
 ```
 
-These execute real model calls. For a real cohort, set its dataset, knowledge
-bundle, and outcome instead, rebuild its matcher, and pass the outcome explicitly
-with `--y-column`. The board CLI defaults to `outcome`.
+| Profile key | Stages |
+|---|---|
+| `non_explanation_agents` | Question, Hypothesis, Data, ML, Interpretation |
+| `explanation_agent` | Explanation / final report |
 
-**5. Open the browser workspace.** Configure the viewer's read-only database
-accounts and connection settings as described in [viewer/README.md](viewer/README.md).
-From the Memstara checkout:
+For separate models, edit the two profiles independently and retain the deployment
+provider and endpoint that actually serve each model. Explicit profiles override
+stage assignments; legacy CLI `--model` is not a substitute. Other supported
+connections include `anthropic` with `ANTHROPIC_API_KEY`, and `openai` with
+`OPENAI_API_KEY`; change provider/model/endpoint consistently. Claude on Foundry
+uses the `azure_foundry` provider, not an OpenAI chat endpoint. Credentials stay
+in the environment, never in the stage-profile JSON. For advanced controls see
+[model profiles](DEVELOPER_GUIDE.md#model-profiles-and-their-limits).
+
+Initialize both schemas after the databases are healthy:
 
 ```bash
-docker compose -f viewer/docker-compose.yml up -d --build
-python -m memstara.control
+python -m motoro.migrations upgrade --url "$MOTORO_DATABASE_URL"
+python -m memstara.blackboard --create
 ```
 
-Open <http://localhost:8070>. The observation API uses port 8071; the separate
-host control service uses 8072 and runs in the foreground. Keep it running in
-its own terminal when using browser execution controls. The viewer's database
-connections remain read-only; pipeline actions go through the control service.
+### 4. Choose and prepare one research input
+
+Choose **A or B** for the first execution. Registration does not call the model.
+Do not combine one dataset with an unrelated corpus by accident.
+
+**A. Included synthetic example — no separately supplied dataset needed**
+
+```bash
+python -m memstara.research_inputs inspect examples/research-inputs/research.json
+python scripts/prepare_research_tutorial.py examples/research-inputs/research.json > outputs/launch.json
+```
+
+This contains 120 generated rows, four predictors and the binary `simulated_event`
+outcome. Its OKF is invented educational material, not clinical evidence.
+
+**B. Supplied HeartFailure demonstration**
+
+Place the supplied files at these locations without changing their contents:
+
+| Material | Required location |
+|---|---|
+| `mi_HeartFailure.csv` | `resources/datasets/heart-failure/dataset.csv` |
+| Contents of the supplied `okf/okf/` directory | `resources/knowledge/heart-failure/` |
+| OKF entry point after copying | `resources/knowledge/heart-failure/index.md` |
+
+These inputs are not currently included by Git; an absent file must be supplied,
+not replaced with a private HIV dataset. Preserve the directory hierarchy of the
+corpus. Use the following explicit preprocessing for installation acceptance:
+
+```bash
+python scripts/prepare_heart_failure_demo.py \
+  --source resources/datasets/heart-failure/dataset.csv \
+  --corpus resources/knowledge/heart-failure \
+  --destination outputs/heart-failure-demo
+python -m memstara.research_inputs inspect outputs/heart-failure-demo/research.json
+python scripts/prepare_research_tutorial.py outputs/heart-failure-demo/research.json > outputs/launch.json
+```
+
+The script selects eight fixed predictors: age, sex, prior myocardial infarctions,
+hypertension stage, diabetes history, obesity history, chronic bronchitis history,
+and asthma history. It retains rows with complete values on those predictors;
+it does **not** impute or modify the original. For the inspected supplied file,
+1,671 of 1,700 rows remained, with 29 excluded. `preparation.json` records both
+hashes, the selection and counts. Existing destination directories are rejected;
+choose another destination for a new preparation rather than overwrite evidence.
+
+The target is the supplied `chronic_heart_failure` indicator (1 positive, 0 negative).
+The generated contract explicitly labels endpoint timing and horizon as unverified.
+This is a software demonstration with possible complete-case selection bias, not
+validated prospective clinical prediction. The raw CSV cannot pass the current
+reject-missing-values policy unchanged.
+
+**C. Your own CSV / OKF / target**
+
+Copy `examples/research-inputs/research.json` to `outputs/my-study.json` and edit:
+
+| Field | Required meaning |
+|---|---|
+| `dataset_path`, `knowledge_path` | CSV path and OKF root containing `index.md`; absolute paths recommended |
+| `target.column`, `target.description` | Exact binary outcome column and what it means |
+| `target.positive_label`, `target.negative_label` | Exact CSV values, not inferred label order |
+| `target.prediction_time`, `target.horizon` | Predictor availability and outcome window |
+| `excluded_columns` | IDs, leakage-prone or unavailable-at-prediction-time columns |
+| `missing_policy` | `reject`; clean data explicitly before registering |
+
+Relative paths resolve from the working directory, not the JSON file's directory.
+Use an analysis-ready CSV up to 100 MiB with at least four eligible predictors.
+Run the same `inspect` and `prepare_research_tutorial.py` commands with your JSON.
+Review the tutorial skill contents for your study before a paid execution.
+
+| Available sources | `data_mode` | `knowledge_mode` | Output |
+|---|---|---|---|
+| CSV + OKF | `dataset` | `okf` | Models, measured results and source-grounded explanation |
+| CSV only | `dataset` | `llm_only` | Models and measured results without external grounding |
+| OKF only | `proposal` | `okf` | Research/data/analysis proposal, no fitted model or measured metrics |
+| Neither | `proposal` | `llm_only` | Proposal based on unverified model knowledge |
+
+For proposal mode, a target description is still required. Select modes explicitly;
+a missing selected source does not silently switch modes. To inspect/register any
+of these modes, use `python -m memstara.research_inputs inspect CONFIG.json` and the
+same tutorial preparation command. Changed source contents require a new registration.
+
+### 5. Understand the skills used by this execution
+
+The normal specialty catalogue contains 12 choices (4 × 2 × 2 × 2 × 2 = 64
+combinations), but a generic research profile cannot silently use an unrelated
+Addiction/HIV specialty. The tutorial registers separate, versioned user skills
+for Hypothesis and Explanation. It does not enable retired skills or edit originals.
+
+| Role | Normal catalogue | First-run tutorial selection |
+|---|---|---|
+| Hypothesis | Psychiatric, social determinants, substance use, random features | User research tutorial, from `examples/research-inputs/skills/hypothesis.md` |
+| Data | Training-heavy or balanced stratified | `data_training_heavy` |
+| ML | LR or XGBoost | `ml_logistic_regression` |
+| Interpretation | Anil SHAP or LIME | `shared-anil-shap` |
+| Explanation | Anil Addiction or HIV | User research tutorial, from `examples/research-inputs/skills/explanation.md` |
+
+Project skills are under `src/memstara/playbooks/`; common system prompts are under
+`src/memstara/prompts/`. The four Anil originals and two Phil documents have internal
+copies under `src/memstara/resources/contributed/`. Phil's ML Knowledge is additive
+background; the legacy ML Skill report selection remains disabled. No adjacent
+contributor folders are discovered automatically. Explicit skill-path overrides
+remain supported. If a required packaged document is missing, install a complete
+candidate revision; do not silently fall back to an unrelated archived skill.
+
+`outputs/launch.json` contains the saved research ID, tutorial skill IDs and a
+one-Loop command. `execution_ready: false` at this preparation stage means that
+runtime/model execution has not yet been validated; it is not an execution failure.
+
+### 6. Execute one Loop and check completion
+
+This step makes real provider calls and can incur charges. Do not also press Start
+in the UI for the same intended test. The commands below run the saved launch
+configuration with a bounded evaluation and preserve the log and exit status:
+
+```bash
+python - <<'PY'
+import json, shlex, subprocess, sys
+from pathlib import Path
+run = Path('outputs/runs/first-demo').resolve()
+if run.exists():
+    raise SystemExit('Use a new run path; do not overwrite an earlier execution')
+launch = json.loads(Path('outputs/launch.json').read_text())
+argv = shlex.split(launch['next_command'])
+argv[0] = sys.executable
+argv += ['--run-dir', str(run), '--max-attempts', '5', '--baseline-columns', '[]',
+         '--evaluation', json.dumps({'engine': 'xgboost', 'seed': 42,
+             'test_size': .25, 'folds': 0, 'replicates': 1, 'search_trials': 1})]
+with Path('outputs/first-demo-driver.log').open('w') as log:
+    result = subprocess.run(argv, stdout=log, stderr=subprocess.STDOUT)
+print('Exit code:', result.returncode)
+raise SystemExit(result.returncode)
+PY
+```
+
+In another terminal, follow `tail -f outputs/first-demo-driver.log` or, once it
+exists, `tail -f outputs/runs/first-demo/console.log`. Initial model downloads and
+matcher preparation can precede stage messages. Do not start a second execution
+merely because the first is preparing its inputs.
+
+After the process exits:
+
+```bash
+python - <<'PY'
+import json
+from pathlib import Path
+run = Path('outputs/runs/first-demo')
+status = json.loads((run / 'pipeline_status.json').read_text())
+assert status['status'] == 'completed', status
+assert status['report_completed'] and not status['unfinished_task_ids'] and not status['missing_trials']
+assert (run / 'report.md').stat().st_size > 0
+print('Completed; report saved at', run / 'report.md')
+PY
+```
+
+| Saved artifact | What to check |
+|---|---|
+| `config.json` | Frozen inputs, selected skills, model profiles and settings |
+| `execution.json` | Stage status and durations |
+| `iteration_outcomes.json`, `pipeline_status.json` | Actual Loop and final completion |
+| `report.md`, `report_status.json` | Persisted Explanation |
+| `trace/`, `console.log` | Agent/tool evidence and errors |
+| `cost_ledger.jsonl`, `model_retries.jsonl` | Provider usage and retries, when present |
+| `registry_status.json` | Synchronization into the experiment registry |
+
+Saved token-price estimates are not actual Azure billing. No billing response or
+no run-level attribution means actual execution cost is unconfirmed, not zero.
+A completed Loop does not prove that every combination or future provider call
+will succeed. Retry recovery must not be reported as error-free execution.
+
+### 7. Open the browser workspace (optional after CLI acceptance)
+
+For the custom ports above, use the local viewer path below. The existing
+`viewer/docker-compose.yml` has literal default database ports (5463/5453) and
+container names; do not start it against this stack without adjusting those values.
+The API must use read-only accounts, while the host control retains write access.
+
+Create a viewer role on **each** new database server (once per server). Enter
+`viewer` at the password prompt for these loopback-only development examples:
+
+```bash
+docker compose -f outputs/local-runtime/compose.yml exec board psql -U cleancheck -d memstara
+```
+
+Inside psql:
+
+```sql
+CREATE ROLE memstara_viewer LOGIN;
+\password memstara_viewer
+GRANT CONNECT ON DATABASE memstara TO memstara_viewer;
+GRANT USAGE ON SCHEMA public TO memstara_viewer;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO memstara_viewer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO memstara_viewer;
+\q
+```
+
+Repeat using `exec runtime psql -U cleancheck -d motoro` and replace the database
+name in `GRANT CONNECT` with `motoro`. Keep the grants as the `cleancheck` table
+owner so future tables are readable too. Do not use the owner account for the viewer.
+
+Install the separate observation API environment and frontend:
+
+```bash
+python -m venv viewer/.venv
+uv pip install --python viewer/.venv/bin/python -r viewer/requirements.txt
+npm --prefix viewer/web ci
+```
+
+Before starting the UI, check ports 5173, 8071 and 8072 using the socket check in
+step 2 with `ports = (5173, 8071, 8072)`. Do not connect the new UI to an old API or
+control process just because those ports respond. If occupied, stop only the
+instance you deliberately intend to replace, or choose different API/control ports
+and update both matching `server.proxy` targets in `viewer/web/vite.config.ts`.
+Use those same ports in the commands below. Keep the browser on port 5173 for the
+documented local origin policy. An occupied 5173 must be resolved before continuing.
+
+Start three terminals from the repository root:
+
+1. **Host control:** activate `.venv`, load `.env` and export the local paths from
+   step 3, then run `python -m memstara.control --port 8072`.
+2. **Read-only observation API:** run the following:
+
+```bash
+export MEMSTARA_VIEWER_DSN='postgresql://memstara_viewer:viewer@127.0.0.1:55641/memstara'
+export CORE_VIEWER_DSN='postgresql://memstara_viewer:viewer@127.0.0.1:55642/motoro'
+viewer/.venv/bin/python -m uvicorn main:app --app-dir viewer/api --host 127.0.0.1 --port 8071
+```
+
+3. **Web:** run `npm --prefix viewer/web run dev -- --host 127.0.0.1 --port 5173 --strictPort` and open
+   **http://localhost:5173**. This development UI proxies to 8071/8072; it is not the
+   Docker-served UI at 8070. Free these ports or update the proxy configuration if
+   another instance already occupies them. Node.js 22 is required for this path.
+
+In Floor plan, choose **Add pipeline**, select the research version saved in step 4,
+select the tutorial Hypothesis/Explanation skill IDs printed in `outputs/launch.json`,
+and use the remaining choices from step 5. Set one Loop initially. Creating a
+pipeline saves settings; Start executes it. Do not replay the already completed CLI
+run merely to view its results. Restart the control process between executions after
+changing environment settings; a running worker retains its frozen configuration.
+
+The CLI pipeline acceptance and the frontend build/unit checks were verified
+separately. This README does not claim a fresh interactive browser acceptance of
+the custom-port stack. The workspace has no production login/authentication layer;
+these instructions bind development services to loopback.
+
+### 8. Troubleshooting and verification boundaries
+
+| Symptom | Check / action |
+|---|---|
+| Foundry credentials missing | Set both API key and resource name in the active terminal; do not rely on an adjacent `.env` |
+| Missing SHAP or other skill | Check the internal contributed files exist in the installed revision |
+| HeartFailure missing-values rejection | Prepare the separate demo CSV in step 4; never relabel the raw CSV as validated |
+| Database connection refused | Check Compose health, port/URL agreement, migration and role permissions |
+| UI cannot connect / port 8070 unavailable | This walkthrough's development UI uses 5173; keep API 8071 and control 8072 running |
+| Slow first execution | Inspect download/cache preparation and stage logs; a fresh embedding cache is intentionally empty |
+| Provider timeout / HTTP 429 | Inspect saved retry and request events; preserve the failed run, resolve provider capacity/connection before retrying |
+| Changed data rejected on resume | Keep historical snapshots; register changed input as a new version and start a new run |
+
+Focused offline checks (no provider calls):
+
+```bash
+python -m pytest -q tests/test_heart_failure_demo.py tests/test_preflight_modes.py tests/test_packaged_skills.py tests/test_research_tutorial.py
+python scripts/check_release_readiness.py
+npm --prefix viewer/web test
+npm --prefix viewer/web run build
+```
+
+The release check without `--publication` validates contents only. A successful
+local run, an ignored resource folder, and a passing test suite do not establish
+that the same files are already published or approved for redistribution.
 
 ## Using the workspace
 

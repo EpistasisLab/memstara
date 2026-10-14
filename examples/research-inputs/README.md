@@ -17,19 +17,25 @@ target description from `research.json`, inspect, and save. Paths refer to the
 machine running the control service; relative paths use its working directory.
 Absolute paths are recommended for user datasets.
 
-In **Add pipeline**, choose the saved research version in the first step. Review
-the `hypothesis_research` skill, Data, ML, Interpretation and Explanation settings.
-Use one Loop initially. Creating a pipeline saves settings; Start executes it
-and can incur model charges. All Combinations uses the same research selector.
-Existing pipelines can switch versions in **Data & target** when not running.
-
-A direct CLI execution, after configuring the normal model/database prerequisites,
-uses the returned ID:
+For a fresh installation, follow [the from-scratch guide](../../GETTING_STARTED.md).
+Register the example together with separate corpus-independent tutorial skills:
 
 ```sh
-python -m memstara.pipeline.board --research-input-id RECORD_ID \
-  --playbook-hypothesis hypothesis_research --trials 1 --waves 1
+python scripts/prepare_research_tutorial.py examples/research-inputs/research.json
 ```
+
+This prints an input record ID, two user-skill IDs and a one-Loop execution command.
+It does not start a pipeline or check provider/database availability. In **Add
+pipeline**, select that research version and the printed Hypothesis/Explanation
+skills; select training-heavy Data, LR ML and SHAP Interpretation. Use one Loop.
+Do not use the existing Addiction/HIV specialty selections for this generic profile:
+they are deliberately rejected by the research contract. The contributed originals
+are preserved; tutorial skills are separate user records, not replacements.
+
+The printed command makes real model calls only when you execute it. Configure the
+runtime first. This is a software demonstration, not evidence of clinical validity
+or a successful live execution of the current revision. See the
+[release gates](../../RELEASE_CHECKLIST.md) for outstanding acceptance.
 
 ## Choose the input mode
 
@@ -112,7 +118,7 @@ digits and underscores, up to 64 characters. It is not an arbitrary-document
 ingestion, automatic cleaning or multiclass workflow.
 
 Legacy corpus-specific Hypothesis defaults and unbound Addiction/HIV specialist
-Explanation skills are rejected for these generic profiles. Use the generic
-defaults or a custom skill you have reviewed for the selected dataset and corpus.
+Explanation skills are rejected for these generic profiles. Use the separate tutorial user skills or a custom skill you have reviewed for
+the selected dataset and corpus.
 Selecting different research inputs resets source filters and fixed baselines;
 review the entire skill selection, especially a saved combination schedule.

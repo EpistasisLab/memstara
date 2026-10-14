@@ -39,6 +39,14 @@ def main():
                     name = path.relative_to(ROOT / "src").as_posix()
                     assert name in names, name
                     assert archive.read(name) == path.read_bytes(), name
+        # The current specialist bundle is required even without sibling folders.
+        bundle = ROOT / "src/memstara/resources/contributed"
+        manifest = json.loads((bundle / "manifest.json").read_text())
+        for relative in ["manifest.json", *[row["path"] for row in manifest["files"]]]:
+            path = bundle / relative
+            name = path.relative_to(ROOT / "src").as_posix()
+            assert name in names, f"Missing portable skill resource: {name}"
+            assert archive.read(name) == path.read_bytes(), name
         assert not any(
             part in {".env", "docs", "daily_log", "BACKLOG.md", "CLAUDE.md", "CHECKLIST.md"}
             for name in names

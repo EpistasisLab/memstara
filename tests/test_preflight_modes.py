@@ -91,3 +91,17 @@ def test_omitting_inputs_does_not_omit_provider_credentials(monkeypatch):
     monkeypatch.delenv('OPENAI_API_KEY', raising=False)
     problems = env.missing_vars('openai', knowledge_mode='llm_only', data_mode='proposal')
     assert any(p.startswith('OPENAI_API_KEY ') for p in problems)
+
+
+def test_isolated_install_can_disable_sibling_environment(tmp_path, monkeypatch):
+    local, sibling = tmp_path / 'local.env', tmp_path / 'sibling.env'
+    local.write_text('MEMSTARA_TEST_LOCAL=local\n')
+    sibling.write_text('MEMSTARA_TEST_SIBLING=must-not-load\n')
+    monkeypatch.setattr(env, 'ENV_FILES', (local, sibling))
+    monkeypatch.setenv('MEMSTARA_DISABLE_SIBLING_ENV', '1')
+    monkeypatch.delenv('MEMSTARA_TEST_LOCAL', raising=False)
+    monkeypatch.delenv('MEMSTARA_TEST_SIBLING', raising=False)
+    assert env.load_env() == [local.resolve()]
+    import os
+    assert os.environ['MEMSTARA_TEST_LOCAL'] == 'local'
+    assert 'MEMSTARA_TEST_SIBLING' not in os.environ

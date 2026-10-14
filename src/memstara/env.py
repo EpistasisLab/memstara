@@ -81,7 +81,9 @@ def load_env() -> list[Path]:
     Safe to call repeatedly — existing values are never overwritten.
     """
     read: list[Path] = []
-    for path in ENV_FILES:
+    for index, path in enumerate(ENV_FILES):
+        if index and os.environ.get("MEMSTARA_DISABLE_SIBLING_ENV") == "1":
+            continue
         if path.is_file():
             load_dotenv(path)
             read.append(path.resolve())

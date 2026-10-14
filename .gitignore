@@ -59,3 +59,8 @@ htmlcov/
 # Deployment-specific pricing and account mappings
 config/pricing.local.json
 config/azure-pricing-meters.local.json
+
+# Local research inputs: official layout, not cleared for public distribution.
+/resources/datasets/
+/resources/knowledge/
+/resources/manifests/*.local.json

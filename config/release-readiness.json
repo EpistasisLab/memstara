@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "candidate_branch": "experiment/agent-combinations-pilot",
+  "public_and_research_same_source": true,
+  "provisional_example": "examples/research-inputs/research.json",
+  "decisions": {
+    "toy_dataset_and_knowledge_source": {"status": "pending", "evidence": ""},
+    "project_license": {"status": "pending", "evidence": ""},
+    "contributed_document_rights": {"status": "pending", "evidence": ""},
+    "human_review": {"status": "pending", "evidence": ""},
+    "final_candidate_live_acceptance": {"status": "pending", "evidence": ""},
+    "publication_owner_approval": {"status": "pending", "evidence": ""}
+  }
+}

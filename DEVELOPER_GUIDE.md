@@ -1176,3 +1176,25 @@ including combination runs. Files and historical prompt loading remain intact.
 New UI drafts inheriting a disabled choice use addiction-psychiatric; review its
 domain compatibility with the selected research inputs before starting. Existing
 run configurations are not rewritten.
+
+
+## Portable contributed documents
+
+Current specialist documents are preserved byte-for-byte under
+`src/memstara/resources/contributed/anil/`. The loader uses an explicit
+`MEMSTARA_SPECIALIST_SKILLS_DIR`, otherwise the packaged directory. Sibling
+folders are never discovered automatically. Missing files in an explicitly
+selected directory are not filled from another source. Archived
+files and symlinks outside the selected root remain rejected.
+
+Phil's ML reference and legacy results instructions are included unchanged under
+`src/memstara/resources/contributed/phil/`. Explicit document paths and
+`MEMSTARA_SHARED_SKILLS_DIR` take precedence over packaged defaults. The ML
+reference is additive background, not a selectable ML skill; the legacy results
+skill remains hidden/disabled for new experiments. Adding the packaged reference
+changes fresh installations that previously had no reference; frozen historical
+prompts remain authoritative on recovery.
+
+The manifest records preservation hashes, not publication rights. Redistribution
+approval remains pending. Run `python scripts/check_release_readiness.py` for
+content checks and consult [REVIEW_GUIDE.md](REVIEW_GUIDE.md) before sign-off.

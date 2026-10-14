@@ -7,7 +7,7 @@ import os
 import re
 from pathlib import Path
 
-from memstara.paths import DEFAULT_OUTPUT_DIR, WORKSPACE_ROOT
+from memstara.paths import DEFAULT_OUTPUT_DIR, PACKAGE_ROOT
 from memstara.agent_labels import agent_label
 from memstara.pipeline import prompts
 
@@ -23,7 +23,10 @@ ANIL_SKILLS = {
 
 
 def anil_dir() -> Path:
-    return WORKSPACE_ROOT / 'anil_shared'
+    configured = os.environ.get('MEMSTARA_SPECIALIST_SKILLS_DIR', '').strip()
+    if configured:
+        return Path(configured).expanduser()
+    return PACKAGE_ROOT / 'resources/contributed/anil'
 
 
 def anil_skills() -> list[dict]:
@@ -57,7 +60,11 @@ def document_path(variable: str, filename: str) -> Path | None:
     if value:
         return Path(value).expanduser()
     directory = shared_dir()
-    return directory / filename if directory else None
+    if directory is not None:
+        return directory / filename
+    bundled = {'ml-reference.md': 'ML Knowledge (1).md', 'ml-results.md': 'ML Skill (1).md'}
+    name = bundled.get(filename)
+    return PACKAGE_ROOT / 'resources/contributed/phil' / name if name else None
 
 
 def canonical_name(name: str) -> str:
