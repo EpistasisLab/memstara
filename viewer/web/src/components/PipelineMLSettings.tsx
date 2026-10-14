@@ -18,8 +18,8 @@ export default function PipelineMLSettings({pipeline,close}:{pipeline:PipelineDe
  const locked=busy||!!pipeline.running;
  return <FloorDetailDialog title={`${pipeline.name} · ML evaluation and advanced settings`} close={close}>
   <p className="mb-3 text-sm">Changes apply to future executions. Existing runs and saved results keep their original frozen settings.</p>
-  <EvaluationSettings value={evaluation} onChange={setEvaluation} paired dataSkill={combined?'combinations':pipeline.configuration.playbook_data} proposal={pipeline.configuration.data_mode==='proposal'} disabled={locked}/>
   <MLAdvancedSettings skills={skills} value={overrides} onChange={setOverrides} replicates={evaluation.replicates} proposal={pipeline.configuration.data_mode==='proposal'} disabled={locked}/>
+  <EvaluationSettings value={evaluation} onChange={setEvaluation} paired dataSkill={combined?'combinations':pipeline.configuration.playbook_data} proposal={pipeline.configuration.data_mode==='proposal'} disabled={locked}/>
   {locked&&<p className="mt-3 text-sm">End the active execution before changing its ML settings.</p>}
   {(invalid||error)&&<p role="alert" className="mt-3 text-sm text-red-700">{invalid||error}</p>}
   <div className="mt-4 flex gap-3"><button type="button" onClick={close}>Cancel</button><button type="button" disabled={locked||!!invalid} onClick={async()=>{const saved=await usePipelines.getState().save(pipeline.id,{...pipeline.configuration,evaluation,ml_overrides:overridesForSkills(overrides,skills)});if(saved)close();}}>Save ML settings</button></div>

@@ -7,7 +7,7 @@ export default function MLAdvancedSettings({skills,value={},onChange,replicates=
  const [expanded,setExpanded]=useState(false);
  useControl(s=>s.catalog); // Catalog responses carry the authoritative settings schema.
  const schema=getMlSettingsSchema(),models=modelsForSkills(skills);
- if(!models.length)return null;
+ if(!models.length)return <section aria-label="Advanced model settings" className="mt-3 rounded border border-paper-line p-3"><h3 className="font-semibold">Advanced model settings</h3><p className="mt-2 text-sm">Select the Logistic Regression (LR) or XGBoost skill to configure its model parameters. Select both skills in All Combinations to configure both models separately.</p></section>;
  const error=mlOverridesError(value,skills,replicates);
  function changeModel(name:ModelName,key:string,item:unknown,parameter=false){
   const next=structuredClone(value);next.version=1;next.models??={};
@@ -19,7 +19,8 @@ export default function MLAdvancedSettings({skills,value={},onChange,replicates=
   onChange(overridesForSkills(next,skills));
  }
  return <section className="mt-3 rounded border border-paper-line p-3">
-  <button type="button" className="cursor-pointer text-left font-semibold" aria-expanded={expanded||!!error} onClick={()=>setExpanded(v=>!v)}>Advanced model settings · {overrideCount(value)} fixed values</button>
+  <button type="button" className="flex w-full cursor-pointer items-center justify-between gap-3 rounded border border-paper-line bg-paper-panel px-3 py-2 text-left font-semibold" aria-expanded={expanded||!!error} onClick={()=>setExpanded(v=>!v)}><span>Advanced model settings · {overrideCount(value)} fixed values</span><span aria-hidden="true">{expanded||error?'−':'+'}</span></button>
+  {!expanded&&!error&&<p className="mt-2 text-sm text-ink-muted">Expand to edit {models.map(name=>modelLabels[name]).join(' and ')} parameters, prediction thresholds and training cross-validation.</p>}
   {(expanded||!!error)&&<div className="mt-3 space-y-4">
    <p className="text-sm">Blank or Auto fields are chosen by the ML Agent. Your explicit values are fixed before fitting and recorded separately from automatic settings. Both LR and XGBoost are fitted; only the selected ML skills have editable model panels here. Unselected comparator settings remain automatic.</p>
    {models.length>1&&<p className="text-sm">These model-specific values apply to that model in every Loop, regardless of which selected skill is primary. They are not shared between LR and XGBoost.</p>}

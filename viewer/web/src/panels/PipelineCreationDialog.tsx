@@ -153,6 +153,7 @@ function CreationWizard() {
             }}><option value="" disabled>{loading ? 'Loading skills…' : 'Select a skill'}</option>
               {catalog.filter(s => compatibleResearchSkill(s,draft) && s.stage === stage).map(s => <option key={s.id} value={s.id} className={addictionSkills.has(s.id) ? 'font-bold' : 'font-normal'}>{s.title}</option>)}
             </select></label>
+          {stage==='ml'&&<MLAdvancedSettings skills={[draft.playbook_ml]} value={draft.ml_overrides} replicates={draft.evaluation.replicates} proposal={draft.data_mode==='proposal'} disabled={busy||loading||uploading} onChange={ml_overrides=>setDraft(d=>({...d,ml_overrides}))}/>}
           {!loading && !catalog.some(s => s.stage === stage) && <div role="alert" className="text-sm">Skills are unavailable. <button type="button" onClick={() => void reload()} className="underline">Try again</button></div>}
           <CustomSkillUpload key={stage} stage={stage} disabled={busy}
             onBusy={setUploading} onSelect={chosen => setDraft(d => ({ ...d, [`playbook_${stage === "report" ? "explanation" : stage}`]: chosen.id,
@@ -161,7 +162,6 @@ function CreationWizard() {
           {skill && <div className="rounded-lg border border-paper-line bg-paper-panel p-4 text-sm"><p className={addictionSkills.has(skill.id) ? 'font-bold' : 'font-medium'}>{skill.title}</p><p className="mt-2 text-ink-muted">{skill.description}</p>
             <details className="mt-3"><summary className="cursor-pointer">Read skill instructions</summary><pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-sans text-xs">{skill.content}</pre></details></div>}
           {stage === 'ml' && <><AgentReferenceKnowledge /><EvaluationSettings proposal={draft.data_mode==='proposal'} paired={paired} dataSkill={draft.playbook_data} value={draft.evaluation} disabled={busy || loading || uploading} onChange={evaluation=>setDraft(d=>({...d,evaluation}))}/>
-            <MLAdvancedSettings skills={[draft.playbook_ml]} value={draft.ml_overrides} replicates={draft.evaluation.replicates} proposal={draft.data_mode==='proposal'} disabled={busy||loading||uploading} onChange={ml_overrides=>setDraft(d=>({...d,ml_overrides}))}/>
             <p className="text-xs text-ink-muted">Selecting another ML skill may apply its evaluation defaults. Review these settings after changing or uploading a skill.</p>
             <BaselineSettings value={draft.baseline_columns ?? []} onChange={value=>setDraft(d=>({...d, baseline_columns:value}))}/></>}
         </>}

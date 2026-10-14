@@ -32,6 +32,7 @@ try{
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
  for(const role of ['Hypothesis','Data']){const choice=dialog.getByRole('combobox',{name:role+' skill',exact:true});if(!await choice.inputValue())await choice.selectOption(role==='Hypothesis'?'hypothesis_general':'data_training_heavy');await dialog.getByRole('button',{name:'Next',exact:true}).click();}
  await dialog.getByRole('combobox',{name:'Machine learning skill',exact:true}).selectOption('ml_logistic_regression');
+ assert.equal(await dialog.evaluate(el=>{const advanced=[...el.querySelectorAll('button')].find(b=>b.textContent.startsWith('Advanced model settings'));const evaluation=el.querySelector('[aria-label="ML evaluation settings"]');return !!(advanced.compareDocumentPosition(evaluation)&Node.DOCUMENT_POSITION_FOLLOWING);}),true);
  await dialog.getByText(/^Advanced model settings/).click();
  assert.equal(await dialog.getByRole('group',{name:'XGBoost settings',exact:true}).count(),0);
  await dialog.getByLabel('Logistic Regression (LR) C',{exact:true}).fill('.25');

@@ -134,6 +134,7 @@ function Editor({ close }: { close: () => void }) {
         {catalog.filter(x => x.stage === stage && compatibleResearchSkill(x, form)).map(x => <option key={x.id} value={x.id}
           disabled={multiple && used.includes(x.hash)}>{x.title}{multiple && used.includes(x.hash) ? " · already used" : ""}</option>)}
       </select>
+    {stage==='ml'&&<MLAdvancedSettings skills={[choice]} value={overrides} replicates={plan.replicates} proposal={form.data_mode==='proposal'} disabled={saving||!!running||busy} onChange={setOverrides}/>}
       {coach===1&&selected&&<button type="button" className="mt-3 rounded border border-paper-line px-3 py-2 text-xs font-semibold text-ink" onClick={()=>setCoach(2)}>Keep this skill · review next</button>}
 
     <section className="mt-4 border-t border-paper-line pt-3" aria-label="Upload a custom skill" aria-busy={saving}>
@@ -180,7 +181,6 @@ function Editor({ close }: { close: () => void }) {
         dataSkill={form.combination_max_loops?'combinations':form.playbook_data}/>
       <p className="text-xs text-ink-faint">Paired LR/XGBoost evaluation requires complete predictors for both models. Missing labels and non-finite values are rejected before training.</p>
     </div>}
-    {stage==='ml'&&<MLAdvancedSettings skills={[choice]} value={overrides} replicates={plan.replicates} proposal={form.data_mode==='proposal'} disabled={saving||!!running||busy} onChange={setOverrides}/>}
     {(error || duplicate || invalidPlan) && <p role="alert" className="mt-3 text-sm text-red-700">{error || advancedError || (invalidPlan ? "Check evaluation ranges. CV folds must be 0 or 2–10." : "Choose a different skill for this agent.")}</p>}
     {!add && multiple && count === 1 && <p className="mt-3 text-xs text-ink-faint">At least one {agentStageLabel(stage)} agent is required.</p>}
     <div className="agent-settings-footer mt-5 flex flex-wrap justify-end gap-2">
