@@ -7,6 +7,7 @@ try {
  const inputs=['hiv','heart'].map(id=>({id,input_checks_passed:true,configuration:{name:id,knowledge_mode:'okf',data_mode:'dataset',target:{column:id==='hiv'?'HIV_DETECTABLE':'chronic_heart_failure',description:id+' target',prediction_time:'Before outcome'}}}));
  await page.route('**/control/**',async route=>{
   const path=new URL(route.request().url()).pathname;
+  if(path==='/control/health')return route.fulfill({json:{ok:true,bundle:{},llm:{provider:'openai',model:'fixture'},input_defaults:{dataset_available:false,knowledge_available:false,target_column:''}}});
   if(path==='/control/playbooks')return route.fulfill({json:{catalog,stages:['hypothesis','data','ml','interpreter','report'],playbooks:catalog.map(x=>x.id),references:[]}});
   if(path==='/control/research-inputs')return route.fulfill({json:{inputs}});
   if(path==='/control/pipelines')return route.fulfill({json:{pipelines:[]}});
@@ -17,6 +18,9 @@ try {
  await page.getByRole('button',{name:/Add pipeline/i}).click();
  await page.getByRole('button',{name:/Selected Pipelines/}).click();
  const dialog=page.getByRole('dialog',{name:'Create a pipeline',exact:true});
+ await dialog.getByText(/No deployment OKF is configured/).waitFor();
+ await dialog.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();
+ assert.equal(await dialog.getByRole('button',{name:'Next',exact:true}).isEnabled(),false);
  const research=dialog.getByRole('combobox',{name:'Research inputs',exact:true});
  await research.selectOption('hiv');
  await dialog.getByText(/Target: HIV_DETECTABLE/).waitFor();

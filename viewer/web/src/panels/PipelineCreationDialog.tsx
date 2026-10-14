@@ -65,6 +65,7 @@ function CreationWizard() {
       playbook_interpreter: "shared-anil-shap" };
   });
   const sources = useControl(s => s.skills);
+  const [sourceError,setSourceError]=useState('');
   const [sourceReviewed, setSourceReviewed] = useState(false);
   const catalog = useControl(s => s.catalog);
   const { busy, error, closeCreation, create } = usePipelines();
@@ -88,7 +89,7 @@ function CreationWizard() {
   const complete = setupStages.every(s => catalog.some(c => c.stage === s && c.id === draft[`playbook_${s === "report" ? "explanation" : s}`]));
   const validName = Boolean(name.trim()) && name.length <= 80;
   const validModel = evaluationPlanError(draft.evaluation) === null;
-  const validSource = sourceReviewed && (draft.skill === '' || sources.some(s => s.skill === draft.skill));
+  const validSource = !sourceError && sourceReviewed && (draft.skill === '' || sources.some(s => s.skill === draft.skill));
   const sourceLabel = draft.research_input_id ? `Saved research ${draft.research_input_id.slice(0,8)} · target ${draft.y_column}` : draft.knowledge_mode==='llm_only' ? 'LLM knowledge only (no corpus)' : draft.skill === '' ? 'All available knowledge' : sources.find(s => s.skill === draft.skill)?.label || 'Unavailable source';
   const valid = step === 0 ? validSource : step === 6 ? validName : step === 7 ? validSource && validName && complete && validModel && Number.isInteger(draft.waves) && draft.waves >= 1 && draft.waves <= 10 : Boolean(skill) && (stage !== 'ml' || validModel);
   return <dialog ref={dialog} aria-labelledby="pipeline-create-title" aria-describedby="pipeline-create-description"
@@ -119,7 +120,7 @@ function CreationWizard() {
       <div className="pipeline-creation-body space-y-4">
         <h3 ref={heading} tabIndex={-1} className="text-lg font-semibold">{step + 1}. {labels[step]} <span className="text-xs font-normal text-ink-muted">· Step {step + 1} of {labels.length}</span></h3>
         {step === 0 && <><p className="text-sm text-ink-muted">Choose the evidence this pipeline will explore to generate research questions and hypotheses. Agent skills are configured in the following steps.</p>
-          <ResearchInputSelect value={draft} onChange={patch=>{setDraft(d=>({...d,...patch}));setSourceReviewed(false);}}/>
+          <ResearchInputSelect onValidityChange={setSourceError} value={draft} onChange={patch=>{setDraft(d=>({...d,...patch}));setSourceReviewed(false);}}/>
           {!draft.research_input_id&&draft.knowledge_mode!=='llm_only'&&<KnowledgeSelect value={draft.skill} onChange={value => { setDraft(d => ({...d, skill: value})); setSourceReviewed(false); }} />}
           <label className="flex items-start gap-3 rounded-lg border border-paper-line bg-paper-panel p-3 text-sm"><input type="checkbox" checked={sourceReviewed} onChange={e => setSourceReviewed(e.target.checked)} className="mt-1"/><span>Use {sourceLabel} for this pipeline.</span></label>
           {!loading && !draft.research_input_id && draft.knowledge_mode!=='llm_only' && sources.length === 0 && <p className="text-sm text-ink-muted">No deployment source filters are available. Select a saved research input or verify the configured corpus; you can <button type="button" className="underline" onClick={() => void reload()}>reload sources</button>.</p>}
@@ -154,14 +155,14 @@ function CreationWizard() {
               evaluation: stage === 'ml' ? { ...d.evaluation, ...chosen.evaluation } : d.evaluation }))} />
           {skill && <div className="rounded-lg border border-paper-line bg-paper-panel p-4 text-sm"><p className={addictionSkills.has(skill.id) ? 'font-bold' : 'font-medium'}>{skill.title}</p><p className="mt-2 text-ink-muted">{skill.description}</p>
             <details className="mt-3"><summary className="cursor-pointer">Read skill instructions</summary><pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-sans text-xs">{skill.content}</pre></details></div>}
-          {stage === 'ml' && <><AgentReferenceKnowledge /><EvaluationSettings paired={paired} dataSkill={draft.playbook_data} value={draft.evaluation} disabled={busy || loading || uploading} onChange={evaluation=>setDraft(d=>({...d,evaluation}))}/>
+          {stage === 'ml' && <><AgentReferenceKnowledge /><EvaluationSettings proposal={draft.data_mode==='proposal'} paired={paired} dataSkill={draft.playbook_data} value={draft.evaluation} disabled={busy || loading || uploading} onChange={evaluation=>setDraft(d=>({...d,evaluation}))}/>
             <p className="text-xs text-ink-muted">Selecting another ML skill may apply its evaluation defaults. Review these settings after changing or uploading a skill.</p>
             <BaselineSettings value={draft.baseline_columns ?? []} onChange={value=>setDraft(d=>({...d, baseline_columns:value}))}/></>}
         </>}
         {step === 7 && <><p className="text-sm text-ink-muted">Review your pipeline. Each loop builds on earlier results and interpretations. The first loop starts from knowledge. After creation, press Play when you are ready.</p>
           <div className="rounded-lg border border-paper-line bg-paper-panel p-3 text-sm" aria-label="ML settings review">
             <p className="font-semibold">ML evaluation settings</p>
-            {paired?<p className="mt-1 text-ink-muted">Both LR and XGBoost · primary: {draft.playbook_ml==='ml_xgboost'?'XGBoost':'LR'} · agent-selected parameters and training CV · Data-skill split policy · {draft.evaluation.replicates} split evaluations</p>:<p className="mt-1 text-ink-muted">Model: {draft.evaluation.engine} · seed: {draft.evaluation.seed} · hold-out: {Math.round(draft.evaluation.test_size*100)}% · {draft.evaluation.replicates} splits · {draft.evaluation.search_trials} candidates</p>}
+            {draft.data_mode==='proposal'?<p>Proposal only: no model training or measured evaluation.</p>:paired?<p className="mt-1 text-ink-muted">Both LR and XGBoost · primary: {draft.playbook_ml==='ml_xgboost'?'XGBoost':'LR'} · agent-selected parameters and training CV · Data-skill split policy · {draft.evaluation.replicates} split evaluations</p>:<p className="mt-1 text-ink-muted">Model: {draft.evaluation.engine} · seed: {draft.evaluation.seed} · hold-out: {Math.round(draft.evaluation.test_size*100)}% · {draft.evaluation.replicates} splits · {draft.evaluation.search_trials} candidates</p>}
             {!validModel && <p role="alert">{evaluationPlanError(draft.evaluation)}</p>}
             <button type="button" className="mt-2 underline" onClick={()=>setStep(3)}>Edit ML settings</button>
           </div>

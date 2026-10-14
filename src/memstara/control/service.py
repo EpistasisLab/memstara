@@ -601,7 +601,14 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"ok": True, "bundle": bundle, "running": RUNS.running(), "llm": llm,
                              "configuration_source": configuration_source(),
                              "configuration_check": check(dict(os.environ)),
-                             "stage_models": stage_models, "stage_model_error": stage_model_error})
+                             "stage_models": stage_models, "stage_model_error": stage_model_error,
+                             "input_defaults": {
+                                 "dataset_available": bool(os.environ.get('MEMSTARA_DATASET_PATH')) and
+                                     Path(os.environ['MEMSTARA_DATASET_PATH']).is_file(),
+                                 "knowledge_available": bool(os.environ.get('AGENTIC_OKF_BUNDLE_DIR')) and
+                                     (Path(os.environ['AGENTIC_OKF_BUNDLE_DIR']) / 'index.md').is_file(),
+                                 "target_column": os.environ.get('MEMSTARA_OUTCOME_COLUMN', ''),
+                             }})
             return
 
         if path.startswith("/control/pipelines/") and path.endswith("/combinations"):

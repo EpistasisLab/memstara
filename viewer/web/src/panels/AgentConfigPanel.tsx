@@ -169,7 +169,7 @@ function Editor({ close }: { close: () => void }) {
     {choice && !selected && <p role="alert" className="mt-3 text-sm">This saved selection is not a skill for this agent. ML Results Presenter belongs to Explanation; ML Knowledge is reference material. Choose an appropriate skill and save.</p>}
     {stage === "ml" && <div className="mt-4 space-y-3">
       <BaselineSettings value={baseline} onChange={setBaseline}/>
-      <EvaluationSettings value={plan} onChange={setPlan} disabled={saving||!!running||busy}
+      <EvaluationSettings proposal={form.data_mode==='proposal'} value={plan} onChange={setPlan} disabled={saving||!!running||busy}
         paired={!!form.combination_max_loops||['ml_logistic_regression','ml_xgboost'].includes(choice)}
         dataSkill={form.combination_max_loops?'combinations':form.playbook_data}/>
       <p className="text-xs text-ink-faint">Paired LR/XGBoost evaluation requires complete predictors for both models. Missing labels and non-finite values are rejected before training.</p>

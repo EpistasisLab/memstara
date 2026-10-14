@@ -2,11 +2,12 @@ import type { EvaluationPlan } from '../store/control';
 import { evaluationPlanError } from '../lib/evaluationPlan';
 
 const field = 'mt-2 block w-full min-w-0 rounded-lg border border-paper-line bg-paper px-3 py-2 text-sm text-ink disabled:opacity-50';
-export default function EvaluationSettings({value, onChange, disabled = false, paired = false, dataSkill = ""}: {
-  value: EvaluationPlan; onChange: (value: EvaluationPlan) => void; disabled?: boolean; paired?: boolean; dataSkill?: string;
+export default function EvaluationSettings({value, onChange, disabled = false, paired = false, dataSkill = "", proposal = false}: {
+  value: EvaluationPlan; onChange: (value: EvaluationPlan) => void; disabled?: boolean; paired?: boolean; dataSkill?: string; proposal?: boolean;
 }) {
   const error = evaluationPlanError(value);
   const update = (key: keyof EvaluationPlan, number: number) => onChange({...value, [key]: number});
+  if (proposal) return <fieldset className="compact-evaluation space-y-2 rounded-lg border p-4" aria-label="ML evaluation settings"><legend>Proposed analysis only</legend><p>No CSV is selected. The agents propose a future analysis plan; no models are fitted, no split is performed, and no measured performance or SHAP/LIME values are produced.</p><p>The selected ML instructions guide the proposal. Empirical settings must be reviewed after a dataset and target mapping are registered.</p></fieldset>;
   if (paired) return <fieldset disabled={disabled} className="compact-evaluation space-y-3 rounded-lg border border-paper-line p-4" aria-label="ML evaluation settings">
     <legend>Agent-configured LR and XGBoost</legend>
     <p>Both models are fitted on the same predictors and split. The selected ML skill determines the primary model; the other is the comparator. Random Forest is not part of this execution.</p>
