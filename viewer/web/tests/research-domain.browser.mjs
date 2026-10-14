@@ -1,14 +1,15 @@
+import {corpusSkillBindings} from './corpus-skill-bindings.fixture.mjs';
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
 try {
  const page=await browser.newPage({viewport:{width:1400,height:1000}});
- const catalog=[['hypothesis_general','hypothesis'],['random_features','hypothesis'],['addiction-psychiatric','hypothesis'],['data_training_heavy','data'],['ml_logistic_regression','ml'],['ml_xgboost','ml'],['shared-anil-shap','interpreter'],['report_general','report'],['shared-anil-hiv','report']].map(([id,stage])=>({id,stage,title:id,hash:id,content:'# Fixture',description:'Fixture',source:'fixture'}));
+ const catalog=[['hypothesis_general','hypothesis'],['random_features','hypothesis'],...corpusSkillBindings.profiles.hiv.hypothesis.slice(0,3).map(id=>[id,'hypothesis']),...corpusSkillBindings.profiles.heart_failure.hypothesis.slice(0,3).map(id=>[id,'hypothesis']),['data_training_heavy','data'],['ml_logistic_regression','ml'],['ml_xgboost','ml'],['shared-anil-shap','interpreter'],['report_general','report'],['shared-anil-hiv','report']].map(([id,stage])=>({id,stage,title:id,hash:id,content:'# Fixture',description:'Fixture',source:'fixture'}));
  const inputs=['hiv','heart'].map(id=>({id,input_checks_passed:true,configuration:{name:id,knowledge_mode:'okf',data_mode:'dataset',target:{column:id==='hiv'?'HIV_DETECTABLE':'chronic_heart_failure',description:id+' target',prediction_time:'Before outcome'}}}));
  await page.route('**/control/**',async route=>{
   const path=new URL(route.request().url()).pathname;
   if(path==='/control/health')return route.fulfill({json:{ok:true,bundle:{},llm:{provider:'openai',model:'fixture'},input_defaults:{dataset_available:false,knowledge_available:false,target_column:''}}});
-  if(path==='/control/playbooks')return route.fulfill({json:{catalog,stages:['hypothesis','data','ml','interpreter','report'],playbooks:catalog.map(x=>x.id),references:[]}});
+  if(path==='/control/playbooks')return route.fulfill({json:{corpus_skill_bindings:corpusSkillBindings,catalog,stages:['hypothesis','data','ml','interpreter','report'],playbooks:catalog.map(x=>x.id),references:[]}});
   if(path==='/control/research-inputs')return route.fulfill({json:{inputs}});
   if(path==='/control/pipelines')return route.fulfill({json:{pipelines:[]}});
   return route.fulfill({status:503,json:{error:'No deployment defaults in this fixture'}});
@@ -22,14 +23,23 @@ try {
  await dialog.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();
  assert.equal(await dialog.getByRole('button',{name:'Next',exact:true}).isEnabled(),false);
  const research=dialog.getByRole('combobox',{name:'Research inputs',exact:true});
+ // A registered corpus must replace a previous no-corpus mode before choosing skills.
+ await dialog.getByRole('combobox',{name:'Pipeline knowledge mode',exact:true}).selectOption('llm_only');
  await research.selectOption('hiv');
  await dialog.getByText(/Target: HIV_DETECTABLE/).waitFor();
+ await dialog.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();
+ await dialog.getByRole('button',{name:'Next',exact:true}).click();
+ const hivHyp=dialog.getByRole('combobox',{name:'Hypothesis skill',exact:true});
+ assert.deepEqual((await hivHyp.locator('option').evaluateAll(options=>options.map(o=>o.value).filter(Boolean))).sort(),corpusSkillBindings.profiles.hiv.hypothesis.slice().sort());
+ await hivHyp.selectOption('addiction-psychiatric');
+ await dialog.getByRole('button',{name:'Back',exact:true}).click();
  await research.selectOption('heart');
  await dialog.getByText(/Target: chronic_heart_failure/).waitFor();
  await dialog.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
  const hyp=dialog.getByRole('combobox',{name:'Hypothesis skill',exact:true});
- assert.equal(await hyp.inputValue(),'hypothesis_general');
+ assert.equal(await hyp.inputValue(),'heart-failure-cardiovascular');
+ assert.deepEqual((await hyp.locator('option').evaluateAll(options=>options.map(o=>o.value).filter(Boolean))).sort(),corpusSkillBindings.profiles.heart_failure.hypothesis.slice().sort());
  assert.equal(await hyp.locator('option[value="addiction-psychiatric"]').count(),0);
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
@@ -41,5 +51,5 @@ try {
  const report=dialog.getByRole('combobox',{name:'Explanation skill',exact:true});
  assert.equal(await report.inputValue(),'report_general');
  assert.equal(await report.locator('option[value="shared-anil-hiv"]').count(),0);
- console.log('HIV to HeartFailure switch updates target and generic skills; paired ML controls match execution. Mocked HTTP, no execution.');
+ console.log('HIV and HeartFailure each offer their three specialties and Random; switching updates target and skills; paired ML controls match execution. Mocked HTTP, no execution.');
 } finally {await browser.close();}

@@ -1,4 +1,4 @@
-"""Four experiment choices remain visible without deleting historical instructions."""
+"""Corpus-specific experiment choices preserve historical instructions."""
 import asyncio
 import json
 from types import SimpleNamespace
@@ -8,10 +8,12 @@ from memstara.control import catalog
 from memstara.pipeline import prompts
 
 
-def test_four_hypothesis_choices(tmp_path, monkeypatch):
+def test_catalog_contains_both_corpus_profiles_and_general_choice(tmp_path, monkeypatch):
     monkeypatch.setenv('MEMSTARA_USER_SKILLS_DIR', str(tmp_path))
     ids = {i['id'] for i in catalog.catalog() if i['stage'] == 'hypothesis'}
-    assert ids == {'addiction-psychiatric', 'addiction-sdoh', 'addiction-substance-use', 'random_features', 'hypothesis_general'}
+    assert ids == {'addiction-psychiatric', 'addiction-sdoh', 'addiction-substance-use',
+                   'heart-failure-cardiovascular', 'heart-failure-metabolic-renal',
+                   'heart-failure-lifestyle-social', 'random_features', 'hypothesis_general'}
     for name in ids:
         catalog.validate_selection({'playbook_hypothesis': name})
 

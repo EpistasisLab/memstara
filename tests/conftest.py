@@ -72,6 +72,13 @@ def fake_encoder():
     return bag_of_words_encoder()
 
 
+@pytest.fixture(autouse=True)
+def isolated_corpus_selection(request, monkeypatch):
+    """Offline cases explicitly select a corpus; prior .env tests cannot select one."""
+    if not request.config.getoption('--run-live'):
+        monkeypatch.delenv('AGENTIC_OKF_BUNDLE_DIR', raising=False)
+
+
 def pytest_addoption(parser):
     parser.addoption("--run-integration", action="store_true", help="Run tests against an explicit test database")
     parser.addoption("--run-live", action="store_true", help="Run paid Haiku 5.5 pipeline acceptance tests")

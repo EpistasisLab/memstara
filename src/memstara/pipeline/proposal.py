@@ -164,6 +164,10 @@ def freeze(args, root, books):
         "input_contract": "Research planning only; proposed variables are not verified dataset columns",
         "planning_adapter": "proposal_v1",
     }
+    from memstara.ml_configuration import validate_overrides
+    overrides = validate_overrides(json.loads(getattr(args, 'ml_overrides', '{}')), all_books.get('ml', []))
+    if overrides:
+        state['ml_overrides'] = overrides
     if prior and prior != state:
         raise ValueError("Proposal configuration changed; start a new execution")
     if not prior:
@@ -227,6 +231,7 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
                 names = books.get(role, [])
                 system = POLICY + TASKS[stage] + "\n" + "\n".join(state["prompts"][n]["content"] for n in names if n)
                 payload = {
+                    'fixed_ml_settings': state.get('ml_overrides', {}),
                     "objective": state["research_objective"],
                     "target": (state.get("research_profile") or {}).get("configuration", {}).get("target", {}),
                     "evidence": state["knowledge_evidence"],

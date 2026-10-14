@@ -308,6 +308,7 @@ export interface Health {
 }
 
 export interface RunConfiguration {
+  ml_overrides?: import("./lib/mlOverrides").MlOverrides;
   knowledge_mode?: 'okf'|'llm_only';
   data_mode?: 'dataset'|'proposal';
   research_objective?: string;

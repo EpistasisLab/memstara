@@ -25,8 +25,9 @@ try{
   await page.close();
  }
  const page=await browser.newPage({viewport:{width:390,height:900}});
+ await page.route('**/control/health',r=>r.fulfill({json:{input_defaults:{dataset_available:true,knowledge_available:true,target_column:'deployment_target'}}}));
  await page.route('**/control/research-inputs',r=>r.fulfill({json:{inputs:[
-  {id:'a'.repeat(32),input_checks_passed:true,configuration:{name:'Synthetic study',target:{column:'new_target',description:'New objective',prediction_time:'Baseline'}}},
+  {id:'a'.repeat(32),input_checks_passed:true,configuration:{name:'Synthetic study',dataset_path:'/fixtures/study.csv',knowledge_path:'/fixtures/study-okf',target:{column:'new_target',description:'New objective',prediction_time:'Baseline'}}},
   {id:'b'.repeat(32),input_checks_passed:false,configuration:{name:'Incomplete study',target:{}}}
  ]}}));
  await page.goto((process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:5179')+'/tests/research-inputs.fixture.html?selector');
@@ -38,6 +39,13 @@ try{
  assert.equal(selected.playbook_explanation,'report_general');
  assert.deepEqual(selected.combination_skills,{});
  assert.equal(await page.locator(`option[value="${'b'.repeat(32)}"]`).evaluate(option=>option.disabled),true);
+ await page.getByText('Selected CSV and OKF files',{exact:true}).click();
+ await page.getByText('/fixtures/study.csv',{exact:true}).waitFor();
+ await page.getByText('/fixtures/study-okf',{exact:true}).waitFor();
+ await page.getByLabel('Research inputs',{exact:true}).selectOption('');
+ const deployment=JSON.parse(await page.getByLabel('Selected research configuration').innerText());
+ assert.equal(deployment.y_column,'deployment_target');
+ assert.equal(await page.getByLabel('Deployment target column',{exact:true}).inputValue(),'deployment_target');
  await page.close();
  for(const width of [390,1280]){
   const workspace=await browser.newPage({viewport:{width,height:900}});

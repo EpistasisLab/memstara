@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "models": {
+    "logistic_regression": {
+      "parameters": {
+        "C": {
+          "type": "number",
+          "min": 1e-05,
+          "max": 10000.0
+        },
+        "max_iter": {
+          "type": "integer",
+          "min": 50,
+          "max": 2000
+        },
+        "tol": {
+          "type": "number",
+          "min": 1e-06,
+          "max": 0.01
+        },
+        "solver": {
+          "type": "choice",
+          "choices": [
+            "lbfgs",
+            "liblinear"
+          ]
+        },
+        "penalty": {
+          "type": "choice",
+          "choices": [
+            "l2",
+            "l1"
+          ]
+        },
+        "class_weight": {
+          "type": "choice",
+          "choices": [
+            null,
+            "balanced"
+          ]
+        },
+        "fit_intercept": {
+          "type": "choice",
+          "choices": [
+            true,
+            false
+          ]
+        }
+      }
+    },
+    "xgboost": {
+      "parameters": {
+        "n_estimators": {
+          "type": "integer",
+          "min": 10,
+          "max": 400
+        },
+        "max_depth": {
+          "type": "integer",
+          "min": 1,
+          "max": 8
+        },
+        "learning_rate": {
+          "type": "number",
+          "min": 0.005,
+          "max": 0.5
+        },
+        "min_child_weight": {
+          "type": "number",
+          "min": 0,
+          "max": 100
+        },
+        "subsample": {
+          "type": "number",
+          "min": 0.5,
+          "max": 1
+        },
+        "colsample_bytree": {
+          "type": "number",
+          "min": 0.5,
+          "max": 1
+        },
+        "reg_alpha": {
+          "type": "number",
+          "min": 0,
+          "max": 100
+        },
+        "reg_lambda": {
+          "type": "number",
+          "min": 0,
+          "max": 100
+        },
+        "gamma": {
+          "type": "number",
+          "min": 0,
+          "max": 100
+        },
+        "scale_pos_weight": {
+          "type": "number",
+          "min": 0.01,
+          "max": 100
+        },
+        "max_bin": {
+          "type": "integer",
+          "min": 32,
+          "max": 256
+        }
+      }
+    }
+  },
+  "folds": [
+    0,
+    2,
+    3,
+    4,
+    5
+  ],
+  "threshold": {
+    "min": 0.05,
+    "max": 0.95
+  },
+  "resource_limits": {
+    "version": "agent_paired_ml_v1",
+    "threads": 1,
+    "concurrent_jobs": 1,
+    "memory_bytes": 2147483648,
+    "wall_seconds": 600,
+    "max_fits": 120,
+    "max_csv_bytes": 67108864,
+    "max_dense_cells": 4000000,
+    "max_encoded_columns": 4096
+  }
+}

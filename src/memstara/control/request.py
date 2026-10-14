@@ -92,6 +92,7 @@ DEFAULTS: dict[str, Any] = {
     "combination_random_start": False,
     "combination_max_loops": None,
     "evaluation": {},
+    "ml_overrides": {},
     "baseline_columns": [],
     "skill": "",
     "trials": 3,
@@ -298,13 +299,14 @@ def build_argv(
         "--model", model,
         "--skill", skill,
     ]
-    if research_id or knowledge_mode == 'llm_only' or data_mode == 'proposal':
+    from memstara.corpus_skills import corpus_profile
+    if research_id or knowledge_mode == 'llm_only' or data_mode == 'proposal' or corpus_profile() != 'general':
         from memstara.research_inputs import validate_skills
         selected_books = {stage: value.split(',') for stage, value in chosen}
         if combination_plan:
             selected_books = {stage: [item['id'] for item in entries]
                               for stage, entries in combination_plan['skills'].items()}
-        validate_skills(selected_books)
+        validate_skills(selected_books, profile if research_id else None, knowledge_mode=knowledge_mode)
         if research_id:
             argv += ['--research-input-id', research_id]
     if knowledge_mode != 'okf':
@@ -327,6 +329,13 @@ def build_argv(
     for stage, book in chosen:
         argv += [f"--playbook-{"explanation" if stage == "report" else stage}", book]
     import json
+    from memstara.ml_configuration import validate_overrides
+    ml_skills = body.get('combination_skills', {}).get('ml', []) if body.get('combination_skills') else str(body.get('playbook_ml', '')).split(',')
+    overrides = validate_overrides(body.get('ml_overrides', {}), ml_skills, replicates=evaluation.get('replicates', 1))
+    if overrides:
+        if controls:
+            raise ValueError('Controlled comparisons cannot also use advanced ML overrides')
+        argv += ['--ml-overrides', json.dumps(overrides, allow_nan=False)]
     if "baseline_columns" in body:
         argv += ["--baseline-columns", json.dumps(baseline)]
     if "evaluation" in body:

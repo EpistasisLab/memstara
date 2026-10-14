@@ -503,22 +503,13 @@ def instructions(profile):
     )
 
 
-def validate_skills(books):
-    """Legacy corpus-specific defaults cannot silently define a different study."""
-    from memstara.paths import PLAYBOOKS_DIR
-
-    generic_hypotheses = {"hypothesis_general", "random_features"}
-    for name in books.get("hypothesis", []):
-        if (PLAYBOOKS_DIR / f"{name}.md").is_file() and name not in generic_hypotheses:
-            raise ValueError(
-                "Research inputs require a corpus-independent Hypothesis skill. "
-                "Select hypothesis_general, random_features, or a reviewed custom skill"
-            )
-    if any(name in {"shared-anil-addiction", "shared-anil-hiv"} for name in books.get("report", [])):
-        raise ValueError(
-            "This research profile has no approved specialist domain binding. "
-            "Select a generic Explanation skill or a reviewed custom skill"
-        )
+def validate_skills(books, profile=None, *, knowledge_mode='okf'):
+    """Validate the selected skills against the actual, explicitly bound corpus."""
+    from memstara.corpus_skills import validate_hypotheses
+    from memstara.control.catalog import ensure_hypothesis_enabled, ensure_explanation_enabled
+    ensure_hypothesis_enabled(books.get('hypothesis', []))
+    ensure_explanation_enabled(books.get('report', []))
+    validate_hypotheses(books, profile, knowledge_mode=knowledge_mode)
 
 
 if __name__ == "__main__":

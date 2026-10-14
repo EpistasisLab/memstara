@@ -321,13 +321,14 @@ def test_invalid_matcher_ready_record_rebuilds_once(sample, monkeypatch, damage)
         assert isinstance(json.loads((root / 'matcher_catalog.json').read_text()), list)
 
 
-def test_generic_profiles_do_not_silently_apply_legacy_domain_skills():
+def test_unbound_profiles_do_not_silently_apply_domain_skills(monkeypatch):
     from memstara.research_inputs import validate_skills
+    monkeypatch.delenv('AGENTIC_OKF_BUNDLE_DIR', raising=False)
     validate_skills({'hypothesis':['hypothesis_general', 'random_features'],
                      'report':['report_general']})
-    with pytest.raises(ValueError, match='corpus-independent'):
+    with pytest.raises(ValueError, match='disabled'):
         validate_skills({'hypothesis':['comorbidity']})
-    with pytest.raises(ValueError, match='specialist domain'):
+    with pytest.raises(ValueError, match='does not match the selected corpus'):
         validate_skills({'report':['shared-anil-hiv']})
 
 

@@ -100,6 +100,8 @@ def train_and_score(
             snapshot = for_dataset(snapshot, p)
             # Proposal errors are repairable and cannot start training or freeze a plan.
             ml_plan, plan_resolution = resolve_ml(ml_plan, snapshot, plan)
+            if snapshot.get('ml_overrides'):
+                snapshot = {**snapshot, '_ml_plan_resolution': plan_resolution}
         elif ml_plan is not None:
             raise ValueError('This frozen run does not support agent-configured paired ML')
         try:

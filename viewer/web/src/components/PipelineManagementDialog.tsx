@@ -1,3 +1,4 @@
+import PipelineMLSettings from './PipelineMLSettings';
 import { useState } from 'react';
 import { Settings2, Trash2 } from 'lucide-react';
 import { usePipelines, type PipelineDefinition } from '../store/pipelines';
@@ -9,17 +10,19 @@ import PipelineSetupGuide from './PipelineSetupGuide';
 
 export default function PipelineManagementDialog({pipeline:p,onSettings,close}:{pipeline:PipelineDefinition;onSettings:()=>void;close:()=>void}) {
   const busy=usePipelines(s=>s.busy), error=usePipelines(s=>s.error);
+  const [mlOpen,setMlOpen]=useState(false);
   const [fresh,setFresh]=useState(false);
   const [confirm,setConfirm]=useState<'delete'|'end'|null>(null);
   const combinations=!!p.configuration.combination_skills&&Object.keys(p.configuration.combination_skills).length>0;
   const paused=!!p.running&&(p.running.pause_requested||p.running.execution_state==='paused');
+  if(mlOpen)return <PipelineMLSettings pipeline={p} close={close}/>;
   if(confirm==='delete')return <PipelineDeleteDialog pipeline={p} close={()=>setConfirm(null)} onDeleted={close}/>;
   if(fresh)return <AdditionalAnalysisDialog pipeline={p} fresh close={()=>setFresh(false)}/>;
   return <FloorDetailDialog title="Pipeline settings and actions" close={close} className="pipeline-management-dialog">
     <div className="pipeline-management">
       <div className="pipeline-management-identity"><span>Pipeline {p.number}</span><h3>{p.name}</h3></div>
       <section aria-label="General settings"><h3>General settings</h3><p>Update the execution settings or give this research pipeline a recognizable name.</p>
-        <div className="pipeline-management-buttons"><button disabled={busy||combinations} aria-label={`Settings for ${p.name}`} onClick={()=>{close();onSettings();}}><Settings2 size={16}/>Execution settings</button><PipelineNameEditor pipeline={p} buttonLabel="Rename pipeline"/></div>
+        <div className="pipeline-management-buttons"><button disabled={busy||combinations} aria-label={`Settings for ${p.name}`} onClick={()=>{close();onSettings();}}><Settings2 size={16}/>Execution settings</button><PipelineNameEditor pipeline={p} buttonLabel="Rename pipeline"/><button disabled={busy} onClick={()=>setMlOpen(true)}>ML evaluation and advanced settings</button></div>
       </section>
       <section aria-label="Agent skills"><h3>Agent skills</h3><p>Review the instructions for the hypothesis, machine learning, interpreter and explanation agents.</p>{combinations?<p>Review all selected flavors in the combination grid. To change the combination schedule, create a new design; saved execution schedules stay fixed.</p>:<PipelineSetupGuide/>}</section>
       <section className="pipeline-management-danger" aria-label="Execution and removal"><h3>Execution and removal</h3>

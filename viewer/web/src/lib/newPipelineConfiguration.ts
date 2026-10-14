@@ -1,4 +1,5 @@
-import {compatibleResearchSkill} from './researchSkills.ts';
+import {overridesForSkills} from './mlOverrides.ts';
+import {compatibleResearchSkill,researchSkillProfile} from './researchSkills.ts';
 import type { RunRequest } from '../store/control';
 
 export type NewPipelineConfiguration = Omit<RunRequest, 'provider' | 'model' | 'stage_models'>;
@@ -29,7 +30,8 @@ export function newPipelineConfiguration(configuration: RunRequest): RunRequest 
     'report_team_briefing','report_validation_audit'].includes(draft.playbook_explanation)) {
     draft.playbook_explanation = 'report_general';
   }
-  if (!compatibleResearchSkill({id:draft.playbook_hypothesis,stage:'hypothesis'},draft)) draft.playbook_hypothesis='hypothesis_general';
-  if (!compatibleResearchSkill({id:draft.playbook_explanation,stage:'report'},draft)) draft.playbook_explanation='report_general';
+  if (!compatibleResearchSkill({id:draft.playbook_hypothesis,stage:'hypothesis'},draft)) draft.playbook_hypothesis=researchSkillProfile(draft).hypothesis[0];
+  if (!compatibleResearchSkill({id:draft.playbook_explanation,stage:'report'},draft)) draft.playbook_explanation=researchSkillProfile(draft).report[0];
+  draft.ml_overrides=overridesForSkills(draft.ml_overrides,Object.keys(draft.combination_skills??{}).length?draft.combination_skills?.ml??[]:[draft.playbook_ml]);
   return draft;
 }

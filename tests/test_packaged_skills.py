@@ -24,7 +24,7 @@ def standalone(monkeypatch, tmp_path):
 
 def test_standalone_catalog_and_preserved_hashes(standalone):
     rows = catalog.catalog()
-    assert [sum(r['stage'] == stage for r in rows) for stage in catalog.ROLES] == [5, 2, 2, 2, 3]
+    assert [sum(r['stage'] == stage for r in rows) for stage in catalog.ROLES] == [8, 2, 2, 2, 3]
     bundle = PACKAGE_ROOT / 'resources/contributed'
     manifest = json.loads((bundle / 'manifest.json').read_text())
     for entry in manifest['files']:

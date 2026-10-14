@@ -4,6 +4,8 @@ import type { PipelineDefinition } from '../store/pipelines';
 import PipelineRowActions from './PipelineRowActions';
 import PipelineDeleteDialog from './PipelineDeleteDialog';
 import { pipelineLoopLabel } from '../lib/pipelineProgress';
+import {researchSkillProfile} from '../lib/researchSkills';
+import {useControl} from '../store/control';
 
 export function pipelineState(p: PipelineDefinition) {
   if (p.running?.pause_requested || p.running?.execution_state === 'paused' || p.running?.execution_state === 'stopping') return p.running.execution_state === 'paused' ? 'Paused' : 'Stopping';
@@ -16,6 +18,8 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
   items: PipelineDefinition[]; selected: string | null; onSelect: (id:string)=>void;
   compare: string[]; onCompare:(ids:string[])=>void; onSettings:(id:string)=>void;
 }) {
+  // Profile bindings arrive with the catalog; refresh the source label with it.
+  useControl(s=>s.catalog);
   const browser=useRef<HTMLElement>(null);
   const [deleting,setDeleting]=useState<PipelineDefinition|null>(null);
   const [selectionRevision,setSelectionRevision]=useState(0);
@@ -71,6 +75,8 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
           </div>
           <button className="pipeline-card-select" data-help="Inspect this pipeline" data-help-description="Select this card to focus its diagram and view its execution controls. The Loop counter refers to this pipeline’s latest execution." aria-label={`Inspect ${p.name}`} aria-pressed={selected===p.id} onClick={()=>choose(p.id)}>
             <strong className="pipeline-card-name" title={p.name}>{p.name}</strong>
+            <span className="pipeline-card-stage">Configured corpus: {researchSkillProfile(p.configuration).label}</span>
+            <span className="pipeline-card-stage">{p.running?'Execution target':'Configured target'}: {p.running?.configuration?.y_column??p.configuration.y_column??'Not specified'}</span>
             <span className="pipeline-card-position"><span className="pipeline-card-loop">{pipelineLoopLabel(p)}</span><ArrowUpRight size={16} aria-hidden="true"/></span>
             <span className="pipeline-card-stage">{p.progress.stage ? `${p.running?'Current':'Last recorded'} stage: ${stageNames[p.progress.stage]??p.progress.stage}` : 'Ready to begin exploration'}</span>
           </button>

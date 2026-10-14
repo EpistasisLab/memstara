@@ -2298,6 +2298,7 @@ async def main() -> int:
     ap.add_argument("--pipeline-id", default="")
     ap.add_argument("--pipeline-name", default="")
     ap.add_argument("--evaluation", default="{}")
+    ap.add_argument("--ml-overrides", default="{}", help="JSON: bounded user settings for selected ML models")
     ap.add_argument("--ablate-okf", action="store_true",
                     help="Disable OKF retrieval and mark the execution as an ablation")
     ap.add_argument("--baseline-columns", default="[]", help="JSON array of fixed baseline predictor columns")
@@ -2451,9 +2452,9 @@ async def main() -> int:
             if args.combination_plan:
                 books = {stage: [item['id'] for item in entries] for stage, entries
                          in json.loads(args.combination_plan)['skills'].items()}
-            validate_skills(books)
             profile = getattr(args, 'research_profile', None) if args.resume else None
             args.research_profile = profile or prepare(args.research_input_id)
+            validate_skills(books, args.research_profile)
             activate(args.research_profile)
             research = args.research_profile['configuration']
             args.y_column = research['target']['column'] or 'outcome'
@@ -2465,14 +2466,16 @@ async def main() -> int:
     args.knowledge_mode = getattr(args, 'knowledge_mode', 'okf')
     args.research_objective = getattr(args, 'research_objective', '')
     args.ablate_okf = args.ablate_okf or args.knowledge_mode == 'llm_only'
-    if args.ablate_okf or args.data_mode == 'proposal':
+    from memstara.corpus_skills import corpus_profile
+    if args.ablate_okf or args.data_mode == 'proposal' or corpus_profile() != 'general':
         from memstara.research_inputs import validate_skills
         try:
             books = chosen_playbooks(args)
             if args.combination_plan:
                 books = {stage: [item['id'] for item in entries] for stage, entries
                          in json.loads(args.combination_plan)['skills'].items()}
-            validate_skills(books)
+            validate_skills(books, getattr(args, 'research_profile', None),
+                            knowledge_mode='llm_only' if args.ablate_okf else args.knowledge_mode)
         except ValueError as exc:
             ap.error(str(exc))
     if args.data_mode == 'proposal' and not args.research_objective:
@@ -2482,6 +2485,9 @@ async def main() -> int:
     from memstara.evaluation import validate
     try:
         args.evaluation = json.dumps(validate(json.loads(args.evaluation)))
+        from memstara.ml_configuration import validate_overrides
+        overrides = validate_overrides(json.loads(getattr(args, 'ml_overrides', '{}')))
+        args.ml_overrides = json.dumps(overrides, allow_nan=False)
     except (ValueError, TypeError) as exc:
         ap.error(str(exc))
     # Capacity follows the configured hypotheses; single-role UI stays unchanged.

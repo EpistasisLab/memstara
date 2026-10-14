@@ -173,8 +173,7 @@ export default function PipelineWorkspace(){
   const configureStation=useCallback((id:string,stage:string)=>{
     select(id);
     setInspected({id,stage});
-    if(stage==='data')setSettings({id,section:'data'});
-    if(['hypothesis','ml','interpreter','report'].includes(stage))
+    if(['hypothesis','data','ml','interpreter','report'].includes(stage))
       useControl.getState().openEditor(stage as PlaybookStage);
   },[select]);
   const [floorActivity,setFloorActivity]=useState<FloorActivity|null>(null);

@@ -1,3 +1,5 @@
+import {setMlSettingsSchema,type MlOverrides} from '../lib/mlOverrides';
+import {setCorpusSkillBindings} from '../lib/researchSkills';
 import { usePipelines } from "./pipelines";
 import { create } from "zustand";
 import { useViewer } from "./viewer";
@@ -76,6 +78,7 @@ export type RunRequest = {
   combination_max_loops?: number | null;
   question: string;
   evaluation: EvaluationPlan;
+  ml_overrides?: MlOverrides;
   baseline_columns?: string[];
   skill: string;
   trials: number;
@@ -199,7 +202,7 @@ async function readError(res: Response): Promise<string> {
 }
 
 export function applyRunConfiguration(form: RunRequest, config: RunConfiguration): RunRequest {
-  return { ...form, research_input_id:config.research_profile?.id??'', knowledge_mode:config.knowledge_mode??'okf', data_mode:config.data_mode??'dataset', research_objective:config.research_objective??'', question: "", ...Object.fromEntries(["skill", "y_column", "provider", "model"].flatMap(k => {
+  return { ...form, ml_overrides:structuredClone(config.ml_overrides??{}), research_input_id:config.research_profile?.id??'', knowledge_mode:config.knowledge_mode??'okf', data_mode:config.data_mode??'dataset', research_objective:config.research_objective??'', question: "", ...Object.fromEntries(["skill", "y_column", "provider", "model"].flatMap(k => {
     const value = config[k as keyof RunConfiguration]; return typeof value === "string" ? [[k, value]] : [];
   })), hypothesis_agents: config.hypotheses, interpret_agents: config.interpreters ?? 1, trials: config.trials, waves: config.waves, continuous: config.continuous ?? false,
     baseline_columns: config.comparison_policy?.baseline_columns ?? [],
@@ -311,6 +314,8 @@ export const useControl = create<ControlState>((set, get) => ({
       const stages: PlaybookStage[] = (body.stages ?? []).filter(
         (s: string): s is PlaybookStage => (PLAYBOOK_STAGES as readonly string[]).includes(s),
       );
+      setCorpusSkillBindings(body.corpus_skill_bindings);
+      setMlSettingsSchema(body.ml_settings);
       set({ playbooks: body.playbooks ?? [], catalog: body.catalog ?? [], references: body.references ?? [], playbookStages: stages });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e) });

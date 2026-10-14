@@ -1,3 +1,5 @@
+import MLAdvancedSettings from '../components/MLAdvancedSettings';
+import {mlOverridesError,overridesForSkills,type MlOverrides} from '../lib/mlOverrides';
 import EvaluationSettings from '../components/EvaluationSettings';
 import {evaluationPlanError} from '../lib/evaluationPlan';
 import {compatibleResearchSkill} from '../lib/researchSkills';
@@ -16,10 +18,11 @@ import { useControl, type RunRequest, type EvaluationPlan } from "../store/contr
 import { asSlots, fromSlots, withPlaybookAt, withoutSlot, withoutInterpreterSlot } from "../lib/planned";
 
 const descriptions: Record<string, string> = {
+  data: "Extract the selected predictors and choose training-heavy or balanced stratified allocation. CSV and target definitions are configured in Knowledge sources / Data & target.",
   hypothesis: "Generate a knowledge-grounded hypothesis and choose features for the fixed target. Each hypothesis uses a different skill.",
-  ml: "Train the selected model using the saved evaluation plan. All hypotheses share the same split and evaluation conditions.",
-  interpreter: "Explain the measured features and model behavior, including evidence and clinical limitations.",
-  report: "Compare completed hypotheses and produce the final report, including failed or unsupported hypotheses.",
+  ml: "Choose LR or XGBoost as the primary model. Both are trained and compared on the same predictors and split within each Loop; the Data skill determines that Loop's allocation.",
+  interpreter: "Describe measured performance and SHAP or LIME attributions for both LR and XGBoost. Clinical interpretation belongs in Explanation.",
+  report: "Use the Interpretation output and selected knowledge sources to explain meaning, follow-up questions and limitations. Distinguish measured findings from unverified clinical claims.",
 };
 const field = "w-full rounded border border-paper-line bg-white px-2 py-1.5 text-sm focus:border-ink focus:outline-hidden";
 
@@ -45,6 +48,7 @@ function Editor({ close }: { close: () => void }) {
     editor?.stage === "interpreter" ? asSlots(form.playbook_interpreter, form.interpret_agents)[editor.slot] :
       form[`playbook_${editor!.stage === "report" ? "explanation" : editor!.stage}`]);
   const [plan, setPlan] = useState<EvaluationPlan>({ ...form.evaluation });
+  const [overrides,setOverrides]=useState<MlOverrides>(structuredClone(form.ml_overrides??{}));
   const [baseline, setBaseline] = useState(form.baseline_columns ?? []);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -64,7 +68,8 @@ function Editor({ close }: { close: () => void }) {
   const used = asSlots(form[`playbook_${stage === "report" ? "explanation" : stage}`], count)
     .filter((_, i) => add || i !== slot).map(id => catalog.find(x => x.id === id)?.hash).filter(Boolean);
   const duplicate = multiple && selected && used.includes(selected.hash);
-  const invalidPlan = stage === 'ml' && !!evaluationPlanError(plan);
+  const advancedError=stage==='ml'?mlOverridesError(overrides,[choice],plan.replicates):null;
+  const invalidPlan = stage === 'ml' && (!!evaluationPlanError(plan)||!!advancedError);
   const commit = async () => {
     if (!selected || duplicate || invalidPlan || saving || running || busy) return;
     if (add && count >= maximum) { setError(`At most ${maximum} ${agentStageLabel(stage)} agents are supported.`); return; }
@@ -74,7 +79,7 @@ function Editor({ close }: { close: () => void }) {
       if (add) return { ...f, hypothesis_agents: f.hypothesis_agents + 1,
         trials: Math.max(f.trials, f.hypothesis_agents + 1),
         playbook_hypothesis: fromSlots([...asSlots(f.playbook_hypothesis, f.hypothesis_agents), choice]) };
-      return { ...withPlaybookAt(f, stage, slot, choice), baseline_columns: stage === "ml" ? baseline : f.baseline_columns, evaluation: stage === "ml" ? plan : f.evaluation };
+      return { ...withPlaybookAt(f, stage, slot, choice), baseline_columns: stage === "ml" ? baseline : f.baseline_columns, ml_overrides:stage==="ml"?overridesForSkills(overrides,[choice]):f.ml_overrides, evaluation: stage === "ml" ? plan : f.evaluation };
     };
     const pipeline = usePipelines.getState().items.find(p=>p.id===usePipelines.getState().selected);
     if (pipeline) {
@@ -102,7 +107,7 @@ function Editor({ close }: { close: () => void }) {
       // Registration remains usable even if the subsequent catalog refresh fails.
       useControl.setState(s => ({ catalog: [...s.catalog.filter(x => x.id !== body.id), body],
         playbooks: [...new Set([...(s.playbooks ?? []), body.id])] }));
-      setChoice(body.id); setUploadedName(file.name); setCoach(2);
+      setChoice(body.id); setOverrides(v=>overridesForSkills(v,[body.id])); setUploadedName(file.name); setCoach(2);
       void loadPlaybooks();
       if (body.evaluation) setPlan(p => ({ ...p, ...body.evaluation }));
     } catch (e) { setError(String(e)); } finally { setSaving(false); if (uploadInput.current) uploadInput.current.value = ""; }
@@ -121,6 +126,7 @@ function Editor({ close }: { close: () => void }) {
       {coach===1&&<p className="agent-click-hint" role="status"><ArrowDown size={17} aria-hidden="true"/>Click this list to select a skill.</p>}
       <select id="agent-skill-select" aria-describedby="agent-skill-hint" autoFocus className={`${field} agent-skill-select mt-1 ${coach===1?'agent-click-target':''}`} value={choice} onChange={e => {
         setChoice(e.target.value);setUploadedName("");setCoach(e.target.value?2:1);
+        setOverrides(v=>overridesForSkills(v,[e.target.value]));
         const defaults = catalog.find(x => x.id === e.target.value)?.evaluation;
         if (defaults) setPlan(p => ({ ...p, ...defaults }));
       }}>
@@ -151,7 +157,7 @@ function Editor({ close }: { close: () => void }) {
     </section>
     </div>
     {stage !== "data" && <CreateCustomSkill key={stage} stage={stage} disabled={!!running || busy || saving} onBusy={setSaving}
-      onSelect={skill=>{setChoice(skill.id);setCoach(2);if(skill.evaluation)setPlan(p=>({...p,...skill.evaluation}));}} />}
+      onSelect={skill=>{setChoice(skill.id);setOverrides(v=>overridesForSkills(v,[skill.id]));setCoach(2);if(skill.evaluation)setPlan(p=>({...p,...skill.evaluation}));}} />}
     <section ref={reviewTarget} aria-label="Review selected skill" className="mt-3 rounded-lg border border-paper-line bg-paper/40 p-3">
       <h3 className="mb-3 text-sm font-semibold"><span className="agent-config-step">2</span>Review what it does</h3>
     {selected ? <div aria-live="polite">
@@ -174,7 +180,8 @@ function Editor({ close }: { close: () => void }) {
         dataSkill={form.combination_max_loops?'combinations':form.playbook_data}/>
       <p className="text-xs text-ink-faint">Paired LR/XGBoost evaluation requires complete predictors for both models. Missing labels and non-finite values are rejected before training.</p>
     </div>}
-    {(error || duplicate || invalidPlan) && <p role="alert" className="mt-3 text-sm text-red-700">{error || (invalidPlan ? "Check evaluation ranges. CV folds must be 0 or 2–10." : "Choose a different skill for this agent.")}</p>}
+    {stage==='ml'&&<MLAdvancedSettings skills={[choice]} value={overrides} replicates={plan.replicates} proposal={form.data_mode==='proposal'} disabled={saving||!!running||busy} onChange={setOverrides}/>}
+    {(error || duplicate || invalidPlan) && <p role="alert" className="mt-3 text-sm text-red-700">{error || advancedError || (invalidPlan ? "Check evaluation ranges. CV folds must be 0 or 2–10." : "Choose a different skill for this agent.")}</p>}
     {!add && multiple && count === 1 && <p className="mt-3 text-xs text-ink-faint">At least one {agentStageLabel(stage)} agent is required.</p>}
     <div className="agent-settings-footer mt-5 flex flex-wrap justify-end gap-2">
       <div className="w-full"><p className="text-sm font-semibold"><span className="agent-config-step">3</span>Apply to this agent</p>

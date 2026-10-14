@@ -159,7 +159,7 @@ class _Runs:
                 record["configuration"] = {k: config.get(k) for k in
                                            ("hypotheses", "interpreters", "interpretation_mode",
                                             "books", "evaluation", "comparison_policy", "trials", "waves", "continuous",
-                                            "question", "y_column", "provider", "model")}
+                                            "question", "y_column", "provider", "model", "ml_overrides")}
                 from memstara.stage_models import public_profiles
                 record["configuration"]["stage_models"] = public_profiles(config.get("stage_models"))
             except (OSError, ValueError):
@@ -412,7 +412,11 @@ def playbooks() -> dict[str, Any]:
     no such property, it is one file that is either attached or not.
     """
     entries = catalog()
+    from memstara.corpus_skills import menu_bindings
+    from memstara.ml_configuration import override_schema
     return {
+        "ml_settings": override_schema(),
+        "corpus_skill_bindings": menu_bindings(),
         "playbooks": [x["id"] for x in entries],
         "catalog": entries,
         "references": reference_knowledge(),
@@ -535,8 +539,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/control/research-inputs":
             from memstara.research_inputs import list_inputs
+            from memstara.corpus_skills import corpus_profile
             try:
-                self._send(200, {"inputs": list_inputs()})
+                self._send(200, {"inputs": [{**record, 'corpus_skill_profile': corpus_profile(record)}
+                                           for record in list_inputs()]})
             except (OSError, ValueError):
                 self._send(503, {"error": "Registered research inputs could not be read"})
             return

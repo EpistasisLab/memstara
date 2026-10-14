@@ -254,3 +254,40 @@ def test_selected_model_contract_reaches_tool_and_keeps_both_models(experiment, 
     assert set(result.get('model_results', {})) == {'logistic_regression', 'xgboost'}, result
     assert result['ml_configuration']['requested']['primary_model'] == primary
     assert result['model'] == primary
+
+
+def test_advanced_user_values_reach_real_models_and_replay_with_provenance(experiment):
+    from memstara.mcp_servers.ml import train_and_score, get_ml_configuration
+    import os
+    import subprocess
+    import sys
+    path,snapshot,plan,proposal=experiment
+    snapshot['books']['ml']=['ml_logistic_regression']
+    overrides={'version':1,'models':{
+        'logistic_regression':{'parameters':{'C':.25,'solver':'liblinear'},'threshold':.65,'scale_numeric':False},
+        'xgboost':{'parameters':{'n_estimators':15,'max_depth':2,'learning_rate':.05},'threshold':.4}},'folds':0}
+    snapshot['ml_overrides']=overrides
+    specification=json.loads(asyncio.run(get_ml_configuration(str(path),'Y')))
+    assert specification['user_overrides']==overrides
+    proposal['models']['logistic_regression']['parameters']['C']=5
+    result=json.loads(train_and_score(str(path),'Y',ml_plan=proposal))
+    assert not result.get('error'),result
+    assert result['ml_configuration']['user_overrides']==overrides
+    assert result['ml_plan_resolution']['agent_proposal']['models']['logistic_regression']['parameters']['C']==5
+    assert result['ml_configuration']['setting_sources']['models']['logistic_regression']['parameters']['C']=='user'
+    assert result['ml_configuration']['setting_sources']['models']['logistic_regression']['parameters']['random_state']=='server'
+    for name in config.MODELS:
+        model=result['model_results'][name]
+        bundle=Path(model['evaluation']['reproducibility']['bundle_path'])
+        manifest=json.loads((bundle/'manifest.json').read_text())
+        assert manifest['configuration']['threshold']==overrides['models'][name]['threshold']
+        for key,value in overrides['models'][name]['parameters'].items():
+            assert manifest['configuration']['parameters'][key]==value
+        receipt=json.loads((bundle/'ml-plan.json').read_text())
+        assert receipt['user_overrides']==overrides
+        assert receipt['proposal_resolution']['agent_proposal']==proposal
+        env={**os.environ,**{key:'1' for key in ('OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS','VECLIB_MAXIMUM_THREADS')}}
+        replayed=subprocess.run([sys.executable,'-m','memstara.reproducibility',str(bundle)],env=env,capture_output=True,text=True,timeout=60)
+        assert replayed.returncode==0,replayed.stdout+replayed.stderr
+        assert json.loads(replayed.stdout)['status']=='verified'
+    assert json.loads(train_and_score(str(path),'Y',ml_plan=proposal))==result

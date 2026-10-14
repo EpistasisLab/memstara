@@ -9,8 +9,8 @@ const names = { hypothesis: 'Hypothesis', ml: 'Machine learning', interpreter: '
 const descriptions = {
   hypothesis: 'Choose how this agent uses knowledge to propose promising hypotheses and select features.',
   ml: 'Review model training, validation and reproducibility instructions, together with the evaluation settings.',
-  interpreter: 'Choose how the agent explains feature effects, biological meaning and limitations.',
-  report: 'Choose how the agent compares evidence and recommends hypotheses worth investigating.',
+  interpreter: 'Choose SHAP or LIME to describe measured model behavior, attributions and technical limitations.',
+  report: 'Choose how the agent explains the Interpretation output using the selected knowledge sources, with follow-up questions and limitations.',
 };
 export default function PipelineSetupGuide() {
   const { items, selected, busy, error } = usePipelines();

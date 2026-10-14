@@ -213,6 +213,13 @@ class PipelineWorkspace:
         for key in ("playbook_hypothesis", "playbook_interpreter"):
             if not isinstance(config[key], str) or "," in config[key]:
                 raise ValueError("Each pipeline has one hypothesis and one interpreter skill")
+        from memstara.ml_configuration import validate_overrides
+        ml_skills = config.get('combination_skills', {}).get('ml', []) if config.get('combination_skills') else str(config.get('playbook_ml', '')).split(',')
+        if not isinstance(config.get('evaluation'), dict):
+            raise ValueError('ML evaluation settings must be an object')
+        config['ml_overrides'] = validate_overrides(config.get('ml_overrides', {}), ml_skills, replicates=config.get('evaluation', {}).get('replicates', 1))
+        if config['ml_overrides'] and config.get('controlled_comparison'):
+            raise ValueError('Controlled comparisons cannot also use advanced ML overrides')
         return config
 
     def start(self, key, launch, *, mode="initial", additional_loops=None, expected_run_tag=None):

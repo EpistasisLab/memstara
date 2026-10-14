@@ -1,3 +1,4 @@
+import {corpusSkillBindings} from './corpus-skill-bindings.fixture.mjs';
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 const browser=await chromium.launch({headless:true});
@@ -17,7 +18,10 @@ try {
   if(r.request().method()!=='GET')throw Error('Unexpected write or execution');
   if(path==='/control/research-inputs')return r.fulfill({json:{inputs}});
   if(path==='/control/health')return r.fulfill({json:{ok:true,bundle:{configured:false,documents:0},llm:{provider:'openai',model:'fixture'},input_defaults:{dataset_available:false,knowledge_available:false,target_column:''}}});
-  return r.fulfill({json:{skills:[],catalog:[],stages:[],playbooks:[],runs:[]}});
+  if(path==='/control/playbooks')return r.fulfill({json:{corpus_skill_bindings:corpusSkillBindings,
+   catalog:['data_training_heavy','data_balanced_stratified'].map(id=>({id,stage:'data',title:id,description:'Synthetic Data skill',content:'# Fixture',hash:id,source:'Fixture'})),
+   playbooks:['data_training_heavy','data_balanced_stratified'],stages:['data'],references:[]}});
+  return r.fulfill({json:{corpus_skill_bindings:corpusSkillBindings,skills:[],catalog:[],stages:[],playbooks:[],runs:[]}});
  });
  await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Fixture'}}));
  await page.addInitScript(()=>localStorage.setItem('memstara.pipelineSelection','fixture'));
@@ -36,8 +40,22 @@ try {
  assert.equal(writes.length,1);
  assert.equal(item.configuration.research_input_id,'heart');assert.equal(item.configuration.y_column,'chronic_heart_failure');
  assert.deepEqual(item.configuration.baseline_columns,[]);
- if(combined){assert.deepEqual(item.configuration.combination_skills.hypothesis,['hypothesis_general','random_features']);assert.deepEqual(item.configuration.combination_skills.report,['report_general']);assert.deepEqual(item.configuration.combination_skills.ml,['ml_logistic_regression']);assert.equal(item.configuration.combination_max_loops,2);}else assert.deepEqual(item.configuration.combination_skills,{});
+ if(combined){assert.deepEqual(item.configuration.combination_skills.hypothesis,corpusSkillBindings.profiles.heart_failure.hypothesis);assert.deepEqual(item.configuration.combination_skills.report,['report_general']);assert.deepEqual(item.configuration.combination_skills.ml,['ml_logistic_regression']);assert.equal(item.configuration.combination_max_loops,2);}else assert.deepEqual(item.configuration.combination_skills,{});
  await page.reload();if(combined){await page.getByRole('button',{name:'Knowledge sources',exact:true}).click();await page.getByRole('dialog',{name:/Knowledge sources$/}).getByText(/Target: chronic_heart_failure/).waitFor();}else await page.getByRole('button',{name:/Knowledge sources: HeartFailure study/}).waitFor();
+ await page.getByText('Configured corpus: HeartFailure knowledge corpus',{exact:true}).waitFor();
+ await page.getByText('Configured target: chronic_heart_failure',{exact:true}).waitFor();
+ if(!combined){
+  await page.getByRole('button',{name:'Inspect Data',exact:true}).click();
+  const editor=page.getByRole('dialog').filter({has:page.locator('#agent-skill-select')});
+  const selector=editor.locator('#agent-skill-select');
+  assert.deepEqual((await selector.locator('option').evaluateAll(options=>options.map(o=>o.value).filter(Boolean))).sort(),['data_balanced_stratified','data_training_heavy']);
+  await selector.selectOption('data_balanced_stratified');
+  await editor.getByRole('button',{name:'Save settings',exact:true}).click();
+  await editor.waitFor({state:'hidden'});
+  assert.equal(item.configuration.playbook_data,'data_balanced_stratified');
+  assert.equal(item.configuration.research_input_id,'heart');
+  assert.equal(item.configuration.y_column,'chronic_heart_failure');
+ }
  assert.deepEqual(errors,[]);
  await page.close();
  }

@@ -102,6 +102,12 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     if getattr(args, 'research_profile', None):
         state['research_profile'] = args.research_profile
         state['missing_value_policy'] = 'reject'
+    from memstara.ml_configuration import validate_overrides
+    ml_skills = ([item['id'] for item in combination_plan['skills']['ml']]
+                 if combination_plan else books.get('ml', []))
+    overrides = validate_overrides(json.loads(getattr(args, 'ml_overrides', '{}')), ml_skills, replicates=evaluation['replicates'])
+    if overrides:
+        state['ml_overrides'] = overrides
     if combination_plan and not getattr(args, "report_only", False):
         from memstara.pipeline.feature_selection import freeze as freeze_selection
         state["feature_selection_policy"] = freeze_selection(state)
@@ -143,6 +149,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     from memstara.controlled_comparison import freeze as freeze_controls
     controls = freeze_controls(getattr(args, 'controlled_comparison', '{}'), state)
     if controls:
+        if overrides:
+            raise ValueError('Controlled comparisons cannot also use advanced ML overrides')
         state['controlled_comparison'] = controls
     state["config_hash"] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
     location = run_dir / "config.json"
