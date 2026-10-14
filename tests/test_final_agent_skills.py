@@ -5,10 +5,12 @@ from memstara.pipeline.prompts import load_prompt
 
 
 @pytest.mark.parametrize('role,book', [
-    ('interpreter', 'interpreter_factual_observations'),
-    ('report', 'report_clinical_explanations'),
+    ('interpreter', 'shared-anil-shap'),
+    ('interpreter', 'shared-anil-lime'),
+    ('report', 'shared-anil-addiction'),
+    ('report', 'shared-anil-hiv'),
 ])
-def test_new_skill_is_selectable_and_reaches_prompt(role, book, monkeypatch):
+def test_current_skill_is_selectable_and_reaches_prompt(role, book, monkeypatch):
     monkeypatch.setattr('memstara.evaluation.active_plan', lambda: None)
     item = catalog.resolve(book)
     assert item['stage'] == role
@@ -35,3 +37,9 @@ def test_interpreter_no_longer_requires_recommendations(monkeypatch):
     assert '**Research opportunity:**' not in text
     assert '**Actionability and threshold:**' not in text
     assert 'This boundary takes precedence over attached skills requesting recommendations.' in text
+
+
+def test_retired_explanation_skill_cannot_start_execution(monkeypatch):
+    monkeypatch.setattr('memstara.evaluation.active_plan', lambda: None)
+    with pytest.raises(ValueError, match='disabled for execution'):
+        catalog.validate_selection({'playbook_report': 'report_clinical_explanations'})
