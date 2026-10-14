@@ -8,6 +8,8 @@ import PipelineManagementDialog from './PipelineManagementDialog';
 export default function PipelineRowActions({pipeline:p,onSettings,compact=false}:{pipeline:PipelineDefinition;onSettings:()=>void;compact?:boolean}) {
   const [detailsOpen,setDetailsOpen]=useState(false);
   const busy=usePipelines(s=>s.busy);
+  const pendingStart=usePipelines(s=>s.pendingStart);
+  const checkingStart=pendingStart?.pipelineId===p.id;
   const [settingsOpen,setSettingsOpen]=useState(false);
   const [additionalOpen,setAdditionalOpen]=useState(false);
   const paused=!!p.running&&(p.running.pause_requested||p.running.execution_state==='paused'||p.running.execution_state==='stopping');
@@ -27,7 +29,7 @@ export default function PipelineRowActions({pipeline:p,onSettings,compact=false}
       {p.latest?.recovery_blocked&&<span>Automatic recovery requires review. See execution details.</span>}
     </div>}
     {!compact&&infrastructure&&<p className="pipeline-row-note" role="status">{infrastructure.message}</p>}
-    <button className="pipeline-row-primary" disabled={busy} aria-label={`${action} ${p.name}`} onClick={()=>{if(finished&&!recoverable){setAdditionalOpen(true);return;}void(paused||recoverable?usePipelines.getState().pause(p.id,false):p.running?usePipelines.getState().stop(p.id):usePipelines.getState().play(p.id));}}>{action==='Pause'?<Pause size={15}/>:<Play size={15}/>} {action}</button>
+    <button className="pipeline-row-primary" disabled={busy||checkingStart||!!pendingStart&&!p.running} aria-label={`${checkingStart?'Checking start':action} ${p.name}`} onClick={()=>{if(finished&&!recoverable){setAdditionalOpen(true);return;}void(paused||recoverable?usePipelines.getState().pause(p.id,false):p.running?usePipelines.getState().stop(p.id):usePipelines.getState().play(p.id));}}>{action==='Pause'?<Pause size={15}/>:<Play size={15}/>} {checkingStart?'Checking start…':action}</button>
     {!compact&&paused&&<p className="pipeline-row-note">{p.running?.execution_state==='paused'?'Paused — ready to resume.':'Pausing after the current agent call.'}</p>}
     {!compact&&<details className="pipeline-card-disclosure"><summary>Execution details</summary>
       {p.failure&&<p className="pipeline-row-note break-words">Saved diagnostic for {p.latest?.run_tag??p.name}: {p.failure.message}</p>}

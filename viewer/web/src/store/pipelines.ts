@@ -25,6 +25,7 @@ let workspaceRevision = 0;
 let saveQueue: Promise<unknown> = Promise.resolve();
 let bulkStart: Promise<void> | null = null;
 let cancelBulkStart = false;
+const delayedStartMessage = 'The start response was delayed. Checking server status; do not start again until its state updates.';
 async function request(body: object) {
   const response = await fetch('/control/pipelines', { method: 'POST', headers: {'Content-Type':'application/json'}, body:JSON.stringify(body), signal:AbortSignal.timeout(10000) });
   const data = await response.json();
@@ -36,6 +37,7 @@ export const usePipelines = create<{
   focusRevision: number; focus: (id:string)=>void;
   resultsScope: "all" | "selected"; viewRun: (tag:string|null)=>void;
   items: PipelineDefinition[]; selected: string | null; loaded: boolean; busy: boolean; error: string | null;
+  pendingStart: {pipelineId:string; previousTag:string|null} | null;
   poll: () => Promise<void>; select: (id: string) => void; add: () => Promise<void>;
   save: (id: string, config: RunRequest) => Promise<boolean>; rename: (id:string,name:string)=>Promise<void>;
   stoppingAll: boolean; stopAll:()=>Promise<void>; end:(id:string,expectedRunTag?:string)=>Promise<boolean>; pause:(id:string,paused:boolean)=>Promise<void>;
@@ -50,7 +52,7 @@ export const usePipelines = create<{
     get().select(id);
     set(state=>({focusRevision:state.focusRevision+1}));
   },
-  resultsScope:"selected", items:[], selected:null, loaded:false, busy:false, error:null,
+  resultsScope:"selected", items:[], selected:null, loaded:false, busy:false, error:null, pendingStart:null,
   poll: async()=>{
     if(inFlight || get().busy) return;
     inFlight=true;
@@ -70,7 +72,13 @@ export const usePipelines = create<{
         });
         const unchanged=refreshedItems.length===previousItems.length&&refreshedItems.every((item,i)=>item===previousItems[i]);
         const pollingError = get().error === 'Error: Pipeline workspace is unavailable; last settings are retained.';
-        if(!unchanged||!get().loaded||pollingError)set({items:unchanged?previousItems:refreshedItems,loaded:true,...(pollingError?{error:null}:{})});
+        const pending = get().pendingStart;
+        const started = pending && refreshedItems.find(p=>p.id===pending.pipelineId);
+        const confirmed = !!(started && (started.running?.run_tag || started.latest?.run_tag) &&
+          (started.running?.run_tag || started.latest?.run_tag)!==pending!.previousTag);
+        if(!unchanged||!get().loaded||pollingError||confirmed)set({items:unchanged?previousItems:refreshedItems,loaded:true,
+          ...(confirmed?{pendingStart:null}:{}),
+          ...(pollingError||(confirmed&&get().error===delayedStartMessage)?{error:null}:{})});
         const restored = remembered();
         if(firstLoad && restored) get().select(restored);
         const refreshed=get().items.find(p=>p.id===get().selected);
@@ -147,7 +155,7 @@ export const usePipelines = create<{
     finally{set({busy:false});}
   },
   playAll:async()=>{
-    if(get().busy||get().stoppingAll||get().startingAll||!get().loaded||!get().items.length)return;
+    if(get().busy||get().pendingStart||get().stoppingAll||get().startingAll||!get().loaded||!get().items.length)return;
     cancelBulkStart=false;
     set({busy:true,startingAll:true,startOutcomes:[],error:null});
     bulkStart=(async()=>{
@@ -167,11 +175,19 @@ export const usePipelines = create<{
     try{await bulkStart;}finally{bulkStart=null;void get().poll();}
   },
   play:async (id,options)=>{
-    if(get().busy||get().stoppingAll)return false;set({busy:true,error:null});
+    if(get().busy||get().pendingStart||get().stoppingAll)return false;
+    const previousTag=get().items.find(p=>p.id===id)?.latest?.run_tag??null;
+    set({busy:true,error:null});
     try{await saveQueue;const response=await fetch('/control/runs',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(15000),body:JSON.stringify({pipeline_id:id,...(options?{execution_mode:options.mode,additional_loops:options.loops,expected_run_tag:options.expectedRunTag}:{})})});
       const run=await response.json();if(!response.ok)throw new Error(run.error);
       set({items:get().items.map(p=>p.id===id?{...p,running:run,latest:run,progress:{}}:p)});get().select(id);return true;
-    }catch(e){set({error:e instanceof DOMException && (e.name==='TimeoutError'||e.name==='AbortError') ? 'The start response was delayed. Checking server status; do not start again until its state updates.' : String(e)});return false;}finally{set({busy:false});void get().poll();}
+    }catch(e){
+      // A lost response is not a rejected start. Reconcile with a new run for
+      // this pipeline before allowing another start or dismissing the notice.
+      const uncertain=e instanceof TypeError || (e instanceof DOMException && (e.name==='TimeoutError'||e.name==='AbortError'));
+      set({error:uncertain?delayedStartMessage:String(e),pendingStart:uncertain?{pipelineId:id,previousTag}:null});
+      return false;
+    }finally{set({busy:false});void get().poll();}
   },
   pause:async(id,paused)=>{
     const pipeline=get().items.find(p=>p.id===id);
