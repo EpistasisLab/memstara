@@ -89,7 +89,8 @@ def test_control_refuses_insufficient_pool_without_starting_run(tmp_path, monkey
     responses = []
     handler = object.__new__(service.Handler)
     handler._send = lambda status, body: responses.append((status, body))
-    service.Handler._start(handler, {'y_column': 'Y', 'evaluation': {'engine': 'xgboost'},
+    service.Handler._start(handler, {'knowledge_mode': 'llm_only', 'y_column': 'Y',
+                                    'evaluation': {'engine': 'xgboost'},
                                     'combination_skills': {'hypothesis': ['random_features']}})
     assert responses[0][0] == 422
     assert 'at least four complete' in responses[0][1]['error']

@@ -33,8 +33,10 @@ try{
  await page.getByLabel('Research inputs',{exact:true}).selectOption('a'.repeat(32));
  const selected=JSON.parse(await page.getByLabel('Selected research configuration').innerText());
  assert.equal(selected.y_column,'new_target');assert.equal(selected.skill,'');assert.deepEqual(selected.baseline_columns,[]);
- assert.equal(selected.playbook_hypothesis,'addiction-psychiatric');
+ assert.equal(selected.playbook_hypothesis,'hypothesis_general');
  assert.equal(selected.playbook_data,'data_training_heavy');
+ assert.equal(selected.playbook_explanation,'report_general');
+ assert.deepEqual(selected.combination_skills,{});
  assert.equal(await page.locator(`option[value="${'b'.repeat(32)}"]`).evaluate(option=>option.disabled),true);
  await page.close();
  for(const width of [390,1280]){
