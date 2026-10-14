@@ -20,9 +20,10 @@ def shared(tmp_path, monkeypatch):
     monkeypatch.delenv('MEMSTARA_RUN_CONFIG', raising=False)
 
 
-def test_only_two_explanation_choices_visible(shared):
+def test_current_domain_explanations_and_general_choice_visible(shared):
     assert {i['id'] for i in catalog.catalog() if i['stage'] == 'report'} == {
-        'shared-anil-addiction', 'shared-anil-hiv', 'report_general'}
+        'shared-anil-addiction', 'shared-anil-hiv', 'report_general',
+        'report_heart_failure_cardiovascular', 'report_heart_failure_cardiorenal'}
     for name in ('shared-anil-addiction', 'shared-anil-hiv'):
         catalog.validate_selection({'playbook_explanation': name})
 

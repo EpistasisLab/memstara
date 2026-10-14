@@ -18,7 +18,7 @@ PROFILES = {
         'label': 'HeartFailure knowledge corpus',
         'hypothesis': ['heart-failure-cardiovascular', 'heart-failure-metabolic-renal',
                        'heart-failure-lifestyle-social', 'random_features'],
-        'report': ['report_general'],
+        'report': ['report_heart_failure_cardiovascular', 'report_heart_failure_cardiorenal'],
     },
     'general': {
         'label': 'General research corpus / model knowledge',
@@ -38,7 +38,13 @@ def corpus_profile(profile=None, *, knowledge_mode='okf'):
     if profile is not None:
         if profile['configuration'].get('knowledge_mode', 'okf') == 'llm_only':
             return 'general'
-        index = profile.get('knowledge', {}).get('hashes', {}).get('index.md')
+        # Inspection/registration and materialized execution manifests use
+        # different inventories. Resume must identify the frozen artifact,
+        # not fall back to the deployment's current corpus.
+        if 'artifact_hashes' in profile:
+            index = profile['artifact_hashes'].get('okf/index.md')
+        else:
+            index = profile.get('knowledge', {}).get('hashes', {}).get('index.md')
     else:
         if knowledge_mode == 'llm_only':
             return 'general'

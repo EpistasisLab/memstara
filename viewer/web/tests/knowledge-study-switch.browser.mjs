@@ -40,7 +40,7 @@ try {
  assert.equal(writes.length,1);
  assert.equal(item.configuration.research_input_id,'heart');assert.equal(item.configuration.y_column,'chronic_heart_failure');
  assert.deepEqual(item.configuration.baseline_columns,[]);
- if(combined){assert.deepEqual(item.configuration.combination_skills.hypothesis,corpusSkillBindings.profiles.heart_failure.hypothesis);assert.deepEqual(item.configuration.combination_skills.report,['report_general']);assert.deepEqual(item.configuration.combination_skills.ml,['ml_logistic_regression']);assert.equal(item.configuration.combination_max_loops,2);}else assert.deepEqual(item.configuration.combination_skills,{});
+ if(combined){assert.deepEqual(item.configuration.combination_skills.hypothesis,corpusSkillBindings.profiles.heart_failure.hypothesis);assert.deepEqual(item.configuration.combination_skills.report,corpusSkillBindings.profiles.heart_failure.report);assert.deepEqual(item.configuration.combination_skills.ml,['ml_logistic_regression']);assert.equal(item.configuration.combination_max_loops,2);}else assert.deepEqual(item.configuration.combination_skills,{});
  await page.reload();if(combined){await page.getByRole('button',{name:'Knowledge sources',exact:true}).click();await page.getByRole('dialog',{name:/Knowledge sources$/}).getByText(/Target: chronic_heart_failure/).waitFor();}else await page.getByRole('button',{name:/Knowledge sources: HeartFailure study/}).waitFor();
  await page.getByText('Configured corpus: HeartFailure knowledge corpus',{exact:true}).waitFor();
  await page.getByText('Configured target: chronic_heart_failure',{exact:true}).waitFor();

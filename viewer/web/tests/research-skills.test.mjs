@@ -16,7 +16,7 @@ test('source switch maps expertise to the new corpus while retaining technical c
  const current={research_input_id:'hiv',playbook_hypothesis:'addiction-psychiatric',playbook_explanation:'shared-anil-hiv',combination_skills:{hypothesis:['addiction-psychiatric','random_features'],data:['data_training_heavy'],ml:['ml_xgboost'],interpreter:['shared-anil-shap'],report:['shared-anil-hiv']}};
  const reset=resetResearchSkills(current,{research_input_id:'heart'});
  assert.deepEqual(reset.combination_skills.hypothesis,corpusSkillBindings.profiles.heart_failure.hypothesis);
- assert.deepEqual(reset.combination_skills.report,['report_general']);
+ assert.deepEqual(reset.combination_skills.report,corpusSkillBindings.profiles.heart_failure.report);
  assert.deepEqual(reset.combination_skills.ml,['ml_xgboost']);
  assert.deepEqual(reset.combination_skills.data,['data_training_heavy']);
  assert.deepEqual(reset.combination_skills.interpreter,['shared-anil-shap']);

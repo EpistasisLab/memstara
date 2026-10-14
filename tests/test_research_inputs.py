@@ -58,6 +58,71 @@ def test_valid_inputs_are_not_falsely_marked_pipeline_ready(sample):
     assert 'yes' not in json.dumps(result['dataset'])
 
 
+@pytest.mark.parametrize('scope', ['hiv', 'heart_failure'])
+def test_registered_domain_skills_survive_preparation_and_cached_resume(sample, scope, monkeypatch):
+    from memstara.corpus_skills import INDEX_PROFILES, PROFILES, corpus_profile
+    from memstara.research_inputs import validate_skills
+    record = register(sample)
+    monkeypatch.setitem(INDEX_PROFILES, record['knowledge']['hashes']['index.md'], scope)
+    books = {'hypothesis': PROFILES[scope]['hypothesis'], 'report': PROFILES[scope]['report']}
+    assert corpus_profile(record) == scope
+    validate_skills(books, record)
+    for profile in (prepare(record['id']), prepare(record['id'])):
+        assert 'knowledge' not in profile
+        assert 'okf/index.md' in profile['artifact_hashes']
+        assert corpus_profile(profile) == scope
+        validate_skills(books, profile)
+        restored = json.loads(json.dumps(profile))
+        verify_materialized(restored)
+        assert corpus_profile(restored) == scope
+        other = 'heart_failure' if scope == 'hiv' else 'hiv'
+        with pytest.raises(ValueError, match='does not match the selected corpus'):
+            validate_skills({'hypothesis': PROFILES[other]['hypothesis']}, restored)
+
+
+@pytest.mark.parametrize('scope', ['hiv', 'heart_failure'])
+@pytest.mark.parametrize('combined', [False, True])
+def test_ui_arguments_reach_cli_environment_check_with_prepared_domain(sample, scope, combined, monkeypatch):
+    import asyncio
+    from memstara.corpus_skills import INDEX_PROFILES, PROFILES, corpus_profile
+    from memstara.control.catalog import catalog
+    from memstara.control.request import build_argv
+    from memstara.pipeline import board
+    record = register(sample)
+    monkeypatch.setitem(INDEX_PROFILES, record['knowledge']['hashes']['index.md'], scope)
+    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'azure_foundry')
+    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'claude-haiku-5-5')
+    monkeypatch.setattr('memstara.stage_models.deployment_profiles', lambda: {})
+    monkeypatch.setattr(board, 'load_env', lambda: None)
+    # Activate really prepares the child environment; monkeypatch tracks rollback.
+    for key in ('MEMSTARA_DATASET_PATH', 'AGENTIC_OKF_BUNDLE_DIR', 'MEMSTARA_OUTPUT_DIR',
+                'MEMSTARA_USER_SKILLS_DIR', 'MEMSTARA_SKILL_ALIASES_PATH',
+                'MEMSTARA_LEAKAGE_RULES_PATH', 'MEMSTARA_OUTCOME_COLUMN', 'MEMSTARA_OKF_FIELDS'):
+        monkeypatch.delenv(key, raising=False)
+    choices = {'hypothesis': PROFILES[scope]['hypothesis'],
+               'data': ['data_training_heavy', 'data_balanced_stratified'],
+               'ml': ['ml_logistic_regression', 'ml_xgboost'],
+               'interpreter': ['shared-anil-shap', 'shared-anil-lime'],
+               'report': PROFILES[scope]['report']}
+    body = {'research_input_id': record['id'], 'trials': 1,
+            **{('playbook_explanation' if stage == 'report' else 'playbook_' + stage): ids[0]
+               for stage, ids in choices.items()}}
+    if combined:
+        body.update(combination_skills=choices, combination_max_loops=64)
+    argv = build_argv(body, [], [item['id'] for item in catalog()], list(choices))
+    monkeypatch.setattr('sys.argv', ['board', *argv])
+    class ReachedEnvironmentCheck(Exception):
+        pass
+    async def stop_before_services(**settings):
+        assert settings['y_column'] == sample['target']['column']
+        assert settings['use_okf'] and settings['use_data']
+        assert corpus_profile() == scope
+        raise ReachedEnvironmentCheck
+    monkeypatch.setattr(board, 'check_environment', stop_before_services)
+    with pytest.raises(ReachedEnvironmentCheck):
+        asyncio.run(board.main())
+
+
 def test_missing_target_semantics_and_identifiers_are_explicit(sample):
     sample['target'] = {}
     sample['excluded_columns'] = []

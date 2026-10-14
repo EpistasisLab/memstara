@@ -23,7 +23,8 @@ export const corpusSkillBindings={
         "random_features"
       ],
       "report": [
-        "report_general"
+        "report_heart_failure_cardiovascular",
+        "report_heart_failure_cardiorenal"
       ]
     },
     "general": {

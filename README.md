@@ -810,6 +810,12 @@ the resulting combination count before the next execution.
 
 ### Research changes and ML settings in Add pipeline
 
+The **Build pipelines** chooser offers **Prepare research inputs** and
+**All Combinations**. The **Selected Pipelines** entry is temporarily hidden;
+existing pipelines and the retained single-pipeline editor are preserved. To build
+one combination, select one skill per agent in All Combinations. Creating a design
+does not start it automatically.
+
 Register CSV, OKF and the target definition together, then select that saved version
 in Add pipeline. HIV studies must explicitly provide their actual label mapping and
 prediction timing; the column name alone does not establish those semantics.
@@ -838,7 +844,22 @@ HeartFailure's three project-owned skills are separate files named
 existing hypothesis output and feature-selection contracts, use only available
 predictors and retrieved evidence, and retain the study's fixed target. The original
 HIV and Anil/Phil skill files are unchanged. HIV offers Anil's Addiction and HIV
-Explanation skills; HeartFailure uses General research explanation.
+Explanation skills. HeartFailure offers two project-authored adaptations of the
+structure and evidence rules of Anil's HIV Explanation skill:
+
+| HeartFailure Explanation skill | Focus | File under `src/memstara/playbooks/` |
+|---|---|---|
+| Cardiovascular expert explanation | Cardiac function and cardiovascular disease | `report_heart_failure_cardiovascular.md` |
+| Cardiometabolic and renal expert explanation | Metabolic/renal comorbidity, lifestyle and care context | `report_heart_failure_cardiorenal.md` |
+
+Both use the selected CSV/target contract, available LR/XGBoost Interpretation
+outputs and supplied HeartFailure OKF evidence. Neither connects to a separate
+specialty database or changes Anil's original instructions. They are project-authored
+adaptations, not specialist-reviewed clinical guidance. With all built-in domain
+choices selected, both HIV and HeartFailure offer 4 Hypothesis × 2 Data × 2 ML ×
+2 Interpretation × 2 Explanation = 64 combinations. The execution Loop limit
+still controls how many combinations are attempted. Existing saved designs retain
+their settings until explicitly edited; old general Explanation runs remain readable.
 
 Source-to-skill bindings live in `src/memstara/corpus_skills.py`. They match the
 supplied corpus index SHA-256, including copies in independent installations,
