@@ -11,7 +11,7 @@ import { evaluationPlanError } from '../lib/evaluationPlan';
 import LoopLimitSettings from "../components/LoopLimitSettings";
 import BaselineSettings from '../components/BaselineSettings';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Database, Workflow, X } from 'lucide-react';
 import { useControl, type RunRequest } from '../store/control';
 import { usePipelines } from '../store/pipelines';
 import { newPipelineConfiguration } from '../lib/newPipelineConfiguration';
@@ -42,10 +42,24 @@ function ChooseBuildMode() {
   if(mode==='selected')return <CreationWizard/>;
   if(mode==='all')return <CombinationWizard/>;
   return <FloorDetailDialog title="Build pipelines" close={()=>usePipelines.getState().closeCreation()}>
-    <div className="space-y-4 p-3">
-      <button type="button" className="w-full rounded-xl border border-paper-line p-4 text-left" onClick={()=>setMode('research')}><strong>Prepare research inputs</strong><p>Inspect and register your OKF corpus, dataset and target definition before connecting a pipeline.</p></button>
-      <button type="button" className="w-full rounded-xl border border-paper-line p-4 text-left" onClick={()=>setMode('selected')}><strong>Selected Pipelines</strong><p>Build one pipeline, then run it when ready. Add more separately.</p></button>
-      <button type="button" className="w-full rounded-xl border border-paper-line p-4 text-left" onClick={()=>setMode('all')}><strong>All Combinations</strong><p>Select multiple skills per agent, choose a starting method and set your maximum Loops.</p></button>
+    <div className="space-y-5 p-3">
+      <p className="text-sm leading-relaxed text-ink-muted">Choose your study inputs, then configure the agents that will analyze them. If your study is already registered, go straight to All Combinations.</p>
+      <div className="grid gap-4" style={{gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,260px),1fr))'}}>
+      <button aria-label="Prepare research inputs" type="button" className="group flex h-full w-full flex-col gap-3 rounded-xl border border-paper-line bg-paper-panel p-5 text-left transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-accent" onClick={()=>setMode('research')}>
+        <span className="flex w-full items-center justify-between text-ink-muted"><Database size={24} aria-hidden="true"/><span className="text-xs font-semibold">1 · Study inputs</span></span>
+        <strong className="text-lg">Prepare research inputs</strong>
+        <p className="text-sm leading-relaxed text-ink-muted">Register your CSV, OKF corpus and prediction target together, or review an existing study.</p>
+        <span className="mt-auto flex items-center gap-2 pt-2 text-sm font-semibold">Prepare a study <ArrowRight size={16} aria-hidden="true"/></span>
+      </button>
+      <button hidden type="button" className="w-full rounded-xl border border-paper-line p-4 text-left" onClick={()=>setMode('selected')}><strong>Selected Pipelines</strong><p>Build one pipeline, then run it when ready. Add more separately.</p></button>
+      <button aria-label="All Combinations" type="button" className="group flex h-full w-full flex-col gap-3 rounded-xl border border-accent/40 bg-accent/5 p-5 text-left transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-accent" onClick={()=>setMode('all')}>
+        <span className="flex w-full items-center justify-between text-ink-muted"><Workflow size={24} aria-hidden="true"/><span className="text-xs font-semibold">2 · Pipeline setup</span></span>
+        <strong className="text-lg">All Combinations</strong>
+        <p className="text-sm leading-relaxed text-ink-muted">Choose your study and one or more skills for each agent. Review the combinations and set the maximum Loops.</p>
+        <span className="mt-auto flex items-center gap-2 pt-2 text-sm font-semibold">Configure a pipeline <ArrowRight size={16} aria-hidden="true"/></span>
+      </button>
+      </div>
+      <p className="rounded-lg border border-paper-line bg-paper px-3 py-2 text-xs leading-relaxed text-ink-muted">Choose one skill per agent for a single combination. Creating a design does not start an experiment; review it and press Run when ready.</p>
     </div>
   </FloorDetailDialog>;
 }

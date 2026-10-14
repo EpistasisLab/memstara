@@ -1,3 +1,4 @@
+import {openBuildModeFixture} from './build-mode.fixture.mjs';
 // Mock every API write and generation: exercise UI contracts without paid model calls.
 import {chromium, expect} from '@playwright/test';
 import fs from 'node:fs';
@@ -32,7 +33,7 @@ try {
   const dist=new URL('../dist/',import.meta.url);
   await page.route(base+'/',r=>r.fulfill({path:new URL('index.html',dist).pathname,contentType:'text/html'}));
   await page.route('**/assets/**',r=>{const name=new URL(r.request().url()).pathname.split('/').at(-1);return r.fulfill({path:new URL('assets/'+name,dist).pathname,contentType:name.endsWith('.css')?'text/css':'application/javascript'});});
-  await page.goto(base);await page.getByRole('button',{name:/Add pipeline/i,exact:true}).click();await page.getByRole('button',{name:new RegExp('^'+mode)}).click();
+  await page.goto(base);await page.getByRole('button',{name:/Add pipeline/i,exact:true}).click();await openBuildModeFixture(page,mode);
   const d=page.getByRole('dialog',{name:mode==='Selected Pipelines'?'Create a pipeline':'All Combinations',exact:true});
   if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();await d.getByRole('button',{name:'Next',exact:true}).click();}
   else await d.getByRole('button',{name:'Choose skills',exact:true}).click();

@@ -1,3 +1,4 @@
+import {openBuildModeFixture} from './build-mode.fixture.mjs';
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -26,7 +27,7 @@ try{
  });
  await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Isolated fixture'}}));
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
- await page.getByRole('button',{name:/Add pipeline/i}).click();await page.getByRole('button',{name:/Selected Pipelines/}).click();
+ await page.getByRole('button',{name:/Add pipeline/i}).click();await openBuildModeFixture(page);
  let dialog=page.getByRole('dialog',{name:'Create a pipeline',exact:true});
  await dialog.getByLabel('Deployment target column').fill('Y');await dialog.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();
  await dialog.getByRole('button',{name:'Next',exact:true}).click();

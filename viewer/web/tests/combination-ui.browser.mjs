@@ -1,3 +1,4 @@
+import {openBuildModeFixture} from './build-mode.fixture.mjs';
 // Browser regression: all writes are mocked; no pipeline or paid LLM call is started.
 import {chromium} from '@playwright/test';
 const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
@@ -21,7 +22,7 @@ try{
  });
  await page.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');
  await page.getByRole('button',{name:/Add pipeline/i}).click();
- await page.getByRole('button',{name:/Selected Pipelines/}).click();
+ await openBuildModeFixture(page);
  await page.getByRole('combobox',{name:'Knowledge sources'}).waitFor();
  await page.getByRole('button',{name:'Cancel',exact:true}).click();
  await page.getByRole('button',{name:/Add pipeline/i}).click();

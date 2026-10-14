@@ -1,10 +1,11 @@
+import {openBuildModeFixture} from './build-mode.fixture.mjs';
 import {corpusSkillBindings} from './corpus-skill-bindings.fixture.mjs';
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
 try {
  const page=await browser.newPage({viewport:{width:1400,height:1000}});
- const catalog=[['hypothesis_general','hypothesis'],['random_features','hypothesis'],...corpusSkillBindings.profiles.hiv.hypothesis.slice(0,3).map(id=>[id,'hypothesis']),...corpusSkillBindings.profiles.heart_failure.hypothesis.slice(0,3).map(id=>[id,'hypothesis']),['data_training_heavy','data'],['ml_logistic_regression','ml'],['ml_xgboost','ml'],['shared-anil-shap','interpreter'],['report_general','report'],['shared-anil-hiv','report']].map(([id,stage])=>({id,stage,title:id,hash:id,content:'# Fixture',description:'Fixture',source:'fixture'}));
+ const catalog=[['hypothesis_general','hypothesis'],['random_features','hypothesis'],...corpusSkillBindings.profiles.hiv.hypothesis.slice(0,3).map(id=>[id,'hypothesis']),...corpusSkillBindings.profiles.heart_failure.hypothesis.slice(0,3).map(id=>[id,'hypothesis']),['data_training_heavy','data'],['ml_logistic_regression','ml'],['ml_xgboost','ml'],['shared-anil-shap','interpreter'],['report_general','report'],['shared-anil-hiv','report'],...corpusSkillBindings.profiles.heart_failure.report.map(id=>[id,'report'])].map(([id,stage])=>({id,stage,title:id,hash:id,content:'# Fixture',description:'Fixture',source:'fixture'}));
  const inputs=['hiv','heart'].map(id=>({id,input_checks_passed:true,configuration:{name:id,knowledge_mode:'okf',data_mode:'dataset',target:{column:id==='hiv'?'HIV_DETECTABLE':'chronic_heart_failure',description:id+' target',prediction_time:'Before outcome'}}}));
  await page.route('**/control/**',async route=>{
   const path=new URL(route.request().url()).pathname;
@@ -17,7 +18,7 @@ try {
  await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Fixture'}}));
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
  await page.getByRole('button',{name:/Add pipeline/i}).click();
- await page.getByRole('button',{name:/Selected Pipelines/}).click();
+ await openBuildModeFixture(page);
  const dialog=page.getByRole('dialog',{name:'Create a pipeline',exact:true});
  await dialog.getByText(/No deployment OKF is configured/).waitFor();
  await dialog.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();
@@ -49,7 +50,8 @@ try {
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
  const report=dialog.getByRole('combobox',{name:'Explanation skill',exact:true});
- assert.equal(await report.inputValue(),'report_general');
+ assert.equal(await report.inputValue(),corpusSkillBindings.profiles.heart_failure.report[0]);
+ assert.deepEqual((await report.locator('option').evaluateAll(options=>options.map(o=>o.value).filter(Boolean))).sort(),corpusSkillBindings.profiles.heart_failure.report.slice().sort());
  assert.equal(await report.locator('option[value="shared-anil-hiv"]').count(),0);
  console.log('HIV and HeartFailure each offer their three specialties and Random; switching updates target and skills; paired ML controls match execution. Mocked HTTP, no execution.');
 } finally {await browser.close();}

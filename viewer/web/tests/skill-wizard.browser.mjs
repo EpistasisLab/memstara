@@ -1,3 +1,4 @@
+import {openBuildModeFixture} from './build-mode.fixture.mjs';
 // All API writes and model generation mocked; no production mutation.
 import {chromium,expect} from '@playwright/test';
 console.log("Launching browser");
@@ -17,7 +18,7 @@ if(path.startsWith('/control/skill-drafts/')&&n===3&&!transient){transient=true;
 if(path.startsWith('/control/skill-drafts/'))return r.fulfill({json:failure?{status:'failed',error:'Test failure'}:{status:'ready',content:'# Draft '+n,model:'chosen-model',provider:'openai'}});
 if(path==='/control/playbooks'){if(r.request().method()==='GET')return r.fulfill({json:{catalog,playbooks:catalog.map(s=>s.id),stages:roles,references:[]}});const q=r.request().postDataJSON();saves.push(q);const s={...q,id:'saved-'+saves.length,title:q.name,hash:String(saves.length),source:'User'};catalog.push(s);return r.fulfill({json:s});}
 if(r.request().method()==='POST')throw Error('Unexpected write '+path);return r.fulfill({json:{}});});
-await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await p.getByRole('button',{name:/Add pipeline/i}).click();await p.getByRole('button',{name:new RegExp(mode)}).click();
+await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await p.getByRole('button',{name:/Add pipeline/i}).click();await openBuildModeFixture(p,mode);
 const d=p.getByRole('dialog',{name:mode==='Selected Pipelines'?'Create a pipeline':'All Combinations',exact:true});
 if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();await d.getByRole('button',{name:'Next',exact:true}).click();}else {await d.getByRole('button',{name:'Choose skills'}).click();await d.getByRole('button',{name:/^Create with AI/}).click();}
 await d.getByRole('button',{name:'Create a skill with AI'}).click();

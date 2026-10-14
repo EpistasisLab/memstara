@@ -1,3 +1,4 @@
+import {openBuildModeFixture} from './build-mode.fixture.mjs';
 // Browser regression: all writes mocked, no real execution.
 import {chromium} from '@playwright/test';
 const b=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
@@ -11,7 +12,7 @@ if(r.request().method()==='POST')throw Error('Unexpected write');return r.contin
 await p.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Isolated fixture'}}));
 await p.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');
 for(let i=1;i<=4;i++){
-await p.getByRole('button',{name:/Add pipeline/i}).click();await p.getByRole('button',{name:/Selected Pipelines/}).click();const d=p.getByRole('dialog',{name:'Create a pipeline',exact:true});await d.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();await d.getByRole('button',{name:'Next',exact:true}).click();
+await p.getByRole('button',{name:/Add pipeline/i}).click();await openBuildModeFixture(p);const d=p.getByRole('dialog',{name:'Create a pipeline',exact:true});await d.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();await d.getByRole('button',{name:'Next',exact:true}).click();
 for(const label of ['Hypothesis','Data','Machine learning','Interpretation','Explanation']){const c=d.getByRole('combobox',{name:label+' skill',exact:true});const value=await c.inputValue();if(!value){const option=await c.locator('option').evaluateAll(os=>os.find(o=>o.value)?.value);await c.selectOption(option);}await d.getByRole('button',{name:'Next',exact:true}).click();}
 await d.getByLabel('Pipeline name',{exact:true}).fill('Selected '+i);await d.getByRole('button',{name:'Next',exact:true}).click();await d.getByRole('button',{name:'Create pipeline',exact:true}).click();await d.waitFor({state:'hidden'});if(starts.length!==i-1)throw Error('Create started execution');const run=p.getByRole('button',{name:'Run Selected '+i,exact:true});
 await run.waitFor();
