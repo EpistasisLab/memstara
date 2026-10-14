@@ -399,6 +399,73 @@ This is a software demonstration with possible complete-case selection bias, not
 validated prospective clinical prediction. The raw CSV cannot pass the current
 reject-missing-values policy unchanged.
 
+#### What the HeartFailure inputs contain and how they are used
+
+The supplied CSV has 1,700 rows and 113 columns. It is a supplied processed cohort,
+not the generated 120-row synthetic tutorial in option A. The preparation above
+creates a smaller **analysis CSV with eight predictors plus the target**. The
+pipeline using that prepared study cannot choose the other raw columns. Changing
+that selection requires a separately reviewed input contract and a new registration;
+changing a skill or the pipeline name does not add columns to the analysis CSV.
+
+| Exact predictor column | Meaning used in the demonstration |
+|---|---|
+| `age_years` | Age |
+| `sex` | Supplied sex code; confirm its coding before clinical interpretation |
+| `previous_myocardial_infarctions_count` | Number of prior myocardial infarctions |
+| `essential_hypertension_stage` | Supplied hypertension stage |
+| `diabetes_mellitus_history` | Diabetes history |
+| `obesity_history` | Obesity history |
+| `chronic_bronchitis_history` | Chronic bronchitis history |
+| `bronchial_asthma_history` | Asthma history |
+
+The target column is never a predictor. Predictor coding and measurement timing
+must be checked against source documentation before using the demonstration for a
+scientific claim; the software does not establish those meanings from column names.
+
+The OKF is a searchable literature bundle, not a second patient table. Its
+`index.md` describes 100 curated PubMed/PMC papers across eight topics:
+
+- Hypertension and ischemic heart disease.
+- Arrhythmia, valvular and other cardiac conditions.
+- Metabolic and renal comorbidities.
+- Biomarkers and subclinical cardiac dysfunction.
+- Lifestyle and behavioural factors.
+- Social, psychosocial and healthcare-access determinants.
+- Cardiotoxic drugs, inflammatory and environmental exposures.
+- Risk prediction models, demographics and genetics.
+
+The Hypothesis Agent uses retrieved knowledge to propose a question, justify a
+hypothesis and select **available CSV predictors**. The Data and ML stages work
+with the selected study's CSV and fixed target. Interpretation explains the
+recorded analysis; Explanation combines that interpretation with available
+knowledge evidence. A paper mentioning a measurement does not make that
+measurement available in the CSV. Literature claims are not measured model results.
+
+Keep the whole `okf/` directory, including indexes, topic directories, citations
+and supporting files. The bundle's generation model names, duration and costs
+are historical corpus-build metadata; they do not select the model or describe
+the cost of a new Memstara execution. Current execution models come from project
+`.env` and are frozen into each run. Source provenance, redistribution terms and
+clinical validity still require review; repository inclusion is not a new license
+for the supplied data or cited publications.
+
+After preparation, these files have different purposes:
+
+| File | Purpose |
+|---|---|
+| `examples/heart-failure/dataset.csv` | Unmodified supplied CSV; do not pass it directly to the reject-missing-values demo |
+| `examples/heart-failure/okf/index.md` | Entry point and overview of the supplied literature bundle |
+| `outputs/heart-failure-demo/dataset.csv` | Derived complete-case analysis data |
+| `outputs/heart-failure-demo/research.json` | CSV/OKF paths, target labels, missing-value policy and explicit timing limitations |
+| `outputs/heart-failure-demo/preparation.json` | Source/derived hashes, chosen columns and retained/excluded counts |
+| `outputs/launch.json` | Registered research ID, tutorial skill IDs and a one-Loop CLI command |
+
+Preparation and registration do not run agents or train a model. Use **either**
+the tutorial CLI route in steps 5–6 or the domain-specific browser walkthrough
+below for your first execution. These use the same prepared inputs but different
+Hypothesis/Explanation skills; they are not identical experimental conditions.
+
 **C. Your own CSV / OKF / target**
 
 Use this route to replace the example with your study. Your model connection and
@@ -618,13 +685,14 @@ same tutorial preparation command. Changed source contents require a new registr
 
 ### 5. Understand the skills used by this execution
 
-The original specialty experiment uses 12 choices (4 × 2 × 2 × 2 × 2 = 64
-combinations). Two additional general-research skills support other domains. A
+Each supplied domain profile offers 12 built-in choices across five roles
+(4 × 2 × 2 × 2 × 2 = 64 combinations). Separate general-research skills support
+other corpora. HeartFailure has its own Hypothesis/Explanation choices listed below. A
 registered research profile cannot silently use an unrelated
 Addiction/HIV specialty. The tutorial registers separate, versioned user skills
 for Hypothesis and Explanation. It does not enable retired skills or edit originals.
 
-| Role | Normal catalogue | First-run tutorial selection |
+| Role | HIV / Addiction catalogue | First-run CLI tutorial selection |
 |---|---|---|
 | Hypothesis | Psychiatric, social determinants, substance use, random features | User research tutorial, from `examples/research-inputs/skills/hypothesis.md` |
 | Data | Training-heavy or balanced stratified | `data_training_heavy` |
@@ -639,6 +707,12 @@ background; the legacy ML Skill report selection remains disabled. No adjacent
 contributor folders are discovered automatically. Explicit skill-path overrides
 remain supported. If a required packaged document is missing, install a complete
 candidate revision; do not silently fall back to an unrelated archived skill.
+
+The preparation script uses the same two general tutorial files for both the
+synthetic and HeartFailure CLI demonstrations. It does not automatically substitute
+the HeartFailure specialists. Their registered user skill IDs are explicit in the
+CLI command; the known-corpus browser picker instead offers the domain choices
+listed below. Use the browser walkthrough for the HeartFailure specialist design.
 
 `outputs/launch.json` contains the saved research ID, tutorial skill IDs and a
 one-Loop command. `execution_ready: false` at this preparation stage means that
@@ -777,10 +851,11 @@ and the control service's local origin allowance follow the selected ports. You 
 not edit Vite config or export separate DSNs. An occupied port stops startup; choose
 a free port in `.env` and restart the relevant services.
 
-In Floor plan, choose **Add pipeline**, select the research version saved in step 4,
-select the tutorial Hypothesis/Explanation skill IDs printed in `outputs/launch.json`,
-and use the remaining choices from step 5. Set one Loop initially. Creating a
-pipeline saves settings; Start executes it. Do not replay the already completed CLI
+In Floor plan, choose **Add pipeline → All Combinations**, select the research
+version saved in step 4, and choose compatible skills from the displayed corpus
+profile. For HeartFailure, follow the one-Loop walkthrough below. The tutorial CLI
+skill IDs are not the same as the built-in domain choices shown in that picker.
+Creating a pipeline saves settings; running it executes the design. Do not replay the already completed CLI
 run merely to view its results. Restart the control process between executions after
 changing environment settings; a running worker retains its frozen configuration.
 
@@ -805,8 +880,93 @@ semantics. Retain explicit unknowns and review them for a clinical experiment.
 
 Changing the study does not alter historical execution results. Compatible Data,
 ML and Interpretation choices remain in a combination design; unsupported domain
-Hypothesis/Explanation choices are replaced with general research choices. Review
+Hypothesis/Explanation choices are mapped to compatible choices in the destination
+corpus profile (general research for an unrecognized corpus). Review
 the resulting combination count before the next execution.
+
+### HeartFailure browser walkthrough: one combination, one Loop
+
+Complete installation steps 1–4 and browser startup in step 7 first. Use the URL
+printed by the startup command: the documented development frontend normally uses
+`http://localhost:5173`; a separately running Docker web service may use
+`http://localhost:8070`. These can point at different installations. Check the
+selected study and source paths rather than assuming two URLs share state.
+
+1. Open **Add pipeline → All Combinations**. **Prepare research inputs** is the
+   alternative for inspecting/registering new input files; the CLI preparation above
+   has already registered this example on this installation.
+2. In **Research inputs**, select the saved HeartFailure study. Open **Selected
+   CSV and OKF files** and confirm the *derived* CSV, supplied HeartFailure OKF and
+   `chronic_heart_failure` target with labels `1`/`0`. Do not leave **Deployment
+   inputs** selected when intending to use this registered study.
+3. In **Agent skills**, choose exactly one skill per role for the initial test:
+
+   | Role | Example selection |
+   |---|---|
+   | Hypothesis | Cardiovascular disease and cardiac function |
+   | Data | Training-heavy stratified (`data_training_heavy`) |
+   | Machine learning | Logistic regression (`ml_logistic_regression`) |
+   | Interpretation | Anil SHAP (`shared-anil-shap`) |
+   | Explanation | Cardiovascular expert explanation (`report_heart_failure_cardiovascular`) |
+
+   The design should show **1 possible combination**. LR is the primary model in
+   this selection; the paired ML path also evaluates XGBoost on the same split.
+   This example does not select all 64 combinations.
+4. Review model assignments and evaluation settings. **Advanced model settings**
+   lets you fix supported ML parameters; blank/Auto leaves them for the ML Agent.
+   These ML parameters are separate from the LLM deployment selected in `.env`.
+   Keep the initial workload small and review the actual applied configuration in
+   the saved results. The eight-column prepared dataset bounds available features.
+5. In **Review & create**, give the design a name, set **Maximum Loops per execution**
+   to **1**, review the selected study/skills/model settings, and acknowledge the
+   execution cost notice. Choose **Create combination design**.
+6. Start the created design with its Run control. Creation alone does not execute
+   it. If the start response is delayed, wait for state reconciliation; do not
+   launch another copy. Follow the Floor plan and Live log.
+7. Confirm the Loop and report are completed, then inspect measured results and
+   saved artifacts using the completion checks in step 6. A question, an agent
+   response or an animation alone does not establish successful completion.
+
+For a subsequent full built-in design, select all 4/2/2/2/2 domain choices and
+review the **64 possible combinations**. The Loop limit is independent: a limit
+of 1 attempts only one combination; 64 schedules one full cycle. Blocked Loops
+count toward the limit; retries within a Loop do not add Loops. A limit above the
+combination count repeats combinations. Random starting order is separate from
+selecting the Random features Hypothesis skill. Do not start a larger run merely
+to populate the interface.
+
+### When the result views become populated
+
+Navigation entries are available before execution finishes. Each view depends on
+saved records, not simply on a running/completed badge:
+
+| View | When useful content appears | What an empty view means |
+|---|---|---|
+| Floor plan / Live log | As execution state, agent calls and saved updates arrive | No recorded activity yet, or a loading/connection issue if explicitly reported |
+| Question universe | When questions are saved, potentially before ML finishes | No questions in the displayed scope yet; a display error is a separate issue |
+| Telemetry | As calls, timing and usage records become available | Measurements have not arrived or the selected execution has no records |
+| Clinician view | When analysis results are saved; Interpretation fills in when recorded | A question/hypothesis may exist while there is no analysis finding yet |
+| Final report | When Explanation saves report text | The report is not yet available, even if earlier stages have results |
+
+**Memstara · Clinical insights**, **What is your research finding?** and **Choose
+a finding to understand its meaning and what to check next.** are the Clinician
+view's introductory heading and instructions, not additional pipeline stages.
+The page can display these before its finding list has any entries. In that case,
+wait for recorded analysis results and check execution progress rather than
+assuming a rendering failure. An available result can still be awaiting Interpretation.
+
+Clinician view defaults to recent findings across pipelines; **Past analyses**
+selects a saved execution. Final report and detailed Telemetry follow the selected
+execution. Check the pipeline, run and Loop scope when comparing these views.
+Use Live log stage links for that stage's activity, or **Browse activity** for the
+execution. This compact view has no search/agent/type filters; the full Activity
+view retains filters and offers **Clear filters** when a search has no matches.
+
+If the pipeline says **Needs attention**, inspect its recorded failure and trace;
+waiting for a report does not repair a failed execution. If updates are unavailable,
+check API/control connectivity. Do not reinterpret missing results as zero model
+performance or missing billing as zero cost. A displayed cost estimate is not an
+Azure bill; the billing rules and attribution limits above still apply.
 
 ### Research changes and ML settings in Add pipeline
 
