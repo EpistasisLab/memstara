@@ -1,3 +1,6 @@
+import EvaluationSettings from '../components/EvaluationSettings';
+import {evaluationPlanError} from '../lib/evaluationPlan';
+import {compatibleResearchSkill} from '../lib/researchSkills';
 import CreateCustomSkill from '../components/CreateCustomSkill';
 import { agentStageLabel } from "../lib/stage";
 import AgentReferenceKnowledge from '../components/AgentReferenceKnowledge';
@@ -9,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { X, ArrowDown, Upload, FileText } from "lucide-react";
 import { STAGE_ICON } from "../lib/icons";
 import { STAGE_COLOR } from "../lib/stage";
-import { useControl, type EvaluationPlan } from "../store/control";
+import { useControl, type RunRequest, type EvaluationPlan } from "../store/control";
 import { asSlots, fromSlots, withPlaybookAt, withoutSlot, withoutInterpreterSlot } from "../lib/planned";
 
 const descriptions: Record<string, string> = {
@@ -57,28 +60,29 @@ function Editor({ close }: { close: () => void }) {
   const multiple = stage === "hypothesis" || stage === "interpreter";
   const count = stage === "interpreter" ? form.interpret_agents : form.hypothesis_agents;
   const maximum = usePipelines.getState().selected ? 1 : 4;
-  const selected = catalog.find(x => x.id === choice && x.stage === stage);
+  const selected = catalog.find(x => x.id === choice && x.stage === stage && compatibleResearchSkill(x, form));
   const used = asSlots(form[`playbook_${stage === "report" ? "explanation" : stage}`], count)
     .filter((_, i) => add || i !== slot).map(id => catalog.find(x => x.id === id)?.hash).filter(Boolean);
   const duplicate = multiple && selected && used.includes(selected.hash);
-  const invalidPlan = stage === "ml" && (
-    !Number.isInteger(plan.seed) || plan.seed < 0 || plan.seed > 2147483647 ||
-    !Number.isFinite(plan.test_size) || plan.test_size < .1 || plan.test_size > .5 ||
-    !Number.isInteger(plan.folds) || plan.folds < 0 || plan.folds === 1 || plan.folds > 10 ||
-    !Number.isInteger(plan.replicates) || plan.replicates < 1 || plan.replicates > 10 ||
-    !Number.isInteger(plan.search_trials) || plan.search_trials < 1 || plan.search_trials > 10
-  );
-  const commit = () => {
+  const invalidPlan = stage === 'ml' && !!evaluationPlanError(plan);
+  const commit = async () => {
     if (!selected || duplicate || invalidPlan || saving || running || busy) return;
     if (add && count >= maximum) { setError(`At most ${maximum} ${agentStageLabel(stage)} agents are supported.`); return; }
-    setForm(f => {
+    const update = (f: RunRequest): RunRequest => {
       if (add && stage === "interpreter") return { ...f, interpret_agents: f.interpret_agents + 1,
         playbook_interpreter: fromSlots([...asSlots(f.playbook_interpreter, f.interpret_agents), choice]) };
       if (add) return { ...f, hypothesis_agents: f.hypothesis_agents + 1,
         trials: Math.max(f.trials, f.hypothesis_agents + 1),
         playbook_hypothesis: fromSlots([...asSlots(f.playbook_hypothesis, f.hypothesis_agents), choice]) };
       return { ...withPlaybookAt(f, stage, slot, choice), baseline_columns: stage === "ml" ? baseline : f.baseline_columns, evaluation: stage === "ml" ? plan : f.evaluation };
-    });
+    };
+    const pipeline = usePipelines.getState().items.find(p=>p.id===usePipelines.getState().selected);
+    if (pipeline) {
+      setSaving(true);
+      const saved=await usePipelines.getState().save(pipeline.id,update(pipeline.configuration));
+      setSaving(false);
+      if (!saved) {setError(usePipelines.getState().error||'Settings could not be saved. Retry.');return;}
+    } else setForm(update);
     close();
   };
   const upload = async (file?: File) => {
@@ -121,7 +125,7 @@ function Editor({ close }: { close: () => void }) {
         if (defaults) setPlan(p => ({ ...p, ...defaults }));
       }}>
         <option value="">Choose analysis instructions</option>
-        {catalog.filter(x => x.stage === stage).map(x => <option key={x.id} value={x.id}
+        {catalog.filter(x => x.stage === stage && compatibleResearchSkill(x, form)).map(x => <option key={x.id} value={x.id}
           disabled={multiple && used.includes(x.hash)}>{x.title}{multiple && used.includes(x.hash) ? " · already used" : ""}</option>)}
       </select>
       {coach===1&&selected&&<button type="button" className="mt-3 rounded border border-paper-line px-3 py-2 text-xs font-semibold text-ink" onClick={()=>setCoach(2)}>Keep this skill · review next</button>}
@@ -163,26 +167,13 @@ function Editor({ close }: { close: () => void }) {
     </section>
     {stage === "ml" && <AgentReferenceKnowledge />}
     {choice && !selected && <p role="alert" className="mt-3 text-sm">This saved selection is not a skill for this agent. ML Results Presenter belongs to Explanation; ML Knowledge is reference material. Choose an appropriate skill and save.</p>}
-    {stage === "ml" && <fieldset className="mt-4 space-y-2 border-t border-paper-line pt-3">
-      <legend className="text-xs font-bold">Predictive model and evaluation <Help topic="Predictive model" /></legend>
-      <BaselineSettings value={baseline} onChange={setBaseline} />
-      <select aria-label="Predictive model" className={field} value={plan.engine} onChange={e => setPlan({ ...plan, engine: e.target.value })}>
-        <option value="xgboost">XGBoost</option><option value="random_forest">Random forest (scikit-learn)</option>
-        <option value="logistic_regression">Logistic regression (scikit-learn)</option>
-      </select>
-      <p className="text-xs text-ink-faint" role="note">{plan.engine === "xgboost"
-        ? "Missing values supported: numeric gaps use XGBoost's native tree routing; categorical gaps are encoded when seen in training. No imputation or row deletion."
-        : "This model requires complete predictors. Choose XGBoost to retain missing values without imputation."}
-        {" Missing target labels and infinite values are always rejected before a run starts."}</p>
-      <div className="grid grid-cols-2 gap-2">{([
-        ["seed", "Seed", 0, 2147483647, 1], ["test_size", "Hold-out fraction", .1, .5, .05],
-        ["folds", "CV folds (0 = off)", 0, 10, 1], ["replicates", "Replicates", 1, 10, 1],
-        ["search_trials", "HP candidates", 1, 10, 1],
-      ] as const).map(([key, label, min, max, step]) => <label key={key} className="text-xs">{label} <Help topic={label} />
-        <input className={field} type="number" min={min} max={max} step={step} value={plan[key]}
-          onChange={e => setPlan({ ...plan, [key]: e.target.valueAsNumber })} /></label>)}</div>
-      <p className="text-xs text-ink-faint">Optimization uses training folds only. Hold-out results are not used to choose a model.</p>
-    </fieldset>}
+    {stage === "ml" && <div className="mt-4 space-y-3">
+      <BaselineSettings value={baseline} onChange={setBaseline}/>
+      <EvaluationSettings value={plan} onChange={setPlan} disabled={saving||!!running||busy}
+        paired={!!form.combination_max_loops||['ml_logistic_regression','ml_xgboost'].includes(choice)}
+        dataSkill={form.combination_max_loops?'combinations':form.playbook_data}/>
+      <p className="text-xs text-ink-faint">Paired LR/XGBoost evaluation requires complete predictors for both models. Missing labels and non-finite values are rejected before training.</p>
+    </div>}
     {(error || duplicate || invalidPlan) && <p role="alert" className="mt-3 text-sm text-red-700">{error || (invalidPlan ? "Check evaluation ranges. CV folds must be 0 or 2–10." : "Choose a different skill for this agent.")}</p>}
     {!add && multiple && count === 1 && <p className="mt-3 text-xs text-ink-faint">At least one {agentStageLabel(stage)} agent is required.</p>}
     <div className="agent-settings-footer mt-5 flex flex-wrap justify-end gap-2">

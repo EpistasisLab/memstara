@@ -837,6 +837,13 @@ class Handler(BaseHTTPRequestHandler):
                 body.update(knowledge_mode=config['knowledge_mode'], data_mode=config['data_mode'],
                             research_objective=config['target']['description'],
                             y_column=config['target']['column'] or 'outcome')
+            if not research:
+                if body.get('knowledge_mode', 'okf') == 'okf' and not os.environ.get('AGENTIC_OKF_BUNDLE_DIR'):
+                    raise ValueError('Select a saved research input with an OKF corpus in Data & target settings, '
+                                     'or explicitly choose LLM knowledge only. No deployment corpus is configured.')
+                if body.get('data_mode', 'dataset') == 'dataset' and not os.environ.get('MEMSTARA_DATASET_PATH'):
+                    raise ValueError('Select a saved research input with a CSV and target definition in Data & target '
+                                     'settings, or explicitly choose proposal mode. No deployment CSV is configured.')
             available = ([] if body.get('knowledge_mode') == 'llm_only' else
                          skills(Path(research['root']) / 'okf') if research else skills())
             offered = [s["skill"] for s in available]

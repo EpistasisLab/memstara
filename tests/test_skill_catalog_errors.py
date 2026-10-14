@@ -76,7 +76,7 @@ def test_invalid_catalog_blocks_launch_before_any_run_creation(monkeypatch, erro
     monkeypatch.setattr(service, 'playbooks', fail)
     create = Mock(side_effect=AssertionError('Must not create a run'))
     monkeypatch.setattr(service, 'new_run_dir', create)
-    handler._launch({'knowledge_mode': 'llm_only'}, manager)
+    handler._launch({'knowledge_mode': 'llm_only', 'data_mode': 'proposal'}, manager)
     assert sent[0][0] == 503
     assert 'Run not started' in sent[0][1]['error']
     assert 'private-' not in json.dumps(sent)

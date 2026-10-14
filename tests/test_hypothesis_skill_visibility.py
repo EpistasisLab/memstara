@@ -11,7 +11,7 @@ from memstara.pipeline import prompts
 def test_four_hypothesis_choices(tmp_path, monkeypatch):
     monkeypatch.setenv('MEMSTARA_USER_SKILLS_DIR', str(tmp_path))
     ids = {i['id'] for i in catalog.catalog() if i['stage'] == 'hypothesis'}
-    assert ids == {'addiction-psychiatric', 'addiction-sdoh', 'addiction-substance-use', 'random_features'}
+    assert ids == {'addiction-psychiatric', 'addiction-sdoh', 'addiction-substance-use', 'random_features', 'hypothesis_general'}
     for name in ids:
         catalog.validate_selection({'playbook_hypothesis': name})
 

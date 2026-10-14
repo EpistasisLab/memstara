@@ -1,3 +1,4 @@
+import {compatibleResearchSkill} from './researchSkills.ts';
 import type { RunRequest } from '../store/control';
 
 export type NewPipelineConfiguration = Omit<RunRequest, 'provider' | 'model' | 'stage_models'>;
@@ -14,7 +15,7 @@ export function newPipelineConfiguration(configuration: RunRequest): RunRequest 
   const draft = {...newPipelineRequest(configuration), provider: '', model: ''};
   if (['hypothesis_research','comorbidity','drug-class-effect','shared-anatomy',
     'shared-pharmacology','symptom-bridge','taxonomic','treatment-toxicity'].includes(draft.playbook_hypothesis)) {
-    draft.playbook_hypothesis = 'addiction-psychiatric';
+    draft.playbook_hypothesis = 'hypothesis_general';
   }
   if (draft.playbook_data === 'data_exact_features') draft.playbook_data = 'data_training_heavy';
   if (['ml_governance','ml_pilot_lr_focus','ml_reporting','ml_results_presenter','ml_scikit_knowledge'].includes(draft.playbook_ml)) draft.playbook_ml = 'ml_logistic_regression';
@@ -26,7 +27,9 @@ export function newPipelineConfiguration(configuration: RunRequest): RunRequest 
   if (['shared-ml-results','report_clinical_explanations','report_clinician_summary',
     'report_evidence','report_loop_learning','report_ml_results','report_research_priority',
     'report_team_briefing','report_validation_audit'].includes(draft.playbook_explanation)) {
-    draft.playbook_explanation = 'shared-anil-addiction';
+    draft.playbook_explanation = 'report_general';
   }
+  if (!compatibleResearchSkill({id:draft.playbook_hypothesis,stage:'hypothesis'},draft)) draft.playbook_hypothesis='hypothesis_general';
+  if (!compatibleResearchSkill({id:draft.playbook_explanation,stage:'report'},draft)) draft.playbook_explanation='report_general';
   return draft;
 }

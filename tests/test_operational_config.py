@@ -267,3 +267,17 @@ def test_control_refuses_invalid_storage_before_creating_worker(monkeypatch):
     assert 'SECRET_SENTINEL' not in json.dumps(responses)
     create.assert_not_called()
     manager.start.assert_not_called()
+
+
+def test_unconfigured_default_sources_explain_how_to_select_research(monkeypatch):
+    from unittest.mock import Mock
+    from memstara.control import service
+    monkeypatch.delenv('AGENTIC_OKF_BUNDLE_DIR', raising=False)
+    h = object.__new__(service.Handler)
+    sent = []
+    h._send = lambda code, body: sent.append((code, body))
+    manager = Mock()
+    h._launch({'knowledge_mode': 'okf'}, manager)
+    assert sent[0][0] == 422
+    assert 'Select a saved research input' in sent[0][1]['error']
+    manager.start.assert_not_called()

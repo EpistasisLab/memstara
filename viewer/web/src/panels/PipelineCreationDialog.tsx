@@ -1,3 +1,4 @@
+import {compatibleResearchSkill} from '../lib/researchSkills';
 import ResearchInputs from '../components/ResearchInputs';
 import ResearchInputSelect from '../components/ResearchInputSelect';
 import CombinationWizard from '../components/CombinationWizard';
@@ -60,8 +61,8 @@ function CreationWizard() {
       playbook_hypothesis: form.playbook_hypothesis.split(',')[0],
       playbook_data: form.playbook_data.split(',')[0],
       playbook_ml: form.playbook_ml.split(',')[0],
-      playbook_explanation: "report_clinical_explanations",
-      playbook_interpreter: "interpreter_factual_observations" };
+      playbook_explanation: "report_general",
+      playbook_interpreter: "shared-anil-shap" };
   });
   const sources = useControl(s => s.skills);
   const [sourceReviewed, setSourceReviewed] = useState(false);
@@ -83,11 +84,12 @@ function CreationWizard() {
   useEffect(() => { if(step > 0) heading.current?.focus(); }, [step]);
   const stage = step > 0 && step < 6 ? setupStages[step - 1] : null;
   const skill = stage ? catalog.find(s => s.stage === stage && s.id === draft[`playbook_${stage === "report" ? "explanation" : stage}`]) : null;
+  const paired = ['ml_logistic_regression','ml_xgboost'].includes(draft.playbook_ml);
   const complete = setupStages.every(s => catalog.some(c => c.stage === s && c.id === draft[`playbook_${s === "report" ? "explanation" : s}`]));
   const validName = Boolean(name.trim()) && name.length <= 80;
   const validModel = evaluationPlanError(draft.evaluation) === null;
   const validSource = sourceReviewed && (draft.skill === '' || sources.some(s => s.skill === draft.skill));
-  const sourceLabel = draft.skill === '' ? 'All available knowledge' : sources.find(s => s.skill === draft.skill)?.label || 'Unavailable source';
+  const sourceLabel = draft.research_input_id ? `Saved research ${draft.research_input_id.slice(0,8)} · target ${draft.y_column}` : draft.knowledge_mode==='llm_only' ? 'LLM knowledge only (no corpus)' : draft.skill === '' ? 'All available knowledge' : sources.find(s => s.skill === draft.skill)?.label || 'Unavailable source';
   const valid = step === 0 ? validSource : step === 6 ? validName : step === 7 ? validSource && validName && complete && validModel && Number.isInteger(draft.waves) && draft.waves >= 1 && draft.waves <= 10 : Boolean(skill) && (stage !== 'ml' || validModel);
   return <dialog ref={dialog} aria-labelledby="pipeline-create-title" aria-describedby="pipeline-create-description"
     onCancel={event => { event.preventDefault(); if (!busy && !uploading) closeCreation(); }}
@@ -120,18 +122,18 @@ function CreationWizard() {
           <ResearchInputSelect value={draft} onChange={patch=>{setDraft(d=>({...d,...patch}));setSourceReviewed(false);}}/>
           {!draft.research_input_id&&draft.knowledge_mode!=='llm_only'&&<KnowledgeSelect value={draft.skill} onChange={value => { setDraft(d => ({...d, skill: value})); setSourceReviewed(false); }} />}
           <label className="flex items-start gap-3 rounded-lg border border-paper-line bg-paper-panel p-3 text-sm"><input type="checkbox" checked={sourceReviewed} onChange={e => setSourceReviewed(e.target.checked)} className="mt-1"/><span>Use {sourceLabel} for this pipeline.</span></label>
-          {!loading && sources.length === 0 && <p className="text-sm text-ink-muted">No source filters are listed. You can use all available knowledge, or <button type="button" className="underline" onClick={() => void reload()}>reload sources</button>.</p>}
+          {!loading && !draft.research_input_id && draft.knowledge_mode!=='llm_only' && sources.length === 0 && <p className="text-sm text-ink-muted">No deployment source filters are available. Select a saved research input or verify the configured corpus; you can <button type="button" className="underline" onClick={() => void reload()}>reload sources</button>.</p>}
         </>}
         {step === 6 && <><p className="text-sm text-ink-muted">Give this configured pipeline a recognizable name. Next, review the settings and create it.</p>
           <label className="block space-y-2 text-sm font-medium">Pipeline name
             <input autoFocus required maxLength={80} className={field} placeholder="e.g. Treatment-related effects" value={name} onChange={e => setName(e.target.value)} /></label>
           <p className="text-xs text-ink-muted">Settings remain a draft until you choose Create pipeline.</p></>}
         {stage && <><p className="text-sm text-ink-muted">{guidance[stage]}</p>
-          {stage === 'hypothesis' && <aside className="rounded-lg border border-paper-line bg-paper-panel p-3 text-sm" aria-label="Addiction KB skill guidance">
+          {stage === 'hypothesis' && !draft.research_input_id && draft.knowledge_mode!=='llm_only' && draft.data_mode!=='proposal' && <aside className="rounded-lg border border-paper-line bg-paper-panel p-3 text-sm" aria-label="Addiction KB skill guidance">
             <p className="font-medium">Exploring Addiction KB?</p>
             <p className="mt-1 text-ink-muted">Choose a research focus below, or browse the full skill list.</p>
             <div className="mt-2 flex flex-col gap-2">
-              {catalog.filter(s => s.stage === 'hypothesis' && addictionSkills.has(s.id)).map(s => <button
+              {catalog.filter(s => compatibleResearchSkill(s,draft) && s.stage === 'hypothesis' && addictionSkills.has(s.id)).map(s => <button
                 key={s.id} type="button" disabled={loading || busy || uploading} aria-pressed={skill?.id === s.id}
                 className="rounded-md border border-paper-line px-3 py-2 text-left font-bold text-ink hover:bg-paper disabled:opacity-40 aria-pressed:border-accent aria-pressed:bg-accent/10"
                 onClick={() => setDraft(d => ({...d, playbook_hypothesis: s.id}))}>{s.title}</button>)}
@@ -144,7 +146,7 @@ function CreationWizard() {
               setDraft(d => ({ ...d, [`playbook_${stage === "report" ? "explanation" : stage}`]: e.target.value,
                 evaluation: stage === 'ml' ? { ...d.evaluation, ...chosen?.evaluation } : d.evaluation }));
             }}><option value="" disabled>{loading ? 'Loading skills…' : 'Select a skill'}</option>
-              {catalog.filter(s => s.stage === stage).map(s => <option key={s.id} value={s.id} className={addictionSkills.has(s.id) ? 'font-bold' : 'font-normal'}>{s.title}</option>)}
+              {catalog.filter(s => compatibleResearchSkill(s,draft) && s.stage === stage).map(s => <option key={s.id} value={s.id} className={addictionSkills.has(s.id) ? 'font-bold' : 'font-normal'}>{s.title}</option>)}
             </select></label>
           {!loading && !catalog.some(s => s.stage === stage) && <div role="alert" className="text-sm">Skills are unavailable. <button type="button" onClick={() => void reload()} className="underline">Try again</button></div>}
           <CustomSkillUpload key={stage} stage={stage} disabled={busy}
@@ -152,14 +154,14 @@ function CreationWizard() {
               evaluation: stage === 'ml' ? { ...d.evaluation, ...chosen.evaluation } : d.evaluation }))} />
           {skill && <div className="rounded-lg border border-paper-line bg-paper-panel p-4 text-sm"><p className={addictionSkills.has(skill.id) ? 'font-bold' : 'font-medium'}>{skill.title}</p><p className="mt-2 text-ink-muted">{skill.description}</p>
             <details className="mt-3"><summary className="cursor-pointer">Read skill instructions</summary><pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-sans text-xs">{skill.content}</pre></details></div>}
-          {stage === 'ml' && <><AgentReferenceKnowledge /><EvaluationSettings value={draft.evaluation} disabled={busy || loading || uploading} onChange={evaluation=>setDraft(d=>({...d,evaluation}))}/>
+          {stage === 'ml' && <><AgentReferenceKnowledge /><EvaluationSettings paired={paired} dataSkill={draft.playbook_data} value={draft.evaluation} disabled={busy || loading || uploading} onChange={evaluation=>setDraft(d=>({...d,evaluation}))}/>
             <p className="text-xs text-ink-muted">Selecting another ML skill may apply its evaluation defaults. Review these settings after changing or uploading a skill.</p>
             <BaselineSettings value={draft.baseline_columns ?? []} onChange={value=>setDraft(d=>({...d, baseline_columns:value}))}/></>}
         </>}
         {step === 7 && <><p className="text-sm text-ink-muted">Review your pipeline. Each loop builds on earlier results and interpretations. The first loop starts from knowledge. After creation, press Play when you are ready.</p>
           <div className="rounded-lg border border-paper-line bg-paper-panel p-3 text-sm" aria-label="ML settings review">
             <p className="font-semibold">ML evaluation settings</p>
-            <p className="mt-1 text-ink-muted">Model: {draft.evaluation.engine} · seed: {draft.evaluation.seed} · hold-out: {Number((draft.evaluation.test_size*100).toFixed(8))}% · training CV: {draft.evaluation.folds || (draft.evaluation.search_trials > 1 ? 'automatic (3 folds requested)' : 'off')} · split evaluations: {draft.evaluation.replicates} · candidates: {draft.evaluation.search_trials}</p>
+            {paired?<p className="mt-1 text-ink-muted">Both LR and XGBoost · primary: {draft.playbook_ml==='ml_xgboost'?'XGBoost':'LR'} · agent-selected parameters and training CV · Data-skill split policy · {draft.evaluation.replicates} split evaluations</p>:<p className="mt-1 text-ink-muted">Model: {draft.evaluation.engine} · seed: {draft.evaluation.seed} · hold-out: {Math.round(draft.evaluation.test_size*100)}% · {draft.evaluation.replicates} splits · {draft.evaluation.search_trials} candidates</p>}
             {!validModel && <p role="alert">{evaluationPlanError(draft.evaluation)}</p>}
             <button type="button" className="mt-2 underline" onClick={()=>setStep(3)}>Edit ML settings</button>
           </div>
@@ -168,7 +170,7 @@ function CreationWizard() {
             <div className="flex items-start justify-between gap-3 py-3"><div><p className="text-xs text-ink-muted">Knowledge sources</p><p className="text-sm">{sourceLabel}</p></div><button type="button" className="text-sm underline" onClick={() => setStep(0)}>Edit</button></div>
             <div className="py-3"><p className="text-xs text-ink-muted">Pipeline name</p><p className="font-medium">{name.trim()}</p></div>
             <p className="text-sm">Fixed clinical baseline: {draft.baseline_columns?.join(" · ") || "None — hypothesis-selected predictors only"}</p>
-            {setupStages.map((s, index) => <div key={s} className="flex items-start justify-between gap-3 py-3"><div className="min-w-0"><p className="text-xs text-ink-muted">{labels[index + 1]}</p><p className="text-sm">{catalog.find(c => c.stage === s && c.id === draft[`playbook_${s === "report" ? "explanation" : s}`])?.title || 'Select a skill'}{s === 'ml' && ` · ${draft.evaluation.engine}`}</p></div><button type="button" className="shrink-0 text-sm underline" onClick={() => setStep(index + 1)}>Edit</button></div>)}
+            {setupStages.map((s, index) => <div key={s} className="flex items-start justify-between gap-3 py-3"><div className="min-w-0"><p className="text-xs text-ink-muted">{labels[index + 1]}</p><p className="text-sm">{catalog.find(c => c.stage === s && c.id === draft[`playbook_${s === "report" ? "explanation" : s}`])?.title || 'Select a skill'}{s === 'ml' && (paired ? ' · LR + XGBoost' : ` · ${draft.evaluation.engine}`)}</p></div><button type="button" className="shrink-0 text-sm underline" onClick={() => setStep(index + 1)}>Edit</button></div>)}
           </div><p className="text-xs text-ink-muted">This pipeline uses the knowledge sources you confirmed above. Dataset settings are carried over from the current configuration. Data extraction uses the Data skill selected above. Each pipeline has one agent per stage.</p></>}
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       </div>

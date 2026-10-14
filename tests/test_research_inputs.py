@@ -323,8 +323,8 @@ def test_invalid_matcher_ready_record_rebuilds_once(sample, monkeypatch, damage)
 
 def test_generic_profiles_do_not_silently_apply_legacy_domain_skills():
     from memstara.research_inputs import validate_skills
-    validate_skills({'hypothesis':['hypothesis_research', 'random_features'],
-                     'report':['report_clinical_explanations']})
+    validate_skills({'hypothesis':['hypothesis_general', 'random_features'],
+                     'report':['report_general']})
     with pytest.raises(ValueError, match='corpus-independent'):
         validate_skills({'hypothesis':['comorbidity']})
     with pytest.raises(ValueError, match='specialist domain'):

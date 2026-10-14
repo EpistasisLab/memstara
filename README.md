@@ -593,8 +593,9 @@ same tutorial preparation command. Changed source contents require a new registr
 
 ### 5. Understand the skills used by this execution
 
-The normal specialty catalogue contains 12 choices (4 × 2 × 2 × 2 × 2 = 64
-combinations), but a generic research profile cannot silently use an unrelated
+The original specialty experiment uses 12 choices (4 × 2 × 2 × 2 × 2 = 64
+combinations). Two additional general-research skills support other domains. A
+registered research profile cannot silently use an unrelated
 Addiction/HIV specialty. The tutorial registers separate, versioned user skills
 for Hypothesis and Explanation. It does not enable retired skills or edit originals.
 
@@ -762,6 +763,34 @@ The CLI pipeline acceptance and the frontend build/unit checks were verified
 separately. This README does not claim a fresh interactive browser acceptance of
 the custom-port stack. The workspace has no production login/authentication layer;
 these instructions bind development services to loopback.
+
+### Research changes and ML settings in Add pipeline
+
+Register CSV, OKF and the target definition together, then select that saved version
+in Add pipeline. HIV studies must explicitly provide their actual label mapping and
+prediction timing; the column name alone does not establish those semantics.
+HeartFailure uses the prepared demonstration contract described above. There is no
+automatic inference of a study from a disease name or folder name.
+
+Switching research inputs clears source filters, baseline columns and combination
+selections and selects `hypothesis_general` / `report_general`. These are separate
+project skills; Anil/Phil originals remain unchanged. Random features, the two Data
+skills, LR/XGBoost and SHAP/LIME remain available. Registered studies currently do
+not have a verified specialist-domain binding, so HIV/Addiction specialists are
+excluded even for a study named HIV. Use the general explanation or a reviewed
+custom skill; a custom skill's clinical appropriateness is a human review decision.
+The general explanation does not claim specialist clinical competence.
+
+For LR/XGBoost skills, both models are trained and the skill selects the primary
+model. The ML Agent chooses supported parameters, scaling, threshold and training
+CV within server limits. Random Forest and preset candidate-search controls belong
+to the legacy evaluation mode and are not shown for this paired mode. Data skills
+choose the split policy and seed; split evaluations add fits within a Loop. Review
+actual applied values in saved results, not just the initial defaults.
+
+Creating a design is not execution readiness. With no deployment input paths, select
+a registered research version before Run. Missing inputs produce an actionable
+message rather than implying that a corpus exists. No source mode is silently changed.
 
 ### 8. Troubleshooting and verification boundaries
 

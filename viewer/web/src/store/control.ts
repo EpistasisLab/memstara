@@ -92,19 +92,7 @@ export type RunRequest = {
   [S in PlaybookStage as `playbook_${S extends "report" ? "explanation" : S}`]: string;
 };
 
-/** `y_column` is the cohort's real outcome column, not `board.py:1810`'s CLI default.
- *
- *  That default is the string `outcome`, which is a placeholder rather than a column: the
- *  dataset's 1394 headers are the matcher catalogue's 1393 features plus `HIV_DETECTABLE`,
- *  and nothing is called `outcome`. On the command line the placeholder is defensible —
- *  `check_environment` (`src/memstara/pipeline/board.py:390-410`) refuses the run and names
- *  the file, which forces the choice to be made explicitly. Copied into a form's initial
- *  value it is not: pressing Start with the field untouched failed every time with
- *  "--y-column 'outcome' is not a column in the dataset".
- *
- *  This is the one place it is legitimate to name that column. It is the target, and it is
- *  never a feature — the catalogue the data stage picks columns from does not contain it,
- *  which is what keeps it out of every agent's reach. */
+/** New drafts have no disease-specific target. Select a research contract before execution. */
 export const DEFAULT_REQUEST: RunRequest = {
   baseline_columns: [],
   question: "",
@@ -115,14 +103,14 @@ export const DEFAULT_REQUEST: RunRequest = {
   continuous: false,
   hypothesis_agents: 1,
   interpret_agents: 1,
-  y_column: "HIV_DETECTABLE",
+  y_column: "outcome",
   provider: "",
   model: "",
-  playbook_hypothesis: "addiction-psychiatric",
+  playbook_hypothesis: "hypothesis_general",
   playbook_data: "",
   playbook_ml: "ml_logistic_regression",
   playbook_interpreter: "shared-anil-shap",
-  playbook_explanation: "shared-anil-addiction",
+  playbook_explanation: "report_general",
 };
 
 interface ControlState {

@@ -22,7 +22,7 @@ def shared(tmp_path, monkeypatch):
 
 def test_only_two_explanation_choices_visible(shared):
     assert {i['id'] for i in catalog.catalog() if i['stage'] == 'report'} == {
-        'shared-anil-addiction', 'shared-anil-hiv'}
+        'shared-anil-addiction', 'shared-anil-hiv', 'report_general'}
     for name in ('shared-anil-addiction', 'shared-anil-hiv'):
         catalog.validate_selection({'playbook_explanation': name})
 

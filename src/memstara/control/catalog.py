@@ -201,14 +201,15 @@ def ensure_explanation_enabled(names) -> None:
     for name in names:
         if canonical_name(name) in prompts.DISABLED_EXPLANATION_SKILLS:
             raise ValueError(f'{name}: this Explanation skill is disabled for execution. '
-                             'Select Anil Addiction or HIV Expert Explanation.')
+                             'Select General research explanation, or an explicitly compatible specialist.')
 
 
 def ensure_hypothesis_enabled(names) -> None:
     for name in names:
         if canonical_name(name) in prompts.DISABLED_HYPOTHESIS_SKILLS:
             raise ValueError(f'{name}: this Hypothesis skill is disabled for execution. '
-                             'Select an Addiction specialty or Random-feature hypothesis generation.')
+                             'Select General research hypothesis, Random features, '
+                             'or an explicitly compatible specialty.')
 
 
 def validate_selection(body: dict) -> None:

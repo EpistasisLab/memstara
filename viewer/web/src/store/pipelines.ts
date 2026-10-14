@@ -37,7 +37,7 @@ export const usePipelines = create<{
   resultsScope: "all" | "selected"; viewRun: (tag:string|null)=>void;
   items: PipelineDefinition[]; selected: string | null; loaded: boolean; busy: boolean; error: string | null;
   poll: () => Promise<void>; select: (id: string) => void; add: () => Promise<void>;
-  save: (id: string, config: RunRequest) => void; rename: (id:string,name:string)=>Promise<void>;
+  save: (id: string, config: RunRequest) => Promise<boolean>; rename: (id:string,name:string)=>Promise<void>;
   stoppingAll: boolean; stopAll:()=>Promise<void>; end:(id:string,expectedRunTag?:string)=>Promise<boolean>; pause:(id:string,paused:boolean)=>Promise<void>;
   startingAll: boolean; startOutcomes: StartOutcome[]; playAll:()=>Promise<void>;
   remove: (id:string)=>Promise<boolean>; play: (id:string, options?:{mode:"additional"|"fresh";loops?:number;expectedRunTag:string})=>Promise<boolean>; stop: (id:string)=>Promise<void>;
@@ -117,13 +117,15 @@ export const usePipelines = create<{
     }catch(e){set({error:String(e)});return false;}finally{set({busy:false});}
   },
   save:(id,configuration)=>{
+    const previous=get().items.find(p=>p.id===id)?.configuration;
     set({busy:true,error:null,items:get().items.map(p=>p.id===id?{...p,configuration}:p)});
     saveQueue=saveQueue.catch(()=>{}).then(async()=>{
       try{await request({action:'update',id,configuration});}
-      catch(e){set({error:`Settings not saved: ${String(e)}`}); throw e;}
+      catch(e){set({error:`Settings not saved: ${String(e)}`,items:get().items.map(p=>p.id===id&&p.configuration===configuration&&previous?{...p,configuration:previous}:p)}); throw e;}
     });
     const current=saveQueue;
     void current.catch(()=>{}).finally(()=>{if(saveQueue===current)set({busy:false});});
+    return current.then(()=>true,()=>false);
   },
   rename:async(id,name)=>{
     if(get().busy)return;

@@ -507,12 +507,12 @@ def validate_skills(books):
     """Legacy corpus-specific defaults cannot silently define a different study."""
     from memstara.paths import PLAYBOOKS_DIR
 
-    generic_hypotheses = {"hypothesis_research", "random_features"}
+    generic_hypotheses = {"hypothesis_general", "random_features"}
     for name in books.get("hypothesis", []):
         if (PLAYBOOKS_DIR / f"{name}.md").is_file() and name not in generic_hypotheses:
             raise ValueError(
                 "Research inputs require a corpus-independent Hypothesis skill. "
-                "Select hypothesis_research, random_features, or a reviewed custom skill"
+                "Select hypothesis_general, random_features, or a reviewed custom skill"
             )
     if any(name in {"shared-anil-addiction", "shared-anil-hiv"} for name in books.get("report", [])):
         raise ValueError(
