@@ -281,3 +281,20 @@ def test_unconfigured_default_sources_explain_how_to_select_research(monkeypatch
     assert sent[0][0] == 422
     assert 'Select a saved research input' in sent[0][1]['error']
     manager.start.assert_not_called()
+
+
+def test_port_probe_rejects_listener_and_allows_closed_connection_restart():
+    import socket
+    from memstara.local_setup import assert_free
+    with socket.socket() as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(('127.0.0.1', 0))
+        port = listener.getsockname()[1]
+        listener.listen(1)
+        with pytest.raises(ValueError, match='unavailable'):
+            assert_free([port])
+        with socket.create_connection(('127.0.0.1', port)) as client:
+            accepted, _ = listener.accept()
+            accepted.close()
+            assert client.recv(1) == b''
+    assert_free([port])

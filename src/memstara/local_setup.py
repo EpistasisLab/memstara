@@ -35,6 +35,9 @@ def assert_free(ports):
     try:
         for port in ports:
             sock = socket.socket()
+            # Match HTTPServer's restart behavior: completed TCP connections may
+            # leave TIME_WAIT sockets, but an active listener still blocks binding.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sockets.append(sock)
             try:
                 sock.bind(('127.0.0.1', int(port)))
