@@ -96,3 +96,14 @@ def pytest_collection_modifyitems(config, items):
         (deselected if excluded else selected).append(item)
     items[:] = selected
     config.hook.pytest_deselected(items=deselected)
+
+
+def pytest_configure(config):
+    """Offline tests cannot accidentally borrow deployment credentials/defaults."""
+    if config.getoption('--run-live'):
+        return
+    from memstara.operational import PREFIXES
+    for key in list(os.environ):
+        if (key.startswith(PREFIXES) and not key.startswith('MEMSTARA_TEST_')) or key == 'CORE_VIEWER_DSN':
+            os.environ.pop(key, None)
+    os.environ['MEMSTARA_CONFIG_MODE'] = 'environment'

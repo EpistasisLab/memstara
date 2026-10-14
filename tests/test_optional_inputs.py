@@ -44,6 +44,8 @@ def test_all_four_profiles_prepare_without_unselected_input_access(example, monk
 @pytest.mark.parametrize('knowledge_mode', ['okf', 'llm_only'])
 def test_no_csv_full_workflow_records_six_handoffs_and_no_empirical_metrics(example, tmp_path, monkeypatch, knowledge_mode):
     from memstara.pipeline.proposal import run, STAGES
+    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
+    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'fixture')
     config = {**example, 'data_mode': 'proposal', 'knowledge_mode': knowledge_mode}
     record = register(config)
     profile = prepare(record['id'])
