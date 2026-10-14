@@ -28,3 +28,6 @@ Explicit settings continue to take precedence; there is no automatic dataset swi
 Agent skills stay in `src/memstara/playbooks/` and contributed instructions in
 `src/memstara/resources/contributed/`, so installed packages can resolve them.
 Contributor originals are preserved. Model credentials never belong here.
+
+The supplied HeartFailure example is also tracked under `examples/heart-failure/`.
+Use that portable copy for new installations; these local source directories stay ignored.

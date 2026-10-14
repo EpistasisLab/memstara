@@ -159,14 +159,13 @@ register skills, run one pipeline, and open the browser workspace. Run commands
 from the repository root unless a step says otherwise. Do not use the authors'
 private folders or copy an existing database to complete this procedure.
 
-**Current distribution boundary:** the synthetic CSV/OKF is included under
-`examples/research-inputs/`. HeartFailure inputs under `resources/` are currently
-local, Git-ignored material, not automatically downloaded by cloning. Obtain the
-approved input bundle separately for that route. Contributed documents and the
-latest setup changes must exist in the revision you install; older revisions do
-not contain them. A local working-tree acceptance run is not proof that GitHub
-already contains those changes. Project licensing and contributed-document
-redistribution remain pending; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+**Included examples:** synthetic CSV/OKF under `examples/research-inputs/` and
+supplied HeartFailure CSV/OKF under `examples/heart-failure/` are tracked and
+arrive with a clone of this revision. Private HIV inputs and local research
+materials under `resources/` remain excluded. See the HeartFailure
+[provenance and preparation guide](examples/heart-failure/README.md).
+Project licensing and third-party redistribution decisions remain separate from
+installation acceptance; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ### 1. Install a pinned checkout and Python environment
 
@@ -412,24 +411,27 @@ python scripts/prepare_research_tutorial.py examples/research-inputs/research.js
 This contains 120 generated rows, four predictors and the binary `simulated_event`
 outcome. Its OKF is invented educational material, not clinical evidence.
 
-**B. Supplied HeartFailure demonstration**
+**B. Included HeartFailure demonstration — no separate input download**
 
-Place the supplied files at these locations without changing their contents:
+The clone contains the original supplied CSV and complete OKF hierarchy:
 
-| Material | Required location |
+| Material | Included location |
 |---|---|
-| `mi_HeartFailure.csv` | `resources/datasets/heart-failure/dataset.csv` |
-| Contents of the supplied `okf/okf/` directory | `resources/knowledge/heart-failure/` |
-| OKF entry point after copying | `resources/knowledge/heart-failure/index.md` |
+| Supplied HeartFailure CSV | `examples/heart-failure/dataset.csv` |
+| Complete HeartFailure OKF | `examples/heart-failure/okf/` |
+| OKF entry point | `examples/heart-failure/okf/index.md` |
+| Integrity inventory | `examples/heart-failure/manifest.json` |
 
-These inputs are not currently included by Git; an absent file must be supplied,
-not replaced with a private HIV dataset. Preserve the directory hierarchy of the
-corpus. Use the following explicit preprocessing for installation acceptance:
+The target is `chronic_heart_failure`, with positive label `1` and negative label
+`0`. The command below generates `research.json` with the target description,
+labels and dataset/corpus paths, together with the separate analysis CSV.
+Do not use the raw CSV directly: it contains missing values. The original tracked
+inputs remain unchanged. No private HIV input or adjacent contributor folder is needed.
 
 ```bash
 python scripts/prepare_heart_failure_demo.py \
-  --source resources/datasets/heart-failure/dataset.csv \
-  --corpus resources/knowledge/heart-failure \
+  --source examples/heart-failure/dataset.csv \
+  --corpus examples/heart-failure/okf \
   --destination outputs/heart-failure-demo
 python -m memstara.research_inputs inspect outputs/heart-failure-demo/research.json
 python scripts/prepare_research_tutorial.py outputs/heart-failure-demo/research.json > outputs/launch.json

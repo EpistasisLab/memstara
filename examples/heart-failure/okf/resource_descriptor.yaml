@@ -1,0 +1,27 @@
+kind: okf
+id: 20261008-000746-59bb
+name: Identify and weigh the clinical, biological, behavioural, social and environmental factors that
+  predict the development of chronic heart failure in adults, to support risk assessment.
+description: 100 curated papers from PubMed and PMC, grouped into 8 domains.
+index: index.md
+catalog: _catalog.jsonl
+log: log.md
+charter: charter.yaml
+predictors: predictors.md
+search: search.md
+domains:
+  hypertension-ischemic-disease: Hypertension and ischemic heart disease
+  arrhythmia-valvular-cardiac: Arrhythmia, valvular and other cardiac conditions
+  metabolic-renal-comorbidity: Metabolic and renal comorbidities
+  biomarkers-subclinical-dysfunction: Biomarkers and subclinical cardiac dysfunction
+  lifestyle-behavioural-factors: Lifestyle and behavioural factors
+  social-psychosocial-determinants: Social, psychosocial and healthcare-access determinants
+  cardiotoxic-inflammatory-environmental: Cardiotoxic drugs, inflammatory and environmental exposures
+  risk-models-demographics-genetics: Risk prediction models, demographics and genetics
+documents: 100
+tool: okf-loremaster
+tool_version: okf-loremaster/0.4.1
+charter_digest: 2e71c56964e97a86
+built_on: '2026-10-08'
+stale_after: '2027-04-06'
+abstracts: false

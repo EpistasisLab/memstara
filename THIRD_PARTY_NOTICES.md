@@ -55,3 +55,12 @@ Six current documents are included byte-for-byte in
 hashes in its manifest. These copies do not modify contributor originals and do
 not include archived skill editions. Their redistribution approval is pending;
 this inventory does not grant a license. Resolve that gate before a public release.
+
+## Supplied HeartFailure example
+
+`examples/heart-failure/` contains the supplied cohort CSV and complete HeartFailure
+OKF, preserved byte-for-byte for repository installation at the owner's request.
+Its manifest records integrity; its README describes provenance and preparation.
+It is not covered by the synthetic example's CC0 declaration. Inclusion in this
+candidate does not settle source-data licensing or redistribution of literature
+material; those remain part of the public-release review.

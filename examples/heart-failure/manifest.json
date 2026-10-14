@@ -1,0 +1,473 @@
+{
+  "schema_version": 1,
+  "purpose": "Supplied HeartFailure software demonstration",
+  "target": "chronic_heart_failure",
+  "positive_label": "1",
+  "negative_label": "0",
+  "files": [
+    {
+      "path": "dataset.csv",
+      "sha256": "39055f36c1ad7b8e7e243298ede8cb20ad71a47764779499dfebbf60c686f2a4"
+    },
+    {
+      "path": "okf/_catalog.jsonl",
+      "sha256": "abd3e7a18a389bcca89c817cef95ab4c2d2a36f9ab93d4112928399ac5780ed7"
+    },
+    {
+      "path": "okf/arrhythmia-valvular-cardiac/25438221_Lin.md",
+      "sha256": "ea0ae89fb825b3baaf4ecf82576a92450558b5219f40275886f99a8406544bf1"
+    },
+    {
+      "path": "okf/arrhythmia-valvular-cardiac/28034376_Pandey.md",
+      "sha256": "e312401857aa4dffc449267d7978bc04148177df185855f342eb209a2420fee9"
+    },
+    {
+      "path": "okf/arrhythmia-valvular-cardiac/28214002_Agarwal.md",
+      "sha256": "b34c4cb11dcd2ce67c3b231538879eb665054651efcbe14d2750840c7f463907"
+    },
+    {
+      "path": "okf/arrhythmia-valvular-cardiac/28624486_Chatterjee.md",
+      "sha256": "3aa4d1cb16d9e198a0ac807b475fb28c422d22dbe4ac31f8f09fb937ed338e3a"
+    },
+    {
+      "path": "okf/arrhythmia-valvular-cardiac/29550771_B-Schnabel.md",
+      "sha256": "02d56bc2a8d62de6357d0fd2a3283f59f16a082780207461b017a71d900302cd"
+    },
+    {
+      "path": "okf/arrhythmia-valvular-cardiac/33707226_Weber.md",
+      "sha256": "417f53a56787313e8dcc3049ca37a209e2f8d933cb51e1cf64d00f7cf3029520"
+    },
+    {
+      "path": "okf/arrhythmia-valvular-cardiac/34516657_Buckley.md",
+      "sha256": "c3dc7ae15ef02c9a6adef7fa427e962030bcd608e3665ff0123ff567bd7d47f1"
+    },
+    {
+      "path": "okf/arrhythmia-valvular-cardiac/34969871_Brownrigg.md",
+      "sha256": "59aeebd76ab3cc9a39dc128da83bd33bb6f9fa4b1cefc7eebc5f145ed4b09c61"
+    },
+    {
+      "path": "okf/arrhythmia-valvular-cardiac/35110692_Fu.md",
+      "sha256": "e52b3e81fe55e324b786526f903d2fd357a1665fa0c9d762d89b98f8c3595178"
+    },
+    {
+      "path": "okf/arrhythmia-valvular-cardiac/36035738_Yogasundaram.md",
+      "sha256": "fccc0a9a2fe3a9289b3fe22be72e8300f451de5d8ebe28669b75104124d68bee"
+    },
+    {
+      "path": "okf/arrhythmia-valvular-cardiac/40965376_Dewland.md",
+      "sha256": "0f0a856110101d31f6e7debbdb628f6340330a7120382daa9a737e4e76cb389e"
+    },
+    {
+      "path": "okf/arrhythmia-valvular-cardiac/index.md",
+      "sha256": "d705350ebca90fc4b560704e6ad266a1c704c9df4b52ddc63fce60f583c6c1f3"
+    },
+    {
+      "path": "okf/biomarkers-subclinical-dysfunction/27813300_Yang.md",
+      "sha256": "ccb6d46581db6b2207eb076062ded6f7da57fdb3f0ab632288aa6af0129ea41e"
+    },
+    {
+      "path": "okf/biomarkers-subclinical-dysfunction/28967680_Stenemo.md",
+      "sha256": "ab9ae0cc7fa29ff7839487659ada5e54bd6b510fc03cfac3ff1e77c1d4f5d725"
+    },
+    {
+      "path": "okf/biomarkers-subclinical-dysfunction/31628809_Brainin.md",
+      "sha256": "83f8385c764c6f0437c7d5447ed8e4e871eb2953ed45315a778041760e46d184"
+    },
+    {
+      "path": "okf/biomarkers-subclinical-dysfunction/33136816_Georgiopoulos.md",
+      "sha256": "3d3338e65ba30942d39038a79a80f2920b86dc116bcfb6a220a70f1ad82e1895"
+    },
+    {
+      "path": "okf/biomarkers-subclinical-dysfunction/33729428_Reimer-Jensen.md",
+      "sha256": "908116a6bf82274a8743767fafda4b6b446aa4d6bf2c349f674db2d0f7661c50"
+    },
+    {
+      "path": "okf/biomarkers-subclinical-dysfunction/34056865_Schill.md",
+      "sha256": "2f8345ea4de9d75e04d75887136f744cfd8bcc750298371b1271f2db6cc3117a"
+    },
+    {
+      "path": "okf/biomarkers-subclinical-dysfunction/35497796_Zelnick.md",
+      "sha256": "3fc5fce9e398d658644655bcbf5f1da0022bcb0c39670406c12547a389015edd"
+    },
+    {
+      "path": "okf/biomarkers-subclinical-dysfunction/36565186_Arshi.md",
+      "sha256": "04c896adcfac1876bf1406bd6d5cc823f0d0765ebbc4b4eb421f179432264caf"
+    },
+    {
+      "path": "okf/biomarkers-subclinical-dysfunction/37495278_Burger.md",
+      "sha256": "154b4473619e194d4aa80db8636d270074078ec0f41abf35ee2c246c627d80a1"
+    },
+    {
+      "path": "okf/biomarkers-subclinical-dysfunction/37936531_Emilsson.md",
+      "sha256": "204d631069e89a07894cd0b7d900b37be9343d2f977d28589182884adeb654ef"
+    },
+    {
+      "path": "okf/biomarkers-subclinical-dysfunction/38757788_Dubin.md",
+      "sha256": "4b46833352f142bc8d9ee253d624acabe9db4b03885434a5958f9606589a9939"
+    },
+    {
+      "path": "okf/biomarkers-subclinical-dysfunction/39708029_Qin.md",
+      "sha256": "0fdbf6c1a6e1a984151b5ca28d054613c179caa90a74a873246be07f0a863d89"
+    },
+    {
+      "path": "okf/biomarkers-subclinical-dysfunction/40578264_Buckley.md",
+      "sha256": "b100c4cc2c0565c91f7feaa439974b5c4f6ed8b38876e52fd00ac8dc26f5512f"
+    },
+    {
+      "path": "okf/biomarkers-subclinical-dysfunction/41636061_Njoroge.md",
+      "sha256": "9f5c8f8f6a5834506f4c8f42f0baa0b7a2e8cfad8b48ebfb9f7edbc8d0affe23"
+    },
+    {
+      "path": "okf/biomarkers-subclinical-dysfunction/index.md",
+      "sha256": "d08fb2f18193abbe177b94226a3295feedaac496d0c5ab855937e52941a12b1d"
+    },
+    {
+      "path": "okf/cardiotoxic-inflammatory-environmental/26720629_Ungprasert.md",
+      "sha256": "c0dcfca98e6fe258a312bf755489a9e07d96637447118f64f66cf3168a16efe1"
+    },
+    {
+      "path": "okf/cardiotoxic-inflammatory-environmental/28953453_S-rensen.md",
+      "sha256": "67a94207ad25ce0c8df16f7155fc086fb9507adc908984a496dcda7f63cd0d50"
+    },
+    {
+      "path": "okf/cardiotoxic-inflammatory-environmental/29352092_Khalid.md",
+      "sha256": "e22a60c1c741cc0b9cbddff34b624329bdf783c347a756906f296d65de9a569b"
+    },
+    {
+      "path": "okf/cardiotoxic-inflammatory-environmental/32378457_Ahlers.md",
+      "sha256": "42ab59a536d9a674e2e50f1138fc5ff91a669a20cbeb1df642091bb746237b3b"
+    },
+    {
+      "path": "okf/cardiotoxic-inflammatory-environmental/33492019_Chen.md",
+      "sha256": "8bbe7f180a677c037483638dc75bba9c8007532ea6239217ee91c3f961136f59"
+    },
+    {
+      "path": "okf/cardiotoxic-inflammatory-environmental/33527989_Wang.md",
+      "sha256": "30eb08e16dcccd4ad39e2bd1fa1410190084637590debf413fa93b06f76e0e29"
+    },
+    {
+      "path": "okf/cardiotoxic-inflammatory-environmental/33599141_Rosenthal.md",
+      "sha256": "73109791b291f7a9bc9b02d8880b6b9edc54576138c2ae995b61f371b620a03d"
+    },
+    {
+      "path": "okf/cardiotoxic-inflammatory-environmental/37045515_Holt.md",
+      "sha256": "0c53bcfaa835cdfe82273699ba0f492ed6dadddca2d2ba246596fde51eb59216"
+    },
+    {
+      "path": "okf/cardiotoxic-inflammatory-environmental/37951494_Diaz.md",
+      "sha256": "d09eed8835215257345c8dc89e6b7de56f08ff606d0e979d91bf31dbd04926a5"
+    },
+    {
+      "path": "okf/cardiotoxic-inflammatory-environmental/39439267_Cui.md",
+      "sha256": "0490a223d210af46363b1841535b49edc321e3ecc9144e8ba352d43600739195"
+    },
+    {
+      "path": "okf/cardiotoxic-inflammatory-environmental/40897219_Xiao.md",
+      "sha256": "0ddb852589c2b978dbff70c4275711f558b0a4940c9c50e5a0ca60392ffe6251"
+    },
+    {
+      "path": "okf/cardiotoxic-inflammatory-environmental/40938238_Tatebe.md",
+      "sha256": "8d19df663b5b779964fea2f2c87e1e74003d8937fc2c98b80759ef562b9468f4"
+    },
+    {
+      "path": "okf/cardiotoxic-inflammatory-environmental/41521844_Peterson.md",
+      "sha256": "ee6c6110ba4e4a49d5957d100720be8dc67290538f9332bb15e5e4bc91c2cf62"
+    },
+    {
+      "path": "okf/cardiotoxic-inflammatory-environmental/index.md",
+      "sha256": "ba516cd193720b1536b79fd6a3b35055eb943a69666aea7d12b77266dc7c8ef2"
+    },
+    {
+      "path": "okf/charter.yaml",
+      "sha256": "5b6f58a227fa8e15d5c5bc90375d0a5433085de43e77ffa3ecc50c5023b7321e"
+    },
+    {
+      "path": "okf/hypertension-ischemic-disease/19854330_Dunlay.md",
+      "sha256": "e6b50b669ed00a5d9cb69fc103a861e6df143156caf816e6f77b966bee71c991"
+    },
+    {
+      "path": "okf/hypertension-ischemic-disease/22258189_Palano.md",
+      "sha256": "00806e404494aeb46f678cba170075577a92ae426aaba301b52feb1aceddbf66"
+    },
+    {
+      "path": "okf/hypertension-ischemic-disease/24656111_Lala.md",
+      "sha256": "45ae04604d7aa53722fd1aa810b17ead552c60a99c092d14026b7c81d9fb5321"
+    },
+    {
+      "path": "okf/hypertension-ischemic-disease/28228456_Wu.md",
+      "sha256": "e196ecd64cddb6f75fc44c747a18b56fa259077a6790ba41d100adc761dc164d"
+    },
+    {
+      "path": "okf/hypertension-ischemic-disease/28343761_Sheriff.md",
+      "sha256": "5d610c09a3bb269ff1cc55b47b126c5a16c1dd49757147c4fcd5f1171efb2f25"
+    },
+    {
+      "path": "okf/hypertension-ischemic-disease/34671653_Gu.md",
+      "sha256": "a64834a86526b2a60c9c2af2dba0a5f96361439c9ea9b09beb6c959d87f48ff9"
+    },
+    {
+      "path": "okf/hypertension-ischemic-disease/36892491_Kou.md",
+      "sha256": "de51d72aeeb72686f49bf1197c1d6c0376dd678d83013a745041ed28498e7169"
+    },
+    {
+      "path": "okf/hypertension-ischemic-disease/37939784_Baffour.md",
+      "sha256": "f9a4b079138035a0e7d4dacbb9937159dd94ac6ffc06b08139a2d413c0b51da0"
+    },
+    {
+      "path": "okf/hypertension-ischemic-disease/39874177_Butler.md",
+      "sha256": "c49133cd62d1b288e33b6b626edd255b1761d76923a2a4777652afe4870a9405"
+    },
+    {
+      "path": "okf/hypertension-ischemic-disease/40889512_Udell.md",
+      "sha256": "ca0aa5230e45f0afdbee3bbd38798e756cef126314d56d58990d9855b28c30ba"
+    },
+    {
+      "path": "okf/hypertension-ischemic-disease/index.md",
+      "sha256": "42cd1f8a3cb45022ddaf257e4455c964da5997645911c8bf73709a08b903ec78"
+    },
+    {
+      "path": "okf/index.md",
+      "sha256": "e90b6191d13c1c1bc626713bf4c12787f445b72e24aac523598ac483156c7a06"
+    },
+    {
+      "path": "okf/lifestyle-behavioural-factors/24464981_Khan.md",
+      "sha256": "ecf476da4e20fb3b071142bf7782d0d5fb60445f6bf784dffcb2069b00d39f3e"
+    },
+    {
+      "path": "okf/lifestyle-behavioural-factors/26502092_Javaheri.md",
+      "sha256": "a2b2629851a22bdac293d8f45e13fef83a18d1a19590edfdaea624e4220ab33e"
+    },
+    {
+      "path": "okf/lifestyle-behavioural-factors/26847971_Ljunggren.md",
+      "sha256": "c8311c2baa317d39276dc791f592c26d3c7ba2396d3f81889ee16a0c92009a49"
+    },
+    {
+      "path": "okf/lifestyle-behavioural-factors/29661945_Kamimura.md",
+      "sha256": "2bb40714010839f8778c95ecc7ff8897777b8c370452a69e74f6d56cd4176bd2"
+    },
+    {
+      "path": "okf/lifestyle-behavioural-factors/32298733_Azarbarzin.md",
+      "sha256": "bebdcdd4417a3103dba467e925d897b52b8290f13b7585f788666f7b0a6fe300"
+    },
+    {
+      "path": "okf/lifestyle-behavioural-factors/33228398_LaMonte.md",
+      "sha256": "9f4192931e56962d8153c4806ed71b718e4e23ed7a9653c2bf7467959b7b1f71"
+    },
+    {
+      "path": "okf/lifestyle-behavioural-factors/34392357_Mahmood.md",
+      "sha256": "f1f3fa4c9d11e278b783b4f72e4ba0513f3efe3dbc406b13ce2c5e7da8d5ebf1"
+    },
+    {
+      "path": "okf/lifestyle-behavioural-factors/36056190_Khurshid.md",
+      "sha256": "14f2534bfe1444fc5cc002b25c1fdd5ec5555d1754dece0b96d55fa70007100b"
+    },
+    {
+      "path": "okf/lifestyle-behavioural-factors/36480010_Li.md",
+      "sha256": "06b6c1b2391566dcc9a53f3776633650d313d4c594e0c8a4ee23a92f29f774d8"
+    },
+    {
+      "path": "okf/lifestyle-behavioural-factors/38573265_Zhang.md",
+      "sha256": "bc7bb054d6ca930d9dff3dded179ba81194e20eef26d7749f6ae100628cb3756"
+    },
+    {
+      "path": "okf/lifestyle-behavioural-factors/39834049_Qin.md",
+      "sha256": "d9744c36c3eb137075c7d4e173ec2da382e8bc4a4029261d0a50a939cc10c3da"
+    },
+    {
+      "path": "okf/lifestyle-behavioural-factors/40128779_Hu.md",
+      "sha256": "2855b1eaec81b2c16665f5f9850c7aec4a313d936469168196a5fb4632606c95"
+    },
+    {
+      "path": "okf/lifestyle-behavioural-factors/40976358_van-Essen.md",
+      "sha256": "fc741352a99378027af1bdeaf8c0b14596ad5a143853ae5c2a874549f1d7227d"
+    },
+    {
+      "path": "okf/lifestyle-behavioural-factors/index.md",
+      "sha256": "23def19a961784be0f5977d0dc9ef38bf19f8f76331eef14240c5afb06cb3e25"
+    },
+    {
+      "path": "okf/log.md",
+      "sha256": "a312d863bfa943a57282ee4a0150305e5461c6149cf4962360ae838ba5374e06"
+    },
+    {
+      "path": "okf/metabolic-renal-comorbidity/15353499_Bibbins-Domingo.md",
+      "sha256": "ea1f2e9a136cf0cb8e83c424c0a6927a69a538485063f99cf2463f5cf4b822e8"
+    },
+    {
+      "path": "okf/metabolic-renal-comorbidity/19844184_de-Simone.md",
+      "sha256": "9489d6aa0202b4b12845786a7f63a18d408163ba48f9390597c804bc0d20032b"
+    },
+    {
+      "path": "okf/metabolic-renal-comorbidity/23575256_Banerjee.md",
+      "sha256": "888db5b99502f2d11ebf4aebd0b8fbcb4ad2168923a657fad946def38f1ea387"
+    },
+    {
+      "path": "okf/metabolic-renal-comorbidity/23824655_Fall.md",
+      "sha256": "db143a427420a257a9fe1c3ca9931edc6958ab34ecf0d4a5448f82bdf4edd3f6"
+    },
+    {
+      "path": "okf/metabolic-renal-comorbidity/24455475_Vardeny.md",
+      "sha256": "db665993636874bc8dc18d0267180f398eee51676af21e95dcbcab949812dc44"
+    },
+    {
+      "path": "okf/metabolic-renal-comorbidity/29490333_Khan.md",
+      "sha256": "010703b5055733e851c1c608faa220c52271390d8f6e23e94de9378917c7e258"
+    },
+    {
+      "path": "okf/metabolic-renal-comorbidity/30007554_Savji.md",
+      "sha256": "92467f7fbf86421a56d1a10a97efd30b9af9e9015a3b85247d0bc3ec44f136db"
+    },
+    {
+      "path": "okf/metabolic-renal-comorbidity/31167558_Dunlay.md",
+      "sha256": "9961d60dcce188a5b90790c0ad6012be2899040255c52192dc8379aaec2e0f92"
+    },
+    {
+      "path": "okf/metabolic-renal-comorbidity/33949876_Ren.md",
+      "sha256": "eb00201c6c286a8aef37134863328554b6acd6829328931c85a3518fab7b90c4"
+    },
+    {
+      "path": "okf/metabolic-renal-comorbidity/34441977_Triposkiadis.md",
+      "sha256": "364369a00418d907bc8a198c350c2b86d1bad2eadad82d9d704b9cfd1ea04c37"
+    },
+    {
+      "path": "okf/metabolic-renal-comorbidity/36907452_Burger.md",
+      "sha256": "0069fb56f947e303015df345265c1b1169472f576f834de1021cf4916c998082"
+    },
+    {
+      "path": "okf/metabolic-renal-comorbidity/41049511_Wei.md",
+      "sha256": "efde000c052d79e75e86681d12d57cd1c4f24d6d6bff42501c1559c158b521fc"
+    },
+    {
+      "path": "okf/metabolic-renal-comorbidity/41239303_Wu.md",
+      "sha256": "b3f961439149abe43521381ded76638229ac22bceee524cc5aaaa5a28c974a82"
+    },
+    {
+      "path": "okf/metabolic-renal-comorbidity/index.md",
+      "sha256": "8f7d0f84c089530ddea470314eaccf601db9ec4a95daedd38c2fa238c57a424a"
+    },
+    {
+      "path": "okf/predictors.md",
+      "sha256": "4c35a03708500b6502aed624ee78bb8fd073a97ab1fd7325d048375d16054c69"
+    },
+    {
+      "path": "okf/resource_descriptor.yaml",
+      "sha256": "32ddd34aa01cfbac70e77d880b31a33a2b806a2e4e416a81438154c5030b09b2"
+    },
+    {
+      "path": "okf/risk-models-demographics-genetics/25398254_Meyer.md",
+      "sha256": "1d67c02aaf566d28ce03831af072b7fef4c0ae2b544a1692cdf7191e7624d4ea"
+    },
+    {
+      "path": "okf/risk-models-demographics-genetics/28360032_de-Lemos.md",
+      "sha256": "963cf08f104af6d61bb1687ebbc9e64cbe1df2408086f12e66a4f66802fca480"
+    },
+    {
+      "path": "okf/risk-models-demographics-genetics/28794054_Ambale-Venkatesh.md",
+      "sha256": "249155811f5812272f4193eab90e27bcdabe4d824842f9f0da9ab2fe683738f5"
+    },
+    {
+      "path": "okf/risk-models-demographics-genetics/31097157_Khan.md",
+      "sha256": "7be9e687d85ee293fd97cf0f93aa51e2be384a3380b38d24cdbb9dda01e769a6"
+    },
+    {
+      "path": "okf/risk-models-demographics-genetics/32943164_Suthahar.md",
+      "sha256": "17edff7f43130a4079a19d592dd9167849288d90f8d616cb5806eb084beb3a53"
+    },
+    {
+      "path": "okf/risk-models-demographics-genetics/33758001_Tromp.md",
+      "sha256": "ba8a1603a84a30b8f97fcb000bf2b3806c5a94a7841abced8171bdefa4d30117"
+    },
+    {
+      "path": "okf/risk-models-demographics-genetics/33761754_Sinha.md",
+      "sha256": "f7b58025106cbbc7c415451670fde188d2db0b20cc4999ce22f73d3f97e02c94"
+    },
+    {
+      "path": "okf/risk-models-demographics-genetics/37498272_Potter.md",
+      "sha256": "90400b5d469ab22c7f21fa4ddb158d7344329e0aaa55bc329cc8468230cef1a4"
+    },
+    {
+      "path": "okf/risk-models-demographics-genetics/39786471_van-Essen.md",
+      "sha256": "e3c4d46ed024fe71e5472ef21d31f7a169e7d1277c900ded31399c0e71866efb"
+    },
+    {
+      "path": "okf/risk-models-demographics-genetics/40036490_Bai.md",
+      "sha256": "8461807c6b87ec74c823c109ff4937a7b8e280fb5e25eb6c38fb3ec578019b3a"
+    },
+    {
+      "path": "okf/risk-models-demographics-genetics/40238120_Dhingra.md",
+      "sha256": "c4f3e5c449fd845c72a609f43c1797f4cda6eeb0cdbfd62fdadddd04bd2e6a85"
+    },
+    {
+      "path": "okf/risk-models-demographics-genetics/41376588_Rauseo.md",
+      "sha256": "18a9dff3526b342c734df12c84b91be2e410e0a09251f76d7c5dcf963f914f2c"
+    },
+    {
+      "path": "okf/risk-models-demographics-genetics/41810943_SCORE2-HF-Writing-Group-and-European-Society-of-Cardiology-s-Car.md",
+      "sha256": "4b63a7908609d63527472d5365b3081ac4352e45f4793a495e68e58f7ece3b92"
+    },
+    {
+      "path": "okf/risk-models-demographics-genetics/index.md",
+      "sha256": "45f9689e6d5cfff892e147faecd3a335f24a9e95287cbeeb8bf6aadf9b0faf4c"
+    },
+    {
+      "path": "okf/search.md",
+      "sha256": "9a2553603e06563f19f1c4c457d126ee8014451757646bbda250b8377d34d20b"
+    },
+    {
+      "path": "okf/social-psychosocial-determinants/11485505_Abramson.md",
+      "sha256": "b06c3dcf614cc7a65e4b889f09679003128e24e3b21e928a47cbd58d3ce6a496"
+    },
+    {
+      "path": "okf/social-psychosocial-determinants/19297571_Bibbins-Domingo.md",
+      "sha256": "1001aa659e5a8b542ec96bda69424f9a8e770e36095f3cd6ada2758f7389f45f"
+    },
+    {
+      "path": "okf/social-psychosocial-determinants/26358261_White.md",
+      "sha256": "32cd26e79bb54a3271c5254a90d9657f7168150d046a0989978f6382de08f890"
+    },
+    {
+      "path": "okf/social-psychosocial-determinants/32000962_Kubicki.md",
+      "sha256": "92db51e3f8762b07982f4b06e3ed5f5b217bf24d80382bf054ccd06244db5d64"
+    },
+    {
+      "path": "okf/social-psychosocial-determinants/32059630_Lawson.md",
+      "sha256": "04ff0cd9ebe23df5000d46ebc6267216cf57f51c963db1c07b03dd183583dbb3"
+    },
+    {
+      "path": "okf/social-psychosocial-determinants/33963504_Rethy.md",
+      "sha256": "fbec0ea9da59ba82a8d236503ad1d1a54dbefdac19f80f1c043d9bee3f01d475"
+    },
+    {
+      "path": "okf/social-psychosocial-determinants/35036999_Coyte.md",
+      "sha256": "173f63875103977e2d58b06b6e23ef16913416a928c2f3dcad39b9bf5f422134"
+    },
+    {
+      "path": "okf/social-psychosocial-determinants/35361444_Dixon.md",
+      "sha256": "6b8aa3a5124e5e8b3c7ba45d0328c5f6d70b2a29f9afe213ca697030e904df4c"
+    },
+    {
+      "path": "okf/social-psychosocial-determinants/36696094_Turecamo.md",
+      "sha256": "7180673d216df85bfd19dab2a45ad8ad134f9182674c43a3e0fec2eb5385614d"
+    },
+    {
+      "path": "okf/social-psychosocial-determinants/36737310_Liang.md",
+      "sha256": "619d84475d8014cd2666ff5416795c9c816b1c33012a20304af2e68884614533"
+    },
+    {
+      "path": "okf/social-psychosocial-determinants/37459409_Mentias.md",
+      "sha256": "c57c29aa0c151de4a5d2c3e5c1dd724135a81e91f9a2b1c7fd1a9be057bf4337"
+    },
+    {
+      "path": "okf/social-psychosocial-determinants/40662517_Tang.md",
+      "sha256": "3bb5be3860f1e07d962680e9053537e1b66044363babcd2de6960e80475c561a"
+    },
+    {
+      "path": "okf/social-psychosocial-determinants/40903135_Ambrosy.md",
+      "sha256": "12b3c1a32ac7687599dd2c54b8e4c87deb2904d7acaf29c22884ecaa43ed1b20"
+    },
+    {
+      "path": "okf/social-psychosocial-determinants/index.md",
+      "sha256": "097cb1eb08323ba6231394f90d57501e337ac222cf2cfbca69c8d3ca9f57f845"
+    }
+  ]
+}

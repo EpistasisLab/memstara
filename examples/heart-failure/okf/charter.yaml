@@ -1,0 +1,107 @@
+prompt: clinical predictors of chronic heart failure in adults
+task: Identify and weigh the clinical, biological, behavioural, social and environmental factors that
+  predict the development of chronic heart failure in adults, to support risk assessment.
+population: adults
+outcome: chronic heart failure
+inclusion:
+- Adult human participants (18 years or older)
+- Reports association of a factor or model with new or incident heart failure
+- Prospective, retrospective cohort, case-control, registry or Mendelian randomization design
+- Heart failure defined clinically, by hospitalization, or by diagnostic criteria
+exclusion:
+- Pediatric or congenital heart disease populations
+- Animal or in vitro studies
+- Only prognosis, readmission or mortality in patients already diagnosed with heart failure
+- Acute heart failure only, without chronic heart failure outcome
+topic_taxonomy:
+- slug: hypertension-ischemic-disease
+  title: Hypertension and ischemic heart disease
+  scope: Blood pressure, hypertension control, coronary artery disease and myocardial infarction as predictors
+    of heart failure onset. Excludes arrhythmia, valvular disease and metabolic conditions.
+  seed_terms:
+  - hypertension
+  - blood pressure
+  - myocardial infarction
+  - coronary artery disease
+  - left ventricular hypertrophy
+- slug: arrhythmia-valvular-cardiac
+  title: Arrhythmia, valvular and other cardiac conditions
+  scope: Atrial fibrillation, other arrhythmias, valvular heart disease, cardiomyopathy and myocarditis
+    preceding heart failure. Excludes hypertension and coronary disease.
+  seed_terms:
+  - atrial fibrillation
+  - valvular heart disease
+  - aortic stenosis
+  - cardiomyopathy
+  - myocarditis
+- slug: metabolic-renal-comorbidity
+  title: Metabolic and renal comorbidities
+  scope: Diabetes, insulin resistance, obesity, dyslipidemia, chronic kidney disease and thyroid dysfunction
+    as predictors of heart failure. Excludes lifestyle behaviours themselves.
+  seed_terms:
+  - diabetes mellitus
+  - obesity
+  - chronic kidney disease
+  - insulin resistance
+  - thyroid dysfunction
+- slug: biomarkers-subclinical-dysfunction
+  title: Biomarkers and subclinical cardiac dysfunction
+  scope: Circulating biomarkers (natriuretic peptides, troponin, inflammatory markers) and imaging or
+    ECG evidence of subclinical dysfunction predicting heart failure. Excludes multivariable risk scores.
+  seed_terms:
+  - natriuretic peptide
+  - high-sensitivity troponin
+  - diastolic dysfunction
+  - echocardiography
+  - electrocardiogram abnormalities
+- slug: lifestyle-behavioural-factors
+  title: Lifestyle and behavioural factors
+  scope: Smoking, alcohol, physical activity, fitness, diet, sodium intake and sleep, including sleep
+    apnea, as predictors of heart failure. Excludes socioeconomic and psychosocial factors.
+  seed_terms:
+  - smoking
+  - alcohol consumption
+  - physical activity
+  - diet quality
+  - sleep apnea
+- slug: social-psychosocial-determinants
+  title: Social, psychosocial and healthcare-access determinants
+  scope: Socioeconomic status, education, race and ethnicity, neighbourhood, depression, stress, social
+    isolation and access to care as predictors of heart failure. Excludes individual lifestyle behaviours.
+  seed_terms:
+  - socioeconomic status
+  - social determinants of health
+  - depression
+  - racial disparities
+  - access to care
+- slug: cardiotoxic-inflammatory-environmental
+  title: Cardiotoxic drugs, inflammatory and environmental exposures
+  scope: Cancer therapy cardiotoxicity, NSAIDs and other drugs, autoimmune and infectious disease such
+    as HIV, air pollution and occupational exposures preceding heart failure. Excludes metabolic comorbidities.
+  seed_terms:
+  - cardiotoxicity
+  - anthracycline
+  - nonsteroidal anti-inflammatory drugs
+  - HIV infection
+  - air pollution
+  - autoimmune disease
+- slug: risk-models-demographics-genetics
+  title: Risk prediction models, demographics and genetics
+  scope: Multivariable risk scores and machine-learning models for incident heart failure, plus age, sex,
+    family history and genetic or polygenic risk. Excludes single-biomarker studies.
+  seed_terms:
+  - risk prediction model
+  - risk score
+  - polygenic risk
+  - sex differences
+  - machine learning
+  - family history
+languages: []
+target_papers: 100
+topic_paper_min: 8
+topic_paper_max: 40
+max_topics: 8
+sample_size_typical: 3000
+sample_size_large: 300000
+generated_by: okf-loremaster/charter/claude-opus-5-5
+generated_at: '2026-10-08T00:08:24.302501Z'

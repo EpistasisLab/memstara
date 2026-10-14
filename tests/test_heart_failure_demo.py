@@ -44,3 +44,20 @@ def test_invalid_target_is_not_silently_dropped(tmp_path):
     with pytest.raises(ValueError, match='Target labels'):
         demo.prepare(source, corpus, tmp_path / 'derived')
     assert not (tmp_path / 'derived').exists()
+
+
+def test_bundled_inputs_are_complete_and_prepare_without_external_folders(tmp_path):
+    import hashlib
+    from memstara import research_inputs
+    root = Path(__file__).resolve().parents[1] / 'examples/heart-failure'
+    manifest = json.loads((root / 'manifest.json').read_text())
+    expected = {row['path'] for row in manifest['files']}
+    actual = {'dataset.csv'} | {str(p.relative_to(root)) for p in (root / 'okf').rglob('*') if p.is_file()}
+    assert actual == expected
+    for row in manifest['files']:
+        assert hashlib.sha256((root / row['path']).read_bytes()).hexdigest() == row['sha256']
+    result = demo.prepare(root / 'dataset.csv', root / 'okf', tmp_path / 'derived')
+    assert (result['source_rows'], result['retained_rows'], result['excluded_rows']) == (1700, 1671, 29)
+    checked = research_inputs.inspect(json.loads((tmp_path / 'derived/research.json').read_text()))
+    assert checked['input_checks_passed'], checked['issues']
+    assert checked['knowledge']['documents'] == 100

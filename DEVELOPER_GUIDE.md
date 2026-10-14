@@ -1139,8 +1139,8 @@ Anil/Phil originals are not modified. Review other custom skills for compatibili
 
 See [the synthetic walkthrough](examples/research-inputs/README.md) for a complete
 input example and commands. It contains generated numbers and invented educational
-knowledge, not patient data or clinical evidence. HeartFailure originals are not
-part of the public example. A paid run and clinical target validation are separate
+knowledge, not patient data or clinical evidence. The supplied HeartFailure CSV and OKF are tracked separately under
+`examples/heart-failure/`, with provenance and preprocessing instructions. A paid run and clinical target validation are separate
 from the offline input/dispatch/cache tests.
 
 

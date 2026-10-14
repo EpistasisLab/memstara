@@ -123,7 +123,7 @@ A missing file is an input error, not consent to change modes. See the
 Local deployments may keep supplied research data under
 `resources/datasets/` and `resources/knowledge/`. These input directories are
 currently ignored by Git and are not included in a clone or release artifact.
-Do not confuse local availability with publication. See [the resource layout](resources/README.md).
+A separate tracked HeartFailure copy is included in `examples/heart-failure/`; use it for the portable demonstration. See [the resource layout](resources/README.md).
 
 | Study | Local dataset | Local knowledge root |
 |---|---|---|
@@ -147,13 +147,13 @@ paths. Historical runs and checkpoints are not rewritten.
 
 ## HeartFailure installation acceptance
 
-When the supplied HeartFailure CSV and corpus are installed in `resources/`,
-prepare a separate, explicitly filtered demonstration:
+The clone includes the supplied CSV and complete OKF in `examples/heart-failure/`.
+Prepare a separate, explicitly filtered demonstration:
 
 ```sh
 python scripts/prepare_heart_failure_demo.py \
-  --source resources/datasets/heart-failure/dataset.csv \
-  --corpus resources/knowledge/heart-failure \
+  --source examples/heart-failure/dataset.csv \
+  --corpus examples/heart-failure/okf \
   --destination outputs/heart-failure-demo
 python scripts/prepare_research_tutorial.py outputs/heart-failure-demo/research.json
 ```

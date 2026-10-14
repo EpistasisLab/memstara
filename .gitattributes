@@ -1,0 +1,3 @@
+# Preserve supplied research input bytes and manifest hashes across platforms.
+examples/heart-failure/dataset.csv -text
+examples/heart-failure/okf/** -text
