@@ -584,7 +584,8 @@ class Handler(BaseHTTPRequestHandler):
                 is_azure = host.endswith((".services.ai.azure.com", ".openai.azure.com"))
                 llm = {"provider": provider, "model": model, "endpoint": endpoint,
                        "resource": host.split(".")[0] if is_azure else None,
-                       "source": "project .env" if os.environ.get('MEMSTARA_CONFIG_MODE') == 'project' else "explicit process environment",
+                       "source": ("project .env" if os.environ.get('MEMSTARA_CONFIG_MODE') == 'project'
+                                  else "explicit process environment"),
                        "restart_required_after_edit": True}
             except ValueError as exc:
                 llm = {"provider": "", "model": "", "error": str(exc)}

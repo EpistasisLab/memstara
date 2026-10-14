@@ -56,8 +56,8 @@ def resolve(environ=None, *, file: Path | None = None):
         if values.get(name):
             p = Path(values[name]).expanduser()
             values[name] = str((p if p.is_absolute() else root / p).resolve())
-    for name, default in PORT_DEFAULTS.items():
-        value = values.get(name, str(default))
+    for name, port_default in PORT_DEFAULTS.items():
+        value = values.get(name, str(port_default))
         if not value.isdecimal() or not 1 <= int(value) <= 65535:
             raise ValueError(f'{name} must be an integer port from 1 to 65535')
         values[name] = str(int(value))
