@@ -89,7 +89,10 @@ For ML reproducibility, use only the measured evaluation.reproducibility status 
 If the supplied final_validation status is `completed`, report the reserve result for
 each completed hypothesis/ML task, identifying its task and hypothesis, selected model,
 validation sample count, saved metrics, and confusion matrix with TN/FP/FN/TP. Each
-task's saved fitted model is applied without refitting. The same run-time reserve is
+task's final model is freshly fitted on all non-reserve development rows with frozen
+settings, then saved and evaluated. Distinguish this final fit from exploratory replicate
+models and their earlier Interpretation/Explanation; do not attribute exploratory SHAP
+or LIME values to the final refitted model. The same run-time reserve is
 scored separately for every completed hypothesis; no single hypothesis is selected by
 reserve performance, and reserve scores must not be used to tune settings or rank
 hypotheses. Distinguish these same-dataset holdout estimates from external-cohort
@@ -178,8 +181,9 @@ prove that a hypothesis is false or statistically indistinguishable from chance 
 appropriate uncertainty analysis.
 
 During exploration the validation reserve is withheld from agents and all adaptive feedback.
-After all Loops, the controller loads each completed hypothesis task's hash-verified fitted
-ML artifact and scores the same reserve once for that task without refitting. Use the supplied
+After all Loops, the controller refits each completed hypothesis task's selected model
+and preprocessing on all non-reserve development rows using its frozen settings. It
+saves this final model before scoring the same reserve once for that task. Use the supplied
 per-task final_validation records. Clearly call these per-hypothesis same-dataset holdout
 estimates, not external-cohort or clinical validation. Do not imply that reserve performance
 selected a hypothesis, and do not recommend tuning or ranking hypotheses against this same
