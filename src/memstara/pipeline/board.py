@@ -1186,6 +1186,9 @@ async def questions_for_wave(
                 "Use read_question_catalog only to avoid duplicate questions. Do not use previous "
                 "AUC, feature importance, successful features or failed features to choose the question. "
                 "Keep any evidence-informed refinement separate from this primary hypothesis.")
+    from memstara.pipeline.combination_questions import enabled as independent_questions, instructions as combination_instructions
+    if independent_questions(snapshot):
+        ask += combination_instructions()
     ask += generation_instructions(snapshot)
     from memstara.pipeline.feature_context import instructions as feature_instructions
     ask += feature_instructions(snapshot)
@@ -1218,7 +1221,7 @@ async def questions_for_wave(
                 return
             from memstara.pipeline.question_repair import retry_instructions, prior_failure_instructions
             repair = (retry_instructions(snapshot or {}, wave, key)
-                      + prior_failure_instructions(snapshot or {}, wave, key))
+                      + ("" if independent_questions(snapshot) else prior_failure_instructions(snapshot or {}, wave, key)))
             await call_agent(
                 agent, ask + repair + f" Your writer identity is '{key}'. Pass writer='{key}' to propose_questions. "
                 f"Propose exactly up to {allocation} grounded questions; this replaces the total requested above.",
@@ -1239,7 +1242,11 @@ async def questions_for_wave(
                         "Use concrete clinical entities from Instances, source_ids from okf_read, "
                         "an array of okf_tags, and "
                         "parent_task_ids plus learning_goal when prior evidence is supplied. "
-                        "Do not repeat an already banked question from an earlier wave.")
+                        + ("A supported question from an earlier Loop is permitted; submit it for this Loop. "
+                           if independent_questions(snapshot) else
+                           "Do not repeat an already banked question from an earlier wave.")
+                        + "Search relevant domains and read source documents before declaring no support; "
+                        "do not infer corpus exhaustion from title search alone.")
             tasks = [asyncio.create_task(write_one(i, k, a)) for i, (k, a) in enumerate(writers)]
             try:
                 await asyncio.gather(*tasks)
@@ -1651,6 +1658,14 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             # has run dry pays for one more question call and not for a whole wave of
             # trials it has already done.
             if not questions and not args.no_curator:
+                from memstara.pipeline.combination_questions import skip_unavailable
+                from memstara.evaluation import active_plan
+                if skip_unavailable(active_plan(), run_dir, wave, checkpoint,
+                                    dry_streak=dry_streak, waves_run=waves_run,
+                                    seeded_total=seeded_total, missing_trials=missing_trials):
+                    dry_streak += 1
+                    note("This combination has no executable question; recorded as skipped. Continuing the schedule.")
+                    continue
                 record_round(run_dir, wave + 1, "blocked",
                              "No executable question after bounded recovery; no analysis was completed.")
                 write_progress(run_dir, wave + 1, "hypothesis")
@@ -2068,6 +2083,15 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         # workbench and disappears when it is cleared; the finished drawer is the record
         # that stays.
         _CURRENT_LOOP.set(None)
+        summary = round_summary(run_dir)
+        if not seeded_total and (summary or {}).get('skipped', 0):
+            atomic_json(run_dir / 'pipeline_status.json', {
+                'status': 'no_findings', 'report_completed': False,
+                'unfinished_task_ids': [], 'missing_trials': [], 'exploration': summary,
+                'message': 'All attempted combinations lacked an executable question; no analysis or report was produced.',
+            })
+            checkpoint.finish()
+            return 0
         step("(6)", "wrap up at the end", "the explanation agent reads the finished drawer")
         # How many trials were seeded is told to the reporter, because the results table
         # cannot say it. read_results only returns rows that exist, so a trial that died
@@ -2086,9 +2110,10 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             agents["report"],
             f"Write the report for run '{args.run_tag}'. Call read_results with that run_tag. "
             f"{seeded_total} trials were seeded across {waves_run} wave(s)"
-            + (f" (of {args.waves} requested; the run stopped early because the question "
-               f"bank ran dry)" if not args.continuous and waves_run < args.waves else "")
+            + (f" (of {args.waves} requested; some scheduled Loops did not seed an analysis)" if not args.continuous and waves_run < args.waves else "")
             + f". State how many of those {seeded_total} produced a result.{lost_note}"
+            + " Skipped question-generation Loops (not completed analyses): "
+            + json.dumps(round_summary(run_dir))
             + " Each result may contain several interpretations of ONE ML evaluation. "
               "Compare all interpreter perspectives, including disagreement and unavailable interpretations. "
               "Do not count interpretations as independent hypotheses or repeated ML experiments. "
@@ -2118,15 +2143,18 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         if not report_ok:
             note("Report failed; see report_status.json. Completed analysis results are preserved.")
         unfinished = [t["task_id"] for t in final["tasks"] if t["status"] != "done"]
-        complete = (report_ok and bool(final["tasks"]) and not unfinished and not missing_trials
-                    and not (summary or {}).get("blocked", 0))
+        successful_analyses = (report_ok and bool(final["tasks"]) and not unfinished and not missing_trials
+                               and not (summary or {}).get("blocked", 0))
+        skipped = (summary or {}).get("skipped", 0)
+        complete = successful_analyses and not skipped
         (run_dir / "pipeline_status.json").write_text(json.dumps({
-            "status": "completed" if complete else "incomplete",
+            "status": "completed" if complete else "completed_with_skips" if successful_analyses else "incomplete",
+            "exploration": summary,
             "report_completed": report_ok, "unfinished_task_ids": unfinished,
             "missing_trials": sorted(set(missing_trials)),
         }, indent=2), encoding="utf-8")
         checkpoint.finish()
-        return 0 if complete else 1
+        return 0 if successful_analyses else 1
     except asyncio.CancelledError:
         from memstara.pipeline.exploration import close_active_round
         if ownership_lost():

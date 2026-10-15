@@ -25,6 +25,7 @@ export function clinicalPipelineStatus(p: PipelineDefinition) {
   if (p.running) return working[p.progress.stage ?? ''] ?? 'Execution is active. Waiting for the next recorded step.';
   if (!p.latest) return 'Ready. This pipeline has not started.';
   if (p.latest.recoverable) return 'Execution stopped. A saved checkpoint is available.';
+  if (p.latest.exit_code === 0 && p.progress.exploration?.skipped) return `Execution ended: ${p.progress.exploration.completed} Loops completed; ${p.progress.exploration.skipped} skipped because no executable question was saved.`;
   if (p.latest.exit_code === 0 && p.progress.exploration?.outcome === 'completed') return 'Execution completed. Review the findings and their limitations.';
   if (p.latest.exit_code !== undefined && p.latest.exit_code !== 0) return 'Execution stopped with an error. Previously saved results are retained.';
   return 'Execution ended. Completion has not been confirmed.';

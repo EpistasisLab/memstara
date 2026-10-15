@@ -24,3 +24,11 @@ def test_completed_run_survives_control_restart(tmp_path):
     live, done = recovery.recover(tmp_path)
     assert live is None and done[0]['exit_code'] == 0
     assert json.loads((directory / 'control_record.json').read_text())['run_tag'] == 'test'
+
+
+def test_finished_schedule_with_skips_survives_controller_restart(tmp_path, monkeypatch):
+    monkeypatch.setattr(recovery, 'identity', lambda pid: '')
+    for status in ['completed_with_skips', 'no_findings', 'failed']:
+        (tmp_path / 'pipeline_status.json').write_text(json.dumps({'status': status}))
+        process = recovery.RecoveredProcess({'pid': 123, 'run_dir': str(tmp_path)})
+        assert process.poll() == (1 if status == 'failed' else 0)

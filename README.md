@@ -1025,6 +1025,24 @@ choices selected, both HIV and HeartFailure offer 4 Hypothesis × 2 Data × 2 ML
 still controls how many combinations are attempted. Existing saved designs retain
 their settings until explicitly edited; old general Explanation runs remain readable.
 
+New All Combinations executions use independent, knowledge-grounded question
+creation for each scheduled Loop. They do not require a novel predictor set in
+every Loop or feed earlier ML scores into later question selection. A supported
+question may be submitted again in another Loop; duplicates within one Loop are
+still rejected. This policy is frozen as `independent_combination_questions_v1`.
+Ordinary iterative exploration and old frozen executions retain their original
+policy. Independent generations are not guaranteed to be identical, so differences
+between results cannot automatically be attributed to downstream skills alone.
+
+After bounded question recovery, a combination with no executable question is
+recorded as **skipped**, without running its downstream agents. Other scheduled
+combinations continue. The outcome journal and final status distinguish completed,
+skipped and blocked Loops. The UI shows **Finished with skips** when analyses were
+saved, or **No findings** if every attempted combination was skipped. Neither means
+all requested analyses succeeded. Database, provider and verification failures
+remain errors, not skipped research questions. Existing failed runs are preserved;
+start a new execution to use the new policy rather than editing old evidence.
+
 Source-to-skill bindings live in `src/memstara/corpus_skills.py`. They match the
 supplied corpus index SHA-256, including copies in independent installations,
 rather than guessing from a research name, target or folder. A changed or new corpus

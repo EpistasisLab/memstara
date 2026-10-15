@@ -61,7 +61,8 @@ class RecoveredProcess:
             root = Path(self.record['run_dir'])
             status_path = root / ('report_status.json' if self.record.get('report_only') else 'pipeline_status.json')
             status = json.loads(status_path.read_text())
-            return 0 if status.get('status') == 'completed' else 1
+            terminal = {'completed'} if self.record.get('report_only') else {'completed', 'completed_with_skips', 'no_findings'}
+            return 0 if status.get('status') in terminal else 1
         except (OSError, ValueError):
             return 1
 

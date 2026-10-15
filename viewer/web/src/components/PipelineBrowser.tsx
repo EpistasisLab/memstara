@@ -12,6 +12,7 @@ export function pipelineState(p: PipelineDefinition) {
   if (p.running) return p.running.waiting_for_questions ? 'Waiting' : 'Running';
   if (p.latest?.recoverable) return 'Interrupted';
   if ((p.progress.counts?.failed ?? 0) > 0 || (p.latest?.exit_code != null && p.latest.exit_code !== 0)) return 'Needs attention';
+  if (p.latest?.exit_code===0 && p.progress.exploration?.skipped) return p.progress.exploration.completed ? 'Finished with skips' : 'No findings';
   return p.latest ? 'Completed' : 'Ready';
 }
 export default function PipelineBrowser({items, selected, onSelect, compare, onCompare, onSettings}: {
@@ -56,7 +57,7 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
       <details className="pipeline-browser-search-tools"><summary>Search and filter</summary>
       <label className="pipeline-search"><Search size={16}/><input aria-label="Search pipelines" placeholder="Search by name…" value={query} onChange={e=>{setQuery(e.target.value);setPage(0);}}/></label>
       <div className="pipeline-browser-filters">
-        <label>Status<select aria-label="Status" value={status} onChange={e=>{setStatus(e.target.value);setPage(0);}}>{['All','Running','Waiting','Paused','Stopping','Ready','Completed','Interrupted','Needs attention'].map(s=><option key={s}>{s}</option>)}</select></label>
+        <label>Status<select aria-label="Status" value={status} onChange={e=>{setStatus(e.target.value);setPage(0);}}>{['All','Running','Waiting','Paused','Stopping','Ready','Completed','Interrupted','Needs attention','Finished with skips','No findings'].map(s=><option key={s}>{s}</option>)}</select></label>
         <label>Sort<select aria-label="Sort pipelines" value={sort} onChange={e=>{setSort(e.target.value);setPage(0);}}><option value="number">Creation order</option><option value="name">Name</option></select></label>
       </div>
       <p className="pipeline-browser-help">Select a name to inspect. Check up to 3 pipelines to compare their diagrams.</p>

@@ -31,3 +31,12 @@ test('Results follows controller pause without masking failure or stale data',()
  assert.match(resultsStatus({status:'running'},true,paused).text,/Last recorded/);
  assert.match(resultsStatus({status:'failed',message:'actual failure'},false,paused).text,/actual failure/);
 });
+
+test('skipped combinations are disclosed without reporting full success or a crash',()=>{
+ const partial=resultsStatus({status:'completed_with_skips'});
+ assert.equal(partial.warning,false);
+ assert.match(partial.text,/not counted as completed/);
+ const empty=resultsStatus({status:'no_findings'});
+ assert.equal(empty.warning,false);
+ assert.match(empty.text,/no analysis or report/);
+});

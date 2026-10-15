@@ -169,6 +169,9 @@ def test_web_launch_freezes_policy_and_delivers_random_input(monkeypatch, tmp_pa
                            evaluation=json.dumps({'engine':'logistic_regression'}), trials=1, waves=2,
                            combination_plan=schedule)
     frozen = freeze(args, tmp_path, {})
+    assert frozen['hypothesis_policy']['version'] == 'knowledge_only_v1'
+    assert frozen['hypothesis_policy']['combination_questions'] == 'independent_combination_questions_v1'
+    assert frozen['hypothesis_policy']['prior_ml_feedback'] is False
     assert frozen['feature_selection_policy']['minimum'] == 4
     assert frozen['feature_selection_policy']['maximum'] == 20
     monkeypatch.setattr('memstara.evaluation.active_plan', lambda: frozen)

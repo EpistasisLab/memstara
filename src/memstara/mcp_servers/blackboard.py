@@ -937,14 +937,15 @@ async def read_question_catalog(limit: int = 200) -> str:
         conn = await asyncpg.connect(_dsn())
         try:
             rows = await conn.fetch(
-                "SELECT question_id, text, okf_tags FROM memstara_questions "
+                "SELECT question_id, text, okf_tags, origin_wave FROM memstara_questions "
                 "WHERE status <> 'cleared' AND origin_run=$1 ORDER BY question_id DESC LIMIT $2",
                 plan["run_tag"], max(1, min(200, int(limit))),
             )
         finally:
             await conn.close()
-        return json.dumps({"questions": [
-            {"question_id": row["question_id"], "text": row["text"],
+        from memstara.pipeline.combination_questions import enabled as independent_questions
+        return json.dumps({"duplicate_scope": "current_loop" if independent_questions(plan) else "run", "questions": [
+            {"question_id": row["question_id"], **({"origin_wave": row.get("origin_wave")} if independent_questions(plan) else {}), "text": row["text"],
              "okf_tags": json.loads(row["okf_tags"]) if isinstance(row["okf_tags"], str) else row["okf_tags"]}
             for row in rows]}, ensure_ascii=False)
     except Exception as exc:
@@ -1170,6 +1171,8 @@ async def propose_questions(questions: list[QuestionProposal] | str, origin_run:
     from memstara.pipeline.question_contract import enabled, make_contract
     from memstara.pipeline.question_repair import preflight_mapping, save_feedback
     plan = active_plan() or {}
+    from memstara.pipeline.combination_questions import enabled as independent_questions
+    comparison_wave = int(origin_wave) if independent_questions(plan) else None
     # Model/candidate work must finish BEFORE opening a database transaction.
     prepared = []
     preflight_rejected = []
@@ -1214,7 +1217,8 @@ async def propose_questions(questions: list[QuestionProposal] | str, origin_run:
                      json.loads(r["okf_tags"]) if r["okf_tags"] else [])
                     for r in await conn.fetch(
                         "SELECT question_id, text, okf_tags FROM memstara_questions "
-                        "WHERE status <> 'cleared' AND ($1 = '' OR origin_run = $1)", _pipeline_run())
+                        "WHERE status <> 'cleared' AND ($1 = '' OR origin_run = $1) "
+                        "AND ($2::int IS NULL OR origin_wave = $2)", _pipeline_run(), comparison_wave)
                 ]
                 for item in parsed:
                     if not isinstance(item, dict):
@@ -1281,7 +1285,9 @@ async def propose_questions(questions: list[QuestionProposal] | str, origin_run:
                         RETURNING question_id
                         """,
                         text,
-                        (f"{scope}::" if scope else "") + _question_key(text),
+                        (f"{scope}::" if scope else "")
+                        + (f"combination-wave-{comparison_wave}::" if comparison_wave is not None else "")
+                        + _question_key(text),
                         json.dumps(tags, ensure_ascii=False),
                         str(item.get("rationale", "")).strip(),
                         origin_run,
@@ -1297,7 +1303,11 @@ async def propose_questions(questions: list[QuestionProposal] | str, origin_run:
         finally:
             await conn.close()
     except Exception as e:  # noqa: BLE001
-        return _err(e)
+        # Preserve storage failure so the driver cannot treat it as an empty
+        # but verified research space and skip to another paid combination.
+        failure_response = json.loads(_err(e))
+        save_feedback(plan, origin_wave, writer, failure_response)
+        return json.dumps(failure_response)
 
     response = {"added": added, "duplicates": duplicates,
                 "skipped": skipped, "rejected": rejected}

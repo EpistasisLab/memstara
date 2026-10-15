@@ -116,7 +116,7 @@ export function PipelineStatus({ids}: {ids?: string[]} = {}){
       const waiting=!!p.running?.waiting_for_questions;
       const failed=(p.progress.counts?.failed??0)>0 || p.progress.exploration?.outcome === "blocked";
       const percent=pipelinePercent(p);
-      const status=(floorExecutionState(p.running).paused||floorExecutionState(p.running).stopping)?(floorExecutionState(p.running).paused?'Paused':'Pausing'):failed?'Needs attention':waiting?'Waiting for knowledge':p.running?'Running':p.latest?(p.latest.exit_code===0?'Completed':'Stopped'):'Ready';
+      const status=(floorExecutionState(p.running).paused||floorExecutionState(p.running).stopping)?(floorExecutionState(p.running).paused?'Paused':'Pausing'):failed?'Needs attention':waiting?'Waiting for knowledge':p.running?'Running':p.latest?(p.latest.exit_code===0?(p.progress.exploration?.skipped?(p.progress.exploration.completed?'Finished with skips':'No findings'):'Completed'):'Stopped'):'Ready';
       const current=index>=0?shortLabels[index]:'Not started';
       return <article key={p.id} className={`pipeline-progress-card ${selected===p.id?'is-selected':''} ${failed?'needs-attention':''}`}>
         <header className="pipeline-progress-header">

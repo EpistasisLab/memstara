@@ -81,6 +81,7 @@ def round_summary(run_dir):
     return {"attempted": len(state),
             "completed": sum(v["outcome"] == "completed" for v in state.values()),
             "blocked": sum(v["outcome"] == "blocked" for v in state.values()),
+            "skipped": sum(v["outcome"] == "skipped" for v in state.values()),
             "outcome": latest.get("outcome"), "reason": latest.get("reason", "")}
 
 

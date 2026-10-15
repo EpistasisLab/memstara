@@ -9,6 +9,10 @@ export function resultsStatus(pipeline?: PipelineStatus | null, stale = false, e
     if (execution?.stopping) return {warning:false, text:'Pause requested. An existing call may still be finishing; saved results remain available.'};
   }
   switch (pipeline.status) {
+    case 'completed_with_skips':
+      return {warning:false, text:'Execution finished with skipped Loops. Completed findings are saved; skipped Loops produced no analysis and are not counted as completed.'};
+    case 'no_findings':
+      return {warning:false, text:'Execution ended without findings. No executable question was saved for the attempted combinations; no analysis or report was produced.'};
     case 'running':
       return {warning:false, text:'Pipeline is running. Completed results appear as they are saved; the final report is not complete yet.'};
     case 'paused':

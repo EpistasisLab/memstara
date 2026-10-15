@@ -31,3 +31,10 @@ test('persisted failure explains needs-attention and clears for a fresh executio
  assert.equal(clinicalPipelineStatus(p),failure.message);
  assert.match(clinicalPipelineStatus({...p,failure:null,running:{},progress:{stage:'question'}}),/Developing a research question/);
 });
+
+test('completed findings and skipped Loops remain distinct',()=>{
+ const p={progress:{exploration:{outcome:'completed',completed:3,skipped:1,blocked:0}},latest:{exit_code:0}};
+ assert.match(clinicalPipelineStatus(p),/3 Loops completed; 1 skipped/);
+ assert.doesNotMatch(clinicalPipelineStatus(p),/Execution completed/);
+ assert.match(clinicalPipelineStatus({...p,failure:{message:'Actual transport failure'}}),/Actual transport failure/);
+});

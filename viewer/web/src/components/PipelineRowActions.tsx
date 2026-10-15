@@ -20,11 +20,11 @@ export default function PipelineRowActions({pipeline:p,onSettings,compact=false}
   const finished=!p.running&&!!p.latest;
   const infrastructure=(p.running??p.latest)?.infrastructure_status;
   const exploration=p.progress.exploration;
-  const completed=finished&&p.latest?.exit_code===0&&exploration?.outcome==='completed';
+  const completed=finished&&p.latest?.exit_code===0&&exploration?.outcome==='completed'&&!exploration?.skipped;
   return <div className={`pipeline-row-actions ${compact?"is-compact":""}`} role="group" aria-label={`Actions for ${p.name}`}>
     {!compact&&finished&&<div className="pipeline-execution-summary" role="status">
       <strong>{infrastructure?.status==='interrupted'?'Connection interrupted — results retained':recoverable?'Execution interrupted — checkpoint available':completed?'Execution completed':p.latest?.exit_code===0?'Execution ended':'Execution stopped — review results'}</strong>
-      {exploration&&<span>{exploration.completed} Loops completed · {exploration.blocked} blocked</span>}
+      {exploration&&<span>{exploration.completed} Loops completed · {exploration.blocked} blocked{exploration.skipped ? ` · ${exploration.skipped} skipped (no executable question)` : ''}</span>}
       {p.failure&&<span>Last execution did not complete. Open Execution details for the saved diagnostic.</span>}
       {p.latest?.recovery_blocked&&<span>Automatic recovery requires review. See execution details.</span>}
     </div>}
