@@ -77,3 +77,42 @@ def test_real_driver_decodes_transient_response_and_keeps_current_tasks(monkeypa
     assert result['tasks'][0]['status'] == 'in_progress'
     assert invoke.await_count == 2
     assert all(c.args[1] == 'read_board' for c in invoke.call_args_list)
+
+
+@pytest.mark.parametrize('code', ['InvalidPasswordError', 'InvalidCatalogNameError', 'UndefinedTableError'])
+def test_permanent_database_error_never_spends_retries(code):
+    invoke = AsyncMock(side_effect=reads.response_error({'error_type': code, 'error': 'redacted'}))
+    with pytest.raises(reads.BoardReadError) as raised:
+        asyncio.run(reads.verified_read(invoke))
+    assert raised.value.code == code and invoke.await_count == 1
+
+
+def test_cancel_during_recovery_backoff_propagates(monkeypatch):
+    monkeypatch.setattr(reads.asyncio, 'sleep', AsyncMock(side_effect=asyncio.CancelledError()))
+    invoke = AsyncMock(side_effect=TimeoutError())
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(reads.verified_read(invoke))
+    assert invoke.await_count == 1
+
+
+@pytest.mark.parametrize('stage', ['data', 'ml', 'interpret'])
+def test_terminal_task_failure_stops_future_calls_and_preserves_completed_results(tmp_path, stage):
+    from memstara.pipeline.failures import ensure_tasks_not_failed, ensure_not_failed, PipelineExecutionFailure
+    (tmp_path / 'report.md').write_text('Earlier completed result')
+    tasks = [{'task_id': 1, 'task_type': stage, 'status': 'failed', 'error': 'private details'},
+             {'task_id': 2, 'task_type': 'interpret', 'status': 'done'}]
+    with pytest.raises(PipelineExecutionFailure):
+        ensure_tasks_not_failed(tmp_path, 4, tasks)
+    with pytest.raises(PipelineExecutionFailure):
+        ensure_not_failed(tmp_path)
+    assert json.loads((tmp_path / 'pipeline_failure.json').read_text())['code'] == 'stage_task_failed'
+    assert json.loads((tmp_path / 'failed_tasks.json').read_text())['tasks'] == [
+        {'task_id': 1, 'task_type': stage, 'status': 'failed'}]
+    assert (tmp_path / 'report.md').read_text() == 'Earlier completed result'
+    assert 'private details' not in (tmp_path / 'failed_tasks.json').read_text()
+
+
+def test_work_in_progress_is_not_a_terminal_failure(tmp_path):
+    from memstara.pipeline.failures import ensure_tasks_not_failed
+    ensure_tasks_not_failed(tmp_path, 1, [{'status': 'ready'}, {'status': 'in_progress'}, {'status': 'done'}])
+    assert not (tmp_path / 'pipeline_failure.json').exists()

@@ -218,3 +218,21 @@ def visible_failure(run_dir, *, include_legacy=True):
     except (OSError, ValueError, TypeError, AttributeError):
         pass
     return None
+
+
+def ensure_tasks_not_failed(run_dir, loop, tasks):
+    """A terminal task failure must stop scheduling, never become a dry Loop."""
+    failed = [task for task in tasks if task.get('status') == 'failed']
+    if not failed:
+        return
+    stage = failed[0].get('task_type', '')
+    label = {'data': 'Data preparation', 'ml': 'Model training and evaluation',
+             'interpret': 'Interpretation'}.get(stage, 'An analysis stage')
+    if run_dir:
+        from memstara.pipeline.checkpoint import atomic_json
+        atomic_json(Path(run_dir) / 'failed_tasks.json', {
+            'loop': loop, 'tasks': [{k: t.get(k) for k in ('task_id', 'task_type', 'status')}
+                                    for t in failed]})
+    stop_execution(run_dir, stage, loop, RuntimeError('Terminal task failure'),
+                   code='stage_task_failed',
+                   message=f'{label} could not complete. Saved results are retained; further execution was stopped.')

@@ -1925,6 +1925,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             while True:
                 state = await board_state(registry, args.run_tag)
                 current_tasks = [t for t in state["tasks"] if base <= t["trial"] < base + args.trials]
+                from memstara.pipeline.failures import ensure_tasks_not_failed
+                ensure_tasks_not_failed(run_dir, wave + 1, current_tasks)
                 current_stage = live_workers.progress_stage(
                     current_tasks, seed_done=seed_task.done())
                 write_progress(run_dir, wave + 1,
@@ -1965,10 +1967,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 print(f"   [lap {polling_laps:>3}] {desc}{stuck}")
 
                 # Give up on tasks that keep coming back. `retried` already counts the
-                # extra claims, so this is a decision on a number that was being printed
-                # and otherwise acted on by nobody. Closing one task does not stop the
-                # run — the others keep going, and the trial is recorded as lost so the
-                # report says so rather than quietly describing fewer results as all.
+                # extra claims. A terminal failure is observed on the next board read
+                # and stops the execution before any further worker is launched.
                 if args.max_attempts:
                     ready_ids = {t["task_id"] for t in state["tasks"] if t["status"] == "ready"}
                     doomed = [tid for tid, n in retried if n >= args.max_attempts and tid in ready_ids]
