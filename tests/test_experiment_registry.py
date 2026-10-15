@@ -75,12 +75,15 @@ async def test_deadlock_retries_only_the_mirror(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_exhausted_conflict_retains_results_and_records_pending(monkeypatch, tmp_path):
+@pytest.mark.parametrize('error_name', ['DeadlockDetectedError', 'SerializationError',
+                                      'PostgresConnectionError', 'CannotConnectNowError', 'TimeoutError'])
+async def test_exhausted_conflict_retains_results_and_records_pending(monkeypatch, tmp_path, error_name):
     from unittest.mock import AsyncMock
     from memstara import experiment_registry as registry
     evidence = tmp_path / 'execution.json'
     evidence.write_text('{"status":"completed"}')
-    attempt = AsyncMock(side_effect=registry.asyncpg.DeadlockDetectedError())
+    error = TimeoutError if error_name == "TimeoutError" else getattr(registry.asyncpg, error_name)
+    attempt = AsyncMock(side_effect=error())
     monkeypatch.setattr(registry, '_sync', attempt)
     monkeypatch.setattr(registry.asyncio, 'sleep', AsyncMock())
     await registry.sync_after_agent(tmp_path)

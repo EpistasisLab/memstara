@@ -189,12 +189,18 @@ def proposal_evidence(root, config, call):
             'attempts': [read(path, {}) for path in paths[2:]]}
 
 
+TRANSIENT_MIRROR_ERRORS = (
+    asyncpg.DeadlockDetectedError, asyncpg.SerializationError,
+    asyncpg.PostgresConnectionError, asyncpg.CannotConnectNowError, TimeoutError,
+)
+
+
 async def sync(root: Path, *, evidence=True):
     """Retry whole rolled-back transactions, never agents or model requests."""
     for attempt in range(5):
         try:
             return await _sync(root, evidence=evidence)
-        except (asyncpg.DeadlockDetectedError, asyncpg.SerializationError):
+        except TRANSIENT_MIRROR_ERRORS:
             if attempt == 4:
                 raise
             await asyncio.sleep(0.1 * (2 ** attempt))
@@ -208,11 +214,11 @@ async def sync_after_agent(root: Path):
     """
     try:
         await sync(root)
-    except (asyncpg.DeadlockDetectedError, asyncpg.SerializationError) as exc:
+    except TRANSIENT_MIRROR_ERRORS as exc:
         from memstara.pipeline.checkpoint import atomic_json
         atomic_json(root / 'registry_status.json', {
             'status': 'pending', 'error_type': type(exc).__name__,
-            'reason': 'Database concurrency conflict; local evidence retained for reconciliation',
+            'reason': 'Transient database mirror failure; local evidence retained for reconciliation',
         })
         print(f'Experiment registry pending: {type(exc).__name__}; agent results retained.')
 
