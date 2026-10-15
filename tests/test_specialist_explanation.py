@@ -182,6 +182,7 @@ def test_prepare_actual_interpretation_and_expert_evidence(frozen, result, tmp_p
     assert row["interpretations"][0]["text"].startswith("Both fitted models")
     assert set(row["interpretations"][0]["models"]) == {"logistic_regression", "xgboost"}
     assert "dsn_env" not in prepared["prompt"]
+    assert "[database_id:document_id]" not in prepared["prompt"]
     assert explanation.read_receipt(prepared["receipt"]) == prepared["payload"]
     text = "Synthetic explanation [" + expert + "-fixture:" + ("a" if expert == "addiction" else "h") + "]"
     entry = explanation.finish(
@@ -350,6 +351,30 @@ def test_invented_citation_is_rejected(frozen, result, tmp_path):
             {"status": "completed"},
             tmp_path / "run" / "explanation_io",
         )
+
+
+def test_literal_citation_template_boilerplate_is_removed_and_audited(frozen, result, tmp_path):
+    prepared = asyncio.run(explanation.prepare(frozen, [result], 1, tmp_path / "run" / "explanation_io"))
+    raw = "Summary. Retrieval evidence is cited as [database_id:document_id].\nEvidence [addiction-fixture:a]"
+    normalized, changes = explanation.normalize_report_output(raw)
+    assert "[database_id:document_id]" not in normalized
+    assert "Evidence [addiction-fixture:a]" in normalized
+    entry = explanation.finish(
+        prepared, normalized, {"status": "completed"}, tmp_path / "run" / "explanation_io",
+        normalization=changes,
+    )
+    saved = explanation.read_receipt(entry["specialist_explanation"]["output"])
+    assert saved["output"] == normalized
+    assert saved["output_normalization"] == ["removed_literal_citation_template_sentence"]
+
+
+def test_unrecognized_placeholder_citation_still_fails_validation(frozen, result, tmp_path):
+    prepared = asyncio.run(explanation.prepare(frozen, [result], 1, tmp_path / "run" / "explanation_io"))
+    raw = "Evidence [database_id:document_id]"
+    normalized, changes = explanation.normalize_report_output(raw)
+    assert normalized == raw and changes == []
+    with pytest.raises(ValueError, match="outside"):
+        explanation.finish(prepared, normalized, {"status": "completed"}, tmp_path / "run" / "explanation_io")
 
 
 def test_expert_failure_stops_following_pipeline_execution(frozen, result, tmp_path, monkeypatch):
