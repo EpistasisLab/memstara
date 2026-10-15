@@ -53,6 +53,9 @@ async def test_proposal_pipeline_does_not_require_dataset_matcher(monkeypatch, t
     monkeypatch.setattr(board.asyncpg, 'connect', connect)
     monkeypatch.setattr(board, 'dsn', lambda: 'postgresql://test')
 
-    problems = await board.check_environment(use_okf=False, use_data=False)
+    def forbidden(*args, **kwargs):
+        pytest.fail('Proposal mode must not build a predictor index')
+    monkeypatch.setattr('memstara.predictor_cache.ensure', forbidden)
+    problems = await board.check_environment(use_okf=False, use_data=False, prepare_matcher=True)
 
     assert not any('Predictor-mapping' in item for item in problems)

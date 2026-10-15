@@ -1209,6 +1209,15 @@ This reserve is generated from the run's dataset when execution starts; it is no
 separately registered user-supplied holdout. If the selected Data skill controls the
 allocation, its saved seed and reserve fraction define the partition for that run.
 
+CSV-based pipeline starts automatically prepare the semantic predictor-search index
+before checking its readiness. This applies to HIV, HeartFailure, custom registered
+inputs, and CSV-only runs without OKF. Missing, stale or damaged caches are rebuilt;
+matching caches are reused. The UI displays **Preparing predictor search** during this
+step. Registered inputs retain separate caches under their research fingerprints.
+No-CSV proposal mode skips predictor indexing. Interrupted preparation can be retried
+with a new start; preparation failures are recorded before any agent calls. The initial
+embedding-model download requires network access unless the pinned model is cached.
+
 ## Everyday commands
 
 Run these from the Memstara checkout with the `memstara` environment active:

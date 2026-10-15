@@ -198,7 +198,8 @@ _PROVIDER_KEYS = {
 
 
 async def check_environment(provider: str = "", y_column: str = "", *,
-                            use_okf: bool = True, use_data: bool = True) -> list[str]:
+                            use_okf: bool = True, use_data: bool = True,
+                            prepare_matcher: bool = False, run_dir: Path | None = None) -> list[str]:
     """Everything missing, reported at once, before anything starts.
 
     What is missing is collected **all together** rather than reported one at a time.
@@ -286,6 +287,34 @@ async def check_environment(provider: str = "", y_column: str = "", *,
                     f"--y-column '{y_column}' is not a column in the dataset."
                     f"{hint} ({len(header)} columns in {Path(dataset).name})"
                 )
+
+    # Fresh registered inputs and legacy CSV runs share the same semantic-index
+    # lifecycle. Repair derived artifacts BEFORE requiring their readiness.
+    if prepare_matcher and use_data and not problems:
+        from memstara.predictor_cache import ensure
+        from memstara.pipeline.checkpoint import atomic_json
+        def preparation_status(status, message):
+            print(message, flush=True)
+            if run_dir is not None:
+                run_dir.mkdir(parents=True, exist_ok=True)
+                progress_path = run_dir / "progress.json"
+                try:
+                    progress = json.loads(progress_path.read_text())
+                    if not isinstance(progress, dict):
+                        progress = {}
+                except (OSError, ValueError):
+                    progress = {}
+                atomic_json(progress_path, {**progress,
+                    "preparation": {"status": status, "message": message}})
+        preparation_status("running", "Preparing predictor search for the selected dataset.")
+        try:
+            receipt = ensure()
+        except Exception as exc:
+            message = f"Predictor search preparation failed ({type(exc).__name__}): {exc}"
+            preparation_status("failed", message)
+            problems.append(message)
+            return problems
+        preparation_status("completed", f"Predictor search ready ({receipt['action']}).")
 
     # Question generation calls the semantic matcher before any data/ML stage.
     # Verify its cohort catalog and embedding stamps here, before spending LLM
@@ -2671,6 +2700,8 @@ async def main() -> int:
         y_column="" if args.report_only or args.data_mode == "proposal" else args.y_column,
         use_okf=not args.ablate_okf,
         use_data=args.data_mode == "dataset",
+        prepare_matcher=not args.report_only,
+        run_dir=Path(args.run_dir) if args.run_dir else None,
     )
     if problems:
         print("Environment is not ready:", file=sys.stderr)

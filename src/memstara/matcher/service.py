@@ -167,8 +167,13 @@ def get_matcher() -> Matcher:
     # Re-read policy on each request so an edited policy cannot reuse a stale singleton.
     rules = load_rules()
     fingerprint = current_fingerprint(rules=rules)
-    return _get_matcher_cached(json.dumps(fingerprint, sort_keys=True),
-                               rules.model_dump_json() if rules is not None else None)
+    import fcntl
+    # Coordinate with automatic builders so multi-file publication is never read
+    # halfway through. Cached matchers remain valid for their own fingerprint.
+    with (cfg_mod.CATALOG_JSON.parent / '.matcher.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_SH)
+        return _get_matcher_cached(json.dumps(fingerprint, sort_keys=True),
+                                   rules.model_dump_json() if rules is not None else None)
 
 
 @lru_cache(maxsize=1)

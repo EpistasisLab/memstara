@@ -21,6 +21,7 @@ export function clinicalPipelineStatus(p: PipelineDefinition) {
   if (p.running?.execution_state === 'paused') return 'Paused. The pipeline is waiting to resume.';
   if (p.running?.pause_requested || p.running?.execution_state === 'stopping') return 'Pausing after the current agent call finishes.';
   if ((p.progress.counts?.failed ?? 0) > 0 || p.progress.exploration?.outcome === 'blocked') return 'An analysis step needs attention. Review the recorded details.';
+  if (p.running && p.progress.preparation?.status === 'running') return 'Preparing predictor search for the selected dataset.';
   if (p.running?.waiting_for_questions) return 'Waiting for an eligible research question.';
   if (p.running) return working[p.progress.stage ?? ''] ?? 'Execution is active. Waiting for the next recorded step.';
   if (!p.latest) return 'Ready. This pipeline has not started.';

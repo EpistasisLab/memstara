@@ -428,51 +428,11 @@ def activate(profile):
 
 
 def ensure_matcher(profile):
-    """Build once per research fingerprint, in the activated child before inference."""
+    """Prepare the selected research input's semantic index before inference."""
     if profile["configuration"]["data_mode"] != "dataset":
         raise ValueError("Proposal mode must not build a dataset matcher")
-    import fcntl
-    from memstara.matcher.catalog import build_catalog, save_catalog, save_catalog_meta, meta_path
-    from memstara.matcher.embedder import embed_catalog, save_embeddings, sentence_transformer_encoder
-    from memstara.matcher.embedder import embeddings_path, embeddings_stamp_path
-    from memstara.matcher.service import build_run_config, current_fingerprint, read_columns
-    from memstara.matcher.rules import load_rules
-    from memstara.pipeline.checkpoint import atomic_json
-
-    root = Path(profile["root"])
-    catalog = root / "derived" / "matcher_catalog.json"
-    with (root / "derived" / ".matcher.lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        rules, run_config = load_rules(), build_run_config()
-        expected = current_fingerprint(run_config, rules=rules)
-        stamp = catalog.with_suffix(".ready.json")
-        paths = (catalog, meta_path(catalog), embeddings_path(catalog), embeddings_stamp_path(catalog))
-        if stamp.exists():
-            try:
-                receipt = json.loads(stamp.read_text())
-            except (OSError, ValueError):
-                receipt = None
-            hashes = receipt.get("hashes") if isinstance(receipt, dict) else None
-            if (
-                isinstance(receipt, dict)
-                and receipt.get("fingerprint") == expected
-                and isinstance(hashes, dict)
-                and set(hashes) == {path.name for path in paths}
-                and all(
-                    path.is_file() and digest(path) == hashes[path.name]
-                    for path in paths
-                )
-            ):
-                return
-        entries = build_catalog(
-            read_columns(root / "dataset.csv"), outcome_col=profile["configuration"]["target"]["column"], rules=rules
-        )
-        texts = [entry.match_text for entry in entries]
-        matrix = embed_catalog(texts, sentence_transformer_encoder(run_config.embedding))
-        save_catalog(entries, catalog)
-        save_embeddings(matrix, catalog, match_texts=texts, cfg=run_config.embedding)
-        save_catalog_meta(entries, catalog, expected)
-        atomic_json(stamp, {"fingerprint": expected, "hashes": {p.name: digest(p) for p in paths}})
+    from memstara.predictor_cache import ensure
+    return ensure(Path(profile["root"]) / "derived" / "matcher_catalog.json")
 
 
 def instructions(profile):

@@ -113,10 +113,28 @@ def test_ui_arguments_reach_cli_environment_check_with_prepared_domain(sample, s
     monkeypatch.setattr('sys.argv', ['board', *argv])
     class ReachedEnvironmentCheck(Exception):
         pass
+    real_check = board.check_environment
+    async def connect(_dsn):
+        return SimpleNamespace(close=lambda: asyncio.sleep(0))
+    monkeypatch.setattr(board.asyncpg, 'connect', connect)
+    monkeypatch.setattr(board, 'dsn', lambda: 'postgresql://fixture')
+    monkeypatch.setattr(board, '_PROVIDER_KEYS', {})
+    monkeypatch.setenv('MOTORO_DATABASE_URL', 'postgresql://fixture')
+    from memstara.matcher import config as matcher_config, embedder
+    import numpy as np
+    monkeypatch.setattr(embedder, 'sentence_transformer_encoder',
+                        lambda _: lambda texts: np.ones((len(texts), 8), dtype=np.float32))
+    monkeypatch.setattr(embedder, 'current_device', lambda: 'cpu')
     async def stop_before_services(**settings):
         assert settings['y_column'] == sample['target']['column']
         assert settings['use_okf'] and settings['use_data']
+        assert settings['prepare_matcher'] is True
         assert corpus_profile() == scope
+        catalog_path = Path(os.environ['MEMSTARA_OUTPUT_DIR']) / 'matcher_catalog.json'
+        monkeypatch.setattr(matcher_config, 'CATALOG_JSON', catalog_path)
+        assert not catalog_path.exists()
+        assert await real_check(**settings) == []
+        assert catalog_path.exists()
         raise ReachedEnvironmentCheck
     monkeypatch.setattr(board, 'check_environment', stop_before_services)
     with pytest.raises(ReachedEnvironmentCheck):

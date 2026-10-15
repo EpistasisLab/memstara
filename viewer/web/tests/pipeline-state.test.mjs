@@ -18,3 +18,11 @@ test('active controls and completed/skipped runs retain their own states',()=>{
  assert.equal(pipelineState(pipeline({exit_code:0}, null, {exploration:{completed:2,skipped:1}})), 'Finished with skips');
  assert.equal(pipelineState(pipeline(null)), 'Ready');
 });
+
+
+test('predictor preparation is visible only for a live run',()=>{
+ const progress={preparation:{status:'running',message:'Preparing predictor search'}};
+ assert.equal(pipelineState(pipeline(null, {execution_state:'running'}, progress)), 'Preparing predictor search');
+ assert.equal(pipelineState(pipeline({exit_code:1}, null, progress)), 'Needs attention');
+ assert.equal(pipelineState(pipeline(null, {execution_state:'paused'}, progress)), 'Paused');
+});
