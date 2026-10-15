@@ -330,7 +330,8 @@ def build_argv(
         argv += [f"--playbook-{"explanation" if stage == "report" else stage}", book]
     import json
     from memstara.ml_configuration import validate_overrides
-    ml_skills = body.get('combination_skills', {}).get('ml', []) if body.get('combination_skills') else str(body.get('playbook_ml', '')).split(',')
+    ml_skills = (body.get('combination_skills', {}).get('ml', []) if body.get('combination_skills')
+                 else str(body.get('playbook_ml', '')).split(','))
     overrides = validate_overrides(body.get('ml_overrides', {}), ml_skills, replicates=evaluation.get('replicates', 1))
     if overrides:
         if controls:

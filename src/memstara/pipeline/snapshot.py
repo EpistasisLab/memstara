@@ -106,7 +106,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     from memstara.ml_configuration import validate_overrides
     ml_skills = ([item['id'] for item in combination_plan['skills']['ml']]
                  if combination_plan else books.get('ml', []))
-    overrides = validate_overrides(json.loads(getattr(args, 'ml_overrides', '{}')), ml_skills, replicates=evaluation['replicates'])
+    overrides = validate_overrides(
+        json.loads(getattr(args, 'ml_overrides', '{}')), ml_skills, replicates=evaluation['replicates'])
     if overrides:
         state['ml_overrides'] = overrides
     if combination_plan and not getattr(args, "report_only", False):

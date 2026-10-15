@@ -11,6 +11,8 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, cast
 from uuid import uuid4
 
+from tenacity import retry, stop_after_attempt
+
 from motoro.services.llm_service import LLMService
 from memstara.pipeline.runtime import provider_policy, runtime_timeouts, TRANSPORT_RETRY_DELAYS
 
@@ -351,17 +353,19 @@ class PipelineLLMService(LLMService):
                 )},
             ])
 
+    # Preserve the upstream decorated-method interface without adding retries.
+    # The request-level recovery loop remains the only transport retry owner.
+    @retry(stop=stop_after_attempt(1), reraise=True)
     async def _complete(self, *args, **kwargs):
-        from tenacity import stop_after_attempt
         return await cast(_RetryWrapped, LLMService._complete).retry_with(
             stop=stop_after_attempt(1))(self, *args, **kwargs)
 
+    @retry(stop=stop_after_attempt(1), reraise=True)
     async def _complete_with_tools_once(self, *args, **kwargs):
-        from tenacity import stop_after_attempt
         return await cast(_RetryWrapped, LLMService._complete_with_tools_once).retry_with(stop=stop_after_attempt(1))(
             self, *args, **kwargs)
 
+    @retry(stop=stop_after_attempt(1), reraise=True)
     async def _complete_text(self, *args, **kwargs):
-        from tenacity import stop_after_attempt
         return await cast(_RetryWrapped, LLMService._complete_text).retry_with(
             stop=stop_after_attempt(1))(self, *args, **kwargs)

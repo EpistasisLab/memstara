@@ -206,3 +206,22 @@ def test_persistent_lookup_failure_stops_after_five_retries(context):
     failure = json.loads((context / 'pipeline_failure.json').read_text())
     assert failure['code'] == 'model_service_unavailable'
     assert failure['http_status'] == 429
+
+
+@pytest.mark.parametrize('method', ['_complete', '_complete_with_tools_once', '_complete_text'])
+def test_upstream_retry_interface_preserved_without_multiplying_requests(method, monkeypatch):
+    from tenacity import retry, stop_after_attempt
+    from motoro.services.llm_service import LLMService
+    attempts = []
+
+    @retry(stop=stop_after_attempt(5), reraise=True)
+    async def upstream(*args, **kwargs):
+        attempts.append(1)
+        raise ConnectionResetError('synthetic')
+
+    monkeypatch.setattr(LLMService, method, upstream)
+    invoke = getattr(PipelineLLMService(), method)
+    assert callable(invoke.retry_with)
+    with pytest.raises(ConnectionResetError):
+        asyncio.run(invoke())
+    assert len(attempts) == 1

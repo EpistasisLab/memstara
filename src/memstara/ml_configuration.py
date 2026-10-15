@@ -199,7 +199,8 @@ def resolve(proposal, snapshot, evaluation):
         chosen = apply_overrides(chosen, overrides)
     effective = validate(chosen, snapshot, evaluation)
     return effective, {
-        'source': 'server_frozen' if controls else 'user_overrides_and_agent_proposal' if overrides else 'agent_proposal',
+        'source': ('server_frozen' if controls else
+                   'user_overrides_and_agent_proposal' if overrides else 'agent_proposal'),
         'agent_proposal_supplied': proposal is not None,
         'agent_proposal': copy.deepcopy(proposal),
         'agent_proposal_ignored': bool(controls) and proposal is not None,

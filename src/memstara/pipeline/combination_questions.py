@@ -41,7 +41,8 @@ def skip_unavailable(plan, run_dir, wave, checkpoint, *, dry_streak, waves_run,
         response = feedback.get("response", {})
         if response.get("error") or any(r.get("code") == "mapping_preflight_unavailable"
                                         for r in response.get("rejected", [])):
-            raise RuntimeError("Question feasibility could not be verified; infrastructure failure is not a skipped question")
+            raise RuntimeError(
+                "Question feasibility could not be verified; infrastructure failure is not a skipped question")
     from memstara.pipeline.exploration import record_round, write_progress
     record_round(run_dir, wave + 1, 'skipped',
                  'No supported executable question was saved after bounded recovery. '

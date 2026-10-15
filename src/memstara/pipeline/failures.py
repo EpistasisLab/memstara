@@ -3,6 +3,7 @@ import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import NoReturn
 
 
 class PipelineExecutionFailure(RuntimeError):
@@ -140,7 +141,7 @@ def ensure_not_failed(run_dir):
         raise PipelineExecutionFailure(failure['message'])
 
 
-def stop_execution(run_dir, stage, loop, error, *, code=None, message=None):
+def stop_execution(run_dir, stage, loop, error, *, code=None, message=None) -> NoReturn:
     kind, summary = failure_summary(error)
     record = dict(code=code or kind, message=message or summary, stage=stage, loop=loop,
                   exception_types=[type(e).__name__ for e in exception_chain(error)],
