@@ -1124,6 +1124,8 @@ message rather than implying that a corpus exists. No source mode is silently ch
 | Database connection refused | Check Compose health, port/URL agreement, migration and role permissions |
 | UI cannot connect / port 8070 unavailable | This walkthrough's development UI uses 5173; keep API 8071 and control 8072 running |
 | Slow first execution | Inspect download/cache preparation and stage logs; a fresh embedding cache is intentionally empty |
+| Execution state read failure | Inspect `board_read_events.jsonl`. Transient connection failures are retried up to five reads; permanent errors stop execution without treating an unavailable board as empty. |
+| Data worker finishes without submitting | The controller verifies the unfinished task and requeues only that data handoff, bounded by five recovery attempts and the run claim limit. Model prose is not proof of submission. |
 | Provider timeout / HTTP 429 | Inspect saved retry and request events; preserve the failed run, resolve provider capacity/connection before retrying |
 | Changed data rejected on resume | Keep historical snapshots; register changed input as a new version and start a new run |
 

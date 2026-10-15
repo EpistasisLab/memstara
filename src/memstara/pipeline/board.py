@@ -606,6 +606,15 @@ async def settle_finished_workers(registry: MCPServerRegistry, run_tag: str,
                 if recovered.get("ok"):
                     note(f"Interpretation task {task['task_id']} will retry once using the saved ML result.")
                     continue
+        if (finished_workers is not None and task["status"] == "in_progress"
+                and task["task_type"] == "data"):
+            recovered = await call_board_tool(registry, "recover_data_handoff", {
+                "task_id": task["task_id"], "worker": task.get("claimed_by", "")})
+            if recovered.get("error"):
+                raise RuntimeError("Could not safely recover the unfinished data handoff")
+            if recovered.get("ok"):
+                note(f"Data task {task['task_id']} returned without submission; retrying the handoff.")
+                continue
         if task["status"] == "in_progress" and task["task_type"] in ("data", "interpret"):
             finalized = await call_board_tool(registry, "submit_result", {
                 "task_id": task["task_id"], "worker": task.get("claimed_by", ""),
@@ -952,11 +961,20 @@ async def board_state(registry: MCPServerRegistry, run_tag: str) -> dict:
         raise RuntimeError("Blackboard server is not registered")
     from motoro.services.mcp_service import call_server_tool
 
-    async with asyncio.timeout(30):
-        raw = await call_server_tool(server.id, "read_board", {"run_tag": run_tag}, registry=registry)
-    # Sometimes the return is a (metadata, body) tuple, sometimes only the body.
-    text = board_tool_text(raw)
-    return decode_board_state(text)
+    from memstara.pipeline.board_reads import verified_read, BoardReadError
+    async def read_once():
+        async with asyncio.timeout(30):
+            raw = await call_server_tool(server.id, "read_board", {"run_tag": run_tag}, registry=registry)
+        return decode_board_state(board_tool_text(raw))
+    directory = _TRACE_DIR.parent if _TRACE_DIR else None
+    try:
+        return await verified_read(read_once, directory=directory)
+    except BoardReadError as exc:
+        from memstara.pipeline.failures import stop_execution
+        stop_execution(directory, "board", _CURRENT_LOOP.get(), exc,
+                       code="board_read_unavailable",
+                       message=f"Execution state could not be read ({exc.code}). Saved results are retained; "
+                               "see board_read_events.jsonl for recovery attempts.")
 
 
 def decode_board_state(text: str) -> dict:
@@ -965,7 +983,10 @@ def decode_board_state(text: str) -> dict:
         state = json.loads(text)
     except (json.JSONDecodeError, TypeError) as exc:
         raise RuntimeError("Blackboard returned invalid JSON; pipeline cannot establish task state") from exc
-    if (not isinstance(state, dict) or "error" in state or
+    if isinstance(state, dict) and "error" in state:
+        from memstara.pipeline.board_reads import response_error
+        raise response_error(state)
+    if (not isinstance(state, dict) or
             not isinstance(state.get("tasks"), list) or type(state.get("count")) is not int):
         raise RuntimeError("Blackboard read failed or returned an invalid task collection")
     if state["count"] != len(state["tasks"]):
@@ -1186,7 +1207,8 @@ async def questions_for_wave(
                 "Use read_question_catalog only to avoid duplicate questions. Do not use previous "
                 "AUC, feature importance, successful features or failed features to choose the question. "
                 "Keep any evidence-informed refinement separate from this primary hypothesis.")
-    from memstara.pipeline.combination_questions import enabled as independent_questions, instructions as combination_instructions
+    from memstara.pipeline.combination_questions import (
+        enabled as independent_questions, instructions as combination_instructions)
     if independent_questions(snapshot):
         ask += combination_instructions()
     ask += generation_instructions(snapshot)
@@ -1221,7 +1243,8 @@ async def questions_for_wave(
                 return
             from memstara.pipeline.question_repair import retry_instructions, prior_failure_instructions
             repair = (retry_instructions(snapshot or {}, wave, key)
-                      + ("" if independent_questions(snapshot) else prior_failure_instructions(snapshot or {}, wave, key)))
+                      + ("" if independent_questions(snapshot) else
+                         prior_failure_instructions(snapshot or {}, wave, key)))
             await call_agent(
                 agent, ask + repair + f" Your writer identity is '{key}'. Pass writer='{key}' to propose_questions. "
                 f"Propose exactly up to {allocation} grounded questions; this replaces the total requested above.",
@@ -2013,7 +2036,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                             agents.get(stage if k == 1 else f"{stage}#{k}", agents[stage]),
                             f"You are worker '{wid}'. Claim a '{ttype}' task from run_tag "
                             f"'{args.run_tag}' and do your part. Pass worker='{wid}' to "
-                            f"both claim_task and submit_result.",
+                            f"both claim_task and submit_result. A final text answer does not save results. "
+                            "Call submit_result and verify its ok response before finishing.",
                             tools=by_stage[stage], registry=registry,
                             # Each worker gets its own trace file. Left as `stage`, two
                             # workers of one type would write trace/NN_data.txt over each
@@ -2088,7 +2112,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             atomic_json(run_dir / 'pipeline_status.json', {
                 'status': 'no_findings', 'report_completed': False,
                 'unfinished_task_ids': [], 'missing_trials': [], 'exploration': summary,
-                'message': 'All attempted combinations lacked an executable question; no analysis or report was produced.',
+                'message': ('All attempted combinations lacked an executable question; '
+                            'no analysis or report was produced.'),
             })
             checkpoint.finish()
             return 0
@@ -2110,7 +2135,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             agents["report"],
             f"Write the report for run '{args.run_tag}'. Call read_results with that run_tag. "
             f"{seeded_total} trials were seeded across {waves_run} wave(s)"
-            + (f" (of {args.waves} requested; some scheduled Loops did not seed an analysis)" if not args.continuous and waves_run < args.waves else "")
+            + (f" (of {args.waves} requested; some scheduled Loops did not seed an analysis)"
+               if not args.continuous and waves_run < args.waves else "")
             + f". State how many of those {seeded_total} produced a result.{lost_note}"
             + " Skipped question-generation Loops (not completed analyses): "
             + json.dumps(round_summary(run_dir))

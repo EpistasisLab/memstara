@@ -386,6 +386,45 @@ async def recover_interpretation(task_id: int, worker: str) -> str:
 
 
 @mcp.tool()
+async def recover_data_handoff(task_id: int, worker: str) -> str:
+    """Controller-only recovery after a worker has returned; never infers a saved result from prose.
+
+    Not granted to any agent role. At most five retries per task, scoped to its current owner
+    and run. No recovery of completed, failed, unowned or actively running calls.
+    The controller is responsible for verifying the agent call has returned.
+    """
+    scope = _pipeline_run()
+    if not scope or not worker:
+        return json.dumps({"error": "Run scope and worker are required"})
+    try:
+        conn = await asyncpg.connect(_dsn(), command_timeout=5)
+        try:
+            async with conn.transaction():
+                await conn.execute("SET LOCAL lock_timeout = '2s'")
+                row = await conn.fetchrow(
+                    "SELECT status, task_type, claimed_by, evaluation FROM memstara_blackboard "
+                    "WHERE task_id=$1 AND run_tag=$2 FOR UPDATE", task_id, scope)
+                if not row or row['status'] != 'in_progress' or row['task_type'] != 'data':
+                    return json.dumps({"ok": False, "reason": "No unfinished data handoff owned by this run"})
+                if row['claimed_by'] != worker:
+                    return json.dumps({"error": "Worker does not own this task"})
+                from memstara.interpretation_fanout import metadata
+                evaluation = metadata(row['evaluation'])
+                count = evaluation.get('data_handoff_recovery_count', 0)
+                if count >= 5:
+                    return json.dumps({"ok": False, "reason": "Data handoff recovery limit reached"})
+                evaluation['data_handoff_recovery_count'] = count + 1
+                await conn.execute(
+                    "UPDATE memstara_blackboard SET status='ready', claimed_by='', claimed_at=NULL, "
+                    "evaluation=$2::jsonb WHERE task_id=$1", task_id, json.dumps(evaluation))
+                return json.dumps({"ok": True, "status": "ready", "task_id": task_id})
+        finally:
+            await conn.close()
+    except Exception as exc:
+        return _err(exc)
+
+
+@mcp.tool()
 async def submit_result(task_id: int, subset_path: str = "",
                         columns_used: list[str] | None = None,
                         columns_missing: list[str] | None = None, auc: float | None = None,
@@ -821,7 +860,7 @@ async def read_board(run_tag: str = "") -> str:
         finally:
             await conn.close()
     except Exception as e:  # noqa: BLE001
-        return _err(e)
+        return json.dumps({"error": "Board storage read unavailable", "error_type": type(e).__name__})
 
     tasks = []
     for r in rows:
@@ -945,7 +984,9 @@ async def read_question_catalog(limit: int = 200) -> str:
             await conn.close()
         from memstara.pipeline.combination_questions import enabled as independent_questions
         return json.dumps({"duplicate_scope": "current_loop" if independent_questions(plan) else "run", "questions": [
-            {"question_id": row["question_id"], **({"origin_wave": row.get("origin_wave")} if independent_questions(plan) else {}), "text": row["text"],
+            {"question_id": row["question_id"],
+             **({"origin_wave": row.get("origin_wave")} if independent_questions(plan) else {}),
+             "text": row["text"],
              "okf_tags": json.loads(row["okf_tags"]) if isinstance(row["okf_tags"], str) else row["okf_tags"]}
             for row in rows]}, ensure_ascii=False)
     except Exception as exc:
