@@ -1,0 +1,335 @@
+"""One-time reserve scoring with the already-fitted exploration model."""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+from pathlib import Path
+import signal
+import sys
+import tempfile
+import time
+from typing import Any
+
+
+POLICY = "highest_exploratory_auc_then_trial_task_v1"
+
+
+def select_candidate(tasks: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Select one completed candidate without consulting reserve outcomes."""
+    candidates = []
+    for task in tasks:
+        evaluation = task.get("evaluation") or {}
+        ml = evaluation.get("ml_configuration") or {}
+        effective = ml.get("effective") or {}
+        score = evaluation.get("auc")
+        if (task.get("status") != "done" or not isinstance(score, (float, int))
+                or not effective.get("primary_model") or not task.get("subset_path")
+                or not task.get("columns_used")):
+            continue
+        candidates.append(task)
+    if not candidates:
+        return None
+    # Stable tie-breakers ensure an identical frozen run picks the same candidate.
+    return max(candidates, key=lambda task: (
+        float(task["evaluation"]["auc"]), -int(task.get("trial", 0)), -int(task.get("task_id", 0))))
+
+
+def _partition(run_dir: Path, config: dict, row_count: int) -> dict:
+    path = run_dir / "validation_partition.json"
+    partition = json.loads(path.read_text()) if path.is_file() else config.get("validation_partition")
+    if not isinstance(partition, dict):
+        raise ValueError("The run did not save its independent validation partition")
+    exploration = partition.get("exploration_rows")
+    if (partition.get("row_count") != row_count or not isinstance(exploration, list)
+            or not exploration or len(set(exploration)) != len(exploration)
+            or any(type(row) is not int or row < 0 or row >= row_count for row in exploration)):
+        raise ValueError("Saved validation partition does not match the selected task rows")
+    reserve = sorted(set(range(row_count)) - set(exploration))
+    if len(reserve) != partition.get("reserved_count") or not reserve:
+        raise ValueError("Saved validation reserve is empty or inconsistent")
+    return {**partition, "exploration_rows": sorted(exploration), "reserved_rows": reserve}
+
+
+def evaluate_candidate(candidate: dict[str, Any], config: dict, run_dir: Path) -> dict:
+    """Load the verified fitted model and score reserve rows without fitting or tuning."""
+    began = time.perf_counter()
+    import numpy as np
+    from sklearn.metrics import (accuracy_score, average_precision_score, balanced_accuracy_score,
+                                 auc, brier_score_loss, cohen_kappa_score, confusion_matrix,
+                                 f1_score, log_loss, matthews_corrcoef, precision_recall_curve,
+                                 precision_score, recall_score, roc_auc_score)
+    from threadpoolctl import threadpool_limits
+
+    task_evaluation = candidate["evaluation"]
+    ml_record = task_evaluation["ml_configuration"]
+    effective = ml_record["effective"]
+    model_name = effective["primary_model"]
+    settings = effective["models"][model_name]
+    target = candidate["y_column"]
+    path = Path(candidate["subset_path"]).resolve()
+    source_bytes = path.read_bytes()
+    measured_input_hash = (task_evaluation.get("evaluation") or {}).get("dataset_sha256")
+    if measured_input_hash and hashlib.sha256(source_bytes).hexdigest() != measured_input_hash:
+        raise ValueError("Selected task input differs from the ML evaluation artifact")
+    allocation = task_evaluation.get("data_allocation") or {}
+    expected_subset = allocation.get("subset_sha256")
+    if expected_subset and hashlib.sha256(source_bytes).hexdigest() != expected_subset:
+        raise ValueError("Selected task input changed after exploratory evaluation")
+    limits = config.get("ml_configuration_policy", {})
+    if len(source_bytes) > limits.get("max_csv_bytes", 100 * 1024**2):
+        raise ValueError("Final validation input exceeds the configured CSV size budget")
+    from memstara.evaluation import validate_clean_dataset
+    frame = validate_clean_dataset(path, target, allow_missing=model_name == "xgboost")
+    features = [name for name in candidate["columns_used"] if name != target]
+    if not features or any(name not in frame for name in features):
+        raise ValueError("Selected task feature list does not match its saved input")
+    frame = frame[features + [target]]
+    partition = _partition(run_dir, config, len(frame))
+    if allocation.get("reserved_rows") and sorted(allocation["reserved_rows"]) != partition["reserved_rows"]:
+        raise ValueError("Selected task allocation disagrees with the run's frozen reserve")
+
+    model, manifest, manifest_hash = _load_fitted_model(candidate, config, features, model_name, settings,
+                                                        source_bytes, partition)
+    y = frame[target]
+    if y.isna().any() or set(y.unique()) != {0, 1}:
+        raise ValueError("Final validation requires the original complete binary target")
+    reserve = np.asarray(partition["reserved_rows"], dtype=int)
+    y_test = y.iloc[reserve]
+    if y_test.nunique() != 2:
+        raise ValueError("Both target classes must be present in the independent validation reserve")
+    x = frame[features]
+    encoded_width = len(model.named_steps["encode"].get_feature_names_out())
+    if encoded_width > limits.get("max_encoded_columns", 10000):
+        raise ValueError("Final validation input exceeds the configured encoded-column budget")
+    if encoded_width * len(reserve) > limits.get("max_dense_cells", 20_000_000):
+        raise ValueError("Final validation input exceeds the configured design-matrix budget")
+    with threadpool_limits(limits=1):
+        probability = model.predict_proba(x.iloc[reserve])[:, 1]
+    threshold = settings["threshold"]
+    predicted = probability >= threshold
+    matrix = confusion_matrix(y_test, predicted, labels=[0, 1])
+    tn, fp, fn, tp = (int(value) for value in matrix.ravel())
+    precision_curve, recall_curve, _ = precision_recall_curve(y_test, probability)
+    metrics = {
+        "auroc": float(roc_auc_score(y_test, probability)),
+        "pr_auc_trapezoidal": float(auc(recall_curve, precision_curve)),
+        "average_precision": float(average_precision_score(y_test, probability)),
+        "brier_score": float(brier_score_loss(y_test, probability)),
+        "log_loss": float(log_loss(y_test, probability, labels=[0, 1])),
+        "accuracy": float(accuracy_score(y_test, predicted)),
+        "balanced_accuracy": float(balanced_accuracy_score(y_test, predicted)),
+        "f1": float(f1_score(y_test, predicted, zero_division=0)),
+        "confusion_matrix": {"labels": [0, 1], "tn": tn, "fp": fp, "fn": fn, "tp": tp},
+        "sensitivity": float(recall_score(y_test, predicted, zero_division=0)),
+        "specificity": tn / (tn + fp) if tn + fp else None,
+        "precision": float(precision_score(y_test, predicted, zero_division=0)),
+        "negative_predictive_value": tn / (tn + fn) if tn + fn else None,
+        "matthews_correlation_coefficient": float(matthews_corrcoef(y_test, predicted)),
+        "cohen_kappa": float(cohen_kappa_score(y_test, predicted)),
+        "false_positive_rate": fp / (fp + tn) if fp + tn else None,
+        "false_negative_rate": fn / (fn + tp) if fn + tp else None,
+        "false_discovery_rate": fp / (fp + tp) if fp + tp else None,
+        "false_omission_rate": fn / (fn + tn) if fn + tn else None,
+        "youden_j": (tp / (tp + fn) + tn / (tn + fp) - 1)
+                    if tp + fn and tn + fp else None,
+    }
+    return {
+        "schema_version": 1, "status": "completed",
+        "scope": "one_time_independent_validation_reserve",
+        "selection_policy": POLICY,
+        "selection": {"task_id": candidate["task_id"], "trial": candidate["trial"],
+                      "exploratory_auc": float(task_evaluation["auc"]),
+                      "criterion": "highest completed exploratory AUROC; deterministic lower trial/task tie-break"},
+        "model": model_name, "parameters": settings["parameters"],
+        "numeric_scaling": settings["scale_numeric"], "probability_threshold": threshold,
+        "target": target, "features": features,
+        "fit_scope": "already-fitted exploration training split; reserve excluded; no refit",
+        "training_split_id": task_evaluation["evaluation"]["replicates"][0]["train_split_id"],
+        "n_fit": int(task_evaluation["evaluation"]["replicates"][0]["n_train"]),
+        "n_validation": int(len(reserve)),
+        "fit_class_counts": task_evaluation["evaluation"]["replicates"][0]["train_class_counts"],
+        "validation_class_counts": {str(k): int(v) for k, v in y_test.value_counts().items()},
+        "validation_partition": {"seed": partition.get("seed"), "fraction": partition.get("fraction"),
+                                 "split_id": partition.get("reserved_split_id"),
+                                 "status": "scored_once_after_exploration"},
+        "selected_task_input_sha256": hashlib.sha256(source_bytes).hexdigest(),
+        "model_bundle_manifest_sha256": manifest_hash,
+        "metrics": metrics, "duration_seconds": time.perf_counter() - began,
+        "interpretation": "This is a final estimate for the single candidate selected using exploration results. "
+                          "Do not use it to tune this run or to choose among candidates on this same reserve.",
+    }
+
+
+def _load_fitted_model(candidate: dict[str, Any], config: dict, features: list[str], model_name: str,
+                       settings: dict, source_bytes: bytes, partition: dict):
+    """Verify the local ML bundle before loading its fitted estimator for prediction."""
+    import joblib
+    import numpy as np
+    from memstara.paths import DEFAULT_OUTPUT_DIR
+
+    task_evaluation = candidate["evaluation"]
+    artifact = (task_evaluation.get("evaluation") or {}).get("reproducibility") or {}
+    bundle = Path(artifact.get("bundle_path", "")).resolve()
+    root = (Path(os.environ.get("MEMSTARA_OUTPUT_DIR") or DEFAULT_OUTPUT_DIR) / "reproducibility").resolve()
+    try:
+        bundle.relative_to(root)
+    except ValueError:
+        raise ValueError("Saved model bundle is outside the configured reproducibility directory") from None
+    if artifact.get("status") != "verified":
+        raise ValueError("The selected ML artifact has no verified fitted model bundle")
+    manifest_path = bundle / "manifest.json"
+    if not manifest_path.is_file():
+        raise ValueError("The selected model bundle has no manifest")
+    manifest_bytes = manifest_path.read_bytes()
+    manifest_hash = hashlib.sha256(manifest_bytes).hexdigest()
+    if manifest_hash != artifact.get("manifest_sha256"):
+        raise ValueError("The selected model bundle manifest changed after ML evaluation")
+    manifest = json.loads(manifest_bytes)
+    if (manifest.get("version") != 1 or manifest.get("target") != candidate["y_column"]
+            or manifest.get("predictors") != features or manifest.get("plan", {}).get("engine") != model_name
+            or manifest.get("configuration") != settings):
+        raise ValueError("The fitted model bundle does not match the selected task and frozen ML settings")
+    expected_input = hashlib.sha256(source_bytes).hexdigest()
+    files = manifest.get("files") or {}
+    if files.get("input.csv") != expected_input:
+        raise ValueError("The fitted model bundle input differs from the selected task input")
+    split_path = bundle / "split-0.npz"
+    if not split_path.is_file() or hashlib.sha256(split_path.read_bytes()).hexdigest() != files.get("split-0.npz"):
+        raise ValueError("The fitted model's training-split record is missing or failed integrity validation")
+    split_record = task_evaluation["evaluation"]["replicates"][0]
+    with np.load(split_path, allow_pickle=False) as saved_split:
+        train_rows = saved_split["train"]
+        exploratory_test_rows = saved_split["test"]
+    if (hashlib.sha256(train_rows.tobytes()).hexdigest() != split_record.get("train_split_id")
+            or hashlib.sha256(exploratory_test_rows.tobytes()).hexdigest() != split_record.get("split_id")):
+        raise ValueError("The saved fitted model does not match the selected task's recorded split")
+    exploration_rows = set(partition["exploration_rows"])
+    reserved_rows = set(partition["reserved_rows"])
+    if (not set(train_rows.tolist()).issubset(exploration_rows)
+            or not set(exploratory_test_rows.tolist()).issubset(exploration_rows)
+            or set(train_rows.tolist()) & reserved_rows
+            or set(exploratory_test_rows.tolist()) & reserved_rows):
+        raise ValueError("The fitted model's train/test rows overlap the final validation reserve")
+    model_name_in_bundle = "model-0.joblib"
+    model_path = bundle / model_name_in_bundle
+    if (Path(model_name_in_bundle).name != model_name_in_bundle or not model_path.is_file()
+            or hashlib.sha256(model_path.read_bytes()).hexdigest() != files.get(model_name_in_bundle)):
+        raise ValueError("The saved fitted model is missing or its integrity check failed")
+    if (not manifest.get("verification") or manifest["verification"][0].get("status") != "verified"
+            or manifest["verification"][0].get("replicate") != 1):
+        raise ValueError("The saved model did not pass the ML artifact's refit-integrity check")
+    if not task_evaluation.get("evaluation", {}).get("replicates"):
+        raise ValueError("The selected ML result has no recorded fitted training split")
+    return joblib.load(model_path), manifest, manifest_hash
+
+
+def run(run_dir: Path, config: dict, tasks: list[dict]) -> dict:
+    """Select one candidate, evaluate at most once, and preserve the outcome."""
+    from memstara.pipeline.checkpoint import atomic_json
+
+    artifact = run_dir / "final_validation.json"
+    if artifact.is_file():
+        previous = json.loads(artifact.read_text())
+        if previous.get("status") in ("completed", "failed", "interrupted"):
+            return previous
+        if previous.get("status") == "in_progress":
+            interrupted = {**previous, "schema_version": 1, "status": "interrupted",
+                           "reason": "A prior final-validation attempt started but did not save a complete result; "
+                                     "the reserve is not evaluated again automatically."}
+            atomic_json(artifact, interrupted)
+            return interrupted
+    candidate = select_candidate(tasks)
+    result: dict[str, Any]
+    if candidate is None:
+        result = {"schema_version": 1, "status": "not_run", "selection_policy": POLICY,
+                  "reason": "No completed candidate contains a frozen ML plan and saved input."}
+        atomic_json(artifact, result)
+    else:
+        atomic_json(artifact, {"status": "in_progress", "selection_policy": POLICY,
+                               "selection": {"task_id": candidate.get("task_id"),
+                                             "trial": candidate.get("trial")},
+                               "started_at": time.time()})
+        try:
+            result = _evaluate_with_budget(candidate, config, run_dir)
+        except Exception as exc:
+            result = {"schema_version": 1, "status": "failed", "selection_policy": POLICY,
+                      "selection": {"task_id": candidate.get("task_id"), "trial": candidate.get("trial")},
+                      "error_type": type(exc).__name__, "reason": str(exc)}
+        atomic_json(artifact, result)
+    return result
+
+
+def _evaluate_with_budget(candidate: dict[str, Any], config: dict, run_dir: Path) -> dict:
+    """Run the one final prediction pass under the normal process-level limits."""
+    from memstara.paired_ml import atomic, supervise
+    from memstara.paths import DEFAULT_OUTPUT_DIR
+
+    root = Path(os.environ.get("MEMSTARA_OUTPUT_DIR") or DEFAULT_OUTPUT_DIR)
+    root.mkdir(parents=True, exist_ok=True)
+    limits = config.get("ml_configuration_policy")
+    if not limits:
+        from memstara.ml_configuration import policy
+        limits = policy()
+    # Only pass the frozen ML plan and the row-allocation provenance the child needs.
+    evaluation = candidate["evaluation"]
+    minimal_candidate = {
+        key: candidate[key] for key in
+        ("task_id", "trial", "status", "subset_path", "columns_used", "y_column")
+    }
+    minimal_candidate["evaluation"] = {
+        "auc": evaluation["auc"],
+        "ml_configuration": evaluation["ml_configuration"],
+        # Preserve only the model artifact and fit/split provenance required by
+        # the child. The fitted estimator is loaded and predict_proba is called;
+        # no final-stage fit or model selection is performed.
+        "evaluation": {
+            "dataset_sha256": (evaluation.get("evaluation") or {}).get("dataset_sha256"),
+            "reproducibility": (evaluation.get("evaluation") or {}).get("reproducibility"),
+            "replicates": (evaluation.get("evaluation") or {}).get("replicates"),
+        },
+        "data_allocation": {key: (evaluation.get("data_allocation") or {}).get(key)
+                             for key in ("reserved_rows", "subset_sha256")},
+    }
+    minimal_config = {key: config.get(key) for key in
+                      ("evaluation", "validation_partition", "ml_configuration_policy")}
+    with tempfile.TemporaryDirectory(prefix="final-validation-", dir=root) as folder:
+        temporary_root = Path(folder)
+        request_path, result_path = temporary_root / "request.json", temporary_root / "result.json"
+        atomic(request_path, {"candidate": minimal_candidate, "config": minimal_config,
+                              "run_dir": str(run_dir.resolve())})
+        env = {**os.environ, **{name: "1" for name in (
+            "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+            "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS")}}
+        usage = supervise([sys.executable, "-m", "memstara.final_validation",
+                           str(request_path), str(result_path)], env=env, limits=limits)
+        result = json.loads(result_path.read_text())
+    if result.get("status") != "completed":
+        frames = result.get("failure_trace", [])
+        location = f" at {frames[-1]['file']}:{frames[-1]['line']}" if frames else ""
+        raise RuntimeError(f"Final validation worker failed ({result.get('error_type', 'unknown')}){location}")
+    result["resource_usage"] = usage
+    return result
+
+
+def _worker(request_path: Path, result_path: Path) -> None:
+    """Isolated worker entry point; the parent supervisor also enforces the deadline."""
+    request = json.loads(request_path.read_text())
+    policy = request["config"].get("ml_configuration_policy") or {}
+    deadline = policy.get("wall_seconds")
+    if isinstance(deadline, int) and deadline > 0:
+        signal.alarm(deadline)
+    from memstara.paired_ml import atomic
+    try:
+        result = evaluate_candidate(request["candidate"], request["config"], Path(request["run_dir"]))
+    except Exception as exc:
+        import traceback
+        result = {"schema_version": 1, "status": "failed", "error_type": type(exc).__name__,
+                  "failure_trace": [{"file": Path(frame.filename).name, "line": frame.lineno,
+                                     "function": frame.name}
+                                    for frame in traceback.extract_tb(exc.__traceback__)]}
+    atomic(result_path, result)
+
+
+if __name__ == "__main__":
+    _worker(Path(sys.argv[1]), Path(sys.argv[2]))

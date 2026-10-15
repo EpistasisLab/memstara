@@ -2165,6 +2165,13 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             if missing_trials else ""
         )
         report_state = await board_state(registry, args.run_tag)
+        final_validation = None
+        config_path = run_dir / "config.json"
+        if config_path.is_file() and not args.report_only:
+            from memstara.final_validation import run as run_final_validation
+            frozen_config = json.loads(config_path.read_text())
+            final_validation = run_final_validation(run_dir, frozen_config, report_state["tasks"])
+            note("final independent validation: " + str(final_validation.get("status", "unknown")))
         incomplete = [{"trial": t["trial"], "status": t["status"], "error": t.get("error", "")}
                       for t in report_state["tasks"] if t["status"] != "done"]
         text, report_entry = await checkpoint.phase("final_report", lambda: call_report(
@@ -2179,6 +2186,11 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             + " Each result may contain several interpretations of ONE ML evaluation. "
               "Compare all interpreter perspectives, including disagreement and unavailable interpretations. "
               "Do not count interpretations as independent hypotheses or repeated ML experiments. "
+            + " Final independent-validation record, computed once after every exploration Loop: "
+            + json.dumps(final_validation, ensure_ascii=False, allow_nan=False)
+            + ". This record was withheld from all Loops. Describe its scope accurately; if its status is not "
+              "completed, say independent validation metrics are unavailable. Do not tune or select candidates "
+              "using this same reserve. "
             + report_skill_note(args.skill) + " Unfinished trials (report these explicitly): " + json.dumps(incomplete),
             tools=by_stage["report"], registry=registry, stage="report",
         ))
@@ -2205,15 +2217,18 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         if not report_ok:
             note("Report failed; see report_status.json. Completed analysis results are preserved.")
         unfinished = [t["task_id"] for t in final["tasks"] if t["status"] != "done"]
-        successful_analyses = (report_ok and bool(final["tasks"]) and not unfinished and not missing_trials
-                               and not (summary or {}).get("blocked", 0))
+        validation_ok = final_validation is None or final_validation.get("status") == "completed"
+        successful_analyses = (
+            report_ok and validation_ok and bool(final["tasks"]) and not unfinished
+            and not missing_trials and not (summary or {}).get("blocked", 0)
+        )
         skipped = (summary or {}).get("skipped", 0)
         complete = successful_analyses and not skipped
         (run_dir / "pipeline_status.json").write_text(json.dumps({
             "status": "completed" if complete else "completed_with_skips" if successful_analyses else "incomplete",
             "exploration": summary,
             "report_completed": report_ok, "unfinished_task_ids": unfinished,
-            "missing_trials": sorted(set(missing_trials)),
+            "missing_trials": sorted(set(missing_trials)), "final_validation": final_validation,
         }, indent=2), encoding="utf-8")
         checkpoint.finish()
         return 0 if successful_analyses else 1

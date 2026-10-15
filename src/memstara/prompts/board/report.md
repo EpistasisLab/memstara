@@ -85,6 +85,16 @@ Provide a compact Markdown table with one row per completed hypothesis and these
 
 For ML reproducibility, use only the measured evaluation.reproducibility status inside the stored evaluation artifact: `verified` means an independent refit matched the saved hold-out predictions exactly in the recorded environment; otherwise say `not verified` or `not recorded`. Never grade reproducibility as weak because only one split was used. This check does not reproduce LLM text or establish clinical validity. Multiple seeds/splits assess robustness; a single split means robustness is not assessed. Older reports and missing artifacts cannot establish either claim.
 
+## Final independent reserve evaluation
+If the supplied final_validation status is `completed`, identify the selected task and
+model, state that its saved fitted model was applied without refitting, report the
+validation sample count, saved metrics, and the confusion matrix with TN/FP/FN/TP. Distinguish this
+one-time same-dataset holdout estimate from external-cohort validation. The candidate was
+selected using exploration results before reserve scoring; do not say the reserve chose
+the model or compare unrun candidates on it. If status is `failed`, `interrupted` or
+`not_run`, give that status and the recorded reason without substituting exploratory
+metrics as validation.
+
 ## Why the leading hypothesis matters
 Connect the leading hypothesis to the knowledge evidence, selected features, measured model behavior, and clinical or biological interpretation. Separate association from causation.
 
@@ -148,9 +158,11 @@ Do not claim incremental value from comparing unrelated trials. Base, knowledge 
 evidence-enriched models require explicitly frozen feature sets, identical cohort,
 target, split identifiers and evaluation settings; report paired differences and
 uncertainty. Features suggested by prior results belong in a separately labelled
-refinement/ablation, never in a retroactively rewritten primary hypothesis. An
-untouched confirmatory dataset is required for independent validation. If no paired
-comparison or confirmatory evaluation exists, state that it was not performed.
+refinement/ablation, never in a retroactively rewritten primary hypothesis. After
+exploration ends, the reserved cohort is scored once; it is an independent holdout
+from adaptive exploration, not an external cohort. External-cohort validation remains
+separate. If no final_validation record is supplied, state that final reserve evaluation
+was not performed.
 
 
 ## Iterative discovery results
@@ -163,11 +175,15 @@ ones. A technical failure is not a biological refutation. A single near-chance A
 prove that a hypothesis is false or statistically indistinguishable from chance without an
 appropriate uncertainty analysis.
 
-The validation reserve is NOT evaluated during exploration. Read evaluation.evaluation.score_scope
-and validation_reserve; scores in this mode come from the adaptive exploration partition.
-Never call those scores independently validated or describe the reserved samples as tested.
-An improved score does not guarantee a better biomedical question. State that confirmatory
-validation remains to be done after hypotheses are frozen.
+During exploration the validation reserve is withheld from agents and all adaptive feedback.
+The controller selects one completed candidate using the recorded exploration-only policy,
+loads that candidate's hash-verified fitted ML artifact, and scores the reserve once after
+all Loops without refitting. Use the supplied final_validation record for those metrics.
+Clearly call
+them a one-time independent holdout estimate for the selected candidate, not external-cohort
+or clinical validation. Do not imply other candidates were independently validated, and do
+not recommend tuning or choosing another candidate against this same reserve. An improved
+exploration score does not guarantee a better biomedical question.
 
 
 When a result contains `comparison`, use its measured baseline increment and group
@@ -188,10 +204,11 @@ Do not call tool retries, hyperparameter candidates or clinical trials pipeline 
 Precision is undefined when TP + FP = 0; report N/A with that reason, not zero.
 Sensitivity 0 and specificity 100% can coexist when all predictions are negative.
 Describe executed split records, not only requested settings. Exact reproducibility
-under the same conditions, robustness across distinct splits, and independent
-validation are separate properties. If recorded as exploratory or with reserved
-validation data not evaluated, state **Not validated** and why. This is not evidence
-that the hypothesis is false or cannot be reproduced. Never infer validation from AUC.
+under the same conditions, robustness across distinct splits, and independent holdout
+validation are separate properties. If final_validation is absent, failed or not_run,
+state that independent holdout metrics are unavailable and why. A successful one-time
+reserve evaluation does not establish external validity, robustness across cohorts,
+clinical utility or causality. Never infer these from AUC.
 
 
 ## Final evidence check before submitting

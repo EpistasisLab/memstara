@@ -1185,11 +1185,22 @@ matcher, and evaluation. Scores and feature importance describe the configured
 experiment; they are not evidence of a causal effect.
 
 In the selected-model workflow, an independent validation reserve is set aside before
-Data divides the exploration population into training and evaluation partitions.
-Saved evaluation metrics and confusion matrices describe their recorded partition;
-a reserve marked `reserved_not_evaluated` has no independent-validation results.
-Check the split indices and evaluation provenance before comparing runs. See the
+Data divides the exploration population into training and evaluation partitions. Agents
+and adaptive Loops cannot access reserve outcomes. After every Loop finishes, Memstara
+selects one completed candidate by its exploratory AUROC (lower Loop/task ID breaks ties),
+loads its hash-verified fitted model from the saved exploration run, and scores the reserve
+once without refitting. `final_validation.json` records the selected candidate, split provenance,
+confusion matrix, AUROC, trapezoidal PR-AUC, average precision, Brier score and other metrics;
+the final report receives this record. It estimates performance for the selected candidate on the saved reserve,
+not an external cohort, clinical utility or causal effect. Do not use this same reserve
+to tune settings or select another candidate. If the record says `failed` or `not_run`,
+no independent-reserve metrics were produced. Check split indices and provenance before
+comparing runs. See the
 [artifact audit](DEVELOPER_GUIDE.md#read-and-verify-an-execution).
+
+This reserve is generated from the run's dataset when execution starts; it is not a
+separately registered user-supplied holdout. If the selected Data skill controls the
+allocation, its saved seed and reserve fraction define the partition for that run.
 
 ## Everyday commands
 
