@@ -25,6 +25,22 @@ class PreparedExecution:
     stage_models: dict[str, Any]
 
 
+def normalize_random_selection(args: argparse.Namespace, books: dict[str, list[str]]) -> None:
+    """A random skill must use the server-sampled contract even outside the wizard."""
+    if (getattr(args, 'combination_plan', '') or args.report_only
+            or 'random_features' not in books.get('hypothesis', [])):
+        return
+    if args.resume:
+        raise ValueError('Legacy random execution has no frozen sampling policy; start a new execution')
+    from memstara.combinations import STAGES, build_plan
+    if (any(len(books.get(stage, [])) != 1 for stage in STAGES)
+            or args.trials != 1 or args.hypothesis_agents != 1 or args.interpret_agents != 1):
+        raise ValueError('Standalone random selection requires one skill per stage and one trial per Loop; '
+                         'use an explicit combination plan for multiple skills')
+    normalize_budget(args)
+    args.combination_plan = json.dumps(build_plan(books, max_loops=args.waves))
+
+
 def normalize_budget(args: argparse.Namespace) -> dict[str, Any] | None:
     """Apply the existing frozen combination and ordinary pipeline loop limits."""
     plan = json.loads(getattr(args, "combination_plan", "") or "null")
@@ -67,6 +83,7 @@ async def prepare_execution(
     from memstara.pipeline.runtime import runtime_timeouts
     from memstara.pipeline.snapshot import freeze
 
+    normalize_random_selection(args, books)
     plan = normalize_budget(args)
     args.runtime_timeouts = runtime_timeouts(args.model)
     settings = Settings()

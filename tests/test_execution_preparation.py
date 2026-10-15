@@ -178,3 +178,23 @@ def test_proposal_dispatch_does_not_enter_empirical_preparation(tmp_path, monkey
     assert asyncio.run(board.run(args, tmp_path)) == 0
     prepare.assert_not_awaited()
     propose.assert_awaited_once_with(args, tmp_path)
+
+
+@pytest.mark.parametrize('changes, message', [
+    ({'resume': True}, 'Legacy random'),
+    ({'trials': 2}, 'one skill per stage'),
+    ({'hypothesis_agents': 2}, 'one skill per stage'),
+])
+def test_unsafe_standalone_random_configuration_rejected_before_provisioning(tmp_path, preflight, changes, message):
+    books = {s: [s] for s in ('data', 'ml', 'interpreter', 'report')}
+    books['hypothesis'] = ['random_features']
+    args = arguments(**({'trials': 1, 'hypothesis_agents': 1, 'interpret_agents': 1} | changes))
+    with pytest.raises(ValueError, match=message):
+        asyncio.run(preparation.prepare_execution(args, tmp_path, books))
+    assert preflight == []
+
+
+def test_existing_random_schedule_is_not_resampled():
+    args = arguments(combination_plan='{"frozen": true}', resume=True)
+    preparation.normalize_random_selection(args, {'hypothesis': ['random_features']})
+    assert args.combination_plan == '{"frozen": true}'

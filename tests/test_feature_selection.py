@@ -141,7 +141,8 @@ def test_data_handoff_blocks_changed_predictors_before_ml(tmp_path, monkeypatch)
         write_context(path, task, p)
 
 
-def test_web_launch_freezes_policy_and_delivers_random_input(monkeypatch, tmp_path):
+@pytest.mark.parametrize('standalone', [False, True])
+def test_web_launch_freezes_policy_and_delivers_random_input(monkeypatch, tmp_path, standalone):
     pytest.importorskip('motoro')
     from memstara.control import catalog
     from memstara.control.request import build_argv
@@ -167,13 +168,22 @@ def test_web_launch_freezes_policy_and_delivers_random_input(monkeypatch, tmp_pa
     monkeypatch.setattr('memstara.pipeline.snapshot.load_prompt', lambda *a: {'system_prompt': 'test', 'goal': 'test'})
     args = SimpleNamespace(run_tag='test', question='', hypothesis_agents=1, y_column='Y',
                            evaluation=json.dumps({'engine':'logistic_regression'}), trials=1, waves=2,
-                           combination_plan=schedule)
-    frozen = freeze(args, tmp_path, {})
+                           combination_plan='' if standalone else schedule, interpret_agents=1,
+                           pipeline_id='test', continuous=False, resume=False, report_only=False)
+    if standalone:
+        from memstara.pipeline.preparation import normalize_random_selection
+        normalize_random_selection(args, choices)
+    frozen = freeze(args, tmp_path, choices)
     assert frozen['hypothesis_policy']['version'] == 'knowledge_only_v1'
     assert frozen['hypothesis_policy']['combination_questions'] == 'independent_combination_questions_v1'
     assert frozen['hypothesis_policy']['prior_ml_feedback'] is False
     assert frozen['feature_selection_policy']['minimum'] == 4
     assert frozen['feature_selection_policy']['maximum'] == 20
+    assert fs.context(frozen, 0)['mode'] == 'random'
+    assert fs.context(frozen, 0) == fs.context(json.loads(json.dumps(frozen)), 0)
+    assert fs.hypothesis_tools([{'tool_name': 'okf_read', 'server': 'okf'},
+                                {'tool_name': 'match_concepts'}, {'tool_name': 'create_task'}],
+                               frozen, 0) == [{'tool_name': 'create_task'}]
     monkeypatch.setattr('memstara.evaluation.active_plan', lambda: frozen)
     monkeypatch.setattr(board, 'call_board_tool', AsyncMock(return_value={'questions': []}))
     agent = AsyncMock()
