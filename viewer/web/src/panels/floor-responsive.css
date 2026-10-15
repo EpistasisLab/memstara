@@ -52,13 +52,12 @@
 .pipeline-row-actions.is-compact .pipeline-row-primary { grid-column:1/-1; min-height:36px; }
 .pipeline-row-actions.is-compact > button { margin:0; min-height:32px; padding:6px 8px; font-size:12px; }
 .pipeline-row-actions.is-compact .pipeline-management-launch svg:last-child { display:none; }
-.floor-observatory .pipeline-browser-row .pipeline-card-select { padding:10px; gap:5px; }
+.floor-observatory .pipeline-browser-row .pipeline-card-select { padding:4px 10px 8px; gap:5px; }
 .floor-observatory .pipeline-browser-row .pipeline-card-name { font-size:13px; line-height:1.4; }
 .floor-observatory .pipeline-browser-row .pipeline-card-position { padding:0; }
 .floor-observatory .pipeline-browser-row:not(.is-selected) .pipeline-card-stage { display:none; }
-.floor-observatory .pipeline-browser-row .pipeline-card-compare { padding:5px 10px; margin:0; font-size:11px; }
+.floor-observatory .pipeline-browser-row .pipeline-card-compare { padding:3px 10px; margin:0; min-height:30px; font-size:11px; }
 .floor-observatory .pipeline-browser-heading { padding-inline:4px; }
-.floor-observatory .pipeline-browser-search-tools > summary { padding-block:5px; }
 .floor-observatory .pipeline-browser-list { scroll-padding-block:6px; }
 .floor-compact-actions { display:none; }
 @container(max-width:900px) {
