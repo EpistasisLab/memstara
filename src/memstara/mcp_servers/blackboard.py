@@ -837,7 +837,7 @@ async def read_board(run_tag: str = "") -> str:
                 """
                 SELECT task_id, run_tag, trial, perspective, status, task_type,
                        hypothesis, columns, okf_concept_ids, match_trace, question_id,
-                       y_column, columns_used, columns_missing,
+                       subset_path, y_column, columns_used, columns_missing,
                        -- Who is holding it. This is the only window a person has onto
                        -- the board, so a status of 'in_progress' with no name beside it
                        -- says "somebody is working on this" without saying who — which

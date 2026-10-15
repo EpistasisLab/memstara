@@ -135,3 +135,17 @@ async def test_registry_readiness_does_not_block_an_active_writer(database):
             await asyncio.wait_for(initialize(other), timeout=2)
     finally:
         await other.close()
+
+
+async def test_board_read_preserves_final_validation_candidate(database):
+    from memstara.final_validation import eligible_tasks
+    task = await create('final-validation-handoff')
+    evaluation = {'auc': 0.75, 'ml_configuration': {'effective': {'primary_model': 'logistic_regression'}}}
+    await database.execute(
+        "UPDATE memstara_blackboard SET status='done', subset_path=$2, columns_used=$3::jsonb, "
+        "evaluation=$4::jsonb WHERE task_id=$1",
+        task, '/synthetic/saved.csv', json.dumps(['signal', 'outcome']), json.dumps(evaluation))
+    state = json.loads(await board.read_board('final-validation-handoff'))
+    candidates = eligible_tasks(state['tasks'])
+    assert [row['task_id'] for row in candidates] == [task]
+    assert candidates[0]['subset_path'] == '/synthetic/saved.csv'
