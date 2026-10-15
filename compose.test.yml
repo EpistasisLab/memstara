@@ -1,7 +1,7 @@
 name: memstara-tests
 services:
   postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: memstara_test
       POSTGRES_PASSWORD: memstara_test
