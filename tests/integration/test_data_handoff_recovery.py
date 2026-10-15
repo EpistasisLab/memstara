@@ -19,11 +19,13 @@ async def test_missing_handoff_recovery_is_atomic_scoped_and_bounded(database, m
         replies = await asyncio.gather(tools.recover_data_handoff(task, 'data#1'),
                                        tools.recover_data_handoff(task, 'data#1'))
         assert sum(bool(json.loads(r).get('ok')) for r in replies) == 1
-        row = await database.fetchrow('SELECT status, claimed_by, evaluation FROM memstara_blackboard WHERE task_id=$1', task)
+        row = await database.fetchrow(
+            'SELECT status, claimed_by, evaluation FROM memstara_blackboard WHERE task_id=$1', task)
         saved = json.loads(row['evaluation'])
         assert row['status'] == 'ready' and row['claimed_by'] == ''
         assert saved['preserve'] is True and saved['data_handoff_recovery_count'] == attempt
-        await database.execute("UPDATE memstara_blackboard SET status='in_progress',claimed_by='data#1' WHERE task_id=$1", task)
+        await database.execute(
+            "UPDATE memstara_blackboard SET status='in_progress',claimed_by='data#1' WHERE task_id=$1", task)
     assert not json.loads(await tools.recover_data_handoff(task, 'data#1'))['ok']
     monkeypatch.setattr(tools, '_pipeline_run', lambda: 'another-run')
     assert not json.loads(await tools.recover_data_handoff(task, 'data#1'))['ok']
