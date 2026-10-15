@@ -25,6 +25,7 @@ import KnowledgeNode from "../components/KnowledgeNode";
 import PipelineViewport from "../components/PipelineViewport";
 import ResourceEdge from "../components/ResourceEdge";
 import { pipelinePercent, pipelineLoopLabel } from "../lib/pipelineProgress";
+import { pipelineState } from "../lib/pipelineState";
 import type { SceneAgent } from "../types";
 import FloorDetailDialog from "../components/FloorDetailDialog";
 import PipelineSettings from "../components/PipelineSettings";
@@ -103,7 +104,7 @@ const nodeTypes={...floorNodeTypes,station:Station,database:FloorDatabaseNode};
 const edgeTypes={resource:ResourceEdge};
 export function PipelineStatus({ids}: {ids?: string[]} = {}){
   const usage=useTelemetryTotals();
-  const pipelines=usePipelines(s=>s.items),selected=usePipelines(s=>s.selected);
+  const pipelines=usePipelines(s=>s.items),selected=usePipelines(s=>s.selected),pendingStart=usePipelines(s=>s.pendingStart);
   const shortLabels=['Hypothesis','Data','ML','Interpretation','Explanation'];
   return <section aria-label="Pipeline status" className="pipeline-status-section">
     <header className="pipeline-status-heading">
@@ -114,9 +115,10 @@ export function PipelineStatus({ids}: {ids?: string[]} = {}){
     <div className="pipeline-progress-list">{pipelines.filter(p=>!ids||ids.includes(p.id)).map(p=>{
       const index=stages.indexOf(p.progress.stage as typeof stages[number])-1;
       const waiting=!!p.running?.waiting_for_questions;
-      const failed=(p.progress.counts?.failed??0)>0 || p.progress.exploration?.outcome === "blocked";
+      const state=pipelineState(p,pendingStart?.pipelineId===p.id);
+      const failed=state==='Needs attention';
       const percent=pipelinePercent(p);
-      const status=(floorExecutionState(p.running).paused||floorExecutionState(p.running).stopping)?(floorExecutionState(p.running).paused?'Paused':'Pausing'):failed?'Needs attention':waiting?'Waiting for knowledge':p.running?'Running':p.latest?(p.latest.exit_code===0?(p.progress.exploration?.skipped?(p.progress.exploration.completed?'Finished with skips':'No findings'):'Completed'):'Stopped'):'Ready';
+      const status=(floorExecutionState(p.running).paused||floorExecutionState(p.running).stopping)?(floorExecutionState(p.running).paused?'Paused':'Pausing'):state==='Waiting'?'Waiting for knowledge':state;
       const current=index>=0?shortLabels[index]:'Not started';
       return <article key={p.id} className={`pipeline-progress-card ${selected===p.id?'is-selected':''} ${failed?'needs-attention':''}`}>
         <header className="pipeline-progress-header">

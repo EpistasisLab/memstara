@@ -98,6 +98,42 @@ def test_actual_ml_uses_data_plan_and_preserves_reserve(experiment, trial, fract
         allocation.load_effective(subset, plan, plan['evaluation'])
 
 
+def test_first_task_handoff_remains_valid_after_reserve_is_frozen(experiment, tmp_path, monkeypatch):
+    source, base = experiment
+    subset = source.with_name('first-task.csv')
+    subset.write_bytes(source.read_bytes())
+    prompt = {'system_prompt': 'balanced data split skill'}
+    plan = {**{key: value for key, value in base.items() if key != 'validation_partition'},
+            'validation_partition_policy': 'data_agent_seed_v1',
+            'data_allocation_policy': {'version': allocation.VERSION},
+            'combination_plan': {'total_loops': 1, 'combinations': 1,
+                                 'skills': {'hypothesis': [{'id': 'hypothesis'}],
+                                            'data': [{'id': 'data_balanced_stratified'}],
+                                            'ml': [{'id': 'ml'}], 'interpreter': [{'id': 'interpreter'}],
+                                            'report': [{'id': 'report'}]}},
+            'prompts': {'board/data:data_balanced_stratified': prompt}}
+    config_path = tmp_path / 'config.json'
+    config_path.write_text(json.dumps(plan))
+    monkeypatch.setenv('MEMSTARA_RUN_CONFIG', str(config_path))
+    monkeypatch.setenv('MEMSTARA_DATASET_PATH', str(source))
+    first_request = allocation.request(plan, 0)
+    assert 'required_validation_partition' not in first_request
+
+    data_plan = {'test_size': .5, 'seed': 19, 'stratify': True, 'replicates': 2,
+                 'validation_seed': 23, 'validation_size': .2}
+    record = allocation.prepare(data_plan, task(0), plan, subset)
+    write_context(subset, task(0), plan, data_allocation=record)
+
+    current = {**plan, 'validation_partition': json.loads(
+        (tmp_path / 'validation_partition.json').read_text())}
+    required_request = allocation.request(current, 0)
+    assert required_request['required_validation_partition'] == {
+        'validation_seed': 23, 'validation_size': .2}
+    effective, accepted = allocation.load_effective(subset, current, current['evaluation'])
+    assert effective['test_size'] == .5
+    assert accepted == record
+
+
 def test_new_data_agent_seed_and_validation_fraction_are_frozen_per_run(experiment, tmp_path, monkeypatch):
     source, base = experiment
     subset = source.with_name('agent-seeded-subset.csv')

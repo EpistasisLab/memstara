@@ -6,6 +6,7 @@ import PipelineDeleteDialog from './PipelineDeleteDialog';
 import { pipelineLoopLabel } from '../lib/pipelineProgress';
 import {researchSkillProfile} from '../lib/researchSkills';
 import {useControl} from '../store/control';
+import {usePipelines} from '../store/pipelines';
 import {pipelineState} from '../lib/pipelineState';
 export default function PipelineBrowser({items, selected, onSelect, compare, onCompare, onSettings}: {
   items: PipelineDefinition[]; selected: string | null; onSelect: (id:string)=>void;
@@ -13,6 +14,7 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
 }) {
   // Profile bindings arrive with the catalog; refresh the source label with it.
   useControl(s=>s.catalog);
+  const pendingStart=usePipelines(s=>s.pendingStart);
   const browser=useRef<HTMLElement>(null);
   const [deleting,setDeleting]=useState<PipelineDefinition|null>(null);
   const [selectionRevision,setSelectionRevision]=useState(0);
@@ -29,7 +31,7 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
     });
     observer.observe(parent);return()=>observer.disconnect();
   },[]);
-  const filtered=useMemo(()=>items.filter(p=>(status==='All'||pipelineState(p)===status)&&p.name.toLowerCase().includes(query.toLowerCase())).sort((a,b)=>sort==='name'?a.name.localeCompare(b.name):a.number-b.number),[items,query,status,sort]);
+  const filtered=useMemo(()=>items.filter(p=>(status==='All'||pipelineState(p,pendingStart?.pipelineId===p.id)===status)&&p.name.toLowerCase().includes(query.toLowerCase())).sort((a,b)=>sort==='name'?a.name.localeCompare(b.name):a.number-b.number),[items,query,status,sort,pendingStart]);
   const pages=Math.max(1,Math.ceil(filtered.length/25)), current=Math.min(page,pages-1);
   useLayoutEffect(()=>{
     if(!open)return;
@@ -49,7 +51,7 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
       <details className="pipeline-browser-search-tools"><summary>Search and filter</summary>
       <label className="pipeline-search"><Search size={16}/><input aria-label="Search pipelines" placeholder="Search by name…" value={query} onChange={e=>{setQuery(e.target.value);setPage(0);}}/></label>
       <div className="pipeline-browser-filters">
-        <label>Status<select aria-label="Status" value={status} onChange={e=>{setStatus(e.target.value);setPage(0);}}>{['All','Running','Waiting','Paused','Stopping','Ready','Completed','Interrupted','Needs attention','Finished with skips','No findings'].map(s=><option key={s}>{s}</option>)}</select></label>
+        <label>Status<select aria-label="Status" value={status} onChange={e=>{setStatus(e.target.value);setPage(0);}}>{['All','Starting','Running','Waiting','Paused','Stopping','Ready','Completed','Interrupted','Needs attention','Finished with skips','No findings'].map(s=><option key={s}>{s}</option>)}</select></label>
         <label>Sort<select aria-label="Sort pipelines" value={sort} onChange={e=>{setSort(e.target.value);setPage(0);}}><option value="number">Creation order</option><option value="name">Name</option></select></label>
       </div>
       <p className="pipeline-browser-help">Select a name to inspect. Check up to 3 pipelines to compare their diagrams.</p>
@@ -57,7 +59,7 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
       {selected&&!filtered.some(p=>p.id===selected)&&<p className="pipeline-browser-help">The selected pipeline is outside this filter. Its diagram remains visible.</p>}
       <div className="pipeline-browser-list" tabIndex={0} aria-label="Scrollable pipeline list">
         {filtered.slice(current*25,current*25+25).map(p=>{
-          const state=pipelineState(p);
+          const state=pipelineState(p,pendingStart?.pipelineId===p.id);
           const stageNames:Record<string,string>={hypothesis:'Hypothesis generation',data:'Data extraction',ml:'Model evaluation',interpret:'Interpretation',interpreter:'Interpretation',report:'Explanation'};
           return <div key={p.id} data-state={state.toLowerCase().replaceAll(' ','-')} className={`pipeline-browser-row ${selected===p.id?'is-selected':''}`}>
           <div className="pipeline-card-top pipeline-card-header">

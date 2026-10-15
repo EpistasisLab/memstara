@@ -26,7 +26,8 @@ def request(snapshot, trial):
     if version == VERSION:
         instruction = ('Supply data_plan with these six fields in submit_result. '
                        'Randomly choose the exploration hold-out fraction, independent-reserve fraction, '
-                       'number of split replicates, and both integer seeds; do not derive them from a fixed code value, '
+                       'number of split replicates, and both integer seeds; do not derive them from a fixed code '
+                       'value, '
                        'dataset, run name or date. The first allocation establishes the independent '
                        'validation fraction and validation_seed for this run. Later Loops must reuse both '
                        'validation settings exactly, and choose fresh exploration settings and a fresh '
@@ -195,8 +196,12 @@ def load_effective(path, snapshot, default):
         # This per-task handoff may have been made before the first allocation
         # published the run-level reserve; the reserve requirement is validated
         # separately against the submitted seed below.
-        recorded_request.pop('required_validation_partition', None)
-        required_request.pop('required_validation_partition', None)
+        suffix = ' Reuse required_validation_partition exactly; do not change it.'
+        for request_record in (recorded_request, required_request):
+            request_record.pop('required_validation_partition', None)
+            instruction = request_record.get('instruction', '')
+            if instruction.endswith(suffix):
+                request_record['instruction'] = instruction[:-len(suffix)]
     if (recorded_request != required_request or record['config_hash'] != snapshot['config_hash']
             or record['subset_sha256'] != hashlib.sha256(Path(path).read_bytes()).hexdigest()):
         raise ValueError('Data allocation handoff differs from this task or run')

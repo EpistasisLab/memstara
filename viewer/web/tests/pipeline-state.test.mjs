@@ -13,6 +13,8 @@ test('terminal failure takes precedence over a resumable checkpoint',()=>{
 test('active controls and completed/skipped runs retain their own states',()=>{
  assert.equal(pipelineState(pipeline({exit_code:1}, {execution_state:'paused'})), 'Paused');
  assert.equal(pipelineState(pipeline(null, {waiting_for_questions:true})), 'Waiting');
+ assert.equal(pipelineState(pipeline({exit_code:1}, {execution_state:'running'})), 'Running');
+ assert.equal(pipelineState(pipeline({exit_code:1}, null), true), 'Starting');
  assert.equal(pipelineState(pipeline({exit_code:0}, null, {exploration:{completed:2,skipped:1}})), 'Finished with skips');
  assert.equal(pipelineState(pipeline(null)), 'Ready');
 });
