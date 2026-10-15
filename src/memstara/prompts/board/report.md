@@ -86,14 +86,16 @@ Provide a compact Markdown table with one row per completed hypothesis and these
 For ML reproducibility, use only the measured evaluation.reproducibility status inside the stored evaluation artifact: `verified` means an independent refit matched the saved hold-out predictions exactly in the recorded environment; otherwise say `not verified` or `not recorded`. Never grade reproducibility as weak because only one split was used. This check does not reproduce LLM text or establish clinical validity. Multiple seeds/splits assess robustness; a single split means robustness is not assessed. Older reports and missing artifacts cannot establish either claim.
 
 ## Final independent reserve evaluation
-If the supplied final_validation status is `completed`, identify the selected task and
-model, state that its saved fitted model was applied without refitting, report the
-validation sample count, saved metrics, and the confusion matrix with TN/FP/FN/TP. Distinguish this
-one-time same-dataset holdout estimate from external-cohort validation. The candidate was
-selected using exploration results before reserve scoring; do not say the reserve chose
-the model or compare unrun candidates on it. If status is `failed`, `interrupted` or
-`not_run`, give that status and the recorded reason without substituting exploratory
-metrics as validation.
+If the supplied final_validation status is `completed`, report the reserve result for
+each completed hypothesis/ML task, identifying its task and hypothesis, selected model,
+validation sample count, saved metrics, and confusion matrix with TN/FP/FN/TP. Each
+task's saved fitted model is applied without refitting. The same run-time reserve is
+scored separately for every completed hypothesis; no single hypothesis is selected by
+reserve performance, and reserve scores must not be used to tune settings or rank
+hypotheses. Distinguish these same-dataset holdout estimates from external-cohort
+validation. If the overall status is `failed`, `interrupted` or `not_run`, report that
+status and the recorded reason, preserve any per-task results already saved, and do not
+substitute exploratory metrics as validation.
 
 ## Why the leading hypothesis matters
 Connect the leading hypothesis to the knowledge evidence, selected features, measured model behavior, and clinical or biological interpretation. Separate association from causation.
@@ -176,14 +178,12 @@ prove that a hypothesis is false or statistically indistinguishable from chance 
 appropriate uncertainty analysis.
 
 During exploration the validation reserve is withheld from agents and all adaptive feedback.
-The controller selects one completed candidate using the recorded exploration-only policy,
-loads that candidate's hash-verified fitted ML artifact, and scores the reserve once after
-all Loops without refitting. Use the supplied final_validation record for those metrics.
-Clearly call
-them a one-time independent holdout estimate for the selected candidate, not external-cohort
-or clinical validation. Do not imply other candidates were independently validated, and do
-not recommend tuning or choosing another candidate against this same reserve. An improved
-exploration score does not guarantee a better biomedical question.
+After all Loops, the controller loads each completed hypothesis task's hash-verified fitted
+ML artifact and scores the same reserve once for that task without refitting. Use the supplied
+per-task final_validation records. Clearly call these per-hypothesis same-dataset holdout
+estimates, not external-cohort or clinical validation. Do not imply that reserve performance
+selected a hypothesis, and do not recommend tuning or ranking hypotheses against this same
+reserve. An improved exploration score does not guarantee a better biomedical question.
 
 
 When a result contains `comparison`, use its measured baseline increment and group

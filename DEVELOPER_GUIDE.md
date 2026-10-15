@@ -658,13 +658,13 @@ A rigorous one-route acceptance check includes all of the following:
    evidence. Citation identity checks do not establish clinical truth or relevance.
 
 The partition record's `reserved_not_evaluated` status describes its state during
-exploration. After the final Loop, Memstara selects one completed candidate using only
-exploratory AUROC, loads that candidate's hash-verified fitted model from its saved ML
-bundle, and evaluates the reserve once without refitting. Read the separate
-`final_validation.json` for the reserve confusion matrix
-and metrics; a confusion matrix on a Loop's exploration split is not the reserve's
-matrix, even when both happen to have the same number of rows. This one-time result is
-independent of adaptive exploration, but is not external-cohort or clinical validation.
+exploration. After the final Loop, Memstara loads each completed hypothesis task's
+hash-verified fitted model from its saved ML bundle and evaluates the same reserve once
+per task without refitting. Read each entry in `final_validation.json` for that task's
+reserve confusion matrix and metrics; a confusion matrix on a Loop's exploration split
+is not the reserve's matrix, even when both happen to have the same number of rows.
+No hypothesis is selected by reserve performance. These same-dataset results are kept
+separate from external-cohort or clinical validation.
 
 Replay utilities:
 

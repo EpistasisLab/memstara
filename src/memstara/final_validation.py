@@ -12,12 +12,12 @@ import time
 from typing import Any
 
 
-POLICY = "highest_exploratory_auc_then_trial_task_v1"
+POLICY = "every_completed_hypothesis_task_once_v1"
 
 
-def select_candidate(tasks: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Select one completed candidate without consulting reserve outcomes."""
-    candidates = []
+def eligible_tasks(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return every completed hypothesis/ML task with a frozen model and input."""
+    candidates: list[dict[str, Any]] = []
     for task in tasks:
         evaluation = task.get("evaluation") or {}
         ml = evaluation.get("ml_configuration") or {}
@@ -25,14 +25,20 @@ def select_candidate(tasks: list[dict[str, Any]]) -> dict[str, Any] | None:
         score = evaluation.get("auc")
         if (task.get("status") != "done" or not isinstance(score, (float, int))
                 or not effective.get("primary_model") or not task.get("subset_path")
-                or not task.get("columns_used")):
+                or not task.get("columns_used") or not task.get("y_column")):
             continue
         candidates.append(task)
-    if not candidates:
-        return None
-    # Stable tie-breakers ensure an identical frozen run picks the same candidate.
-    return max(candidates, key=lambda task: (
-        float(task["evaluation"]["auc"]), -int(task.get("trial", 0)), -int(task.get("task_id", 0))))
+    return sorted(candidates, key=lambda task: (int(task.get("trial", 0)), int(task.get("task_id", 0))))
+
+
+def _task_key(task: dict[str, Any]) -> str:
+    return f"{int(task.get('trial', 0))}:{int(task['task_id'])}"
+
+
+def _task_identity(task: dict[str, Any]) -> dict[str, Any]:
+    return {"key": _task_key(task), "task_id": task["task_id"], "trial": task.get("trial"),
+            "hypothesis_id": task.get("hypothesis_id"), "hypothesis": task.get("hypothesis"),
+            "status": "pending"}
 
 
 def _partition(run_dir: Path, config: dict, row_count: int) -> dict:
@@ -71,11 +77,11 @@ def evaluate_candidate(candidate: dict[str, Any], config: dict, run_dir: Path) -
     source_bytes = path.read_bytes()
     measured_input_hash = (task_evaluation.get("evaluation") or {}).get("dataset_sha256")
     if measured_input_hash and hashlib.sha256(source_bytes).hexdigest() != measured_input_hash:
-        raise ValueError("Selected task input differs from the ML evaluation artifact")
+        raise ValueError("Hypothesis task input differs from its ML evaluation artifact")
     allocation = task_evaluation.get("data_allocation") or {}
     expected_subset = allocation.get("subset_sha256")
     if expected_subset and hashlib.sha256(source_bytes).hexdigest() != expected_subset:
-        raise ValueError("Selected task input changed after exploratory evaluation")
+        raise ValueError("Hypothesis task input changed after exploratory evaluation")
     limits = config.get("ml_configuration_policy", {})
     if len(source_bytes) > limits.get("max_csv_bytes", 100 * 1024**2):
         raise ValueError("Final validation input exceeds the configured CSV size budget")
@@ -83,11 +89,11 @@ def evaluate_candidate(candidate: dict[str, Any], config: dict, run_dir: Path) -
     frame = validate_clean_dataset(path, target, allow_missing=model_name == "xgboost")
     features = [name for name in candidate["columns_used"] if name != target]
     if not features or any(name not in frame for name in features):
-        raise ValueError("Selected task feature list does not match its saved input")
+        raise ValueError("Hypothesis task feature list does not match its saved input")
     frame = frame[features + [target]]
     partition = _partition(run_dir, config, len(frame))
     if allocation.get("reserved_rows") and sorted(allocation["reserved_rows"]) != partition["reserved_rows"]:
-        raise ValueError("Selected task allocation disagrees with the run's frozen reserve")
+        raise ValueError("Hypothesis task allocation disagrees with the run's frozen reserve")
 
     model, manifest, manifest_hash = _load_fitted_model(candidate, config, features, model_name, settings,
                                                         source_bytes, partition)
@@ -136,11 +142,12 @@ def evaluate_candidate(candidate: dict[str, Any], config: dict, run_dir: Path) -
     }
     return {
         "schema_version": 1, "status": "completed",
-        "scope": "one_time_independent_validation_reserve",
+        "scope": "one_time_per_hypothesis_same_dataset_validation_reserve",
         "selection_policy": POLICY,
-        "selection": {"task_id": candidate["task_id"], "trial": candidate["trial"],
-                      "exploratory_auc": float(task_evaluation["auc"]),
-                      "criterion": "highest completed exploratory AUROC; deterministic lower trial/task tie-break"},
+        "hypothesis_id": candidate.get("hypothesis_id"),
+        "hypothesis": candidate.get("hypothesis"),
+        "task_id": candidate["task_id"], "trial": candidate["trial"],
+        "exploratory_auc": float(task_evaluation["auc"]),
         "model": model_name, "parameters": settings["parameters"],
         "numeric_scaling": settings["scale_numeric"], "probability_threshold": threshold,
         "target": target, "features": features,
@@ -156,8 +163,9 @@ def evaluate_candidate(candidate: dict[str, Any], config: dict, run_dir: Path) -
         "selected_task_input_sha256": hashlib.sha256(source_bytes).hexdigest(),
         "model_bundle_manifest_sha256": manifest_hash,
         "metrics": metrics, "duration_seconds": time.perf_counter() - began,
-        "interpretation": "This is a final estimate for the single candidate selected using exploration results. "
-                          "Do not use it to tune this run or to choose among candidates on this same reserve.",
+        "interpretation": "This is the one-time reserve estimate for this hypothesis task. "
+                          "The same reserve is scored separately for each completed hypothesis task; "
+                          "do not use reserve outcomes to tune settings or choose hypotheses.",
     }
 
 
@@ -225,38 +233,68 @@ def _load_fitted_model(candidate: dict[str, Any], config: dict, features: list[s
 
 
 def run(run_dir: Path, config: dict, tasks: list[dict]) -> dict:
-    """Select one candidate, evaluate at most once, and preserve the outcome."""
+    """Score every eligible hypothesis task once and persist each outcome as it finishes."""
     from memstara.pipeline.checkpoint import atomic_json
 
     artifact = run_dir / "final_validation.json"
+    candidates = eligible_tasks(tasks)
     if artifact.is_file():
         previous = json.loads(artifact.read_text())
-        if previous.get("status") in ("completed", "failed", "interrupted"):
+        if previous.get("schema_version") != 2 or previous.get("policy") != POLICY:
+            return {"schema_version": 2, "status": "failed", "policy": POLICY,
+                    "reason": "An incompatible prior final-validation record exists; the reserve will not be rescored."}
+        if previous.get("status") in ("completed", "failed", "not_run"):
             return previous
-        if previous.get("status") == "in_progress":
-            interrupted = {**previous, "schema_version": 1, "status": "interrupted",
-                           "reason": "A prior final-validation attempt started but did not save a complete result; "
-                                     "the reserve is not evaluated again automatically."}
-            atomic_json(artifact, interrupted)
-            return interrupted
-    candidate = select_candidate(tasks)
-    result: dict[str, Any]
-    if candidate is None:
-        result = {"schema_version": 1, "status": "not_run", "selection_policy": POLICY,
-                  "reason": "No completed candidate contains a frozen ML plan and saved input."}
+        stored = previous.get("results", [])
+        expected = [_task_identity(task) for task in candidates]
+        if [row.get("key") for row in stored] != [row["key"] for row in expected]:
+            return {**previous, "status": "failed",
+                    "reason": "The completed-task set changed after reserve scoring began; no task was rescored."}
+        results = stored
+        for row in results:
+            if row.get("status") == "in_progress":
+                row.update(status="interrupted", reason=(
+                    "Scoring began but did not finish; this task will not be rescored."
+                ))
+        result = previous
+    elif not candidates:
+        result = {"schema_version": 2, "status": "not_run", "policy": POLICY, "results": [],
+                  "reason": "No completed hypothesis task contains a frozen ML plan and saved input."}
         atomic_json(artifact, result)
+        return result
     else:
-        atomic_json(artifact, {"status": "in_progress", "selection_policy": POLICY,
-                               "selection": {"task_id": candidate.get("task_id"),
-                                             "trial": candidate.get("trial")},
-                               "started_at": time.time()})
-        try:
-            result = _evaluate_with_budget(candidate, config, run_dir)
-        except Exception as exc:
-            result = {"schema_version": 1, "status": "failed", "selection_policy": POLICY,
-                      "selection": {"task_id": candidate.get("task_id"), "trial": candidate.get("trial")},
-                      "error_type": type(exc).__name__, "reason": str(exc)}
+        results = [_task_identity(task) for task in candidates]
+        result = {"schema_version": 2, "status": "in_progress", "policy": POLICY,
+                  "reserve_scope": "same run-time split, withheld from all exploration Loops",
+                  "candidate_count": len(candidates), "results": results, "started_at": time.time()}
         atomic_json(artifact, result)
+
+    tasks_by_key = {_task_key(task): task for task in candidates}
+    for row in results:
+        if row.get("status") != "pending":
+            continue
+        candidate = tasks_by_key[row["key"]]
+        row.update(status="in_progress", started_at=time.time())
+        result.update(status="in_progress", results=results)
+        atomic_json(artifact, result)
+        try:
+            outcome = _evaluate_with_budget(candidate, config, run_dir)
+            row.update(outcome)
+        except Exception as exc:
+            row.update(status="failed", error_type=type(exc).__name__, reason=str(exc))
+        row["finished_at"] = time.time()
+        result.update(results=results)
+        atomic_json(artifact, result)
+
+    failed = [row for row in results if row.get("status") in ("failed", "interrupted")]
+    pending = [row for row in results if row.get("status") == "pending"]
+    result.update(status="failed" if failed else "interrupted" if pending else "completed",
+                  completed_count=sum(row.get("status") == "completed" for row in results),
+                  failed_count=len(failed), results=results, finished_at=time.time())
+    if failed:
+        result["reason"] = "One or more per-hypothesis reserve evaluations failed or were interrupted; " \
+                            "successful task results are preserved and failures are not automatically retried."
+    atomic_json(artifact, result)
     return result
 
 
@@ -277,6 +315,9 @@ def _evaluate_with_budget(candidate: dict[str, Any], config: dict, run_dir: Path
         key: candidate[key] for key in
         ("task_id", "trial", "status", "subset_path", "columns_used", "y_column")
     }
+    for key in ("hypothesis_id", "hypothesis", "question_id"):
+        if key in candidate:
+            minimal_candidate[key] = candidate[key]
     minimal_candidate["evaluation"] = {
         "auc": evaluation["auc"],
         "ml_configuration": evaluation["ml_configuration"],

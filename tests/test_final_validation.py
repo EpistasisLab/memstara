@@ -1,11 +1,11 @@
-"""The independent holdout is evaluated once after candidate selection; no LLM calls."""
+"""Every completed hypothesis task gets its own one-time reserve score; no LLM calls."""
 import json
 
 import numpy as np
 import pandas as pd
 
 from memstara.evaluation import discovery_partition
-from memstara.final_validation import evaluate_candidate, run, select_candidate
+from memstara.final_validation import eligible_tasks, evaluate_candidate, run
 
 
 def fixture_run(tmp_path, monkeypatch):
@@ -29,7 +29,8 @@ def fixture_run(tmp_path, monkeypatch):
             "folds": 0, "replicates": 1, "search_trials": 1}
     measured = score(path, "Y", plan, predictors=["signal", "noise"], partition=partition,
                      configuration=settings, explain=False, persist=True)
-    task = {"task_id": 15, "trial": 2, "status": "done", "subset_path": str(path),
+    task = {"task_id": 15, "trial": 2, "hypothesis_id": "hyp-15", "hypothesis": "Signal predicts Y",
+            "status": "done", "subset_path": str(path),
             "columns_used": ["signal", "noise", "Y"], "y_column": "Y",
             "evaluation": {"auc": measured["auc"], "ml_configuration": {"effective": effective},
                            "evaluation": measured["evaluation"]}}
@@ -45,14 +46,14 @@ def test_final_validation_uses_saved_fit_without_refitting(tmp_path, monkeypatch
         AssertionError("final validation must not retrain the selected model")))
     result = evaluate_candidate(task, config, tmp_path)
     assert result["status"] == "completed"
-    assert result["scope"] == "one_time_independent_validation_reserve"
+    assert result["scope"] == "one_time_per_hypothesis_same_dataset_validation_reserve"
     assert result["fit_scope"] == "already-fitted exploration training split; reserve excluded; no refit"
     assert result["n_fit"] == task["evaluation"]["evaluation"]["replicates"][0]["n_train"]
     assert result["n_validation"] == partition["reserved_count"]
     assert sum(result["metrics"]["confusion_matrix"][key] for key in ("tn", "fp", "fn", "tp")) == result["n_validation"]
     assert 0 <= result["metrics"]["auroc"] <= 1
     assert result["selected_task_input_sha256"]
-    assert "not use it to tune" in result["interpretation"]
+    assert "do not use reserve outcomes to tune" in result["interpretation"]
 
 
 def test_final_validation_worker_uses_the_bounded_subprocess(tmp_path, monkeypatch):
@@ -67,42 +68,58 @@ def test_final_validation_worker_uses_the_bounded_subprocess(tmp_path, monkeypat
     assert result["resource_usage"]["peak_rss_bytes"] > 0
 
 
-def test_candidate_choice_uses_only_completed_exploration_scores():
+def test_all_completed_hypothesis_tasks_are_scored_regardless_of_exploratory_rank():
     base = {"status": "done", "subset_path": "/unused", "columns_used": ["x", "Y"],
             "evaluation": {"ml_configuration": {"effective": {"primary_model": "xgboost"}}}}
-    winner = select_candidate([{**base, "task_id": 4, "trial": 1, "evaluation": {**base["evaluation"], "auc": .8}},
-                               {**base, "task_id": 5, "trial": 0, "evaluation": {**base["evaluation"], "auc": .8}},
-                               {**base, "task_id": 1, "trial": 0, "status": "failed",
-                                "evaluation": {**base["evaluation"], "auc": .99}}])
-    assert winner["task_id"] == 5
+    tasks = [{**base, "task_id": 4, "trial": 1, "y_column": "Y",
+              "evaluation": {**base["evaluation"], "auc": .8}},
+             {**base, "task_id": 5, "trial": 0, "y_column": "Y",
+              "evaluation": {**base["evaluation"], "auc": .7}},
+             {**base, "task_id": 1, "trial": 0, "status": "failed", "y_column": "Y",
+              "evaluation": {**base["evaluation"], "auc": .99}}]
+    assert [task["task_id"] for task in eligible_tasks(tasks)] == [5, 4]
 
 
-def test_final_validation_artifact_is_saved(tmp_path, monkeypatch):
+def test_every_hypothesis_has_a_saved_reserve_result(tmp_path, monkeypatch):
     _, _, task, config = fixture_run(tmp_path, monkeypatch)
+    second = {**task, "task_id": 16, "trial": 3, "hypothesis_id": "hyp-16",
+              "hypothesis": "Noise predicts Y"}
     import memstara.final_validation as final_validation
     monkeypatch.setattr(final_validation, "_evaluate_with_budget",
                         lambda candidate, frozen, run_dir: evaluate_candidate(candidate, frozen, run_dir))
-    result = run(tmp_path, config, [task])
+    result = run(tmp_path, config, [task, second])
     saved = json.loads((tmp_path / "final_validation.json").read_text())
     assert saved == result
     assert saved["status"] == "completed"
-    monkeypatch.setattr(final_validation, "evaluate_candidate", lambda *args: (_ for _ in ()).throw(
-        AssertionError("completed reserve evaluation must be reused, not repeated")))
-    assert run(tmp_path, config, [task]) == saved
+    assert saved["candidate_count"] == 2
+    assert [row["task_id"] for row in saved["results"]] == [15, 16]
+    assert [row["hypothesis_id"] for row in saved["results"]] == ["hyp-15", "hyp-16"]
+    monkeypatch.setattr(final_validation, "_evaluate_with_budget", lambda *args: (_ for _ in ()).throw(
+        AssertionError("completed reserve evaluations must be reused, not repeated")))
+    assert run(tmp_path, config, [task, second]) == saved
 
 
-def test_no_completed_candidate_is_explicitly_recorded(tmp_path):
+def test_no_eligible_hypothesis_is_explicitly_recorded(tmp_path):
     result = run(tmp_path, {}, [{"task_id": 1, "trial": 0, "status": "failed"}])
     assert result["status"] == "not_run"
     assert json.loads((tmp_path / "final_validation.json").read_text())["status"] == "not_run"
 
 
-def test_interrupted_reserve_scoring_is_never_replayed(tmp_path, monkeypatch):
+def test_interrupted_task_is_not_replayed_but_unstarted_hypotheses_continue(tmp_path, monkeypatch):
+    _, _, task, config = fixture_run(tmp_path, monkeypatch)
+    second = {**task, "task_id": 16, "trial": 3, "hypothesis_id": "hyp-16",
+              "hypothesis": "Noise predicts Y"}
     artifact = tmp_path / "final_validation.json"
-    artifact.write_text(json.dumps({"status": "in_progress", "selection_policy": "locked"}))
-    monkeypatch.setattr("memstara.final_validation.evaluate_candidate",
-                        lambda *args: (_ for _ in ()).throw(AssertionError("must not score twice")))
-    result = run(tmp_path, {}, [{"task_id": 9, "trial": 0, "status": "done"}])
-    assert result["status"] == "interrupted"
-    assert "not evaluated again" in result["reason"]
-    assert json.loads(artifact.read_text())["status"] == "interrupted"
+    from memstara.final_validation import POLICY
+    artifact.write_text(json.dumps({"schema_version": 2, "policy": POLICY, "status": "in_progress",
+        "results": [{"key": "2:15", "task_id": 15, "trial": 2, "status": "interrupted",
+                     "reason": "already started"},
+                    {"key": "3:16", "task_id": 16, "trial": 3, "status": "pending"}]}))
+    scored = []
+    monkeypatch.setattr("memstara.final_validation._evaluate_with_budget",
+                        lambda candidate, frozen, run_dir: scored.append(candidate["task_id"]) or
+                        {"status": "completed", "task_id": candidate["task_id"]})
+    result = run(tmp_path, config, [task, second])
+    assert result["status"] == "failed"
+    assert scored == [16]
+    assert [row["status"] for row in result["results"]] == ["interrupted", "completed"]
