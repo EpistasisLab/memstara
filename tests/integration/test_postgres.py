@@ -100,3 +100,38 @@ async def test_proposal_final_reconciliation_uses_local_stage_evidence(database,
     assert evidence['output']['run_id'] == call['run_id']
     assert await database.fetchval(
         "SELECT status FROM memstara_executions WHERE run_tag='proposal-registry'") == 'completed'
+
+
+async def test_registry_concurrent_cold_start_and_same_run_mirrors(database, tmp_path):
+    from memstara.experiment_registry import sync
+    roots = []
+    for number in range(4):
+        root = tmp_path / f'pipeline-{number}'
+        root.mkdir()
+        (root / 'config.json').write_text(json.dumps({'run_tag': f'parallel-{number}'}))
+        (root / 'pipeline_status.json').write_text('{"status":"running"}')
+        (root / 'cost_ledger.jsonl').write_text('{"id":"receipt-1","tokens":123}\n')
+        roots.append(root)
+    # Cold start, different pipelines, and overlapping mirrors of the same run.
+    await asyncio.wait_for(asyncio.gather(*(
+        sync(root, evidence=False) for _ in range(3) for root in roots
+    )), timeout=20)
+    assert await database.fetchval('SELECT count(*) FROM memstara_executions') == 4
+    assert await database.fetchval('SELECT count(*) FROM memstara_execution_costs') == 4
+    for root in roots:
+        assert json.loads((root / 'registry_status.json').read_text())['status'] == 'synced'
+
+
+async def test_registry_readiness_does_not_block_an_active_writer(database):
+    import asyncpg
+    from memstara.blackboard import dsn
+    from memstara.experiment_registry import initialize
+    await initialize(database)
+    other = await asyncpg.connect(dsn())
+    try:
+        async with database.transaction():
+            # A GRANT needs to modify pg_class. Routine readiness must only read it.
+            await database.execute('LOCK TABLE memstara_executions IN ACCESS EXCLUSIVE MODE')
+            await asyncio.wait_for(initialize(other), timeout=2)
+    finally:
+        await other.close()

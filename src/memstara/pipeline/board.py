@@ -599,7 +599,7 @@ async def _call_agent_uncontrolled(
     # open `trace/00_hypothesis0.txt` and read what just happened — which tool was
     # called with which arguments and what came back.
     await _trace_one(entry)
-    from memstara.experiment_registry import sync as sync_registry
+    from memstara.experiment_registry import sync_after_agent as sync_registry
     if _TRACE_DIR:
         await sync_registry(_TRACE_DIR.parent)
 

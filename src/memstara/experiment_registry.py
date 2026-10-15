@@ -73,13 +73,37 @@ def identity(config, root):
             binding.get('combination_id') or 'C01', binding)
 
 
-async def initialize(conn):
-    await conn.execute(SCHEMA)
-    # The viewer remains SELECT-only, including newly added tables.
+REGISTRY_TABLES = (
+    'memstara_experiments', 'memstara_experiment_combinations', 'memstara_executions',
+    'memstara_execution_agents', 'memstara_execution_costs', 'memstara_execution_artifacts',
+)
+
+
+async def schema_ready(conn):
+    """Read-only readiness: routine mirroring must never rewrite pg_class ACLs."""
+    for name in (*REGISTRY_TABLES, 'memstara_execution_experiment_idx'):
+        if not await conn.fetchval('SELECT to_regclass($1)', name):
+            return False
     if await conn.fetchval("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='memstara_viewer')"):
-        await conn.execute('GRANT SELECT ON memstara_experiments, memstara_experiment_combinations, '
-                           'memstara_executions, memstara_execution_agents, memstara_execution_costs, '
-                           'memstara_execution_artifacts TO memstara_viewer')
+        for name in REGISTRY_TABLES:
+            if not await conn.fetchval("SELECT has_table_privilege('memstara_viewer', $1, 'SELECT')", name):
+                return False
+    return True
+
+
+async def initialize(conn):
+    """Commit schema/ACL setup before any execution writes; serialize cold starts."""
+    if conn.is_in_transaction():
+        raise RuntimeError('Registry initialization must precede the data transaction')
+    if await schema_ready(conn):
+        return
+    async with conn.transaction():
+        await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('memstara.registry.schema', 0))")
+        if await schema_ready(conn):
+            return
+        await conn.execute(SCHEMA)
+        if await conn.fetchval("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='memstara_viewer')"):
+            await conn.execute('GRANT SELECT ON ' + ', '.join(REGISTRY_TABLES) + ' TO memstara_viewer')
 
 
 async def register_experiment(conn, experiment_id, definition, combinations):
@@ -166,6 +190,34 @@ def proposal_evidence(root, config, call):
 
 
 async def sync(root: Path, *, evidence=True):
+    """Retry whole rolled-back transactions, never agents or model requests."""
+    for attempt in range(5):
+        try:
+            return await _sync(root, evidence=evidence)
+        except (asyncpg.DeadlockDetectedError, asyncpg.SerializationError):
+            if attempt == 4:
+                raise
+            await asyncio.sleep(0.1 * (2 ** attempt))
+
+
+async def sync_after_agent(root: Path):
+    """A transient mirror conflict is not a failure of an already completed agent.
+
+    Local evidence remains authoritative for reconciliation. Identity/integrity
+    errors still propagate; final reconciliation must report any pending mirror.
+    """
+    try:
+        await sync(root)
+    except (asyncpg.DeadlockDetectedError, asyncpg.SerializationError) as exc:
+        from memstara.pipeline.checkpoint import atomic_json
+        atomic_json(root / 'registry_status.json', {
+            'status': 'pending', 'error_type': type(exc).__name__,
+            'reason': 'Database concurrency conflict; local evidence retained for reconciliation',
+        })
+        print(f'Experiment registry pending: {type(exc).__name__}; agent results retained.')
+
+
+async def _sync(root: Path, *, evidence=True):
     root = root.resolve()
     config = read(root / 'config.json', {})
     if not config:
@@ -197,8 +249,11 @@ async def sync(root: Path, *, evidence=True):
         records = [(c, {}) for c in calls if c.get('run_id')]
     conn = await asyncpg.connect(dsn(), timeout=10, command_timeout=30)
     try:
+        await initialize(conn)
         async with conn.transaction():
-            await initialize(conn)
+            # Same-run mirrors must acquire locks in one order, including first INSERT.
+            await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+                               'memstara.registry.run:' + tag)
             # Batch definitions must be explicitly registered before binding a run.
             if binding:
                 exists = await conn.fetchval('SELECT 1 FROM memstara_experiment_combinations '
@@ -281,8 +336,8 @@ async def main():
             raise ValueError('planned_runs must equal the number of declared combinations')
         conn = await asyncpg.connect(dsn(), timeout=10, command_timeout=30)
         try:
+            await initialize(conn)
             async with conn.transaction():
-                await initialize(conn)
                 await register_experiment(conn,plan['id'],plan['definition'],plan['combinations'])
         finally:
             await conn.close()
