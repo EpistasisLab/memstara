@@ -100,11 +100,25 @@ def selected(snapshot, loop):
     return names[0] if names[0] in SKILLS else None
 
 
-def read_receipt(receipt):
+def receipt_path(value):
+    """Allow derived-data receipts and this execution's Explanation records only."""
     from memstara.paths import output_dir
 
+    path = Path(value).resolve()
+    if path.is_relative_to(output_dir().resolve()):
+        return path
+    source = os.environ.get('MEMSTARA_RUN_CONFIG', '')
+    if source and Path(source).is_file():
+        root = Path(source).resolve().parent / 'explanation_io'
+        # Do not resolve root: a symlink must not enlarge the authorized boundary.
+        if path.is_relative_to(root):
+            return path
+    raise ValueError('Specialist receipt is outside the active execution and derived-data directories')
+
+
+def read_receipt(receipt):
     path = Path(receipt["path"])
-    path.resolve().relative_to(output_dir().resolve())
+    receipt_path(path)
     if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != receipt["sha256"]:
         raise ValueError("Interpretation receipt integrity mismatch")
     return json.loads(path.read_text())
@@ -169,11 +183,9 @@ def handoffs(snapshot, rows, loop):
 
 
 def write_record(directory, phase, payload):
-    from memstara.paths import output_dir
     from memstara.paired_ml import atomic
 
-    directory = Path(directory).resolve()
-    directory.relative_to(output_dir().resolve())
+    directory = receipt_path(directory)
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     path = directory / f"{phase}-{digest(payload)}.json"
     if not path.exists():

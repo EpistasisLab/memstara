@@ -383,6 +383,49 @@ def test_real_database_preflight_and_failure_before_paid_calls(frozen, tmp_path)
         asyncio.run(explanation.preflight(frozen, tmp_path / "run"))
 
 
+def test_research_activation_keeps_execution_receipts_readable(frozen, tmp_path, monkeypatch):
+    run = tmp_path / 'execution'
+    run.mkdir()
+    config = run / 'config.json'
+    config.write_text(json.dumps(frozen))
+    monkeypatch.setenv('MEMSTARA_RUN_CONFIG', str(config))
+    monkeypatch.setenv('MEMSTARA_OUTPUT_DIR', str(tmp_path / 'research' / 'derived'))
+    asyncio.run(explanation.preflight(frozen, run))
+    assert list((run / 'explanation_io').glob('preflight-*.json'))
+    receipt = explanation.write_record(run / 'explanation_io', 'output', {'result': 'synthetic'})
+    assert explanation.read_receipt(receipt) == {'result': 'synthetic'}
+    derived = explanation.write_record(tmp_path / 'research' / 'derived' / 'interpretation_io',
+                                       'output', {'interpretation': 'synthetic'})
+    assert explanation.read_receipt(derived) == {'interpretation': 'synthetic'}
+
+
+@pytest.mark.parametrize('outside', ['another-run/explanation_io', 'execution/other-artifacts'])
+def test_receipt_scope_does_not_expand_to_other_runs(tmp_path, monkeypatch, outside):
+    run = tmp_path / 'execution'
+    run.mkdir()
+    config = run / 'config.json'
+    config.write_text('{}')
+    monkeypatch.setenv('MEMSTARA_RUN_CONFIG', str(config))
+    monkeypatch.setenv('MEMSTARA_OUTPUT_DIR', str(tmp_path / 'derived'))
+    with pytest.raises(ValueError, match='outside'):
+        explanation.write_record(tmp_path / outside, 'output', {})
+    assert not (tmp_path / outside).exists()
+
+
+def test_execution_receipt_symlink_cannot_escape_run(tmp_path, monkeypatch):
+    run, outside = tmp_path / 'run', tmp_path / 'outside'
+    run.mkdir()
+    outside.mkdir()
+    config = run / 'config.json'
+    config.write_text('{}')
+    (run / 'explanation_io').symlink_to(outside, target_is_directory=True)
+    monkeypatch.setenv('MEMSTARA_RUN_CONFIG', str(config))
+    monkeypatch.setenv('MEMSTARA_OUTPUT_DIR', str(tmp_path / 'derived'))
+    with pytest.raises(ValueError, match='outside'):
+        explanation.write_record(run / 'explanation_io', 'output', {})
+    assert list(outside.iterdir()) == []
+
+
 def test_assembly_rejects_relabelled_expert(frozen, result, tmp_path):
     directory = tmp_path / "run" / "explanation_io"
     asyncio.run(
