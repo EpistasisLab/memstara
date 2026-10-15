@@ -26,14 +26,19 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     from memstara.control.catalog import resolve
     ml_books = books.get("ml") or []
     skill_policy = resolve(ml_books[0]).get("evaluation", {}) if ml_books else {}
+    combination_ml_skills = ([item["id"] for item in combination_plan["skills"].get("ml", [])]
+                             if combination_plan else ml_books)
+    combination_has_lr = "ml_logistic_regression" in combination_ml_skills
     # A skill supplies defaults; only explicitly supplied controls override them.
     evaluation = validate({**skill_policy, **json.loads(args.evaluation)})
     if not getattr(args, "report_only", False):
-        preflight(dataset, args.y_column, evaluation)
+        preflight(dataset, args.y_column, evaluation,
+                  allow_missing=bool(combination_plan) or evaluation["engine"] == "xgboost")
     partition = None
     if not getattr(args, "report_only", False):
         from memstara.evaluation import validate_clean_dataset, discovery_partition, evaluation_splits
-        frame = validate_clean_dataset(dataset, args.y_column, allow_missing=evaluation['engine'] == 'xgboost')
+        frame = validate_clean_dataset(dataset, args.y_column,
+                                       allow_missing=bool(combination_plan) or evaluation['engine'] == 'xgboost')
         partition = discovery_partition(frame[args.y_column], evaluation['seed'])
         evaluation_splits(frame[args.y_column], evaluation, partition=partition)
     from memstara.study_comparison import resolve_comparison
@@ -88,12 +93,13 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         "evaluation": evaluation,
         "comparison_policy": comparison_policy,
         "input_contract": "clean single dataset; column selection only; fixed binary target",
-        "missing_value_policy": "reject" if combination_plan else (
+        "missing_value_policy": "reject" if combination_has_lr else (
             "native_xgboost" if evaluation["engine"] == "xgboost" else "reject"),
         "explainability_review": "Review required; provisional specification",
         "dataset_sha256": digest.hexdigest(),
-        **({"feature_context": freeze_feature_context(dataset, args.y_column,
-                                                      require_complete=bool(combination_plan))}
+        **({"feature_context": freeze_feature_context(
+            dataset, args.y_column,
+            require_complete=bool(combination_plan and combination_has_lr))}
            if not getattr(args, "report_only", False) else {}),
         "knowledge_path": None if ablate_okf else os.environ.get("AGENTIC_OKF_BUNDLE_DIR"),
         "trials": args.trials,
@@ -156,7 +162,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         state['controlled_comparison'] = controls
     if state.get("data_allocation_policy") and not controls:
         # A normal run lets the first Data Agent seed the independent reserve.
-        # Matched controlled comparisons retain their precommitted server split.
+        # Controlled comparisons retain their precommitted server split.
         state["validation_partition_policy"] = "data_agent_seed_v1"
         state["validation_partition"] = None
     state["config_hash"] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()

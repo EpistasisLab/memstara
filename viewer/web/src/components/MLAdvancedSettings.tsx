@@ -7,7 +7,7 @@ export default function MLAdvancedSettings({skills,value={},onChange,replicates=
  const [expanded,setExpanded]=useState(false);
  useControl(s=>s.catalog); // Catalog responses carry the authoritative settings schema.
  const schema=getMlSettingsSchema(),models=modelsForSkills(skills);
- if(!models.length)return <section aria-label="Advanced model settings" className="mt-3 rounded border border-paper-line p-3"><h3 className="font-semibold">Advanced model settings</h3><p className="mt-2 text-sm">Select the Logistic Regression (LR) or XGBoost skill to configure its model parameters. Select both skills in All Combinations to configure both models separately.</p></section>;
+ if(!models.length)return <section aria-label="Advanced model settings" className="mt-3 rounded border border-paper-line p-3"><h3 className="font-semibold">Advanced model settings</h3><p className="mt-2 text-sm">Select one Logistic Regression (LR) or XGBoost skill. Only that model will be configured and fitted for its pipeline combination.</p></section>;
  const error=mlOverridesError(value,skills,replicates);
  function changeModel(name:ModelName,key:string,item:unknown,parameter=false){
   const next=structuredClone(value);next.version=1;next.models??={};
@@ -22,8 +22,8 @@ export default function MLAdvancedSettings({skills,value={},onChange,replicates=
   <button type="button" className="flex w-full cursor-pointer items-center justify-between gap-3 rounded border border-paper-line bg-paper-panel px-3 py-2 text-left font-semibold" aria-expanded={expanded||!!error} onClick={()=>setExpanded(v=>!v)}><span>Advanced model settings · {overrideCount(value)} fixed values</span><span aria-hidden="true">{expanded||error?'−':'+'}</span></button>
   {!expanded&&!error&&<p className="mt-2 text-sm text-ink-muted">Expand to edit {models.map(name=>modelLabels[name]).join(' and ')} parameters, prediction thresholds and training cross-validation.</p>}
   {(expanded||!!error)&&<div className="mt-3 space-y-4">
-   <p className="text-sm">Blank or Auto fields are chosen by the ML Agent. Your explicit values are fixed before fitting and recorded separately from automatic settings. Both LR and XGBoost are fitted; only the selected ML skills have editable model panels here. Unselected comparator settings remain automatic.</p>
-   {models.length>1&&<p className="text-sm">These model-specific values apply to that model in every Loop, regardless of which selected skill is primary. They are not shared between LR and XGBoost.</p>}
+   <p className="text-sm">Blank or Auto fields are chosen by the ML Agent. Your explicit values are fixed before fitting and recorded separately from automatic settings. Only the model selected by this combination's ML skill is fitted.</p>
+   {models.length>1&&<p className="text-sm">Choose one ML skill per combination. Separate combinations can run LR and XGBoost independently.</p>}
    {proposal&&<p className="text-sm">Proposal only: these are planned settings; no models are fitted without a CSV.</p>}
    {!schema?<p role="status">Advanced settings are unavailable. <button type="button" className="underline" onClick={()=>void useControl.getState().loadPlaybooks()}>Reload supported settings</button></p>:<fieldset disabled={disabled} className="min-w-0 space-y-4">
     {models.map(name=><fieldset key={name} className="min-w-0 rounded border border-paper-line p-3"><legend className="px-1 font-semibold">{modelLabels[name]} settings</legend>
@@ -36,7 +36,7 @@ export default function MLAdvancedSettings({skills,value={},onChange,replicates=
       <label className="text-sm">Prediction threshold<input aria-label={`${modelLabels[name]} prediction threshold`} className={field} type="number" min={schema.threshold.min} max={schema.threshold.max} step="any" placeholder="Auto — ML Agent" value={Number.isFinite(value.models?.[name]?.threshold)?value.models?.[name]?.threshold:''} onChange={e=>changeModel(name,'threshold',e.target.value===''?undefined:e.target.valueAsNumber)}/></label>
      </div>
     </fieldset>)}
-    <label className="block text-sm">Shared training cross-validation<select aria-label="Advanced training CV folds" className={field} value={value.folds??'auto'} onChange={e=>{const next={...value,version:1 as const};if(e.target.value==='auto')delete next.folds;else next.folds=Number(e.target.value);onChange(overridesForSkills(next,skills));}}><option value="auto">Auto — ML Agent</option>{schema.folds.map(n=><option key={n} value={n}>{n===0?'No training CV':`${n} folds`}</option>)}</select><span className="text-xs text-ink-muted">The two models share training folds. Held-out and reserved validation outcomes never select these settings.</span></label>
+    <label className="block text-sm">Training cross-validation folds<select aria-label="Advanced training CV folds" className={field} value={value.folds??'auto'} onChange={e=>{const next={...value,version:1 as const};if(e.target.value==='auto')delete next.folds;else next.folds=Number(e.target.value);onChange(overridesForSkills(next,skills));}}><option value="auto">Auto — ML Agent</option>{schema.folds.map(n=><option key={n} value={n}>{n===0?'No training CV':`${n} folds`}</option>)}</select><span className="text-xs text-ink-muted">Held-out and reserved validation outcomes never select these settings.</span></label>
     <p className="text-xs text-ink-muted">Server limits remain fixed: {schema.resource_limits.threads} CPU thread, one ML job at a time, up to {Math.round(schema.resource_limits.memory_bytes/1024**2)} MiB and {schema.resource_limits.wall_seconds} seconds. The server also checks class counts and total fit count before training.</p>
    </fieldset>}
    {error&&<p role="alert" className="text-sm text-red-700">{error}</p>}

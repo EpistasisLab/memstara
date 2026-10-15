@@ -1,4 +1,4 @@
-"""Frozen predictor metadata, with paired-model eligibility for combination runs."""
+"""Frozen predictor metadata, with safe eligibility for selected-model combinations."""
 
 import csv
 import json
@@ -23,8 +23,8 @@ def freeze_feature_context(dataset: Path, target: str, *, require_complete: bool
         excluded_set = set(excluded)
         entries = [entry for entry in entries if entry.feature_name not in excluded_set]
         eligibility = {
-            "version": "paired_complete_predictors_v1",
-            "rule": "No missing predictor values; required by paired LR/XGBoost without imputation",
+            "version": "complete_predictors_v1",
+            "rule": "No missing values in eligible predictors; required for Logistic Regression without imputation",
             "excluded_columns": excluded,
             "excluded_count": len(excluded),
             "eligible_count": len(entries),
@@ -34,13 +34,13 @@ def freeze_feature_context(dataset: Path, target: str, *, require_complete: bool
         }
         if len(entries) < 4:
             raise ValueError(
-                "Paired LR/XGBoost requires at least four complete eligible predictors; "
+                "The selected Logistic Regression combination requires at least four complete eligible predictors; "
                 "no model calls were made and no rows or values were changed"
             )
     if not entries:
         raise ValueError("No predictors available for question generation")
     return {
-        "version": "paired_complete_catalog_v1" if require_complete else "header_catalog_v1",
+        "version": "complete_catalog_v1" if require_complete else "header_catalog_v1",
         **({"eligibility": eligibility} if eligibility else {}),
         "meaning_source": "matcher catalog derived from column labels; not a validated clinical data dictionary",
         "features": [

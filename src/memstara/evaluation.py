@@ -153,9 +153,11 @@ def evaluation_splits(y, plan: dict, partition=None):
     return splits
 
 
-def preflight(path: Path, target: str, plan: dict, *, reserve_validation: bool = False) -> None:
+def preflight(path: Path, target: str, plan: dict, *, reserve_validation: bool = False,
+              allow_missing: bool | None = None) -> None:
     plan = validate(plan)
-    frame = validate_clean_dataset(path, target, allow_missing=plan['engine'] == 'xgboost')
+    frame = validate_clean_dataset(path, target, allow_missing=(
+        plan['engine'] == 'xgboost' if allow_missing is None else allow_missing))
     partition = discovery_partition(frame[target], plan["seed"]) if reserve_validation else None
     evaluation_splits(frame[target], plan, partition=partition)
 

@@ -273,7 +273,7 @@ async def prepare(snapshot, rows, loop, directory):
     visible = {k: payload[k] for k in ("run_tag", "loop", "expert", "results")}
     message = (
         "Write the selected specialist Explanation using ONLY this scoped input. "
-        "Interpret both LR and XGBoost findings supplied by the Interpretation agent. "
+        "Interpret only the selected model's findings supplied by the Interpretation agent. "
         "The knowledge retrieval has already executed against your assigned database; "
         "no other corpus or earlier Loop is available. Follow the attached expert skill sections. "
         "Cite a source only by combining the exact database_id and document id values shown in the "

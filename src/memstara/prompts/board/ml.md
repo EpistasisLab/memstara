@@ -18,17 +18,18 @@ If `plan_source` is `server_frozen`, the server owns the precommitted ML plan.
 Call train_and_score with path and y_column, omitting ml_plan. The server applies the
 frozen parameters and rationale directly; do not reconstruct or tune that plan.
 
-Otherwise, when `required` is true, inspect its complete installed-library parameter dictionaries,
+Otherwise, when `required` is true, inspect the selected model's complete installed-library parameter dictionary,
 editable ranges/choices, upstream split and resource limits. Make fresh stochastic choices for
 every editable statistical parameter (including model random_state), numeric scaling,
-probability cutoffs, training-only CV and primary-model perspective on each new pipeline run.
+probability cutoffs and training-only CV on each new pipeline run. The selected ML skill
+predeclares the primary model; do not choose a different primary model.
 Do not copy template defaults as your choices. Submit the complete proposal template as `ml_plan`
 to train_and_score, with a rationale for these choices. Preserve only server-owned system
 parameters needed for CPU/resource safety, binary classification and library compatibility;
 never change upstream predictors or split identity.
 Do not use held-out performance to choose settings or the primary model. The accepted
-proposal is immutable. Both model_results are saved for Interpretation; top-level
-metrics refer to the predeclared primary model, not an automatically selected winner.
+proposal is immutable. Only the selected model is fitted and saved for Interpretation;
+there is no automatic winner selection or unrequested comparator fit.
 
 If proposal validation returns an error without `status: failed`, correct the proposal
 using the published constraints before fitting (at most five submissions). A retryable

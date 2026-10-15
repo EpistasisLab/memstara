@@ -131,7 +131,7 @@ def result(frozen, tmp_path, monkeypatch):
     # separately exercised below with actual fitted models.
     models = {
         name: {"attributions": [{"explanation_id": name + "-id", "method": "shap", "status": "completed"}]}
-        for name in ("logistic_regression", "xgboost")
+        for name in ("xgboost",)
     }
     task = {"task_id": 12, "trial": 0, "hypothesis": "Synthetic marker question"}
     value = {
@@ -150,7 +150,7 @@ def result(frozen, tmp_path, monkeypatch):
             "task": task,
             "handoff": value,
             "worker": "interpret#1",
-            "interpretation": "Both fitted models: measured synthetic findings",
+            "interpretation": "Selected model: measured synthetic findings",
         },
     )
     row = {
@@ -165,7 +165,7 @@ def result(frozen, tmp_path, monkeypatch):
                 name: {"specialist_xai": {"items": item["attributions"]}} for name, item in models.items()
             },
             "interpretations": [
-                {"status": "done", "text": "Both fitted models: measured synthetic findings", "specialist": receipt}
+                {"status": "done", "text": "Selected model: measured synthetic findings", "specialist": receipt}
             ],
         },
     }
@@ -179,8 +179,8 @@ def test_prepare_actual_interpretation_and_expert_evidence(frozen, result, tmp_p
     assert prepared["payload"]["expert"] == expert
     row = prepared["payload"]["results"][0]
     assert row["knowledge"]["database_id"] == expert + "-fixture"
-    assert row["interpretations"][0]["text"].startswith("Both fitted models")
-    assert set(row["interpretations"][0]["models"]) == {"logistic_regression", "xgboost"}
+    assert row["interpretations"][0]["text"].startswith("Selected model")
+    assert set(row["interpretations"][0]["models"]) == {"xgboost"}
     assert "dsn_env" not in prepared["prompt"]
     assert "[database_id:document_id]" not in prepared["prompt"]
     assert explanation.read_receipt(prepared["receipt"]) == prepared["payload"]

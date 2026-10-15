@@ -1,16 +1,16 @@
 ## Common training, evaluation and result contract
 
-The selected skill declares the primary model, not a winner chosen after scoring.
-Configure and train both LR and XGBoost on the same supplied predictors, target and
-saved split. Preserve both model artifacts and model_results for SHAP/LIME access.
-Follow a server_frozen plan when present; never override a precommitted experiment.
+The selected ML skill declares the only model to configure, fit and evaluate. Do not
+fit, compare, or create artifacts for another model. Preserve the selected model's
+artifact and model_results for SHAP/LIME access. Follow a server_frozen plan when
+present; never override a precommitted experiment.
 
 Use only training partitions for fitting preprocessing and tuning. Do not impute
 labels or predictors, remove rows, manufacture samples, or change upstream splits.
 Inspect class counts and report reduced CV folds or skipped search. Respect the
 server's CPU, memory, fit-count and time limits; do not request unrestricted jobs.
 
-Save the accepted parameters, preprocessing, seed, split identity, threshold,
+Save the accepted selected-model parameters, preprocessing, seed, split identity, threshold,
 software provenance and all returned metrics unchanged. Distinguish exploratory
 test results from reserved validation and training results. Preserve missing or
 undefined metrics as such. Include AUROC, average precision, calibration and

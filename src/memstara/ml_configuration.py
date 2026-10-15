@@ -1,4 +1,4 @@
-"""Agent-proposed paired models with explicit, server-owned safety constraints."""
+"""Agent-proposed configuration for the user-selected model."""
 from __future__ import annotations
 
 import copy
@@ -7,7 +7,7 @@ import json
 import math
 from pathlib import Path
 
-VERSION = 'agent_paired_ml_v1'
+VERSION = 'agent_selected_ml_v2'
 MODELS = ('logistic_regression', 'xgboost')
 MODEL_SKILLS = {'ml_logistic_regression': 'logistic_regression', 'ml_xgboost': 'xgboost'}
 
@@ -24,6 +24,18 @@ def for_dataset(snapshot, path):
     if primary and snapshot.get('combination_plan') and 'trial' not in record:
         raise ValueError('Selected ML skill requires the saved task trial identity')
     return {**snapshot, '_selected_ml_primary': primary}
+
+
+def selected_model(snapshot):
+    snapshot = snapshot or {}
+    selected = snapshot.get('_selected_ml_primary')
+    if selected is None:
+        from_books = [MODEL_SKILLS[name] for name in snapshot.get('books', {}).get('ml', [])
+                      if name in MODEL_SKILLS]
+        selected = from_books[0] if len(from_books) == 1 else None
+    if selected not in MODELS:
+        raise ValueError('Choose exactly one supported ML model skill for this task')
+    return selected
 # Non-editable installed-library parameters remain server-owned system defaults.
 # Arbitrary callbacks, GPU execution and unconstrained parallelism are never accepted.
 RANGES = {
@@ -91,7 +103,7 @@ def validate_overrides(value, skills=None, *, replicates=None):
             raise ValueError('LR l1 requires liblinear')
     if 'folds' in value and (type(value['folds']) is not int or value['folds'] not in (0, 2, 3, 4, 5)):
         raise ValueError('Training CV folds must be 0 or 2–5')
-    if 'folds' in value and replicates is not None and 2 * replicates * (value['folds'] + 2) > 120:
+    if 'folds' in value and replicates is not None and replicates * (value['folds'] + 2) > 120:
         raise ValueError('Reduce split evaluations or training CV folds to remain within the ML fit budget')
     return copy.deepcopy(value)
 
@@ -124,7 +136,8 @@ def policy():
 
 
 def enabled(snapshot):
-    return (snapshot or {}).get('ml_configuration_policy', {}).get('version') == VERSION
+    return (snapshot or {}).get('ml_configuration_policy', {}).get('version') in {
+        VERSION, 'agent_paired_ml_v1'}
 
 
 def context(snapshot, evaluation):
@@ -141,8 +154,9 @@ def context(snapshot, evaluation):
         base['fixed']['primary_model'] = controls['ml_plan']['primary_model']
         return base
     from memstara.evaluation import model_for
+    chosen_model = selected_model(snapshot)
     models = {}
-    for name in MODELS:
+    for name in (chosen_model,):
         model = model_for(name, evaluation['seed'])
         if name == 'logistic_regression':
             model.set_params(penalty='l2')
@@ -154,10 +168,11 @@ def context(snapshot, evaluation):
         models[name] = {'parameters': params, 'scale_numeric': name == 'logistic_regression',
                         'threshold': .5}
     specification = {'version': VERSION, 'required': enabled(snapshot),
-            'proposal_template': {'primary_model': snapshot.get('_selected_ml_primary') or 'logistic_regression',
+            'proposal_template': {'primary_model': chosen_model,
                                   'folds': 0,
                                   'models': models, 'rationale': ''},
-            'editable_parameter_ranges': RANGES, 'editable_parameter_choices': CHOICES,
+            'editable_parameter_ranges': {chosen_model: RANGES[chosen_model]},
+            'editable_parameter_choices': {chosen_model: CHOICES[chosen_model]},
             'editable_common_settings': {'scale_numeric': [True, False], 'threshold': [.05, .95],
                                          'folds': [0, 2, 3, 4, 5]},
             'fixed': {'primary_model': snapshot.get('_selected_ml_primary'),
@@ -172,18 +187,21 @@ def context(snapshot, evaluation):
             'instructions': 'Return the complete proposal_template with fresh stochastic choices and rationale. '
                             'For every new pipeline execution, choose new values for every editable statistical '
                             'parameter, numeric scaling, threshold, and CV folds; do not copy template defaults. '
-                            'Choose both models before seeing results. Preserve upstream features/splits. '
+                            'Configure only the selected model before seeing results. '
+                            'Preserve upstream features/splits. '
                             'LR l1 requires liblinear. No hold-out tuning; accepted proposals are immutable.'}
     overrides = validate_overrides(snapshot.get('ml_overrides', {}))
     if overrides:
         specification['proposal_template'] = apply_overrides(specification['proposal_template'], overrides)
-        params = specification['proposal_template']['models']['logistic_regression']['parameters']
-        if params['penalty'] == 'l1' and params['solver'] == 'lbfgs':
+        params = specification['proposal_template']['models'][chosen_model]['parameters']
+        if chosen_model == 'logistic_regression' and params['penalty'] == 'l1' and params['solver'] == 'lbfgs':
             params['solver'] = 'liblinear'  # Compatible automatic solver suggestion.
         specification['user_overrides'] = overrides
-        specification['editable_parameter_ranges'] = copy.deepcopy(RANGES)
-        specification['editable_parameter_choices'] = copy.deepcopy(CHOICES)
+        specification['editable_parameter_ranges'] = {chosen_model: copy.deepcopy(RANGES[chosen_model])}
+        specification['editable_parameter_choices'] = {chosen_model: copy.deepcopy(CHOICES[chosen_model])}
         for name, settings in overrides.get('models', {}).items():
+            if name != chosen_model:
+                continue
             for key in settings.get('parameters', {}):
                 specification['editable_parameter_ranges'][name].pop(key, None)
                 specification['editable_parameter_choices'][name].pop(key, None)
@@ -232,9 +250,10 @@ def validate(proposal, snapshot, evaluation):
         raise ValueError('folds must be 0 or 2–5')
     if not isinstance(proposal['rationale'], str) or not 1 <= len(proposal['rationale'].strip()) <= 8000:
         raise ValueError('Provide a non-empty rationale (up to 8000 characters)')
-    if not isinstance(proposal['models'], dict) or set(proposal['models']) != set(MODELS):
-        raise ValueError('Both LR and XGBoost configurations are required')
-    for name in MODELS:
+    expected = {selected_model(snapshot)}
+    if not isinstance(proposal['models'], dict) or set(proposal['models']) != expected:
+        raise ValueError('ml_plan must configure only the selected ML model')
+    for name in expected:
         choice = proposal['models'][name]
         if not isinstance(choice, dict) or set(choice) != {'parameters', 'scale_numeric', 'threshold'}:
             raise ValueError('Each model requires parameters, scale_numeric and threshold')

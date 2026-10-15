@@ -24,13 +24,12 @@ def test_partial_user_values_win_and_unset_values_remain_agent_selected(tmp_path
     snapshot,evaluation,proposal=plan()
     snapshot['ml_overrides']=copy.deepcopy(OVERRIDES)
     proposal['models']['logistic_regression']['parameters']['C']=5
-    proposal['models']['xgboost']['parameters']['max_depth']=3
     context=ml.context(snapshot,evaluation)
     assert context['proposal_template']['models']['logistic_regression']['parameters']['C']==.25
     assert 'C' not in context['editable_parameter_ranges']['logistic_regression']
     effective,resolution=ml.resolve(proposal,snapshot,evaluation)
     assert effective['models']['logistic_regression']['parameters']['C']==.25
-    assert effective['models']['xgboost']['parameters']['max_depth']==3
+    assert set(effective['models'])=={'logistic_regression'}
     assert effective['folds']==2
     assert effective['models']['logistic_regression']['scale_numeric'] is False
     assert proposal['models']['logistic_regression']['parameters']['C']==5
@@ -79,8 +78,9 @@ def test_selected_skill_and_fit_budget_checked_before_persistence_or_launch(monk
     assert json.loads(argv[argv.index('--ml-overrides')+1])==settings
     with pytest.raises(ValueError,match='selected ML skills'):
         PipelineWorkspace.configuration({**body,'playbook_ml':'ml_xgboost'})
-    with pytest.raises(ValueError,match='fit budget'):
-        PipelineWorkspace.configuration({**body,'evaluation':{'replicates':10},'ml_overrides':{**settings,'folds':5}})
+    high_fit_single_model=PipelineWorkspace.configuration(
+        {**body,'evaluation':{'replicates':10},'ml_overrides':{**settings,'folds':5}})
+    assert high_fit_single_model['ml_overrides']['folds']==5
     with pytest.raises(ValueError,match='selected ML skills'):
         build_argv({**body,'playbook_ml':'ml_xgboost'},[],['ml_xgboost'],['ml'])
 

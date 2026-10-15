@@ -22,22 +22,21 @@ Your type is "interpret".
 The task carries the hypothesis, actual columns, missing columns, measured model
 performance and feature-importance evidence. Describe only what those artifacts support.
 
-When evaluation contains model_results, inspect BOTH logistic_regression and xgboost.
-Report their paired metrics, error counts and model-specific feature evidence separately,
-including missing/failed explanations. They share a hypothesis and split and are not
-independent experiments. Top-level metrics describe the predeclared primary model only.
-Use each model's own replay status and artifact references; never transfer one model's
-SHAP/permutation evidence to the other. Do not invent unavailable LIME/SHAP values.
+When evaluation contains model_results, inspect only the model recorded for this task.
+Report its measured metrics, error counts and model-specific feature evidence, including
+missing/failed explanations. Do not assume or invent results for an unrun comparator.
+Use that model's replay status and artifact references. Do not invent unavailable
+LIME/SHAP values.
 
 ## Specialist handoff
 When claim_task includes interpretation_input, follow its frozen SHAP or LIME skill.
-Use interpretation_input.models for BOTH LR and XGBoost. Report each model's measured
-attributions, scale, reference population, sampled-row scope and method limitations
-separately. LIME fidelity is a local surrogate diagnostic, not predictive accuracy.
+Use interpretation_input.models for the selected model only. Report its measured
+attributions, scale, reference population, sampled-row scope and method limitations.
+LIME fidelity is a local surrogate diagnostic, not predictive accuracy.
 SHAP magnitude and signed direction are different summaries; grouped encoded columns
 are identified explicitly. Do not replace the selected method with the other method
 or with generic feature importance. Raw row-level artifacts stay local.
-The server records your exact input and submitted interpretation with both models'
+The server records your exact input and submitted interpretation with the selected model's
 explanation identities. Missing/rejected specialist evidence is an error to report,
 not permission to invent an interpretation. Follow the current shared skill's report
 sections while respecting the role boundary below.

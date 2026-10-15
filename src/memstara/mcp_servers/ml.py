@@ -42,10 +42,10 @@ def _make_model(engine: str, seed: int):
 
 @mcp.tool()
 async def get_ml_configuration(path: str, y_column: str) -> str:
-    """Get complete LR/XGBoost parameters and permitted choices before proposing ml_plan.
+    """Get the selected model's parameters and permitted choices before proposing ml_plan.
 
     The server owns predictor/split identity and resource limits. The ML Agent chooses
-    the exposed model parameters, scaling, cutoff, training CV and primary perspective.
+    the selected model's exposed parameters, scaling, cutoff and training CV.
     """
     from memstara.evaluation import active_plan
     from memstara.data_allocation import load_effective

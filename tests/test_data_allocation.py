@@ -194,7 +194,7 @@ def test_web_configuration_freezes_both_skill_requests(experiment, monkeypatch, 
     run.mkdir()
     monkeypatch.setenv('MEMSTARA_RUN_CONFIG', '')
     frozen = freeze(args, run, {})
-    assert frozen["ml_configuration_policy"]["version"] == "agent_paired_ml_v1"
+    assert frozen["ml_configuration_policy"]["version"] == "agent_selected_ml_v2"
     assert allocation.request(frozen, 0)['maximum_test_size'] == .3
     assert allocation.request(frozen, 1)['minimum_test_size'] == .5
     assert (run/'feature_reproduction/source/data_allocation.py').is_file()

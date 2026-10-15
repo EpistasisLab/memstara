@@ -82,9 +82,11 @@ New workspace designs use `shared-anil-addiction` for Explanation and
 disabled selections may require updating before a new execution.
 Instructions guide model behavior and do not guarantee compliant output.
 
-The agent-configured paired workflow adds Data allocation skills (training-heavy
-or balanced, both stratified), an LLM-proposed LR/XGBoost plan within server-enforced
-resource limits, and SHAP or LIME specialists that each receive both models.
+The agent-configured workflow adds Data allocation skills (training-heavy or balanced,
+both stratified), an LLM-proposed plan for the single user-selected LR or XGBoost model
+within server-enforced resource limits, and SHAP or LIME specialists that receive that
+model's saved artifact and results. Selecting both ML skills creates separate model
+combinations; they are not paired fits on identical splits.
 Explanation specialists consume Interpretation output and scoped knowledge.
 These contracts apply when the corresponding policies and skills are selected;
 legacy single-model runs remain supported. See the
@@ -913,8 +915,8 @@ selected study and source paths rather than assuming two URLs share state.
    | Interpretation | Anil SHAP (`shared-anil-shap`) |
    | Explanation | Cardiovascular expert explanation (`report_heart_failure_cardiovascular`) |
 
-   The design should show **1 possible combination**. LR is the primary model in
-   this selection; the paired ML path also evaluates XGBoost on the same split.
+   The design should show **1 possible combination**. Only LR is fitted for this
+   selection. Add a separate XGBoost combination to run that model independently.
    This example does not select all 64 combinations.
 4. Review model assignments and evaluation settings. **Advanced model settings**
    lets you fix supported ML parameters; blank/Auto leaves them for the ML Agent.
@@ -1057,10 +1059,10 @@ Interpretation combinations. Review the new skill schedule before execution.
 Source selection does not rewrite previous execution records or reports. General
 skills in existing saved runs remain executable for compatibility.
 
-For LR/XGBoost skills, both models are trained and the skill selects the primary
-model. The ML Agent chooses supported parameters, scaling, threshold and training
+For LR/XGBoost skills, only the model named by the selected skill is trained. The
+ML Agent chooses supported parameters, scaling, threshold and training
 CV within server limits. Random Forest and preset candidate-search controls belong
-to the legacy evaluation mode and are not shown for this paired mode. Data skills
+to the legacy evaluation mode and are not shown for this selected-model mode. Data skills
 choose the split policy and seed; split evaluations add fits within a Loop. Review
 actual applied values in saved results, not just the initial defaults.
 
@@ -1182,7 +1184,7 @@ The configured outcome column is a label and never a predictor. Keep the target 
 matcher, and evaluation. Scores and feature importance describe the configured
 experiment; they are not evidence of a causal effect.
 
-In the paired workflow, an independent validation reserve is set aside before
+In the selected-model workflow, an independent validation reserve is set aside before
 Data divides the exploration population into training and evaluation partitions.
 Saved evaluation metrics and confusion matrices describe their recorded partition;
 a reserve marked `reserved_not_evaluated` has no independent-validation results.

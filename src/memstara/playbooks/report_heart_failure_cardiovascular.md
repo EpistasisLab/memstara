@@ -12,9 +12,9 @@ HeartFailure OKF evidence supplied or retrieved by this workflow.
 ## Expected inputs and study contract
 
 Read the prediction task, target definition and label mapping, cohort description,
-selected CSV feature names and definitions, data preparation/split records, model
-identities and measured metrics. Read both LR and XGBoost interpretation artifacts
-when available, identifying the primary model and comparator. Identify SHAP or LIME,
+selected CSV feature names and definitions, data preparation/split records, the selected
+model identity and its measured metrics. Read only that model's interpretation artifact.
+Identify SHAP or LIME,
 the explained class/output, local/global scope, and any fidelity or stability evidence.
 Use the registered contract as authoritative: for the included demonstration the
 outcome is `chronic_heart_failure`, positive `1`, negative `0`. Do not change it to
@@ -49,8 +49,8 @@ Report only available held-out AUROC, PR-AUC, calibration/Brier, F1, confusion-m
 metrics, uncertainty, baselines or statistical tests. Identify the evaluated split,
 threshold and sample size. Distinguish training performance, exploration hold-out
 performance and separately evaluated reserved/external validation. An unevaluated
-reserve is not validation evidence. Compare LR and XGBoost only on comparable
-outcomes and samples; do not claim superiority from one uncertain point estimate.
+reserve is not validation evidence. Do not compare against an unrun model or claim
+model superiority from results that were not produced in this execution.
 If intervals, significance tests, baseline comparisons or subgroup results are
 missing, state that the relevant conclusion cannot be assessed.
 

@@ -32,7 +32,8 @@ def test_snapshot_filters_before_sampling_and_preserves_replay(tmp_path, monkeyp
     monkeypatch.setattr(snapshot, 'load_prompt', lambda *args: {})
     stages = ('hypothesis', 'data', 'ml', 'interpreter', 'report')
     plan = {'version': 1, 'total_loops': 200, 'combinations': 1,
-            'skills': {s: [{'id': 'random_features' if s == 'hypothesis' else ''}] for s in stages}}
+            'skills': {s: [{'id': 'random_features' if s == 'hypothesis' else
+                            'ml_logistic_regression' if s == 'ml' else ''}] for s in stages}}
     args = SimpleNamespace(evaluation='{"engine":"xgboost"}', y_column='Y',
         baseline_columns='[]', run_tag='fixture', question='', hypothesis_agents=1,
         trials=1, waves=200, combination_plan=json.dumps(plan))

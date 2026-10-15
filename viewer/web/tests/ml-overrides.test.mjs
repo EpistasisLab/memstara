@@ -15,11 +15,11 @@ test('distinct settings match selected models; deselection removes hidden overri
  assert.equal(overrideCount(settings),7);
  assert.deepEqual(overridesForSkills(settings,[]),{});
 });
-test('unsafe values, incompatible solver and fit counts are blocked',()=>{
+test('unsafe values and incompatible solver are blocked; fit counts use one selected model',()=>{
  for(const bad of [0,NaN,Infinity,20000])assert(mlOverridesError({version:1,models:{logistic_regression:{parameters:{C:bad}}}},['ml_logistic_regression']));
  assert(mlOverridesError({version:1,models:{xgboost:{parameters:{n_jobs:32}}}},['ml_xgboost']));
  assert(mlOverridesError({version:1,models:{logistic_regression:{parameters:{solver:'lbfgs',penalty:'l1'}}}},['ml_logistic_regression']));
- assert(mlOverridesError({version:1,folds:5},['ml_logistic_regression'],10));
+ assert.equal(mlOverridesError({version:1,folds:5},['ml_logistic_regression'],10),null);
 });
 test('Auto defaults need no schema; custom values require supported server settings',()=>{
  setMlSettingsSchema();assert.equal(mlOverridesError({},['ml_logistic_regression']),null);

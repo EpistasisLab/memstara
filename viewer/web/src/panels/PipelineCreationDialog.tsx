@@ -24,8 +24,8 @@ const labels = ['Knowledge sources', 'Hypothesis', 'Data', 'Machine learning', '
 const guidance = {
   data: 'Choose how this agent maps requested features to available columns without cleaning the cohort.',
   hypothesis: 'Choose how this agent uses knowledge to generate hypotheses and select features.',
-  ml: 'Choose LR or XGBoost as the primary model. Both are evaluated on the same predictors and split within each Loop.',
-  interpreter: 'Choose SHAP or LIME to describe technical results and attributions for both models. Clinical meaning belongs in Explanation.',
+  ml: 'Choose LR or XGBoost. Only the selected model is fitted in each pipeline combination.',
+  interpreter: 'Choose SHAP or LIME to describe technical results and attributions for the selected model. Clinical meaning belongs in Explanation.',
   report: 'Choose how findings are compared and useful hypotheses are recommended.',
 };
 const field = 'w-full rounded-lg border border-paper-line bg-white px-3 py-2 text-sm text-ink';
@@ -182,7 +182,7 @@ function CreationWizard() {
         {step === 7 && <><p className="text-sm text-ink-muted">Review your pipeline. Each loop builds on earlier results and interpretations. The first loop starts from knowledge. After creation, press Play when you are ready.</p>
           <div className="rounded-lg border border-paper-line bg-paper-panel p-3 text-sm" aria-label="ML settings review">
             <p className="font-semibold">ML evaluation settings</p>
-            {draft.data_mode==='proposal'?<p>Proposal only: no model training or measured evaluation.</p>:paired?<p className="mt-1 text-ink-muted">Both LR and XGBoost · primary: {draft.playbook_ml==='ml_xgboost'?'XGBoost':'LR'} · {overrideCount(draft.ml_overrides)} fixed advanced values; remaining settings selected by the ML Agent · Data-skill split policy · {draft.evaluation.replicates} split evaluations</p>:<p className="mt-1 text-ink-muted">Model: {draft.evaluation.engine} · seed: {draft.evaluation.seed} · hold-out: {Math.round(draft.evaluation.test_size*100)}% · {draft.evaluation.replicates} splits · {draft.evaluation.search_trials} candidates</p>}
+            {draft.data_mode==='proposal'?<p>Proposal only: no model training or measured evaluation.</p>:paired?<p className="mt-1 text-ink-muted">Selected model: {draft.playbook_ml==='ml_xgboost'?'XGBoost':'Logistic Regression'} · {overrideCount(draft.ml_overrides)} fixed advanced values; remaining settings selected by the ML Agent · Data-skill split policy · {draft.evaluation.replicates} split evaluations</p>:<p className="mt-1 text-ink-muted">Model: {draft.evaluation.engine} · seed: {draft.evaluation.seed} · hold-out: {Math.round(draft.evaluation.test_size*100)}% · {draft.evaluation.replicates} splits · {draft.evaluation.search_trials} candidates</p>}
             {!validModel && <p role="alert">{advancedError||evaluationPlanError(draft.evaluation)}</p>}
             <button type="button" className="mt-2 underline" onClick={()=>setStep(3)}>Edit ML settings</button>
           </div>
@@ -191,7 +191,7 @@ function CreationWizard() {
             <div className="flex items-start justify-between gap-3 py-3"><div><p className="text-xs text-ink-muted">Knowledge sources</p><p className="text-sm">{sourceLabel}</p></div><button type="button" className="text-sm underline" onClick={() => setStep(0)}>Edit</button></div>
             <div className="py-3"><p className="text-xs text-ink-muted">Pipeline name</p><p className="font-medium">{name.trim()}</p></div>
             <p className="text-sm">Fixed clinical baseline: {draft.baseline_columns?.join(" · ") || "None — hypothesis-selected predictors only"}</p>
-            {setupStages.map((s, index) => <div key={s} className="flex items-start justify-between gap-3 py-3"><div className="min-w-0"><p className="text-xs text-ink-muted">{labels[index + 1]}</p><p className="text-sm">{catalog.find(c => compatibleResearchSkill(c,draft) && c.stage === s && c.id === draft[`playbook_${s === "report" ? "explanation" : s}`])?.title || 'Select a skill'}{s === 'ml' && (paired ? ' · LR + XGBoost' : ` · ${draft.evaluation.engine}`)}</p></div><button type="button" className="shrink-0 text-sm underline" onClick={() => setStep(index + 1)}>Edit</button></div>)}
+            {setupStages.map((s, index) => <div key={s} className="flex items-start justify-between gap-3 py-3"><div className="min-w-0"><p className="text-xs text-ink-muted">{labels[index + 1]}</p><p className="text-sm">{catalog.find(c => compatibleResearchSkill(c,draft) && c.stage === s && c.id === draft[`playbook_${s === "report" ? "explanation" : s}`])?.title || 'Select a skill'}{s === 'ml' && (paired ? ' · selected model only' : ` · ${draft.evaluation.engine}`)}</p></div><button type="button" className="shrink-0 text-sm underline" onClick={() => setStep(index + 1)}>Edit</button></div>)}
           </div><p className="text-xs text-ink-muted">This pipeline uses the knowledge sources you confirmed above. Dataset settings are carried over from the current configuration. Data extraction uses the Data skill selected above. Each pipeline has one agent per stage.</p></>}
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       </div>

@@ -1,4 +1,4 @@
-"""Serialized, bounded child-process execution for agent-configured paired models."""
+"""Serialized, bounded child-process execution for the selected ML model."""
 from __future__ import annotations
 
 import fcntl
@@ -75,8 +75,8 @@ def execute(path, target, evaluation, snapshot, proposal):
                                   for r in recorded_splits):
         raise ValueError('Reduce training CV folds to the smallest training class count')
     variants = 2 + len(handoff.get('groups', {})) if snapshot.get('comparison_policy') else 1
-    if 2 * evaluation['replicates'] * (accepted['folds'] + 2) * variants > limits['max_fits']:
-        raise ValueError('Reduce training CV folds: paired fit count exceeds the resource budget')
+    if evaluation['replicates'] * (accepted['folds'] + 2) * variants > limits['max_fits']:
+        raise ValueError('Reduce training CV folds: selected-model fit count exceeds the resource budget')
     root = Path(os.environ.get('MEMSTARA_OUTPUT_DIR') or DEFAULT_OUTPUT_DIR)
     root.mkdir(parents=True, exist_ok=True)
     # One lock for all processes and pipelines in this local application.
@@ -92,7 +92,7 @@ def execute(path, target, evaluation, snapshot, proposal):
                 raise ValueError('Accepted ML settings/input cannot change after evaluation starts')
             if result_path.exists():
                 return json.loads(result_path.read_text())
-            raise ValueError('Prior paired ML execution was interrupted; inspect its record before a new run')
+            raise ValueError('Prior ML execution was interrupted; inspect its record before a new run')
         atomic(accepted_path, record)
         progress_path = path.with_suffix('.paired-progress.json')
         atomic(progress_path, {'phase': 'starting', 'completed_models': {}})
@@ -113,7 +113,7 @@ def execute(path, target, evaluation, snapshot, proposal):
                 result['ml_resource_usage'] = usage
         except Exception as exc:
             result = {'status': 'failed', 'error': str(exc) if type(exc) is RuntimeError else
-                      f'Paired ML failed ({type(exc).__name__})', 'ml_configuration': record,
+                      f'ML failed ({type(exc).__name__})', 'ml_configuration': record,
                       'evaluation': {'dataset_sha256': record['dataset_sha256']}}
         if result.get('status') == 'failed':
             result['partial_progress'] = json.loads(progress_path.read_text())
@@ -134,23 +134,24 @@ def fit(request):
         raise ValueError('ML inputs changed before fitting')
     # All score/comparison helpers use exactly this frozen partition, including ablations.
     evaluation_module.active_plan = lambda: snapshot
-    frame = validate_clean_dataset(path, request['target'])
+    frame = validate_clean_dataset(path, request['target'], allow_missing=proposal['primary_model'] == 'xgboost')
     X = frame.drop(columns=[request['target']])
     categorical = X.select_dtypes(exclude='number')
     width = len(X.columns) - len(categorical.columns) + sum(categorical.nunique(dropna=False))
     limits = snapshot['ml_configuration_policy']
     if width > limits['max_encoded_columns'] or width * len(frame) > limits['max_dense_cells']:
-        raise DataQualityError('Encoded design matrix exceeds paired ML memory budget')
+        raise DataQualityError('Encoded design matrix exceeds ML memory budget')
     handoff = json.loads(path.with_suffix('.comparison.json').read_text())
     variants = 2 + len(handoff.get('groups', {})) if snapshot.get('comparison_policy') else 1
-    estimated_fits = 2 * evaluation['replicates'] * (proposal['folds'] + 2) * variants
+    models_to_fit = (proposal['primary_model'],)
+    estimated_fits = len(models_to_fit) * evaluation['replicates'] * (proposal['folds'] + 2) * variants
     if estimated_fits > limits['max_fits']:
-        raise ValueError('Paired ML fit count exceeds the resource budget')
+        raise ValueError('Selected-model fit count exceeds the resource budget')
     from memstara.specialist_xai import request as xai_request
     specialist = xai_request(snapshot, handoff['trial'])
     results: dict[str, Any] = {}
     with threadpool_limits(limits=1):
-        for name in config.MODELS:
+        for name in models_to_fit:
             atomic(path.with_suffix('.paired-progress.json'), {'phase': name, 'completed_models': results})
             plan = {**evaluation, 'engine': name, 'folds': proposal['folds'], 'search_trials': 1}
             configuration = proposal['models'][name]
@@ -164,18 +165,8 @@ def fit(request):
                                                               'completed_models': results})
     def splits(result):
         return [(r['seed'], r['train_split_id'], r['split_id']) for r in result['evaluation']['replicates']]
-    lr, xgb = (results[name] for name in config.MODELS)
-    if splits(lr) != splits(xgb) or lr['features'] != xgb['features']:
-        raise ValueError('Paired model features or splits differ')
     result = {**results[proposal['primary_model']], 'model_results': results,
-              'ml_configuration': request['record'], 'paired_models': {
-                  'version': config.VERSION, 'primary_model': proposal['primary_model'],
-                  'primary_selection': (
-                      'Precommitted controlled-comparison plan' if snapshot.get('controlled_comparison') else
-                      'Fixed by the selected ML skill before fitting' if snapshot.get('_selected_ml_primary') else
-                      'Declared by the ML Agent before either model was fitted'),
-                  'same_features': True, 'same_splits': True,
-                  'xgboost_minus_lr_auc': xgb['auc'] - lr['auc']}}
+              'ml_configuration': request['record']}
     if specialist and any(row.get('specialist_xai', {}).get('status') != 'completed' for row in results.values()):
         result.update(status='failed', error='Specialist explanations are incomplete; inspect saved model artifacts.')
     if config.identity(path, snapshot, evaluation, proposal) != request['record']:

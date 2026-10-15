@@ -20,8 +20,8 @@ import { asSlots, fromSlots, withPlaybookAt, withoutSlot, withoutInterpreterSlot
 const descriptions: Record<string, string> = {
   data: "Extract the selected predictors and choose training-heavy or balanced stratified allocation. CSV and target definitions are configured in Knowledge sources / Data & target.",
   hypothesis: "Generate a knowledge-grounded hypothesis and choose features for the fixed target. Each hypothesis uses a different skill.",
-  ml: "Choose LR or XGBoost as the primary model. Both are trained and compared on the same predictors and split within each Loop; the Data skill determines that Loop's allocation.",
-  interpreter: "Describe measured performance and SHAP or LIME attributions for both LR and XGBoost. Clinical interpretation belongs in Explanation.",
+  ml: "Choose LR or XGBoost. Only the selected model is trained in each Loop; the Data skill determines that Loop's allocation.",
+  interpreter: "Describe measured performance and SHAP or LIME attributions for the selected ML model. Clinical interpretation belongs in Explanation.",
   report: "Use the Interpretation output and selected knowledge sources to explain meaning, follow-up questions and limitations. Distinguish measured findings from unverified clinical claims.",
 };
 const field = "w-full rounded border border-paper-line bg-white px-2 py-1.5 text-sm focus:border-ink focus:outline-hidden";
@@ -179,7 +179,7 @@ function Editor({ close }: { close: () => void }) {
       <EvaluationSettings proposal={form.data_mode==='proposal'} value={plan} onChange={setPlan} disabled={saving||!!running||busy}
         paired={!!form.combination_max_loops||['ml_logistic_regression','ml_xgboost'].includes(choice)}
         dataSkill={form.combination_max_loops?'combinations':form.playbook_data}/>
-      <p className="text-xs text-ink-faint">Paired LR/XGBoost evaluation requires complete predictors for both models. Missing labels and non-finite values are rejected before training.</p>
+      <p className="text-xs text-ink-faint">The selected model is fitted using the recorded predictors. Missing labels and non-finite values are rejected before training.</p>
     </div>}
     {(error || duplicate || invalidPlan) && <p role="alert" className="mt-3 text-sm text-red-700">{error || advancedError || (invalidPlan ? "Check evaluation ranges. CV folds must be 0 or 2–10." : "Choose a different skill for this agent.")}</p>}
     {!add && multiple && count === 1 && <p className="mt-3 text-xs text-ink-faint">At least one {agentStageLabel(stage)} agent is required.</p>}

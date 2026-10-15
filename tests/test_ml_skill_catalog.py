@@ -11,7 +11,7 @@ def test_two_builtin_ml_choices_and_common_contract(tmp_path, monkeypatch):
     for name in ('ml_logistic_regression', 'ml_xgboost'):
         prompt = load_prompt('board/ml', name)['system_prompt']
         assert 'Common training, evaluation and result contract' in prompt
-        assert 'both model artifacts and model_results' in prompt
+        assert 'Only the selected model is fitted and saved for Interpretation' in prompt
         assert 'Clinical presentation and readiness judgments belong to downstream reporting' in prompt
 
 

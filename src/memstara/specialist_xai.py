@@ -281,7 +281,7 @@ def verify_artifact(model, item, index):
         raise ValueError('Specialist explanation identity changed')
 
 def handoff(snapshot, task, worker):
-    """Select one specialist's two-model aggregate evidence; reject mixed identities."""
+    """Select one specialist's evidence for the model selected by this task."""
     from memstara.combinations import task_books
     from memstara.interpretation_fanout import metadata
     spec = request(snapshot, task['trial'])
@@ -299,10 +299,15 @@ def handoff(snapshot, task, worker):
         raise ValueError('Interpretation skill does not belong to the scheduled task')
     method = SKILLS[skill]
     models = previous.get('model_results', {})
-    if set(models) != {'logistic_regression', 'xgboost'}:
-        raise ValueError('Specialist Interpretation requires both measured model results')
+    from memstara.ml_configuration import MODEL_SKILLS
+    selected = [MODEL_SKILLS[name] for name in (task_books(snapshot, task['trial']).get('ml') or [])
+                if name in MODEL_SKILLS]
+    if len(selected) != 1:
+        raise ValueError('Specialist Interpretation requires exactly one selected ML model skill')
+    expected_model = selected[0]
+    if set(models) != {expected_model}:
+        raise ValueError('Specialist Interpretation received results for a non-selected ML model')
     outputs = {}
-    references = None
     for name, model in models.items():
         if model['model'] != name:
             raise ValueError('Cross-model evidence identity mismatch')
@@ -313,10 +318,6 @@ def handoff(snapshot, task, worker):
         items = [item for item in xai['items'] if item['method'] == method]
         if len(items) != len(replicas):
             raise ValueError('Specialist evidence must cover every evaluated split')
-        splits = [(r['train_split_id'], r['split_id']) for r in replicas]
-        if references is not None and splits != references:
-            raise ValueError('Interpretation cannot mix models from different splits')
-        references = splits
         for index, (item, replica) in enumerate(zip(items, replicas, strict=True)):
             if (item['status'] != 'completed' or item['model'] != name or item['replicate'] != index + 1
                     or item['config_hash'] != snapshot['config_hash'] or item['run_tag'] != snapshot['run_tag']
@@ -328,14 +329,12 @@ def handoff(snapshot, task, worker):
             verify_artifact(model, item, index)
         outputs[name] = {key: model[key] for key in ('model', 'auc', 'features', 'evaluation', 'data_quality')}
         outputs[name]['attributions'] = items
-    if outputs['logistic_regression']['features'] != outputs['xgboost']['features']:
-        raise ValueError('Paired Interpretation predictors differ')
     source = spec['skills'][skill]
     return {'version': VERSION, 'method': method, 'skill': skill, 'skill_source_sha256': source['source_sha256'],
             'task_id': task['task_id'], 'source_task_id': branch.get('source_task_id', task['task_id']),
             'run_tag': snapshot['run_tag'], 'trial': task['trial'], 'config_hash': snapshot['config_hash'],
-            'models': outputs, 'instructions': 'Interpret both models using this method only. '
-            'Do not transfer attribution scales or evidence between models. '
+            'models': outputs, 'instructions': 'Interpret only the selected model using this method. '
+            'Do not introduce or compare an unrun model. '
             'Raw row data and individual attribution arrays remain in local artifacts.'}
 
 

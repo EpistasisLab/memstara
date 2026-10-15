@@ -1,4 +1,4 @@
-"""Opt-in matched settings for a guided versus random feature comparison."""
+"""Opt-in frozen settings for a selected-model guided versus random comparison."""
 import copy
 import json
 
@@ -22,8 +22,10 @@ def freeze(value, snapshot):
         return {}
     from memstara.ml_configuration import validate as validate_ml
     if not snapshot.get('combination_plan') or not snapshot.get('ml_configuration_policy'):
-        raise ValueError('Controlled comparison requires the paired-model combination pipeline')
+        raise ValueError('Controlled comparison requires a model-selected combination pipeline')
     controls['ml_plan'] = validate_ml(controls['ml_plan'], snapshot, snapshot['evaluation'])
+    if len(controls['ml_plan']['models']) != 1:
+        raise ValueError('Controlled comparisons must configure only the selected ML model')
     if controls['feature_count'] > len(snapshot['feature_context']['features']):
         raise ValueError('Insufficient eligible predictors for the fixed feature count')
     return controls

@@ -151,10 +151,9 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
                     {' '}Class counts (training / evaluation): {Object.keys(split.train_class_counts).map(k=>`${k}: ${split.train_class_counts[k]} / ${split.test_class_counts[k] ?? 0}`).join('; ')}
                   </p>)}
                 </section>}
-                {r.evaluation?.paired_models && <section aria-label="Paired ML models" className="mt-3 rounded border border-paper-line p-3 text-sm">
-                  <strong>LR and XGBoost · paired evaluation</strong>
-                  <p>Same predictors and splits. Primary model: {r.evaluation.paired_models.primary_model}, chosen before fitting.</p>
-                  <p>All other result charts below refer to this primary model. These are exploratory scores, not independent validation.</p>
+                {r.evaluation?.model_results && <section aria-label="Selected ML model results" className="mt-3 rounded border border-paper-line p-3 text-sm">
+                  <strong>Selected model · {Object.keys(r.evaluation.model_results)[0]}</strong>
+                  <p>These are exploratory scores, not independent validation.</p>
                   <div className="grid gap-3 md:grid-cols-2">
                     {Object.entries(r.evaluation.model_results ?? {}).map(([name, model])=><div key={name} className="min-w-0 rounded border border-paper-line p-2">
                       <strong>{name}</strong><p>AUROC {model.auc.toFixed(4)} · training {model.n_train} · evaluation {model.n_test}</p>
@@ -170,7 +169,6 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
                       <details><summary>Model parameters and replay location</summary><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify({configuration:model.ml_configuration,replay:model.evaluation.reproducibility},null,2)}</pre></details>
                     </div>)}
                   </div>
-                  <p>XGBoost − LR AUROC: {r.evaluation.paired_models.xgboost_minus_lr_auc.toFixed(4)}</p>
                   <details><summary>Agent proposal and enforced limits</summary><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(r.evaluation.ml_configuration,null,2)}</pre></details>
                 </section>}
                 <ResultEvidenceVisuals key={resultKey(r)} result={r} />

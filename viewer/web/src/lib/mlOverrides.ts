@@ -31,6 +31,6 @@ export function mlOverridesError(value:MlOverrides|undefined,skills:string[],rep
   if(model.parameters?.penalty==='l1'&&model.parameters?.solver==='lbfgs')return 'LR l1 requires the liblinear solver.';
  }
  if(value.folds!==undefined&&!schema.folds.includes(value.folds))return 'Training CV folds must be 0 or 2–5.';
- if(value.folds!==undefined&&2*replicates*(value.folds+2)>schema.resource_limits.max_fits)return 'Reduce split evaluations or CV folds to remain within the ML fit budget.';
+ if(value.folds!==undefined&&replicates*(value.folds+2)>schema.resource_limits.max_fits)return 'Reduce split evaluations or CV folds to remain within the ML fit budget.';
  return null;
 }

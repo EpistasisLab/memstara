@@ -132,11 +132,6 @@ def replay(directory: Path) -> dict:
     # Load the evaluation libraries before recording native thread pools, as in score().
     from memstara.evaluation import model_for
     model_for(manifest['plan']['engine'], manifest['plan']['seed'])
-    if 'ml-plan.json' in manifest['files']:
-        # The paired worker loads both libraries before either fit. Recreate that
-        # native-runtime environment even when replaying only its LR bundle.
-        model_for('logistic_regression', manifest['plan']['seed'])
-        model_for('xgboost', manifest['plan']['seed'])
     if environment() != json.loads((directory / 'environment.json').read_text()):
         return {'status': 'environment_mismatch'}
     expected = json.loads((directory / 'result.json').read_text())

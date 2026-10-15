@@ -1,4 +1,4 @@
-"""Real bounded synthetic LR/XGBoost integration; no model API or private data."""
+"""Real bounded synthetic selected-model integration; no model API or private data."""
 import asyncio
 import copy
 import hashlib
@@ -29,7 +29,7 @@ def experiment(tmp_path, monkeypatch):
                 'evaluation':evaluation.validate({'engine':'xgboost'}),
                 'ml_configuration_policy':config.policy(),
                 'data_allocation_policy':{'version':allocation.PREVIOUS_VERSION},
-                'books':{'data':['data_balanced_stratified']},
+                'books':{'data':['data_balanced_stratified'],'ml':['ml_xgboost']},
                 'prompts':{'board/data:data_balanced_stratified':{'system_prompt':'synthetic'}},
                 'validation_partition':evaluation.discovery_partition(pd.read_csv(source).Y,42),
                 'comparison_policy':{'baseline_columns':[]}}
@@ -45,10 +45,9 @@ def experiment(tmp_path, monkeypatch):
     write_context(subset,task,snapshot,data_allocation=record)
     effective=record['effective_evaluation']
     proposal=config.context(snapshot,effective)['proposal_template']
-    proposal['rationale']='Synthetic paired comparison fixed before fitting'
+    proposal['rationale']='Synthetic selected-model plan fixed before fitting'
     proposal['models']['xgboost']['parameters']['n_estimators']=10
     proposal['models']['xgboost']['parameters']['max_depth']=2
-    proposal['models']['logistic_regression']['threshold']=.6
     return subset,snapshot,effective,proposal
 
 
@@ -70,7 +69,7 @@ def test_frozen_tool_uses_server_plan_and_saves_resolution(experiment, monkeypat
 
     def execute(*args, **kwargs):
         executed.append((args, kwargs))
-        return {'model': 'logistic_regression'}
+        return {'model': 'xgboost'}
 
     monkeypatch.setattr(paired_ml, 'execute', execute)
     result = json.loads(train_and_score(str(path), 'Y', ml_plan=supplied))
@@ -93,13 +92,13 @@ def test_real_tool_pair_and_replay(experiment, monkeypatch):
     assert 'error' in missing and not path.with_suffix('.ml-plan.json').exists()
     result=json.loads(train_and_score(str(path),'Y',seed=999,ml_plan=proposal))
     assert not result.get('error'),result
-    assert result['paired_models']['same_splits']
-    assert result['model']=='logistic_regression'
+    assert 'paired_models' not in result
+    assert result['model']=='xgboost'
     assert result['data_allocation']['agent_plan']['seed']==7
     assert result['ml_configuration']['requested']==proposal
     assert result['ml_resource_usage']['threads']==1
     assert result['ml_resource_usage']['peak_rss_bytes']>0
-    assert set(result['model_results'])==set(config.MODELS)
+    assert set(result['model_results'])=={'xgboost'}
     for name,model in result['model_results'].items():
         run=model['evaluation']['replicates'][0]
         assert (run['n_train'],run['n_test'],run['seed'])==(40,40,7)
@@ -126,11 +125,11 @@ def test_real_tool_pair_and_replay(experiment, monkeypatch):
     again=json.loads(train_and_score(str(path),'Y',ml_plan=proposal))
     assert again==result
     changed=copy.deepcopy(proposal)
-    changed['models']['logistic_regression']['parameters']['C']=2.
+    changed['models']['xgboost']['parameters']['max_depth']=3
     refusal=json.loads(train_and_score(str(path),'Y',ml_plan=changed))
     assert 'cannot change' in refusal['error']
     assert json.loads(path.with_suffix('.evaluation.json').read_text())==result
-    # The existing blackboard transition preserves both models for Interpretation.
+    # The blackboard transition preserves the selected model for Interpretation.
     from unittest.mock import AsyncMock, MagicMock
     from memstara.mcp_servers import blackboard as bb
     monkeypatch.setattr(bb,'_pipeline_run',lambda:'')
@@ -153,30 +152,28 @@ def test_real_tool_pair_and_replay(experiment, monkeypatch):
 def test_ml_agent_random_states_are_editable_and_recorded(experiment):
     path, snapshot, effective, proposal = experiment
     proposal = copy.deepcopy(proposal)
-    for model in config.MODELS:
+    for model in proposal['models']:
         proposal['models'][model]['parameters']['random_state'] = 987654
     accepted = config.validate(proposal, snapshot, effective)
     record = config.identity(path, snapshot, effective, accepted)
     assert record['requested'] == proposal
-    assert record['setting_sources']['models']['logistic_regression']['parameters']['random_state'] == 'agent'
     assert record['setting_sources']['models']['xgboost']['parameters']['random_state'] == 'agent'
 
 
 @pytest.mark.parametrize('change', ['threads','trees','depth','gpu','unknown','missing','solver','bool','nan','seed'])
 def test_invalid_plans_never_start(experiment,change):
     path,snapshot,evaluation_plan,proposal=experiment
-    lr=proposal['models']['logistic_regression']['parameters']
     xgb=proposal['models']['xgboost']['parameters']
     if change=='threads':xgb['n_jobs']=-1
     if change=='trees':xgb['n_estimators']=100000
     if change=='depth':xgb['max_depth']=0
     if change=='gpu':xgb['device']='cuda'
     if change=='unknown':xgb['callbacks']=[]
-    if change=='missing':del lr['C']
-    if change=='solver':lr.update(solver='lbfgs',penalty='l1')
-    if change=='bool':lr['C']=True
-    if change=='nan':lr['C']=float('nan')
-    if change=='seed':lr['random_state']=2147483648
+    if change=='missing':del xgb['max_depth']
+    if change=='solver':xgb['learning_rate']=float('nan')
+    if change=='bool':xgb['n_estimators']=True
+    if change=='nan':xgb['learning_rate']=float('nan')
+    if change=='seed':xgb['random_state']=2147483648
     with pytest.raises(ValueError):paired_ml.execute(path,'Y',evaluation_plan,snapshot,proposal)
     assert not path.with_suffix('.ml-plan.json').exists()
 
@@ -230,43 +227,49 @@ def test_fit_budget_rejection_does_not_freeze(experiment):
     assert not path.with_suffix('.ml-plan.json').exists()
 
 
-def test_second_model_failure_preserves_first_model_artifact(experiment,monkeypatch):
+def test_selected_model_fits_only_one_estimator(experiment,monkeypatch):
     from memstara import comparisons
     path,snapshot,effective,proposal=experiment
+    calls=[]
     def controlled_fit(path,target,plan,snapshot,**kwargs):
-        if plan['engine']=='xgboost':
-            raise RuntimeError('synthetic worker failure')
-        return {'auc':.6,'model':'logistic_regression','artifact':'synthetic-bundle-reference'}
+        calls.append(plan['engine'])
+        return {'auc':.6,'model':plan['engine'],'artifact':'synthetic-bundle-reference',
+                'evaluation':{'replicates':[]}}
     monkeypatch.setattr(comparisons,'score_comparisons',controlled_fit)
     request={'path':str(path),'target':'Y','evaluation':effective,'snapshot':snapshot,
              'proposal':proposal,'record':config.identity(path,snapshot,effective,proposal)}
-    with pytest.raises(RuntimeError,match='synthetic'):
-        paired_ml.fit(request)
-    progress=json.loads(path.with_suffix('.paired-progress.json').read_text())
-    assert progress['phase']=='xgboost'
-    assert progress['completed_models']['logistic_regression']['artifact']=='synthetic-bundle-reference'
+    result=paired_ml.fit(request)
+    assert calls == ['xgboost']
+    assert set(result['model_results']) == {'xgboost'}
 
 
 @pytest.mark.parametrize('skill,primary', [('ml_logistic_regression', 'logistic_regression'),
                                           ('ml_xgboost', 'xgboost')])
-def test_selected_model_contract_reaches_tool_and_keeps_both_models(experiment, skill, primary):
+def test_selected_model_contract_reaches_tool_and_fits_selected_model_only(experiment, skill, primary):
     from memstara.mcp_servers.ml import get_ml_configuration, train_and_score
     path, snapshot, _, _ = experiment
     snapshot['books']['ml'] = [skill]
     spec = json.loads(asyncio.run(get_ml_configuration(str(path), 'Y')))
     assert spec['fixed']['primary_model'] == primary
     plan = spec['proposal_template']
-    assert set(plan['models']) == {'logistic_regression', 'xgboost'}
+    assert set(plan['models']) == {primary}
     plan['rationale'] = 'Synthetic selected-model contract'
-    plan['models']['xgboost']['parameters']['n_estimators'] = 10
-    plan['models']['xgboost']['parameters']['max_depth'] = 2
+    if primary == 'xgboost':
+        plan['models']['xgboost']['parameters']['n_estimators'] = 10
+        plan['models']['xgboost']['parameters']['max_depth'] = 2
     wrong = copy.deepcopy(plan)
     wrong['primary_model'] = 'xgboost' if primary == 'logistic_regression' else 'logistic_regression'
     rejected = json.loads(train_and_score(str(path), 'Y', ml_plan=wrong))
     assert 'selected ML skill' in rejected['error']
     assert not path.with_suffix('.ml-plan.json').exists()
+    extra = copy.deepcopy(plan)
+    unselected = 'xgboost' if primary == 'logistic_regression' else 'logistic_regression'
+    extra['models'][unselected] = copy.deepcopy(plan['models'][primary])
+    rejected = json.loads(train_and_score(str(path), 'Y', ml_plan=extra))
+    assert 'only the selected ML model' in rejected['error']
+    assert not path.with_suffix('.ml-plan.json').exists()
     result = json.loads(train_and_score(str(path), 'Y', ml_plan=plan))
-    assert set(result.get('model_results', {})) == {'logistic_regression', 'xgboost'}, result
+    assert set(result.get('model_results', {})) == {primary}, result
     assert result['ml_configuration']['requested']['primary_model'] == primary
     assert result['model'] == primary
 
@@ -280,10 +283,12 @@ def test_advanced_user_values_reach_real_models_and_replay_with_provenance(exper
     snapshot['books']['ml']=['ml_logistic_regression']
     overrides={'version':1,'models':{
         'logistic_regression':{'parameters':{'C':.25,'solver':'liblinear'},'threshold':.65,'scale_numeric':False},
-        'xgboost':{'parameters':{'n_estimators':15,'max_depth':2,'learning_rate':.05},'threshold':.4}},'folds':0}
+        },'folds':0}
     snapshot['ml_overrides']=overrides
     specification=json.loads(asyncio.run(get_ml_configuration(str(path),'Y')))
     assert specification['user_overrides']==overrides
+    proposal=specification['proposal_template']
+    proposal['rationale']='Synthetic selected LR plan with one fixed user value'
     proposal['models']['logistic_regression']['parameters']['C']=5
     result=json.loads(train_and_score(str(path),'Y',ml_plan=proposal))
     assert not result.get('error'),result
@@ -291,7 +296,7 @@ def test_advanced_user_values_reach_real_models_and_replay_with_provenance(exper
     assert result['ml_plan_resolution']['agent_proposal']['models']['logistic_regression']['parameters']['C']==5
     assert result['ml_configuration']['setting_sources']['models']['logistic_regression']['parameters']['C']=='user'
     assert result['ml_configuration']['setting_sources']['models']['logistic_regression']['parameters']['random_state']=='agent'
-    for name in config.MODELS:
+    for name in ('logistic_regression',):
         model=result['model_results'][name]
         bundle=Path(model['evaluation']['reproducibility']['bundle_path'])
         manifest=json.loads((bundle/'manifest.json').read_text())

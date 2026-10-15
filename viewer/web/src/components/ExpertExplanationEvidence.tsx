@@ -10,7 +10,7 @@ export default function ExpertExplanationEvidence({evidence}:{evidence?:Explanat
     {reports.map((item,index)=><details key={`${item.loop}-${item.expert}-${index}`} className="min-w-0">
       <summary>{item.expert==='addiction'?'Addiction Expert':item.expert==='hiv'?'HIV Expert':'Explanation'}{item.loop!=null?` · Loop ${item.loop}`:''} · {item.status}</summary>
       <p className="break-all">Knowledge sources: {item.database_ids?.join(', ')||'Not available'}</p>
-      <p>Interpretation methods: {item.interpretation_methods?.map(s=>s.toUpperCase()).join(', ')||'Not available'} · LR and XGBoost</p>
+      <p>Interpretation methods: {item.interpretation_methods?.map(s=>s.toUpperCase()).join(', ')||'Not available'} · selected model</p>
       <p>Source task IDs: {item.task_ids?.join(', ')||'Not available'}</p>
       <p className="break-all">Retrieved references: {item.citations?.join(', ')||'Not available'}</p>
       <p>References identify retrieved evidence; they do not establish clinical validation.</p>

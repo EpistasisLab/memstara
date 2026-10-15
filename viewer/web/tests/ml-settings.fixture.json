@@ -120,7 +120,7 @@
     "max": 0.95
   },
   "resource_limits": {
-    "version": "agent_paired_ml_v1",
+    "version": "agent_selected_ml_v2",
     "threads": 1,
     "concurrent_jobs": 1,
     "memory_bytes": 2147483648,

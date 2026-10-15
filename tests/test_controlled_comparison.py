@@ -11,6 +11,7 @@ from test_feature_selection import plan
 
 def configured(mode='guided'):
     snapshot = plan(mode)
+    snapshot['_selected_ml_primary'] = 'xgboost'
     snapshot['evaluation'] = evaluation.validate({'seed': 42, 'test_size': .25})
     snapshot['ml_configuration_policy'] = ml.policy()
     proposal = ml.context(snapshot, snapshot['evaluation'])['proposal_template']

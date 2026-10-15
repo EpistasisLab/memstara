@@ -50,7 +50,7 @@ def test_current_skill_freeze_excludes_old_and_checks_method(specification,skill
         xai.freeze(snapshot['books'],snapshot['prompts'])
 
 
-def test_both_specialists_both_saved_models_and_offline_replay(specification,monkeypatch):
+def test_both_specialists_selected_saved_model_and_offline_replay(specification,monkeypatch):
     from memstara.mcp_servers.ml import train_and_score
     from memstara import paired_ml
     path,snapshot,_,proposal=specification
@@ -97,12 +97,12 @@ def test_both_specialists_both_saved_models_and_offline_replay(specification,mon
     task={'task_id':1,'trial':0,'subset_path':str(path),'evaluation':result}
     for slot,method in enumerate(('shap','lime'),1):
         value=xai.handoff(snapshot,task,f'interpret#{slot}')
-        assert value['method']==method and set(value['models'])=={'logistic_regression','xgboost'}
+        assert value['method']==method and set(value['models'])=={'xgboost'}
         assert all(i['method']==method for m in value['models'].values() for i in m['attributions'])
         incoming=xai.record_io(snapshot,task,f'interpret#{slot}',value)
         outgoing=xai.record_io(snapshot,task,f'interpret#{slot}',value,interpretation='Measured synthetic findings')
         assert incoming['sha256']!=outgoing['sha256']
-        assert set(outgoing['model_explanation_ids'])=={'logistic_regression','xgboost'}
+        assert set(outgoing['model_explanation_ids'])=={'xgboost'}
         assert json.loads(Path(outgoing['path']).read_text())['interpretation']=='Measured synthetic findings'
     from unittest.mock import AsyncMock,MagicMock
     from memstara.mcp_servers import blackboard as bb
@@ -126,17 +126,17 @@ def test_both_specialists_both_saved_models_and_offline_replay(specification,mon
     config_path=path.parent/'config.json'
     config_path.write_text(json.dumps(snapshot))
     monkeypatch.setenv('MEMSTARA_RUN_CONFIG',str(config_path))
-    submitted=json.loads(asyncio.run(bb.submit_result(1,worker='interpret#1',interpretation='Both measured models')))
+    submitted=json.loads(asyncio.run(bb.submit_result(1,worker='interpret#1',interpretation='Selected model findings')))
     assert submitted.get('ok'),submitted
     records=[json.loads(c.args[2]) for c in connection.execute.call_args_list
              if c.args[0].startswith('UPDATE memstara_blackboard SET evaluation=')]
     assert records[0]['specialist_interpretation']['method']=='shap'
-    assert json.loads(Path(records[0]['specialist_interpretation']['path']).read_text())['interpretation']=='Both measured models'
+    assert json.loads(Path(records[0]['specialist_interpretation']['path']).read_text())['interpretation']=='Selected model findings'
     corrupted=copy.deepcopy(task)
-    corrupted['evaluation']['model_results']['logistic_regression']['specialist_xai']['items'][0]['model']='xgboost'
-    with pytest.raises(ValueError,match='another model'):
-        xai.handoff(snapshot,corrupted,'interpret#2' if result['model_results']['logistic_regression']['specialist_xai']['items'][0]['method']=='lime' else 'interpret#1')
-    item=result['model_results']['logistic_regression']['specialist_xai']['items'][0]
+    corrupted['evaluation']['model_results']['xgboost']['specialist_xai']['items'][0]['model']='logistic_regression'
+    with pytest.raises(ValueError,match='Explanation artifact belongs to another model'):
+        xai.handoff(snapshot,corrupted,'interpret#2' if result['model_results']['xgboost']['specialist_xai']['items'][0]['method']=='lime' else 'interpret#1')
+    item=result['model_results']['xgboost']['specialist_xai']['items'][0]
     artifact=Path(item['artifact_path'])
     original=artifact.read_bytes()
     artifact.write_text('{}')
@@ -233,7 +233,7 @@ def test_specialist_web_configuration_freezes_exact_sources(specification,monkey
                          evaluation='{}',trials=1,waves=2,combination_plan=argv[argv.index('--combination-plan')+1])
     run=tmp_path/'web-run';run.mkdir()
     snapshot=freeze(args,run,{})
-    assert snapshot['ml_configuration_policy']['version']=='agent_paired_ml_v1'
+    assert snapshot['ml_configuration_policy']['version']=='agent_selected_ml_v2'
     assert xai.request(snapshot,0)['methods']==['shap']
     assert xai.request(snapshot,1)['methods']==['lime']
     assert snapshot['combination_plan']['total_loops']==2

@@ -442,14 +442,14 @@ validate the requested route end to end. A model-list response is insufficient.
 |---|---|---|
 | Question/Hypothesis | Knowledge sources, question history and eligible feature context; choose a research question and predictors | Question lineage, knowledge reads, selection provenance, model/tool traces |
 | Data | Exact hypothesis predictors, target and allocation skill; server validates extraction and executes the split | Extracted data identity, allocation proposal, row indices and class counts |
-| ML | Frozen data allocation; LLM proposes complete LR/XGBoost settings within resource/parameter constraints | Accepted ML plan, both model results, split and prediction files |
-| Interpretation | Selected SHAP or LIME skill, both fitted models' measured evidence | Two-model handoff, XAI artifacts, input/output receipts |
+| ML | Frozen data allocation; LLM proposes settings for the one selected LR or XGBoost model within resource/parameter constraints | Accepted selected-model plan, its result, split and prediction files |
+| Interpretation | Selected SHAP or LIME skill, selected model's measured evidence | Single-model handoff, XAI artifacts, input/output receipts |
 | Explanation | Interpretation outputs and scoped knowledge retrieval | Retrieval receipts, supplied document identities, actual model record and report |
 
 All Combinations freezes a 4–20 original-predictor policy. `random_features` selects
 within the same bounds using recorded sampling state; target columns are excluded.
 For new combination runs, Guided and Random share a complete-predictor candidate
-pool compatible with both LR and XGBoost. Missing-value columns are excluded before
+pool compatible with either selected model. Missing-value columns are excluded before
 question generation; no patient rows or values are changed or imputed. Eligibility
 checks use input completeness, not outcome associations or model scores. The frozen
 context records excluded columns/counts, the eligibility policy and the candidate
@@ -464,7 +464,7 @@ the fitted predictor list. Use recorded model inputs to verify this distinction.
 population. `data_balanced_stratified` fixes it at 0.5. Both require stratification.
 Here "balanced" means equal train/evaluation sizes, not class oversampling. A separate
 validation reserve is removed before this allocation. Counts, indices and seeds are
-saved so both learners use the same partition.
+saved for the selected model's partition.
 
 These are the two built-in selectable Data skills. Exact feature extraction,
 target preservation, missing-column reporting and the saved handoff to ML are
@@ -476,10 +476,10 @@ Data strategy, or defaults to `data_training_heavy` when none is selected or the
 retired extraction choice was inherited. Existing saved runs are not migrated.
 
 `ml_logistic_regression` (Logistic Regression) and `ml_xgboost` (XGBoost) are the
-two built-in selectable ML skills. The selection fixes the primary model before
-fitting; the tool rejects an agent proposal that changes it. Both models are still
-trained and saved so SHAP/LIME can inspect both. Selecting either skill enables
-the paired policy even outside All Combinations.
+two built-in selectable ML skills. The selection fixes the only model before fitting;
+the tool rejects an agent proposal that changes it or adds another model. Only that
+model is trained and saved for SHAP/LIME. Selecting either skill enables this policy
+even outside All Combinations.
 
 Training safety, evaluation and structured-result reporting are common instructions
 in `prompts/board/_ml_common.md`. Clinical presentation belongs downstream. The
@@ -488,8 +488,8 @@ and are not offered in new menus. New creation drafts translate old choices into
 LR or XGBoost; historical run settings and frozen prompts are not rewritten. The LLM does not have unrestricted control over compute:
 server-owned parameter ranges, data splits, fit budgets, CPU/thread and memory limits
 still apply. See [ml_configuration.py](src/memstara/ml_configuration.py) and
-[paired_ml.py](src/memstara/paired_ml.py). Existing single-model paths and their engine
-settings are separate from this paired workflow.
+[paired_ml.py](src/memstara/paired_ml.py), which retains its historical filename but
+now supervises only the selected model for each pipeline combination.
 
 Matched experiments with `controlled_comparison` use a server-owned, precommitted
 ML plan instead of asking the LLM to reproduce it. `get_ml_configuration` returns
@@ -504,8 +504,8 @@ The current shared specialist catalog uses exact root filenames:
 and `HIV-Expert-Explanation.md`. Resolution is defined by
 [catalog.py](src/memstara/control/catalog.py); archived files are not fallback sources.
 Deployments need authorized current copies, and runs freeze their contents/hashes.
-Each Interpretation specialist receives both models; choosing SHAP for a single route
-does not also execute LIME. Inspect the recorded explanation sample size: bounded XAI
+Each Interpretation specialist receives only the selected model; choosing SHAP for a
+single route does not also execute LIME. Inspect the recorded explanation sample size: bounded XAI
 samples are not automatically summaries of the entire evaluation cohort.
 
 Without an explicit `MEMSTARA_EXPLANATION_SOURCES` binding, current expert Explanation
@@ -648,12 +648,12 @@ A rigorous one-route acceptance check includes all of the following:
    stage. A saved setting alone is not proof of the model used.
 3. Predictor selection is within bounds; extraction preserves row order and values;
    the fitted model excludes the target.
-4. Train, evaluation and reserved rows are disjoint; both models share the same
-   partitions. Confirm the scope of each reported confusion matrix.
+4. Train, evaluation and reserved rows are disjoint; the selected model uses only its
+   recorded partitions. Confirm the scope of each reported confusion matrix.
 5. Recompute metrics from saved labels and probabilities. Distinguish trapezoidal
    PR-AUC from average precision. Verify threshold selection and undefined metrics.
-6. Verify artifact hashes and model/XAI/task/split identities, both-model access by
-   Interpretation, and the Explanation input/output receipts.
+6. Verify artifact hashes and model/XAI/task/split identities, selected-model access
+   by Interpretation, and the Explanation input/output receipts.
 7. Confirm the final report matches the accepted saved output and cites supplied
    evidence. Citation identity checks do not establish clinical truth or relevance.
 
