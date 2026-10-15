@@ -154,6 +154,11 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         if overrides:
             raise ValueError('Controlled comparisons cannot also use advanced ML overrides')
         state['controlled_comparison'] = controls
+    if state.get("data_allocation_policy") and not controls:
+        # A normal run lets the first Data Agent seed the independent reserve.
+        # Matched controlled comparisons retain their precommitted server split.
+        state["validation_partition_policy"] = "data_agent_seed_v1"
+        state["validation_partition"] = None
     state["config_hash"] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
     location = run_dir / "config.json"
     if location.exists():

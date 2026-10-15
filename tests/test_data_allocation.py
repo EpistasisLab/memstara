@@ -26,7 +26,7 @@ def experiment(tmp_path, monkeypatch):
     plan = {'run_tag': 'run', 'config_hash': 'config', 'y_column': 'Y', 'evaluation': shared,
             'dataset_sha256': hashlib.sha256(source.read_bytes()).hexdigest(),
             'comparison_policy': {'baseline_columns': []},
-            'data_allocation_policy': {'version': allocation.VERSION},
+            'data_allocation_policy': {'version': allocation.PREVIOUS_VERSION},
             'validation_partition': evaluation.discovery_partition(frame.Y, 42),
             'combination_plan': {'total_loops': 2, 'combinations': 2,
                                 'skills': {s: [{'id': key} for key in skills] if s == 'data'
@@ -96,6 +96,37 @@ def test_actual_ml_uses_data_plan_and_preserves_reserve(experiment, trial, fract
     sidecar.write_text(json.dumps(payload))
     with pytest.raises(ValueError, match='does not reproduce'):
         allocation.load_effective(subset, plan, plan['evaluation'])
+
+
+def test_new_data_agent_seed_and_validation_fraction_are_frozen_per_run(experiment, tmp_path, monkeypatch):
+    source, base = experiment
+    subset = source.with_name('agent-seeded-subset.csv')
+    subset.write_bytes(source.read_bytes())
+    run_config = tmp_path / 'config.json'
+    run_config.write_text('{}')
+    plan = {**base, 'validation_partition': None,
+            'validation_partition_policy': 'data_agent_seed_v1',
+            'data_allocation_policy': {'version': allocation.VERSION}}
+    plan['combination_plan']['skills']['data'] = [{'id': 'data_training_heavy'}]
+    monkeypatch.setenv('MEMSTARA_RUN_CONFIG', str(run_config))
+    task0 = task(0)
+    plan0 = {'test_size': .2, 'seed': 7, 'stratify': True,
+             'validation_size': .15, 'validation_seed': 1234, 'replicates': 3}
+    request0 = allocation.request(plan, 0)
+    assert 'validation_size' in request0['schema'] and 'validation_seed' in request0['schema']
+    record = allocation.prepare(plan0, task0, plan, subset)
+    frozen = json.loads((tmp_path / 'validation_partition.json').read_text())
+    assert frozen['seed'] == 1234 and frozen['fraction'] == .15
+    assert record['validation_partition'] == {k: frozen[k] for k in
+        ('version', 'seed', 'row_count', 'reserved_count', 'reserved_split_id', 'status', 'fraction')}
+    refreshed = {**plan, 'validation_partition': frozen}
+    later = {'test_size': .3, 'seed': 987, 'stratify': True,
+             'validation_size': .15, 'validation_seed': 1234, 'replicates': 5}
+    request1 = allocation.request(refreshed, 1)
+    assert request1['required_validation_partition'] == {'validation_seed': 1234, 'validation_size': .15}
+    assert allocation.validate(later, request1, base['evaluation'])['seed'] == 987
+    with pytest.raises(ValueError, match='validation settings'):
+        allocation.validate({**later, 'validation_size': .2}, request1, base['evaluation'])
 
 
 def test_reordered_rows_and_missing_plan_block_before_ml(experiment):

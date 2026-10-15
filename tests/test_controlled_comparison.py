@@ -50,7 +50,11 @@ def test_data_split_cannot_drift():
     snapshot['prompts'] = {'board/data:data_training_heavy': {'system_prompt': 'fixture'}}
     spec = data.request(snapshot, 0)
     fixed = spec['required_data_plan']
-    assert fixed == {'test_size': .25, 'seed': 42, 'stratify': True}
+    partition = snapshot.get('validation_partition') or {}
+    assert fixed == {'test_size': .25, 'seed': 42, 'stratify': True,
+                     'replicates': snapshot['evaluation']['replicates'],
+                     'validation_seed': partition.get('seed', snapshot['evaluation']['seed']),
+                     'validation_size': partition.get('fraction', .2)}
     assert data.validate(fixed, spec, snapshot['evaluation'])['seed'] == 42
     with pytest.raises(ValueError, match='frozen controlled-comparison'):
         data.validate({**fixed, 'seed': 7}, spec, snapshot['evaluation'])

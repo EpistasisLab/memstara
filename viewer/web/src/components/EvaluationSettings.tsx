@@ -12,13 +12,12 @@ export default function EvaluationSettings({value, onChange, disabled = false, p
     <legend>Agent-configured LR and XGBoost</legend>
     <p>Both models are fitted on the same predictors and split. The selected ML skill determines the primary model; the other is the comparator. Random Forest is not part of this execution.</p>
     <p>The ML Agent chooses automatic hyperparameters, scaling, prediction thresholds and training CV before fitting. Explicit advanced values are fixed by you and enforced by the server. The server validates the plan and enforces CPU, memory and time limits. There is no user-selected candidate search in this mode.</p>
-    <p>{dataSkill==='data_balanced_stratified'?'The Data Agent uses a stratified 50:50 exploration split and records its seed.':dataSkill==='data_training_heavy'?'The Data Agent selects a stratified 10–30% exploration hold-out and records its seed.':dataSkill==='combinations'?'Each selected Data skill determines its Loop split and seed: training-heavy uses 10–30% hold-out; balanced uses 50%.':'The saved evaluation seed and hold-out supply the split defaults.'} The separate 20% validation reserve is not used to select model settings.</p>
+    <p>{dataSkill==='data_balanced_stratified'?'The Data Agent uses a stratified 50:50 exploration split.':dataSkill==='data_training_heavy'?'The Data Agent selects a stratified 10–30% exploration hold-out.':dataSkill==='combinations'?'Each selected Data skill determines its Loop split: training-heavy uses 10–30% hold-out; balanced uses 50%.':'The saved evaluation seed and hold-out supply the split defaults.'} For each new run the Data Agent also chooses the 10–30% independent reserve, its seed, the exploration seed and 1–5 split replicates. It records these settings before ML; later Loops reuse the run-level reserve.</p>
     {!['data_balanced_stratified','data_training_heavy','combinations'].includes(dataSkill)&&<div>
       <label>Fallback split seed<input aria-label="Random seed" className={field} type="number" value={value.seed} onChange={e=>update('seed',e.target.valueAsNumber)}/></label>
       <label>Fallback hold-out (%)<input aria-label="Hold-out data (%)" className={field} type="number" value={value.test_size*100} onChange={e=>update('test_size',e.target.valueAsNumber/100)}/></label>
     </div>}
-    <label>Split evaluations<input aria-label="Split evaluations" className={field} type="number" min={1} max={10} step={1} value={Number.isFinite(value.replicates)?value.replicates:''} onChange={e=>update('replicates',e.target.valueAsNumber)}/></label>
-    <p>Additional split evaluations add model fits within a Loop. They do not add pipeline Loops. Actual applied settings and their rationale are recorded with the results.</p>
+    <p>Split replicates are selected by the Data Agent (1–5) for each Loop. Both fitted models use the same saved splits. Actual settings and the agent’s rationale are recorded with the results.</p>
     {error&&<p role="alert">{error}</p>}
   </fieldset>;
   return <fieldset disabled={disabled} className="compact-evaluation min-w-0 space-y-3 rounded-lg border border-paper-line p-4" aria-label="ML evaluation settings">

@@ -189,7 +189,9 @@ export interface Result {
         average_precision: number; operating_point: {true_negative: number; false_positive: number;
           false_negative: number; true_positive: number; probability_cutoff: number}}>;
         reproducibility?: {status: string; bundle_path: string}}}>;
-    data_allocation?: {request: {skill: string; population: string}; agent_plan: {test_size: number; seed: number};
+    data_allocation?: {request: {skill: string; population: string}; agent_plan: {test_size: number; seed: number;
+      validation_size?: number; validation_seed?: number; replicates?: number};
+      validation_partition?: {version: string; seed: number; fraction: number; reserved_count: number};
       exploration_count: number; reserved_count: number;
       replicates: {seed: number; n_train: number; n_test: number;
         train_class_counts: Record<string, number>; test_class_counts: Record<string, number>}[]};

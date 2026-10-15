@@ -35,7 +35,19 @@ def validate(plan: dict) -> dict:
 
 def active_plan() -> dict | None:
     source = os.environ.get('MEMSTARA_RUN_CONFIG', '')
-    return json.loads(Path(source).read_text()) if source else None
+    if not source:
+        return None
+    path = Path(source)
+    plan = json.loads(path.read_text())
+    if plan.get('validation_partition_policy') == 'data_agent_seed_v1':
+        partition_path = path.parent / 'validation_partition.json'
+        try:
+            plan['validation_partition'] = json.loads(partition_path.read_text())
+        except (OSError, ValueError):
+            # The independent reserve does not exist until the first Data Agent
+            # accepts its run-level seed. Evaluation remains blocked until then.
+            plan['validation_partition'] = None
+    return plan
 
 
 def model_for(engine: str, seed: int, trial: int = 0):
@@ -90,18 +102,19 @@ def validate_clean_dataset(path: Path, target: str, *, allow_missing: bool = Fal
     return df
 
 
-def discovery_partition(y, seed):
-    """Reserve 20% before adaptive exploration; this module never evaluates that reserve."""
+def discovery_partition(y, seed, fraction=.2):
+    """Reserve a stratified cohort before adaptive exploration; never score the reserve here."""
     import numpy as np
     from sklearn.model_selection import train_test_split
     if y.value_counts().min() < 4:
         raise DataQualityError('Iterative discovery needs at least four samples in each target class '
                                'to reserve validation data.')
-    exploration, reserved = train_test_split(np.arange(len(y)), test_size=.2, random_state=seed, stratify=y)
-    return {'version': 'reserved_validation_v1', 'row_count': len(y),
+    exploration, reserved = train_test_split(np.arange(len(y)), test_size=fraction,
+                                             random_state=seed, stratify=y)
+    return {'version': 'reserved_validation_v1', 'seed': seed, 'row_count': len(y),
             'exploration_rows': sorted(exploration.tolist()), 'reserved_count': len(reserved),
             'reserved_split_id': hashlib.sha256(np.sort(reserved).tobytes()).hexdigest(),
-            'status': 'reserved_not_evaluated', 'fraction': .2}
+            'status': 'reserved_not_evaluated', 'fraction': fraction}
 
 
 def evaluation_splits(y, plan: dict, partition=None):

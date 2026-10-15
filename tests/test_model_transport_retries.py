@@ -62,6 +62,42 @@ def test_fifth_retry_can_succeed_without_replaying_agent_tools(context):
     assert 'private' not in json.dumps(events)
 
 
+def test_absolute_request_deadline_retries_a_stalled_adapter(context, monkeypatch):
+    monkeypatch.setattr('memstara.pipeline.llm.runtime_timeouts',
+                        lambda _model: {'llm_call_timeout_seconds': .001})
+    attempts = []
+
+    async def invoke(_config, _messages):
+        attempts.append(1)
+        if len(attempts) < 6:
+            await asyncio.Future()  # Simulate an adapter that never raises on disconnect.
+        return 'recovered'
+
+    assert asyncio.run(request(invoke)) == 'recovered'
+    assert len(attempts) == 6
+    events = [json.loads(line) for line in (context / 'model_retries.jsonl').read_text().splitlines()]
+    assert [event['state'] for event in events] == ['retry_wait'] * 5 + ['recovered']
+    assert not (context / 'pipeline_failure.json').exists()
+
+
+def test_stalled_adapter_is_recorded_as_bounded_timeout_failure(context, monkeypatch):
+    monkeypatch.setattr('memstara.pipeline.llm.runtime_timeouts',
+                        lambda _model: {'llm_call_timeout_seconds': .001})
+    attempts = []
+
+    async def invoke(*_args, **_kwargs):
+        attempts.append(1)
+        await asyncio.Future()
+
+    with pytest.raises(PipelineExecutionFailure):
+        asyncio.run(request(invoke))
+    assert len(attempts) == 6
+    events = [json.loads(line) for line in (context / 'model_retries.jsonl').read_text().splitlines()]
+    assert events[-1]['state'] == 'exhausted'
+    failure = json.loads((context / 'pipeline_failure.json').read_text())
+    assert failure['code'] == 'model_connection'
+
+
 def test_sixth_failure_latches_and_prevents_later_requests(context):
     invoke = AsyncMock(side_effect=ConnectionResetError('private'))
     with pytest.raises(PipelineExecutionFailure):

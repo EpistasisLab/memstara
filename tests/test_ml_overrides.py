@@ -41,7 +41,7 @@ def test_partial_user_values_win_and_unset_values_remain_agent_selected(tmp_path
     assert receipt['user_overrides']==OVERRIDES
     assert receipt['proposal_resolution']['agent_proposal']==proposal
     sources=receipt['setting_sources']['models']['logistic_regression']['parameters']
-    assert sources['C']=='user' and sources['max_iter']=='agent' and sources['random_state']=='server'
+    assert sources['C']=='user' and sources['max_iter']=='agent' and sources['random_state']=='agent'
     wrong=copy.deepcopy(effective);wrong['models']['logistic_regression']['parameters']['C']=7
     with pytest.raises(ValueError,match='fixed advanced'):
         ml.validate(wrong,snapshot,evaluation)
@@ -52,7 +52,7 @@ def test_partial_user_values_win_and_unset_values_remain_agent_selected(tmp_path
  ('logistic_regression','max_iter',True),('logistic_regression','tol',float('nan')),
  ('xgboost','n_estimators',401),('xgboost','max_depth',9),('xgboost','n_jobs',64),
  ('xgboost','device','cuda'),('logistic_regression','solver','saga'),
- ('logistic_regression','random_state',999),('xgboost','learning_rate',None)])
+ ('logistic_regression','random_state',2147483648),('xgboost','learning_rate',None)])
 def test_rejects_invalid_or_server_owned_settings(model,parameter,value):
     with pytest.raises(ValueError):
         ml.validate_overrides({'version':1,'models':{model:{'parameters':{parameter:value}}}})

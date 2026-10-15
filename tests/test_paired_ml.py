@@ -14,6 +14,7 @@ import pytest
 from memstara import evaluation
 from memstara import ml_configuration as config
 from memstara import paired_ml
+from memstara import data_allocation as allocation
 from memstara.data_allocation import prepare, VERSION
 from memstara.comparisons import write_context
 
@@ -27,7 +28,7 @@ def experiment(tmp_path, monkeypatch):
                 'dataset_sha256':hashlib.sha256(source.read_bytes()).hexdigest(),
                 'evaluation':evaluation.validate({'engine':'xgboost'}),
                 'ml_configuration_policy':config.policy(),
-                'data_allocation_policy':{'version':VERSION},
+                'data_allocation_policy':{'version':allocation.PREVIOUS_VERSION},
                 'books':{'data':['data_balanced_stratified']},
                 'prompts':{'board/data:data_balanced_stratified':{'system_prompt':'synthetic'}},
                 'validation_partition':evaluation.discovery_partition(pd.read_csv(source).Y,42),
@@ -108,6 +109,8 @@ def test_real_tool_pair_and_replay(experiment, monkeypatch):
         assert model['evaluation']['reproducibility']['status']=='verified'
         bundle=Path(model['evaluation']['reproducibility']['bundle_path'])
         arrays=np.load(bundle/'split-0.npz')
+
+
         assert not set(result['data_allocation']['reserved_rows']) & set(arrays['train'])
         manifest=json.loads((bundle/'manifest.json').read_text())
         assert manifest['configuration']==proposal['models'][name]
@@ -147,6 +150,18 @@ def test_real_tool_pair_and_replay(experiment, monkeypatch):
 
 
 
+def test_ml_agent_random_states_are_editable_and_recorded(experiment):
+    path, snapshot, effective, proposal = experiment
+    proposal = copy.deepcopy(proposal)
+    for model in config.MODELS:
+        proposal['models'][model]['parameters']['random_state'] = 987654
+    accepted = config.validate(proposal, snapshot, effective)
+    record = config.identity(path, snapshot, effective, accepted)
+    assert record['requested'] == proposal
+    assert record['setting_sources']['models']['logistic_regression']['parameters']['random_state'] == 'agent'
+    assert record['setting_sources']['models']['xgboost']['parameters']['random_state'] == 'agent'
+
+
 @pytest.mark.parametrize('change', ['threads','trees','depth','gpu','unknown','missing','solver','bool','nan','seed'])
 def test_invalid_plans_never_start(experiment,change):
     path,snapshot,evaluation_plan,proposal=experiment
@@ -161,7 +176,7 @@ def test_invalid_plans_never_start(experiment,change):
     if change=='solver':lr.update(solver='lbfgs',penalty='l1')
     if change=='bool':lr['C']=True
     if change=='nan':lr['C']=float('nan')
-    if change=='seed':lr['random_state']=999
+    if change=='seed':lr['random_state']=2147483648
     with pytest.raises(ValueError):paired_ml.execute(path,'Y',evaluation_plan,snapshot,proposal)
     assert not path.with_suffix('.ml-plan.json').exists()
 
@@ -275,7 +290,7 @@ def test_advanced_user_values_reach_real_models_and_replay_with_provenance(exper
     assert result['ml_configuration']['user_overrides']==overrides
     assert result['ml_plan_resolution']['agent_proposal']['models']['logistic_regression']['parameters']['C']==5
     assert result['ml_configuration']['setting_sources']['models']['logistic_regression']['parameters']['C']=='user'
-    assert result['ml_configuration']['setting_sources']['models']['logistic_regression']['parameters']['random_state']=='server'
+    assert result['ml_configuration']['setting_sources']['models']['logistic_regression']['parameters']['random_state']=='agent'
     for name in config.MODELS:
         model=result['model_results'][name]
         bundle=Path(model['evaluation']['reproducibility']['bundle_path'])

@@ -26,9 +26,9 @@ export default function PipelineManagementDialog({pipeline:p,onSettings,close}:{
       </section>
       <section aria-label="Agent skills"><h3>Agent skills</h3><p>Review the instructions for the hypothesis, machine learning, interpreter and explanation agents.</p>{combinations?<p>Review all selected flavors in the combination grid. To change the combination schedule, create a new design; saved execution schedules stay fixed.</p>:<PipelineSetupGuide/>}</section>
       <section className="pipeline-management-danger" aria-label="Execution and removal"><h3>Execution and removal</h3>
-        <p>{p.running?'End this execution before deleting the pipeline. Saved analysis results are retained.':'Deleting removes this pipeline setup. Saved analysis results are retained.'}</p>
+        <p>{p.running?'Delete will stop this execution first, then remove the pipeline setup. Saved run artifacts are retained.':'Delete removes this pipeline setup. Saved run artifacts are retained.'}</p>
         <div className="pipeline-management-buttons">{!p.running&&p.latest&&<button disabled={busy} onClick={()=>setFresh(true)}>Start a new execution…</button>}{paused&&<button disabled={busy} onClick={()=>setConfirm('end')}>End execution</button>}
-          <button disabled={busy||!!p.running} aria-label={`Delete ${p.name}`} onClick={()=>setConfirm('delete')}><Trash2 size={16}/>Delete pipeline</button></div>
+          <button disabled={busy} aria-label={`Delete ${p.name}`} onClick={()=>setConfirm('delete')}><Trash2 size={16}/>Delete pipeline</button></div>
         {confirm==='end'&&<div className="pipeline-management-confirm" role="group" aria-label={`Confirm ${confirm} ${p.name}`}>
           <p>{`End the execution for “${p.name}”? Resume will no longer be available. Saved results remain.`}</p>
           <div className="pipeline-management-buttons"><button disabled={busy} onClick={()=>setConfirm(null)}>Cancel</button><button disabled={busy} onClick={async()=>{await usePipelines.getState().end(p.id);setConfirm(null);}}>Confirm end</button></div>

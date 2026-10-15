@@ -7,6 +7,7 @@ import {newPipelineRequest} from '../lib/newPipelineConfiguration';
 
 export interface PipelineDefinition {
   id: string; number: number; name: string; configuration: RunRequest;
+  deleting?: boolean;
   running: RunningRun | null;
   failure?: {code: string; message: string; stage?: string; loop?: number | null} | null;
   latest: (RunningRun & { exit_code?: number }) | null;
@@ -71,6 +72,10 @@ export const usePipelines = create<{
           return previous&&JSON.stringify(previous)===JSON.stringify(item)?previous:item;
         });
         const unchanged=refreshedItems.length===previousItems.length&&refreshedItems.every((item,i)=>item===previousItems[i]);
+        const selectedId=get().selected;
+        if(selectedId&&!refreshedItems.some(p=>p.id===selectedId)){
+          set({selected:null});remember(null);useControl.setState({running:null,editor:null});useViewer.getState().setRunTag(null);
+        }
         const pollingError = get().error === 'Error: Pipeline workspace is unavailable; last settings are retained.';
         const pending = get().pendingStart;
         const started = pending && refreshedItems.find(p=>p.id===pending.pipelineId);
@@ -146,8 +151,28 @@ export const usePipelines = create<{
     workspaceRevision++;
     set({busy:true,error:null});
     try{
-      await request({action:'remove',id});
-      set({items:get().items.filter(p=>p.id!==id)});
+      const result=await request({action:'remove',id});
+      if(result.deleting){
+        set({items:get().items.map(p=>p.id===id?{...p,deleting:true}:p)});
+        // The control service retains ownership while a live child handles the
+        // termination signal. Poll until it has exited and the definition is
+        // atomically removed from the workspace.
+        const deadline=Date.now()+120_000;
+        while(Date.now()<deadline){
+          await new Promise(resolve=>setTimeout(resolve,750));
+          const response=await fetch('/control/pipelines',{signal:AbortSignal.timeout(10000)});
+          const data=await response.json();
+          if(!response.ok)throw new Error(data.error||'Could not confirm execution shutdown');
+          const items:PipelineDefinition[]=data.pipelines;
+          if(!items.some(p=>p.id===id)){
+            set({items});
+            break;
+          }
+          set({items:items.map(p=>p.id===id?{...p,deleting:true}:p)});
+        }
+        if(get().items.some(p=>p.id===id))
+          throw new Error('Termination was requested, but the server has not confirmed shutdown yet. The deletion will finish automatically; refresh the pipeline list shortly.');
+      }else set({items:get().items.filter(p=>p.id!==id)});
       usePipelineSetup.getState().remove(id);
       if(get().selected===id){set({selected:null});remember(null);useControl.setState({running:null,editor:null});useViewer.getState().setRunTag(null);}
       return true;

@@ -69,9 +69,16 @@ class PipelineWorkspace:
     def list(self):
         with self.lock:
             out = []
-            for item in self.items:
+            removed = []
+            for item in list(self.items):
                 manager = self.manager(item["id"])
                 current = manager.running()
+                # A deletion request for a live execution is finalized only after
+                # its controller reaps the child. This prevents removing ownership
+                # while the child is still writing its run artifacts.
+                if item.get("deleting") and current is None:
+                    removed.append(item)
+                    continue
                 history = manager.finished()
                 latest = current or (history[0] if history else None)
                 progress = {}
@@ -97,8 +104,14 @@ class PipelineWorkspace:
                             "failure": failure,
                             "configuration_error": configuration_error,
                             "running": current, "latest": latest, "progress": progress,
+                            "deleting": bool(item.get("deleting")),
                             "loop_totals": loop_totals(manager.history_records() if hasattr(manager, "history_records")
                                                        else [*history, *([current] if current else [])])})
+            if removed:
+                for item in removed:
+                    self.items.remove(item)
+                    self.managers.pop(item["id"], None)
+                self._save()
             return out
 
     def mutate(self, body):
@@ -130,12 +143,33 @@ class PipelineWorkspace:
                 item = next((p for p in self.items if p["id"] == body.get("id")), None)
                 if item is None:
                     raise ValueError("Pipeline does not exist")
+                if action == "remove":
+                    if item.get("deleting"):
+                        return {**copy.deepcopy(item), "deleting": True}
+                    manager = self.manager(item["id"])
+                    current = manager.running()
+                    if current:
+                        # A delete click is an explicit request to discard this
+                        # execution's ability to resume. Signal termination and
+                        # keep its owner record until the child has actually exited.
+                        if hasattr(manager, "terminate"):
+                            manager.terminate(current["run_tag"])
+                        else:  # Small test doubles and legacy controllers.
+                            manager.stop(current["run_tag"])
+                        item["deleting"] = True
+                        self._save()
+                        return {**copy.deepcopy(item), "deleting": True,
+                                "run_tag": current.get("run_tag")}
+                    self.items.remove(item)
+                    self.managers.pop(item["id"], None)
+                    self._save()
+                    return copy.deepcopy(item)
                 name_only = action == "update" and "name" in body and set(body) <= {"action", "id", "name"}
+                if item.get("deleting"):
+                    raise ValueError("This pipeline is being deleted")
                 if self.manager(item["id"]).running() and not name_only:
                     raise ValueError("Stop this pipeline before changing its configuration or removing it")
-                if action == "remove":
-                    self.items.remove(item)
-                elif action == "update":
+                if action == "update":
                     if "name" in body:
                         name = body["name"]
                         if not isinstance(name, str) or not name.strip() or len(name) > 80:
@@ -229,6 +263,8 @@ class PipelineWorkspace:
             item = next((p for p in self.items if p["id"] == key), None)
             if item is None:
                 raise ValueError("Pipeline does not exist")
+            if item.get("deleting"):
+                raise ValueError("This pipeline is being deleted and cannot start another execution")
             manager = self.manager(key)
             if manager.running():
                 raise ValueError("This pipeline is already running; pause or resume its current execution")

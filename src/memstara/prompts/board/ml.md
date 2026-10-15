@@ -19,11 +19,13 @@ Call train_and_score with path and y_column, omitting ml_plan. The server applie
 frozen parameters and rationale directly; do not reconstruct or tune that plan.
 
 Otherwise, when `required` is true, inspect its complete installed-library parameter dictionaries,
-editable ranges/choices, upstream split and resource limits. You decide the LR and
-XGBoost parameters, numeric scaling, probability cutoffs, training-only CV and primary
-model perspective before either model is trained. Submit the complete proposal template
-as `ml_plan` to train_and_score, with a rationale for these choices. Keep all fixed
-parameters exactly as returned; never change upstream predictors or split identity.
+editable ranges/choices, upstream split and resource limits. Make fresh stochastic choices for
+every editable statistical parameter (including model random_state), numeric scaling,
+probability cutoffs, training-only CV and primary-model perspective on each new pipeline run.
+Do not copy template defaults as your choices. Submit the complete proposal template as `ml_plan`
+to train_and_score, with a rationale for these choices. Preserve only server-owned system
+parameters needed for CPU/resource safety, binary classification and library compatibility;
+never change upstream predictors or split identity.
 Do not use held-out performance to choose settings or the primary model. The accepted
 proposal is immutable. Both model_results are saved for Interpretation; top-level
 metrics refer to the predeclared primary model, not an automatically selected winner.

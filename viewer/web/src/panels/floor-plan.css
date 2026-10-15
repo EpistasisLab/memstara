@@ -466,6 +466,11 @@
 .pipeline-browser-row .pipeline-card-delete:hover { background:rgb(180 35 50 / .1); }
 .pipeline-card-delete:focus-visible { outline:2px solid currentColor; outline-offset:-3px; }
 .pipeline-delete-name { overflow-wrap:anywhere; }
+.pipeline-delete-dialog .pipeline-delete-notice { padding:12px 14px; border:1px solid rgb(180 35 50 / .22); border-left:3px solid #b42332; border-radius:9px; background:rgb(180 35 50 / .055); line-height:1.55; }
+.pipeline-delete-dialog [role=status].pipeline-delete-notice { color:rgb(var(--ink)); border-color:rgb(var(--accent) / .28); border-left-color:rgb(var(--accent)); background:rgb(var(--accent) / .07); }
+.pipeline-delete-dialog .pipeline-delete-confirm { min-height:42px; justify-content:center; gap:8px; padding:9px 14px; border-radius:8px; font-weight:650; }
+.pipeline-delete-dialog .pipeline-delete-confirm:disabled { opacity:.55; cursor:wait; }
+.pipeline-delete-dialog .pipeline-management-buttons { align-items:center; }
 .pipeline-management .pipeline-delete-confirm { color:#b42332; border-color:rgb(180 35 50 / .4); }
 .pipeline-management .pipeline-delete-confirm:hover:not(:disabled) { color:#b42332; border-color:currentColor; background:rgb(180 35 50 / .08); }
 [data-theme=dark] .pipeline-card-delete, [data-theme=dark] .pipeline-management .pipeline-delete-confirm { color:#fda4af; }

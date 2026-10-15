@@ -223,7 +223,18 @@ class PipelineLLMService(LLMService):
                         from memstara.evaluation import active_plan
                         from memstara.stage_models import validate_call
                         validate_call(config, context[2], active_plan())
-                    result = await method(config, copy.deepcopy(prepared), *args, **kwargs)
+                    # Provider-level HTTP timeouts may be inactivity timers, and some
+                    # adapters ignore them. Bound the whole awaited request as well so
+                    # a dropped connection cannot leave the driver/checkpoint active
+                    # indefinitely. Keep this per-attempt limit aligned with the
+                    # frozen runtime policy; the existing bounded retry loop owns
+                    # recovery and records each timed-out attempt.
+                    call_timeout = runtime_timeouts(config.model).get('llm_call_timeout_seconds')
+                    if call_timeout:
+                        async with asyncio.timeout(call_timeout):
+                            result = await method(config, copy.deepcopy(prepared), *args, **kwargs)
+                    else:
+                        result = await method(config, copy.deepcopy(prepared), *args, **kwargs)
                 except Exception as exc:
                     from memstara.pipeline.failures import provider_error_details, exception_chain
                     record_event(context, 'failed', duration_seconds=time.monotonic() - started,

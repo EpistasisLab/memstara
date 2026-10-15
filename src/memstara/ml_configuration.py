@@ -24,14 +24,16 @@ def for_dataset(snapshot, path):
     if primary and snapshot.get('combination_plan') and 'trial' not in record:
         raise ValueError('Selected ML skill requires the saved task trial identity')
     return {**snapshot, '_selected_ml_primary': primary}
-# All other installed-library parameters are explicitly returned as fixed defaults.
+# Non-editable installed-library parameters remain server-owned system defaults.
 # Arbitrary callbacks, GPU execution and unconstrained parallelism are never accepted.
 RANGES = {
-    'logistic_regression': {'C': (1e-5, 1e4), 'max_iter': (50, 2000), 'tol': (1e-6, .01)},
+    'logistic_regression': {'C': (1e-5, 1e4), 'max_iter': (50, 2000), 'tol': (1e-6, .01),
+                            'random_state': (0, 2147483647)},
     'xgboost': {'n_estimators': (10, 400), 'max_depth': (1, 8), 'learning_rate': (.005, .5),
                 'min_child_weight': (0, 100), 'subsample': (.5, 1), 'colsample_bytree': (.5, 1),
                 'reg_alpha': (0, 100), 'reg_lambda': (0, 100), 'gamma': (0, 100),
-                'scale_pos_weight': (.01, 100), 'max_bin': (32, 256)},
+                'scale_pos_weight': (.01, 100), 'max_bin': (32, 256),
+                'random_state': (0, 2147483647)},
 }
 CHOICES: dict[str, dict[str, list[str | bool | None]]] = {
     'logistic_regression': {
@@ -40,7 +42,7 @@ CHOICES: dict[str, dict[str, list[str | bool | None]]] = {
     },
     'xgboost': {},
 }
-INTEGERS = {'max_iter', 'n_estimators', 'max_depth', 'max_bin'}
+INTEGERS = {'max_iter', 'n_estimators', 'max_depth', 'max_bin', 'random_state'}
 
 
 def override_schema():
@@ -162,11 +164,14 @@ def context(snapshot, evaluation):
                       'data_seed': evaluation['seed'], 'test_size': evaluation['test_size'],
                       'replicates': evaluation['replicates'], 'search_trials': 1,
                       'resource_limits': (snapshot or {}).get('ml_configuration_policy'),
-                      'other_parameters': 'Keep all parameters outside the editable lists exactly as returned.'},
+                      'system_parameters': 'CPU execution, one worker/thread, binary-classification objective, '
+                                           'and the installed-library compatibility contract remain server-owned.'},
             'preprocessing_contract': 'No row cleaning or imputation. LR requires complete predictors. '
                                       'Categoricals use training-fold one-hot encoding. '
                                       'Numeric scaling is agent-selected.',
-            'instructions': 'Return the complete proposal_template with your choices and rationale. '
+            'instructions': 'Return the complete proposal_template with fresh stochastic choices and rationale. '
+                            'For every new pipeline execution, choose new values for every editable statistical '
+                            'parameter, numeric scaling, threshold, and CV folds; do not copy template defaults. '
                             'Choose both models before seeing results. Preserve upstream features/splits. '
                             'LR l1 requires liblinear. No hold-out tuning; accepted proposals are immutable.'}
     overrides = validate_overrides(snapshot.get('ml_overrides', {}))
@@ -270,16 +275,16 @@ def identity(path: Path, snapshot, evaluation, proposal):
             'handoff_sha256': hashlib.sha256(handoff.read_bytes()).hexdigest() if handoff.exists() else None,
             'evaluation': evaluation, 'resource_limits': snapshot['ml_configuration_policy']}
     overrides = snapshot.get('ml_overrides', {})
+    record['proposal_resolution'] = copy.deepcopy(snapshot.get('_ml_plan_resolution'))
+    record['setting_sources'] = {'primary_model': 'selected_ml_skill',
+        'folds': 'user' if 'folds' in overrides else 'agent', 'models': {}}
+    for name, model in proposal['models'].items():
+        fixed = overrides.get('models', {}).get(name, {})
+        record['setting_sources']['models'][name] = {
+            'parameters': {key: 'user' if key in fixed.get('parameters', {}) else
+                'agent' if key in RANGES[name] or key in CHOICES[name] else 'server'
+                for key in model['parameters']},
+            **{key: 'user' if key in fixed else 'agent' for key in ('scale_numeric', 'threshold')}}
     if overrides:
         record['user_overrides'] = copy.deepcopy(overrides)
-        record['proposal_resolution'] = copy.deepcopy(snapshot.get('_ml_plan_resolution'))
-        record['setting_sources'] = {'primary_model': 'selected_ml_skill',
-            'folds': 'user' if 'folds' in overrides else 'agent', 'models': {}}
-        for name, model in proposal['models'].items():
-            fixed = overrides.get('models', {}).get(name, {})
-            record['setting_sources']['models'][name] = {
-                'parameters': {key: 'user' if key in fixed.get('parameters', {}) else
-                    'agent' if key in RANGES[name] or key in CHOICES[name] else 'server'
-                    for key in model['parameters']},
-                **{key: 'user' if key in fixed else 'agent' for key in ('scale_numeric', 'threshold')}}
     return record

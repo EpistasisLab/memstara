@@ -22,6 +22,10 @@ class Manager:
     def finished(self):
         return []
 
+    def terminate(self, run_tag):
+        assert self.live and self.live["run_tag"] == run_tag
+        self.termination_requested = run_tag
+
 
 def test_workspace_preserves_more_than_three_concurrent_adds(tmp_path):
     workspace = PipelineWorkspace(tmp_path / "workspace.json", Manager)
@@ -51,14 +55,36 @@ def test_independent_edit_launch_lock_and_removal(tmp_path):
     a = w.mutate({"action": "add"})
     b = w.mutate({"action": "add"})
     w.start(a["id"], lambda manager, item: setattr(manager, "live", {"run_tag": "run-a", "run_dir": str(tmp_path)}))
-    with pytest.raises(ValueError, match="Stop"):
-        w.mutate({"action": "remove", "id": a["id"]})
+    deletion = w.mutate({"action": "remove", "id": a["id"]})
+    assert deletion["deleting"] is True
+    assert w.manager(a["id"]).termination_requested == "run-a"
+    with pytest.raises(ValueError, match="being deleted"):
+        w.mutate({"action": "update", "id": a["id"], "configuration": {}})
+    with pytest.raises(ValueError, match="being deleted"):
+        w.start(a["id"], lambda *_: None)
     w.mutate({"action": "update", "id": b["id"], "name": "Other research"})
     assert w.locate_manager("run-a").key == a["id"]
     assert w.manager(b["id"]).running() is None
     w.mutate({"action": "remove", "id": b["id"]})
     assert len(w.list()) == 1
-    assert w.list()[0]["name"] == a["name"]
+    assert w.list()[0]["name"] == a["name"] and w.list()[0]["deleting"] is True
+    w.manager(a["id"]).live = None
+    assert w.list() == []
+    assert w.items == []
+
+
+def test_running_delete_intent_survives_workspace_reload(tmp_path):
+    path = tmp_path / "workspace.json"
+    workspace = PipelineWorkspace(path, Manager)
+    pipeline = workspace.mutate({"action": "add"})
+    workspace.manager(pipeline["id"]).live = {"run_tag": "active-run", "run_dir": str(tmp_path)}
+
+    result = workspace.mutate({"action": "remove", "id": pipeline["id"]})
+    assert result["deleting"] is True
+    restored = PipelineWorkspace(path, Manager)
+    assert restored.items[0]["deleting"] is True
+    restored.manager(pipeline["id"]).live = None
+    assert restored.list() == []
 
 
 def test_one_hypothesis_and_interpreter_per_pipeline():
