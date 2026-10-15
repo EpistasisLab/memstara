@@ -1187,11 +1187,17 @@ experiment; they are not evidence of a causal effect.
 In the selected-model workflow, an independent validation reserve is set aside before
 Data divides the exploration population into training and evaluation partitions. Agents
 and adaptive Loops cannot access reserve outcomes. After every Loop finishes, Memstara
-loads each completed hypothesis/ML task's hash-verified fitted model from the saved
-exploration run, and scores the reserve once per task without refitting. Each task's saved fitted model
-is applied to the same reserved rows, and `final_validation.json` stores a separate
-result, split provenance, confusion matrix, AUROC, trapezoidal PR-AUC, average precision,
-Brier score and other metrics for every task; the final report receives all saved results.
+refits each completed hypothesis/ML task's selected model on **all non-reserve development
+rows**, using its frozen parameters, seed, predictors and threshold. Preprocessing is
+freshly fitted on these development rows only. Exploratory replicate models are retained
+as internal evaluation evidence; no replicate winner is selected. Each final model is
+saved before it scores the same reserve once per task. `final_validation.json` stores
+separate final-fit provenance, confusion matrices, AUROC, trapezoidal PR-AUC, average
+precision, Brier score and other metrics for every task. Local `final_models/task-*/`
+bundles contain the final model, input, development/reserve row indices, predictions,
+configuration, environment and integrity hashes. The final report receives all results.
+Final-fit parameters and thresholds are not tuned using the reserve. Historical artifacts
+from the previous no-refit policy are preserved and are not automatically rescored.
 No hypothesis is selected using reserve performance, and scores must not be used to tune
 or rank hypotheses. These are same-dataset holdout estimates, not external-cohort validation,
 clinical utility or causal effects. If the record says `failed` or `not_run`, inspect its

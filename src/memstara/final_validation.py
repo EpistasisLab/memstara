@@ -1,7 +1,8 @@
-"""One-time reserve scoring with the already-fitted exploration model."""
+"""Final development-set refitting and one-time reserve scoring per hypothesis."""
 from __future__ import annotations
 
 import hashlib
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -12,7 +13,7 @@ import time
 from typing import Any
 
 
-POLICY = "every_completed_hypothesis_task_once_v1"
+POLICY = "every_completed_hypothesis_development_refit_v2"
 
 
 def eligible_tasks(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -54,13 +55,17 @@ def _partition(run_dir: Path, config: dict, row_count: int) -> dict:
     reserve = sorted(set(range(row_count)) - set(exploration))
     if len(reserve) != partition.get("reserved_count") or not reserve:
         raise ValueError("Saved validation reserve is empty or inconsistent")
+    import numpy as np
+    if hashlib.sha256(np.asarray(reserve, dtype=int).tobytes()).hexdigest() != partition.get("reserved_split_id"):
+        raise ValueError("Saved validation reserve indices failed their integrity check")
     return {**partition, "exploration_rows": sorted(exploration), "reserved_rows": reserve}
 
 
 def evaluate_candidate(candidate: dict[str, Any], config: dict, run_dir: Path) -> dict:
-    """Load the verified fitted model and score reserve rows without fitting or tuning."""
+    """Refit the frozen configuration on all development rows, then score the reserve."""
     began = time.perf_counter()
     import numpy as np
+    from sklearn.base import clone
     from sklearn.metrics import (accuracy_score, average_precision_score, balanced_accuracy_score,
                                  auc, brier_score_loss, cohen_kappa_score, confusion_matrix,
                                  f1_score, log_loss, matthews_corrcoef, precision_recall_curve,
@@ -95,7 +100,7 @@ def evaluate_candidate(candidate: dict[str, Any], config: dict, run_dir: Path) -
     if allocation.get("reserved_rows") and sorted(allocation["reserved_rows"]) != partition["reserved_rows"]:
         raise ValueError("Hypothesis task allocation disagrees with the run's frozen reserve")
 
-    model, manifest, manifest_hash = _load_fitted_model(candidate, config, features, model_name, settings,
+    template, _, manifest_hash = _load_fitted_model(candidate, config, features, model_name, settings,
                                                         source_bytes, partition)
     y = frame[target]
     if y.isna().any() or set(y.unique()) != {0, 1}:
@@ -105,13 +110,43 @@ def evaluate_candidate(candidate: dict[str, Any], config: dict, run_dir: Path) -
     if y_test.nunique() != 2:
         raise ValueError("Both target classes must be present in the independent validation reserve")
     x = frame[features]
-    encoded_width = len(model.named_steps["encode"].get_feature_names_out())
-    if encoded_width > limits.get("max_encoded_columns", 10000):
+    development = np.asarray(partition["exploration_rows"], dtype=int)
+    if y.iloc[development].nunique() != 2:
+        raise ValueError("Both target classes must be present in the final training population")
+    # clone discards ALL learned preprocessing and estimator state. The verified
+    # template supplies structure only; parameters come from the immutable plan.
+    model = clone(template)
+    parameters = dict(settings["parameters"])
+    if parameters.get("missing") == "NaN":
+        parameters["missing"] = float("nan")
+    if parameters.get("early_stopping_rounds") is not None or parameters.get("callbacks"):
+        raise ValueError("Final refit requires a frozen training length without early-stopping callbacks")
+    model.named_steps["model"].set_params(**parameters)
+    # Bound dense allocation BEFORE fitting, including categories unseen in the
+    # original replicate. Only development rows determine preprocessing dimensions.
+    width = 0
+    for name, _, columns in model.named_steps["encode"].transformers:
+        if name == "numeric":
+            width += len(columns)
+        elif name == "categorical":
+            width += sum(x.iloc[development][column].nunique(dropna=False) for column in columns)
+        else:
+            raise ValueError("Unsupported preprocessing structure for final refit")
+    if width > limits.get("max_encoded_columns", 10000):
         raise ValueError("Final validation input exceeds the configured encoded-column budget")
-    if encoded_width * len(reserve) > limits.get("max_dense_cells", 20_000_000):
+    if width * max(len(development), len(reserve)) > limits.get("max_dense_cells", 20_000_000):
         raise ValueError("Final validation input exceeds the configured design-matrix budget")
+    fit_started = time.perf_counter()
+    with threadpool_limits(limits=1):
+        model.fit(x.iloc[development], y.iloc[development])
+    fit_seconds = time.perf_counter() - fit_started
+    # Persist the final model before exposing any reserve predictions.
+    bundle = _save_final_model(run_dir, candidate, model, source_bytes, settings,
+                               features, target, development, reserve, manifest_hash)
+    score_started = time.perf_counter()
     with threadpool_limits(limits=1):
         probability = model.predict_proba(x.iloc[reserve])[:, 1]
+    score_seconds = time.perf_counter() - score_started
     threshold = settings["threshold"]
     predicted = probability >= threshold
     matrix = confusion_matrix(y_test, predicted, labels=[0, 1])
@@ -140,8 +175,21 @@ def evaluate_candidate(candidate: dict[str, Any], config: dict, run_dir: Path) -
         "youden_j": (tp / (tp + fn) + tn / (tn + fp) - 1)
                     if tp + fn and tn + fp else None,
     }
+    np.savez_compressed(bundle / "predictions.npz", rows=reserve,
+                        labels=y_test.to_numpy(), probability=probability, predicted=predicted)
+    from memstara.pipeline.checkpoint import atomic_json
+    from memstara.reproducibility import digest
+    atomic_json(bundle / "metrics.json", metrics)
+    final_manifest_path = bundle / "manifest.json"
+    final_manifest = json.loads(final_manifest_path.read_text())
+    final_manifest["files"].update({name: digest(bundle / name)
+                                    for name in ("predictions.npz", "metrics.json")})
+    final_manifest["status"] = "evaluated"
+    atomic_json(final_manifest_path, final_manifest)
+    for file in bundle.iterdir():
+        file.chmod(0o600)
     return {
-        "schema_version": 1, "status": "completed",
+        "schema_version": 2, "status": "completed",
         "scope": "one_time_per_hypothesis_same_dataset_validation_reserve",
         "selection_policy": POLICY,
         "hypothesis_id": candidate.get("hypothesis_id"),
@@ -151,22 +199,57 @@ def evaluate_candidate(candidate: dict[str, Any], config: dict, run_dir: Path) -
         "model": model_name, "parameters": settings["parameters"],
         "numeric_scaling": settings["scale_numeric"], "probability_threshold": threshold,
         "target": target, "features": features,
-        "fit_scope": "already-fitted exploration training split; reserve excluded; no refit",
-        "training_split_id": task_evaluation["evaluation"]["replicates"][0]["train_split_id"],
-        "n_fit": int(task_evaluation["evaluation"]["replicates"][0]["n_train"]),
+        "fit_scope": "all non-reserve development rows; frozen settings; fresh preprocessing and model fit",
+        "training_split_id": hashlib.sha256(development.tobytes()).hexdigest(),
+        "n_fit": int(len(development)),
         "n_validation": int(len(reserve)),
-        "fit_class_counts": task_evaluation["evaluation"]["replicates"][0]["train_class_counts"],
+        "fit_class_counts": {str(k): int(v) for k, v in y.iloc[development].value_counts().items()},
         "validation_class_counts": {str(k): int(v) for k, v in y_test.value_counts().items()},
         "validation_partition": {"seed": partition.get("seed"), "fraction": partition.get("fraction"),
                                  "split_id": partition.get("reserved_split_id"),
                                  "status": "scored_once_after_exploration"},
         "selected_task_input_sha256": hashlib.sha256(source_bytes).hexdigest(),
-        "model_bundle_manifest_sha256": manifest_hash,
+        "source_model_bundle_manifest_sha256": manifest_hash,
+        "final_model_artifact": {"bundle_path": str(bundle.resolve()),
+                                 "model_sha256": final_manifest["files"]["model.joblib"],
+                                 "manifest_sha256": digest(final_manifest_path)},
+        "final_fit_seconds": fit_seconds, "reserve_prediction_seconds": score_seconds,
+        "final_fit_seed": parameters.get("random_state"),
         "metrics": metrics, "duration_seconds": time.perf_counter() - began,
         "interpretation": "This is the one-time reserve estimate for this hypothesis task. "
                           "The same reserve is scored separately for each completed hypothesis task; "
                           "do not use reserve outcomes to tune settings or choose hypotheses.",
     }
+
+
+def _save_final_model(run_dir, candidate, model, source, settings, features, target,
+                      development, reserve, source_manifest_hash):
+    """Keep final-fit evidence separate from immutable exploratory artifacts."""
+    import joblib
+    import numpy as np
+    from memstara.pipeline.checkpoint import atomic_json
+    from memstara.reproducibility import digest, environment
+
+    root = run_dir / "final_models"
+    root.mkdir(parents=True, exist_ok=True)
+    bundle = Path(tempfile.mkdtemp(prefix=f"task-{int(candidate['task_id'])}-", dir=root))
+    joblib.dump(model, bundle / "model.joblib")
+    (bundle / "input.csv").write_bytes(source)
+    np.savez_compressed(bundle / "split.npz", development=development, reserve=reserve)
+    atomic_json(bundle / "environment.json", environment())
+    (bundle / "final_validation.py").write_bytes(Path(__file__).read_bytes())
+    atomic_json(bundle / "manifest.json", {
+        "schema_version": 1, "policy": POLICY, "status": "fitted_before_reserve_prediction",
+        "task_id": candidate["task_id"], "trial": candidate["trial"],
+        "target": target, "features": features, "configuration": settings,
+        "source_manifest_sha256": source_manifest_hash,
+        "training_scope": "all non-reserve development rows",
+        "n_fit": len(development), "n_validation": len(reserve),
+        "files": {file.name: digest(file) for file in bundle.iterdir()},
+    })
+    for file in bundle.iterdir():
+        file.chmod(0o600)
+    return bundle
 
 
 def _load_fitted_model(candidate: dict[str, Any], config: dict, features: list[str], model_name: str,
@@ -299,7 +382,7 @@ def run(run_dir: Path, config: dict, tasks: list[dict]) -> dict:
 
 
 def _evaluate_with_budget(candidate: dict[str, Any], config: dict, run_dir: Path) -> dict:
-    """Run the one final prediction pass under the normal process-level limits."""
+    """Run final fitting and prediction under the normal process-level limits."""
     from memstara.paired_ml import atomic, supervise
     from memstara.paths import DEFAULT_OUTPUT_DIR
 
@@ -322,8 +405,8 @@ def _evaluate_with_budget(candidate: dict[str, Any], config: dict, run_dir: Path
         "auc": evaluation["auc"],
         "ml_configuration": evaluation["ml_configuration"],
         # Preserve only the model artifact and fit/split provenance required by
-        # the child. The fitted estimator is loaded and predict_proba is called;
-        # no final-stage fit or model selection is performed.
+        # the child. Its verified template is cloned and refitted on development
+        # rows; no reserve-guided model selection or tuning is performed.
         "evaluation": {
             "dataset_sha256": (evaluation.get("evaluation") or {}).get("dataset_sha256"),
             "reproducibility": (evaluation.get("evaluation") or {}).get("reproducibility"),
@@ -342,8 +425,22 @@ def _evaluate_with_budget(candidate: dict[str, Any], config: dict, run_dir: Path
         env = {**os.environ, **{name: "1" for name in (
             "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
             "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS")}}
-        usage = supervise([sys.executable, "-m", "memstara.final_validation",
-                           str(request_path), str(result_path)], env=env, limits=limits)
+        # Final refits obey the same global ML concurrency limit as exploration.
+        with (root / ".paired-ml.lock").open("a") as lock:
+            wait_started = time.monotonic()
+            while True:
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() - wait_started >= limits["wall_seconds"]:
+                        raise RuntimeError(
+                            "Final refit could not acquire the ML resource lock within its wait budget"
+                        ) from None
+                    time.sleep(.2)
+            usage = supervise([sys.executable, "-m", "memstara.final_validation",
+                               str(request_path), str(result_path)], env=env, limits=limits)
+            usage["lock_wait_seconds"] = time.monotonic() - wait_started - usage["duration_seconds"]
         result = json.loads(result_path.read_text())
     if result.get("status") != "completed":
         frames = result.get("failure_trace", [])

@@ -658,9 +658,11 @@ A rigorous one-route acceptance check includes all of the following:
    evidence. Citation identity checks do not establish clinical truth or relevance.
 
 The partition record's `reserved_not_evaluated` status describes its state during
-exploration. After the final Loop, Memstara loads each completed hypothesis task's
-hash-verified fitted model from its saved ML bundle and evaluates the same reserve once
-per task without refitting. Read each entry in `final_validation.json` for that task's
+exploration. After the final Loop, Memstara clones each task's verified model structure,
+applies its frozen settings, and freshly fits preprocessing and the estimator on all
+non-reserve development rows. It saves the final model before scoring the reserve once
+per task. Inspect `final_models/task-*/` for model, input, split indices, predictions,
+environment and hashed manifest. No exploratory replicate is selected as a winner. Read each entry in `final_validation.json` for that task's
 reserve confusion matrix and metrics; a confusion matrix on a Loop's exploration split
 is not the reserve's matrix, even when both happen to have the same number of rows.
 No hypothesis is selected by reserve performance. These same-dataset results are kept
@@ -672,7 +674,7 @@ Replay utilities:
 # Offline feature-selection integrity/replay; does not regenerate LLM text.
 python -m memstara.feature_reproduction /path/to/feature_reproduction
 
-# Re-fits for a separate reproducibility audit; the pipeline's final reserve score does not refit.
+# Replays exploratory training for a separate reproducibility audit (not the final-model bundle).
 python -m memstara.reproducibility /path/to/model_bundle
 
 # Recomputes supported XAI against saved models: additional local compute.
