@@ -30,6 +30,28 @@ def normalize_report_output(text: str) -> tuple[str, list[str]]:
     return normalized, changes
 
 
+def audit_citations(text: str, refs: list[str]) -> dict:
+    """Record citation coverage without making it a pipeline execution gate."""
+    mentioned = {
+        "[" + member.strip() + "]"
+        for group in re.findall(r"\[([A-Za-z0-9_.-]+:[^\]\n]+)\]", text)
+        for member in group.split(";")
+    }
+    unsupported = sorted(mentioned - set(refs))
+    warnings = []
+    if not mentioned:
+        warnings.append("no_citations_found")
+    if unsupported:
+        warnings.append("citations_not_in_retrieved_source_set")
+    return {
+        "status": "verified" if mentioned and not unsupported else "warning",
+        "supplied_references": refs,
+        "observed_citations": sorted(mentioned),
+        "unsupported_citations": unsupported,
+        "warnings": warnings,
+    }
+
+
 def freeze(books, prompts):
     selected = [name for name in books.get("report", []) if name in SKILLS]
     if not selected:
@@ -276,24 +298,19 @@ def finish(prepared, text, entry, directory, *, normalization=None):
             for d in r["knowledge"]["documents"]
         }
     )
-    # A bracket may contain several complete references separated by semicolons.
-    # Validate every member independently, including unknown members in a group.
-    mentioned = {
-        "[" + member.strip() + "]"
-        for group in re.findall(r"\[([A-Za-z0-9_.-]+:[^\]\n]+)\]", text)
-        for member in group.split(";")
-    }
-    if mentioned - set(refs):
-        raise ValueError("Explanation cites evidence outside the retrieved source set")
-    # Grounding is not established by citation syntax alone; enforce at least a recorded reference.
-    if entry.get("status") != "completed" or not text.strip() or not mentioned:
-        raise ValueError("Specialist Explanation is incomplete or has no supplied evidence citation")
+    citation_audit = audit_citations(text, refs)
+    # Citation omissions and mismatches are evidence-quality warnings, not execution
+    # failures. Preserve the model text and exact audit so later review can distinguish
+    # a completed report from a fully source-cited report.
+    if entry.get("status") != "completed" or not text.strip():
+        raise ValueError("Specialist Explanation is incomplete")
     record = {
         "input": prepared["receipt"],
         "prompt": prepared["prompt"],
         "output": text,
         "execution": entry,
         "output_normalization": list(normalization or []),
+        "citation_audit": citation_audit,
         "model_runtime": [
             json.loads(p.read_text())
             for p in Path(directory).glob("model-*.json")
@@ -312,6 +329,7 @@ def finish(prepared, text, entry, directory, *, normalization=None):
         "task_ids": [r["task_id"] for r in payload["results"]],
         "input": prepared["receipt"],
         "citations": refs,
+        "citation_audit": citation_audit,
         "status": "completed",
     }
     record["provenance"] = summary

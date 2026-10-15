@@ -189,8 +189,11 @@ def test_prepare_actual_interpretation_and_expert_evidence(frozen, result, tmp_p
         prepared, text, {"status": "completed", "run_id": "synthetic"}, tmp_path / "run" / "explanation_io"
     )
     assert explanation.read_receipt(entry["specialist_explanation"]["output"])["output"] == text
-    with pytest.raises(ValueError, match="citation"):
-        explanation.finish(prepared, "Uncited report", {"status": "completed"}, tmp_path / "run" / "explanation_io")
+    uncited = explanation.finish(
+        prepared, "Uncited report", {"status": "completed"}, tmp_path / "run" / "explanation_io"
+    )
+    audit = uncited["specialist_explanation"]["citation_audit"]
+    assert audit["status"] == "warning" and audit["warnings"] == ["no_citations_found"]
 
 
 @pytest.mark.parametrize("change", ["trial", "run", "hypothesis", "text", "models", "missing"])
@@ -240,6 +243,30 @@ def test_execution_tools_removed_and_output_saved(frozen, result, tmp_path):
     assert entry["status"] == "failed" and entry["specialist_explanation"]["missing_loops"] == [2]
 
 
+def test_uncited_report_is_saved_and_does_not_stop_its_loop(frozen, result, tmp_path):
+    call = AsyncMock(return_value=("Completed report without citations.", {"status": "completed", "run_id": "test"}))
+    text, entry = asyncio.run(
+        explanation.execute(
+            frozen,
+            1,
+            tmp_path / "run",
+            ("agent", "prompt"),
+            {"registry": None, "tools": [], "stage": "report"},
+            call,
+            AsyncMock(return_value={"results": [result]}),
+        )
+    )
+    assert text == "Completed report without citations."
+    assert entry["status"] == "completed"
+    saved = json.loads((tmp_path / "run" / "explanation_io" / "loop-1.json").read_text())
+    audit = saved["summary"]["citation_audit"]
+    assert audit["status"] == "warning" and audit["warnings"] == ["no_citations_found"]
+    frozen["combination_plan"] = {"total_loops": 1}
+    combined, assembled = explanation.assemble(frozen, tmp_path / "run" / "explanation_io")
+    assert "Completed report without citations." in combined
+    assert assembled["status"] == "completed"
+
+
 def test_unavailable_database_prevents_llm(frozen, result, tmp_path):
     frozen["specialist_explanation_policy"]["bindings"]["addiction"]["table"] = "missing_table"
     call = AsyncMock()
@@ -268,7 +295,7 @@ def test_report_dispatch_and_saved_status(frozen, result, tmp_path, monkeypatch)
     trace.mkdir(parents=True)
     monkeypatch.setattr(board, "_TRACE_DIR", trace)
     token = board._CURRENT_LOOP.set(1)
-    call = AsyncMock(return_value=("Expert report [addiction-fixture:a]", {"status": "completed"}))
+    call = AsyncMock(return_value=("Expert report without citations", {"status": "completed"}))
     monkeypatch.setattr(board, "call_agent", call)
     monkeypatch.setattr(board, "call_board_tool", AsyncMock(return_value={"results": [result]}))
     try:
@@ -281,6 +308,7 @@ def test_report_dispatch_and_saved_status(frozen, result, tmp_path, monkeypatch)
     assert board.save_report(tmp_path / "run", text, entry)
     saved = json.loads((tmp_path / "run" / "report_status.json").read_text())
     assert saved["specialist_explanation"]["expert"] == "addiction"
+    assert saved["specialist_explanation"]["citation_audit"]["warnings"] == ["no_citations_found"]
 
 
 from test_specialist_xai import specification, skills  # noqa: F401, E402
@@ -342,15 +370,18 @@ def test_model_identity_records_effective_config_without_credentials(tmp_path, m
     assert "must-not-appear" not in json.dumps(payload) and "private-endpoint" not in json.dumps(payload)
 
 
-def test_invented_citation_is_rejected(frozen, result, tmp_path):
+def test_invented_citation_is_recorded_as_warning_without_failing(frozen, result, tmp_path):
     prepared = asyncio.run(explanation.prepare(frozen, [result], 1, tmp_path / "run" / "explanation_io"))
-    with pytest.raises(ValueError, match="outside"):
-        explanation.finish(
-            prepared,
-            "Evidence [addiction-fixture:a] and [invented:source]",
-            {"status": "completed"},
-            tmp_path / "run" / "explanation_io",
-        )
+    entry = explanation.finish(
+        prepared,
+        "Evidence [addiction-fixture:a] and [invented:source]",
+        {"status": "completed"},
+        tmp_path / "run" / "explanation_io",
+    )
+    audit = explanation.read_receipt(entry["specialist_explanation"]["output"])["citation_audit"]
+    assert entry["status"] == "completed"
+    assert audit["status"] == "warning"
+    assert audit["unsupported_citations"] == ["[invented:source]"]
 
 
 def test_literal_citation_template_boilerplate_is_removed_and_audited(frozen, result, tmp_path):
@@ -368,13 +399,16 @@ def test_literal_citation_template_boilerplate_is_removed_and_audited(frozen, re
     assert saved["output_normalization"] == ["removed_literal_citation_template_sentence"]
 
 
-def test_unrecognized_placeholder_citation_still_fails_validation(frozen, result, tmp_path):
+def test_unrecognized_placeholder_citation_is_recorded_not_fatal(frozen, result, tmp_path):
     prepared = asyncio.run(explanation.prepare(frozen, [result], 1, tmp_path / "run" / "explanation_io"))
     raw = "Evidence [database_id:document_id]"
     normalized, changes = explanation.normalize_report_output(raw)
     assert normalized == raw and changes == []
-    with pytest.raises(ValueError, match="outside"):
-        explanation.finish(prepared, normalized, {"status": "completed"}, tmp_path / "run" / "explanation_io")
+    entry = explanation.finish(prepared, normalized, {"status": "completed"}, tmp_path / "run" / "explanation_io")
+    assert entry["status"] == "completed"
+    assert entry["specialist_explanation"]["citation_audit"]["warnings"] == [
+        "citations_not_in_retrieved_source_set"
+    ]
 
 
 def test_expert_failure_stops_following_pipeline_execution(frozen, result, tmp_path, monkeypatch):
@@ -485,5 +519,8 @@ def test_grouped_citations_validate_every_document(frozen, result, tmp_path, sec
         entry = explanation.finish(prepared, text, {'status': 'completed'}, directory)
         assert explanation.read_receipt(entry['specialist_explanation']['output'])['output'] == text
     else:
-        with pytest.raises(ValueError, match='outside'):
-            explanation.finish(prepared, text, {'status': 'completed'}, directory)
+        entry = explanation.finish(prepared, text, {'status': 'completed'}, directory)
+        audit = explanation.read_receipt(entry['specialist_explanation']['output'])['citation_audit']
+        assert entry['status'] == 'completed'
+        assert audit['status'] == 'warning'
+        assert audit['unsupported_citations'] == [f'[addiction-fixture:{second}]']
