@@ -23,7 +23,7 @@ export default function PipelineRowActions({pipeline:p,onSettings,compact=false}
   const completed=finished&&p.latest?.exit_code===0&&exploration?.outcome==='completed'&&!exploration?.skipped;
   return <div className={`pipeline-row-actions ${compact?"is-compact":""}`} role="group" aria-label={`Actions for ${p.name}`}>
     {!compact&&finished&&<div className="pipeline-execution-summary" role="status">
-      <strong>{infrastructure?.status==='interrupted'?'Connection interrupted — results retained':recoverable?'Execution interrupted — checkpoint available':completed?'Execution completed':p.latest?.exit_code===0?'Execution ended':'Execution stopped — review results'}</strong>
+      <strong>{infrastructure?.status==='interrupted'?'Connection interrupted — results retained':p.latest?.exit_code!=null&&p.latest.exit_code!==0?'Execution failed — review the saved diagnostic':recoverable?'Execution interrupted — checkpoint available':completed?'Execution completed':p.latest?.exit_code===0?'Execution ended':'Execution stopped — review results'}</strong>
       {exploration&&<span>{exploration.completed} Loops completed · {exploration.blocked} blocked{exploration.skipped ? ` · ${exploration.skipped} skipped (no executable question)` : ''}</span>}
       {p.failure&&<span>Last execution did not complete. Open Execution details for the saved diagnostic.</span>}
       {p.latest?.recovery_blocked&&<span>Automatic recovery requires review. See execution details.</span>}
@@ -34,7 +34,7 @@ export default function PipelineRowActions({pipeline:p,onSettings,compact=false}
     {!compact&&<details className="pipeline-card-disclosure"><summary>Execution details</summary>
       {p.failure&&<p className="pipeline-row-note break-words">Saved diagnostic for {p.latest?.run_tag??p.name}: {p.failure.message}</p>}
     <p className="pipeline-row-limit">{executionConfig?.continuous?'Continuous execution':`Maximum ${executionConfig?.waves??'—'} Loops per execution`}</p>
-      {finished&&(recoverable?<p className="pipeline-row-note">Resume restores this execution from its saved checkpoint. Completed Loops and results are retained.</p>:<p className="pipeline-row-note">Results are saved. Additional analysis runs only the extra Loops you approve. Each execution retains its own Loop numbering.</p>)}
+      {finished&&(recoverable?<p className="pipeline-row-note">A checkpoint is available. Resume retries from the saved checkpoint; first review the saved diagnostic if this execution failed. Completed Loops and results are retained.</p>:<p className="pipeline-row-note">Results are saved. Additional analysis runs only the extra Loops you approve. Each execution retains its own Loop numbering.</p>)}
       {p.latest?.recovery_blocked&&<p className="pipeline-row-note">Automatic recovery is blocked: {p.latest.recovery_blocked}</p>}
       {p.running&&<p className="pipeline-row-note">Pause finishes the current agent call, then waits. Resume continues the same execution.</p>}
     </details>}

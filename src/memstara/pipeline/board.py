@@ -287,6 +287,42 @@ async def check_environment(provider: str = "", y_column: str = "", *,
                     f"{hint} ({len(header)} columns in {Path(dataset).name})"
                 )
 
+    # Question generation calls the semantic matcher before any data/ML stage.
+    # Verify its cohort catalog and embedding stamps here, before spending LLM
+    # calls on hypotheses that cannot be mapped. This is header/hash metadata
+    # validation only; it does not load the embedding model or rebuild artifacts.
+    if use_data and dataset and Path(dataset).is_file():
+        try:
+            from memstara.matcher import config as matcher_config
+            from memstara.matcher.catalog import load_catalog, verify_catalog
+            from memstara.matcher.embedder import embeddings_stale
+            from memstara.matcher.service import build_run_config, current_fingerprint
+
+            matcher_run_config = build_run_config()
+            fingerprint = current_fingerprint(matcher_run_config)
+            stale_catalog = verify_catalog(matcher_config.CATALOG_JSON, fingerprint)
+            if stale_catalog:
+                problems.append(
+                    "Predictor-mapping cache is not ready: " + stale_catalog
+                )
+            else:
+                entries = load_catalog(matcher_config.CATALOG_JSON)
+                stale_embeddings = embeddings_stale(
+                    matcher_config.CATALOG_JSON,
+                    match_texts=[entry.match_text for entry in entries],
+                    cfg=matcher_run_config.embedding,
+                )
+                if stale_embeddings:
+                    problems.append(
+                        "Predictor-mapping embeddings are not ready: " + stale_embeddings
+                    )
+        except Exception as e:  # noqa: BLE001 - fail before paid/model work
+            problems.append(
+                "Predictor-mapping cache preflight could not be completed: "
+                f"{type(e).__name__}. Check MEMSTARA_DATASET_PATH and "
+                "MEMSTARA_OUTCOME_COLUMN, then run `python -m memstara.preflight --quick`."
+            )
+
     return problems
 
 

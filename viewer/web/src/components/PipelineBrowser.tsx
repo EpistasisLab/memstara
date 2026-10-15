@@ -6,15 +6,7 @@ import PipelineDeleteDialog from './PipelineDeleteDialog';
 import { pipelineLoopLabel } from '../lib/pipelineProgress';
 import {researchSkillProfile} from '../lib/researchSkills';
 import {useControl} from '../store/control';
-
-export function pipelineState(p: PipelineDefinition) {
-  if (p.running?.pause_requested || p.running?.execution_state === 'paused' || p.running?.execution_state === 'stopping') return p.running.execution_state === 'paused' ? 'Paused' : 'Stopping';
-  if (p.running) return p.running.waiting_for_questions ? 'Waiting' : 'Running';
-  if (p.latest?.recoverable) return 'Interrupted';
-  if ((p.progress.counts?.failed ?? 0) > 0 || (p.latest?.exit_code != null && p.latest.exit_code !== 0)) return 'Needs attention';
-  if (p.latest?.exit_code===0 && p.progress.exploration?.skipped) return p.progress.exploration.completed ? 'Finished with skips' : 'No findings';
-  return p.latest ? 'Completed' : 'Ready';
-}
+import {pipelineState} from '../lib/pipelineState';
 export default function PipelineBrowser({items, selected, onSelect, compare, onCompare, onSettings}: {
   items: PipelineDefinition[]; selected: string | null; onSelect: (id:string)=>void;
   compare: string[]; onCompare:(ids:string[])=>void; onSettings:(id:string)=>void;
