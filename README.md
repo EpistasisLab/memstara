@@ -1282,7 +1282,9 @@ there is no claim of full coverage or validated clinical performance.
 
 For the database tests, start the dedicated disposable service and supply its
 URL explicitly. Tests refuse a database whose name does not end in `_test` and
-create a fresh schema for each test.
+create a fresh schema for each test. The disposable image includes pgvector to
+match the CI vector-memory restore checks. Install PostgreSQL 16 client tools
+(`pg_dump`, `pg_restore`, and `psql`) and put them on PATH before running this suite.
 
 ```bash
 docker compose -f compose.test.yml up -d --wait
@@ -1310,6 +1312,35 @@ pipelines or make paid model calls. The deployment diagnostics
 `app-ux-audit.browser.mjs` and `telemetry-live.browser.mjs` require an existing
 running application and are excluded from automated fixture tests. Live provider,
 external dataset and embedding-model validation remain deployment checks.
+After starting the app, `node scripts/check_live_ui.mjs` checks all served views
+with real API reads at desktop and mobile widths. It blocks mutation requests,
+so it does not launch or delete pipelines; this smoke test complements the fixture suite.
+
+Real-provider acceptance is a separate, explicitly paid check. Configure the project
+`.env` so both stage families use `claude-haiku-5-5`, then run:
+
+```bash
+python -m pytest tests/live/test_haiku_pipeline.py --run-live --live-loops=2 --live-audit-io -k 'not private_hiv' -x -s -q --tb=short
+```
+
+This runs the four supported input modes twice, four HeartFailure skill combinations,
+and two HeartFailure random-feature Loops. Cases run sequentially and stop at the first
+failure. It checks stored results, stage/model identity, IO evidence and registry
+synchronization, not just process exit status. Skipped empirical Loops fail acceptance.
+Evidence is retained under `outputs/verification/haiku_live_*/`; a completed case can
+be audited with `--live-batch <directory>` without paying to run it again. Inspect failed
+evidence before explicitly using `--live-retry-failed`; earlier attempts remain intact.
+This representative matrix is not the entire 64-combination experiment or private HIV
+validation, and successful repetitions cannot guarantee external-service availability.
+Standalone `random_features` executions also use a frozen single-combination schedule:
+the server samples 4–20 eligible original predictors, records their seed and order, and
+removes knowledge retrieval and semantic-matching tools from question/hypothesis stages.
+Use one skill per stage and one trial per Loop, or provide an explicit combination plan.
+Legacy random executions without a frozen sampling policy require a new execution;
+they cannot be resumed under a silently changed experimental condition.
+For a separately authorized private HIV check, select `-k private_hiv` and provide
+`--live-private-research /path/to/research.json` (a research configuration or saved
+registration with its explicit target contract). Original inputs remain unchanged.
 
 Build and verify distributions from a clean checkout:
 

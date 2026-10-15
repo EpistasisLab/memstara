@@ -1,4 +1,4 @@
-"""Real provider, board, tools and persistence: one Loop per supported input mode."""
+"""Real Haiku provider, board, tools and persistence across supported input modes."""
 
 import asyncio
 from datetime import UTC, datetime
@@ -66,21 +66,24 @@ print(json.dumps({'version': version('memstara'), 'module': memstara.__file__,
         identity = json.loads(subprocess.check_output([*worker, "-c", code], cwd=root, text=True))
         (root / "installed_distribution.json").write_text(json.dumps(identity, indent=2))
     print(f"\nLIVE BATCH {identifier}: {pytestconfig.getoption('--live-loops')} paid Haiku Loops "
-          f"per selected case; evidence {root}", flush=True)
+          f"per selected case (HeartFailure combinations: four); evidence {root}", flush=True)
     return {"root": root, "repo": REPO_ROOT, "profiles": profiles, "id": identifier,
             "worker": worker, "installed_distribution": identity}
 
 
-@pytest.mark.parametrize("knowledge,data", [
-    ("okf", "dataset"), ("llm_only", "dataset"), ("okf", "proposal"), ("llm_only", "proposal"),
+@pytest.mark.parametrize("study,knowledge,data", [
+    ("synthetic", "okf", "dataset"), ("synthetic", "llm_only", "dataset"),
+    ("synthetic", "okf", "proposal"), ("synthetic", "llm_only", "proposal"),
+    ("heart_combinations", "okf", "dataset"), ("heart_random", "okf", "dataset"),
 ])
-def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, data):
+def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowledge, data):
     from memstara import blackboard
     from memstara.research_inputs import register, digest
 
-    case = f"{knowledge}_{data}"
-    loops = pytestconfig.getoption('--live-loops')
-    area = live_batch["root"] / case
+    case = f"{knowledge}_{data}" if study == "synthetic" else study
+    loops = 4 if study == "heart_combinations" else pytestconfig.getoption('--live-loops')
+    case_area = live_batch["root"] / case
+    area = case_area
     completed = [p for p in area.glob("attempt_*")
                  if read(p / "run" / "pipeline_status.json", {}).get("status") == "completed"
                  and read(p / "acceptance.json", {}).get("exit_code") == 0]
@@ -88,16 +91,49 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
         area = max(completed, key=lambda p: p.stat().st_mtime)
     old_status = read(area / "run" / "pipeline_status.json", {})
     failed_exit = read(area / "acceptance.json", {}).get("exit_code") not in (None, 0)
-    if (area / "run").exists() and (old_status.get("status") != "completed" or failed_exit):
+    failed_validation = (read(area / "acceptance.json", {}).get("validation_status") == "not_passed"
+                         or (area / "validation_failure.json").exists())
+    if failed_exit or failed_validation or ((area / "run").exists() and old_status.get("status") != "completed"):
         assert old_status.get("status") != "running", "Do not duplicate an active live execution"
         assert pytestconfig.getoption("--live-retry-failed"), "Investigate failure before explicitly retrying"
-        area = area / ("attempt_" + uuid.uuid4().hex[:8])
+        area = case_area / ("attempt_" + uuid.uuid4().hex[:8])
     area.mkdir(exist_ok=True)
     monkeypatch.setenv("MEMSTARA_RESEARCH_INPUTS_DIR", str(area / "research_inputs"))
-    config = read(live_batch["repo"] / "examples/research-inputs/research.json")
+    if study == "private_hiv":
+        configured = read(Path(pytestconfig.getoption('--live-private-research')).resolve())
+        config = configured.get('configuration', configured)
+        assert config['target']['column'] == 'HIV_DETECTABLE'
+    elif study.startswith("heart"):
+        from scripts.prepare_heart_failure_demo import prepare
+        demo = live_batch["root"] / "heart_inputs"
+        if not demo.exists():
+            prepare(live_batch["repo"] / "examples/heart-failure/dataset.csv",
+                    live_batch["repo"] / "examples/heart-failure/okf", demo)
+        config = read(demo / "research.json")
+    else:
+        config = read(live_batch["repo"] / "examples/research-inputs/research.json")
     config.update(knowledge_mode=knowledge, data_mode=data)
     for key in ("dataset_path", "knowledge_path"):
         config[key] = str(live_batch["repo"] / config[key])
+    combination = None
+    books = {"hypothesis": ["hypothesis_general"], "data": ["data_training_heavy"],
+             "ml": ["ml_logistic_regression"], "interpreter": ["shared-anil-shap"],
+             "report": ["report_general"]}
+    if study.startswith("heart"):
+        books.update(hypothesis=["heart-failure-cardiovascular"], data=["data_balanced_stratified"],
+                     report=["report_heart_failure_cardiovascular"])
+        if study == "heart_combinations":
+            from memstara.combinations import build_plan
+            books["interpreter"] = ["shared-anil-shap", "shared-anil-lime"]
+            books["report"] += ["report_heart_failure_cardiorenal"]
+            combination = build_plan(books)
+            assert combination["total_loops"] == loops
+        else:
+            books.update(hypothesis=["random_features"], ml=["ml_xgboost"], interpreter=["shared-anil-lime"])
+            from memstara.combinations import build_plan
+            combination = build_plan(books, max_loops=loops)
+    if study == "private_hiv":
+        books.update(hypothesis=["addiction-psychiatric"], report=["shared-anil-hiv"])
     source = Path(config["dataset_path"])
     source_sha = digest(source)
     run = area / "run"
@@ -111,6 +147,9 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
             "Failed live cases require investigation")
         frozen = read(run / "config.json")
         assert frozen["stage_models"] == live_batch["profiles"], "Saved model assignment changed"
+        assert frozen.get("combination_plan") == combination, "Saved combination design changed"
+        if not combination:
+            assert frozen["books"] == books, "Saved skill assignment changed"
         saved = frozen["research_profile"]
         assert saved["source_dataset_sha256"] == source_sha if data == "dataset" else True
         assert saved["configuration"]["knowledge_mode"] == knowledge and saved["configuration"]["data_mode"] == data
@@ -167,9 +206,11 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
                 "--stage-models", json.dumps(live_batch["profiles"]), "--baseline-columns", "[]",
                 "--evaluation", json.dumps({"engine": "xgboost", "seed": 42, "test_size": .25,
                                              "folds": 0, "replicates": 1, "search_trials": 1}),
-                "--playbook-hypothesis", "addiction-psychiatric", "--playbook-data", "data_training_heavy",
-                "--playbook-ml", "ml_logistic_regression", "--playbook-interpreter", "interpreter_factual_observations",
-                "--playbook-explanation", "shared-anil-addiction"]
+                "--playbook-hypothesis", books["hypothesis"][0], "--playbook-data", books["data"][0],
+                "--playbook-ml", books["ml"][0], "--playbook-interpreter", books["interpreter"][0],
+                "--playbook-explanation", books["report"][0]]
+        if combination and study != "heart_random":
+            argv.extend(["--combination-plan", json.dumps(combination)])
         started = time.monotonic()
         previous = None
         print(f"\nSTART {case}: all model calls use {MODEL}; original files preserved", flush=True)
@@ -200,6 +241,7 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
     ledger = [json.loads(line) for line in (run / "cost_ledger.jsonl").read_text().splitlines()] \
         if (run / "cost_ledger.jsonl").exists() else []
     summary = {"case": case, "loops": loops, "model": MODEL, "exit_code": exit_code,
+               "validation_status": "not_passed",
                "installed_distribution": live_batch["installed_distribution"],
                "elapsed_seconds": elapsed, "database_schema": schema, "run_directory": str(run),
                "status": status, "stages": [{k: c.get(k) for k in ("stage", "status", "duration_seconds")}
@@ -214,6 +256,9 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
     assert digest(source) == source_sha, "Original CSV changed"
     assert exit_code == 0, f"Inspect {area / 'driver.log'} and saved traces"
     assert status.get("status") == "completed" and status.get("report_completed") is True, status
+    outcomes = read(run / "iteration_outcomes.json", {})
+    if data == "dataset":
+        assert len(outcomes) == loops and all(r.get("outcome") == "completed" for r in outcomes.values()), outcomes
     assert (run / "report.md").stat().st_size > 100
     assert read(run / "registry_status.json", {}).get("status") == "synced"
     roles = {role(c["stage"]) for c in calls if c["status"] == "completed"}
@@ -226,6 +271,14 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
     frozen = read(run / "config.json")
     assert frozen["data_mode"] == data and frozen["knowledge_mode"] == knowledge
     assert frozen["stage_models"] == live_batch["profiles"]
+    assert frozen.get('combination_plan') == combination
+    if combination:
+        from memstara.feature_reproduction import replay
+        reproduction = replay(run / 'feature_reproduction')
+        (area / 'feature_reproduction_audit.json').write_text(json.dumps(reproduction, indent=2))
+        assert reproduction['status'] == 'verified'
+        assert reproduction['accepted_extractions_validated'] == loops
+        assert reproduction['random_loops_replayed'] == (loops if study == 'heart_random' else 0)
     assert summary["input_tokens"] > 0 and summary["output_tokens"] > 0
     if pytestconfig.getoption('--live-audit-io'):
         from memstara.trace.diagnose import inspect
@@ -260,18 +313,34 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, knowledge, d
         assert "train_and_score" in tools
         if knowledge == "llm_only":
             assert not any(tool.startswith("okf_") for tool in tools), "No-corpus mode invoked retrieval"
-        else:
+        elif study != "heart_random":
             assert "okf_read" in tools, "The supplied corpus was not actually read"
+        if study == "heart_random":
+            hypothesis_tools = [tool for call in read(run / "runs.json", [])
+                                if call.get("stage", "").startswith(("question", "hypothesis"))
+                                for tool in call.get("actual_tools", [])]
+            assert not any(tool.startswith("okf_") or tool in ("match_concept", "match_concepts")
+                           for tool in hypothesis_tools), "Random selection accessed knowledge/matching"
         async def measured():
             connection = await asyncpg.connect(database, timeout=10)
             try:
                 tag = read(run / "config.json")["run_tag"]
-                rows = await connection.fetch("SELECT auc, interpretation FROM memstara_results WHERE run_tag=$1", tag)
+                rows = await connection.fetch(
+                    "SELECT trial, auc, interpretation FROM memstara_results WHERE run_tag=$1", tag)
                 persisted = await connection.fetchval(
                     "SELECT count(*) FROM memstara_execution_costs WHERE run_tag=$1", tag)
                 assert rows and all(r["auc"] is not None and r["interpretation"] for r in rows)
+                assert {r["trial"] for r in rows} == set(range(loops)), "Missing per-Loop measured result"
                 assert persisted == len(ledger)
             finally:
                 await connection.close()
         asyncio.run(measured())
     # Keep the unique schema and all artifacts as auditable live execution evidence.
+    summary['validation_status'] = 'passed'
+    (area / "acceptance.json").write_text(json.dumps(summary, indent=2))
+
+
+def test_private_hiv_pipeline(live_batch, monkeypatch, pytestconfig):
+    if not pytestconfig.getoption('--live-private-research'):
+        pytest.skip('Private HIV acceptance requires an explicit local research contract')
+    test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, 'private_hiv', 'okf', 'dataset')

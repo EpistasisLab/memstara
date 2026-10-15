@@ -289,6 +289,7 @@ def test_report_only_snapshot_does_not_relabel_legacy_generation(clean_data, tmp
 
 @pytest.mark.parametrize('stage', ['hypothesis', 'ml', 'interpreter', 'report'])
 def test_custom_markdown_reaches_each_configurable_agent(stage, tmp_path, monkeypatch):
+    monkeypatch.delenv('MEMSTARA_USER_SKILLS_DIR', raising=False)
     monkeypatch.setenv('MEMSTARA_OUTPUT_DIR', str(tmp_path))
     instructions = f'# Custom {stage}\nExplicit user instructions for the {stage} role.'
     item = catalog.register({'stage': stage, 'name': 'uploaded-skill', 'content': instructions})

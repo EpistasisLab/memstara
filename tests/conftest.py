@@ -14,8 +14,6 @@ from __future__ import annotations
 import os
 import re
 
-# Tests explicitly inject settings; never load a developer's project credentials.
-os.environ.setdefault('MEMSTARA_CONFIG_MODE', 'environment')
 from collections.abc import Sequence
 
 import numpy as np
@@ -73,10 +71,28 @@ def fake_encoder():
 
 
 @pytest.fixture(autouse=True)
-def isolated_corpus_selection(request, monkeypatch):
-    """Offline cases explicitly select a corpus; prior .env tests cannot select one."""
-    if not request.config.getoption('--run-live'):
-        monkeypatch.delenv('AGENTIC_OKF_BUNDLE_DIR', raising=False)
+def isolated_operational_environment(request):
+    """A direct load_env call must not leak project settings into the next test."""
+    if request.config.getoption('--run-live'):
+        yield
+        return
+    from memstara.operational import managed
+    from memstara import env
+    saved = {key: value for key, value in os.environ.items() if managed(key)}
+    source, provenance = env._loaded_source, env._provenance
+    for key in list(os.environ):
+        if managed(key) and not key.startswith('MEMSTARA_TEST_'):
+            os.environ.pop(key, None)
+    os.environ['MEMSTARA_CONFIG_MODE'] = 'environment'
+    env._loaded_source, env._provenance = None, {}
+    try:
+        yield
+    finally:
+        for key in list(os.environ):
+            if managed(key):
+                os.environ.pop(key, None)
+        os.environ.update(saved)
+        env._loaded_source, env._provenance = source, provenance
 
 
 def pytest_addoption(parser):
@@ -90,6 +106,8 @@ def pytest_addoption(parser):
                      help="Paid Haiku Loops per selected case (default one; two for audit acceptance)")
     parser.addoption("--live-audit-io", action="store_true",
                      help="Require verified request payload and stage export evidence in live cases")
+    parser.addoption("--live-private-research", default="",
+                     help="Explicit private HIV research JSON/registration for opt-in acceptance")
     parser.addoption("--live-installed-python", default="",
                      help="Run the paid worker with an isolated, non-editable installed-wheel Python")
 
