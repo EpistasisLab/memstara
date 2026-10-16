@@ -2,7 +2,7 @@ import TelemetryTotals, { useTelemetryTotals } from '../components/TelemetryTota
 import ExperimentRegistry from '../components/ExperimentRegistry';
 import ExecutionLogs from '../components/ExecutionLogs';
 import ExecutionContext from '../components/ExecutionContext';
-import Help from '../components/Help';
+import {controlResponse} from '../lib/controlResponse';
 import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useViewer } from '../store/viewer';
@@ -36,7 +36,7 @@ export default function TelemetryPanel() {
   const runTag = useViewer(s => s.runTag);
   const [selection,setSelection] = useState<{tag:string|null;loop:number|null}>({tag:null,loop:null});
   const loop = selection.tag === runTag ? selection.loop : null;
-  const [tab,setTab] = useState<Tab>('Agents');
+  const [tab,setTab] = useState<Tab>('Totals');
   const [chosenTask,setChosenTask] = useState<number|null>(null);
   const [record,setRecord] = useState<{key:string;data:LoopSnapshot}|null>(null);
   const [failure,setFailure] = useState<{key:string;text:string}|null>(null);
@@ -44,16 +44,16 @@ export default function TelemetryPanel() {
   const key = `${runTag ?? ''}:${loop ?? 'all'}:${tab}`;
   const data = record?.key === key ? record.data : null;
   const error = failure?.key === key ? failure.text : '';
-  const choices = catalog?.tag === runTag ? catalog.loops : [];
+  const choices = totals.data?.executions.find(e=>e.run_tag===runTag)?.loops.map(l=>({number:l.number,status:l.status??'recorded'})) ?? (catalog?.tag === runTag ? catalog.loops : []);
   const selectLoop = (value:number|null) => {setChosenTask(null);setSelection({tag:runTag,loop:value});};
   useEffect(() => {
-    if(!runTag||tab==='Experiments')return;
+    if(!runTag||tab==='Experiments'||tab==='Totals')return;
     let disposed=false;let timer:ReturnType<typeof setTimeout>;let request:AbortController|null=null;
     const poll=async()=>{
       request=new AbortController();let retryDelay=4000;const deadline=setTimeout(()=>request?.abort(),10000);
       try {
         const response=await fetch(`/api/telemetry?run_tag=${encodeURIComponent(runTag)}${loop===null?'':`&loop=${loop}`}&view=${encodeURIComponent(tab)}`,{signal:request.signal});
-        const body=await response.json();
+        const body=await controlResponse(response);
         if(response.status===202&&body.detail?.status==='loading'&&body.detail.run_tag===runTag&&body.detail.loop===loop){retryDelay=1000;if(!disposed)setFailure(null);return;}
         if(!response.ok)throw Error(body.detail||'Telemetry is temporarily unavailable.');
         if(body.run_tag!==runTag||body.telemetry?.loop!==loop)throw Error('The response did not match the selected scope.');
@@ -71,15 +71,24 @@ export default function TelemetryPanel() {
       <div className="telemetry-loop-controls">
         <label>Loop<select aria-label="Loop to inspect" disabled={!runTag||!choices.length} value={loop??'all'} onChange={e=>selectLoop(e.target.value==='all'?null:Number(e.target.value))}>
           <option value="all">All loops</option>
-          {choices.map(c=><option key={c.number} value={c.number}>Loop {c.number} · {c.status.replaceAll('_',' ')} · {c.results} result{c.results===1?'':'s'}</option>)}
+          {choices.map(c=><option key={c.number} value={c.number}>Loop {c.number} · {c.status.replaceAll('_',' ')}</option>)}
         </select></label>
         <div className="flex gap-2"><button aria-label="Previous loop" disabled={index<=0} onClick={()=>selectLoop(choices[index-1].number)}><ChevronLeft size={16}/>Previous</button>
           <button aria-label="Next loop" disabled={!choices.length||index>=choices.length-1} onClick={()=>selectLoop(choices[index+1].number)}>Next<ChevronRight size={16}/></button></div>
 
       </div>
     </div>
-    <nav aria-label="Telemetry tabs" className="flex flex-wrap gap-1 border-b border-paper-line p-2">{(Object.keys(descriptions) as Tab[]).map(name=><Help key={name} topic={name} description={descriptions[name]}><button aria-pressed={tab===name} className={`rounded px-3 py-1.5 text-xs ${tab===name?'bg-accent text-accent-contrast':'text-ink-soft'}`} onClick={()=>setTab(name)}>{name}</button></Help>)}</nav>
-    <p className="border-b border-paper-line px-3 py-2 text-sm text-ink-soft"><strong>{scope}</strong> · {descriptions[tab]}</p>
+    <nav aria-label="Telemetry tabs" className="telemetry-simple-nav">
+      <button aria-pressed={tab==='Totals'} onClick={()=>setTab('Totals')}>Overview</button>
+      <button aria-pressed={tab==='Activity'} onClick={()=>setTab('Activity')}>Activity</button>
+      <label className="telemetry-detail-picker"><span className="sr-only">Detailed records</span>
+        <select aria-label="Detailed records" value={tab==='Totals'||tab==='Activity'?'':tab} onChange={e=>{if(e.target.value)setTab(e.target.value as Tab);}}>
+          <option value="" disabled>More details…</option>
+          {(['Agents','Logs','Access','Tasks','Results','Experiments'] as Tab[]).map(name=><option key={name} value={name}>{name==='Access'?'Tools & resources':name==='Experiments'?'Experiment registry':name}</option>)}
+        </select>
+      </label>
+    </nav>
+    {tab!=='Totals'&&<p className="px-3 py-2 text-xs text-ink-soft"><strong>{scope}</strong> · {descriptions[tab]}</p>}
     {error&&<p role="alert" className="px-3 py-2 text-sm text-ink-soft">{error}{data?' Showing the last available records for this same scope.':''}</p>}
     {data?.stale&&<p role="status" className="px-3 py-2 text-sm text-ink-soft">{data.health.core.up && data.health.memstara.up ? 'Refreshing this scope. Previously loaded records remain visible until the update finishes.' : 'Updates are delayed. This is not confirmation of an empty or completed loop.'}</p>}
     {data?.telemetry.legacy_attribution&&<p className="px-3 py-2 text-xs text-ink-soft">Legacy archive: agent calls are grouped using recorded loop start times. New executions record the loop directly.</p>}

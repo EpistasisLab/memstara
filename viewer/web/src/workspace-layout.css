@@ -135,3 +135,29 @@ button[aria-label^="Help:"] {min-width:24px;min-height:24px;}
 /* Keep the diagram provider attribution readable in both themes. */
 .react-flow__attribution {background:rgb(var(--panel)) !important;}
 .react-flow__attribution a {color:rgb(var(--ink)) !important;}
+
+/* Telemetry keeps the selected execution first; technical evidence stays expandable. */
+.telemetry-workspace .telemetry-scope-region {min-height:0;max-height:40%;flex-shrink:0;}
+.telemetry-workspace .execution-context > details {display:none;}
+.telemetry-simple-nav {display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid rgb(var(--line));flex-wrap:wrap;}
+.telemetry-simple-nav button,.telemetry-simple-nav select {padding:7px 10px;font-size:13px;border-radius:7px;background:rgb(var(--panel));border:1px solid rgb(var(--line));color:rgb(var(--ink));}
+.telemetry-simple-nav button[aria-pressed="true"] {background:rgb(var(--accent));color:rgb(var(--accent-contrast));border-color:transparent;}
+.telemetry-detail-picker {margin-left:auto;min-width:0;}
+.telemetry-detail-picker select {max-width:100%;}
+.telemetry-overview {padding:16px;display:grid;gap:12px;}
+.telemetry-overview header h3 {font-size:15px;font-weight:650;}
+.telemetry-overview header p,.telemetry-usage-note,.telemetry-updated {font-size:12px;color:rgb(var(--ink-soft));line-height:1.5;}
+.telemetry-key-metrics {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+.telemetry-key-metrics > div {padding:12px;border:1px solid rgb(var(--line));border-radius:10px;min-width:0;}
+.telemetry-key-metrics dt {font-size:12px;color:rgb(var(--ink-soft));}
+.telemetry-key-metrics dd {font-size:clamp(16px,2vw,24px);font-weight:650;margin-top:6px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;}
+.telemetry-disclosure {border-top:1px solid rgb(var(--line));padding-top:10px;min-width:0;}
+.telemetry-disclosure summary {cursor:pointer;font-size:13px;font-weight:550;padding:4px 0;}
+.telemetry-disclosure summary span {font-size:12px;font-weight:400;color:rgb(var(--ink-soft));margin-left:8px;}
+.telemetry-disclosure > div {padding-top:12px;display:grid;gap:12px;min-width:0;}
+@container (max-width:420px) {
+ .telemetry-key-metrics {grid-template-columns:1fr;gap:0;}
+ .telemetry-key-metrics > div {display:flex;align-items:center;justify-content:space-between;gap:12px;border:0;border-bottom:1px solid rgb(var(--line));border-radius:0;padding:10px 0;}
+ .telemetry-key-metrics dd {margin:0;font-size:18px;}
+ .telemetry-overview {padding:12px;}
+}
