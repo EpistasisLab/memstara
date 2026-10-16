@@ -1,3 +1,4 @@
+import {controlResponse} from '../lib/controlResponse';
 import { create } from "zustand";
 import { useControl, type RunRequest, type RunningRun } from "./control";
 import { useViewer } from "./viewer";
@@ -29,7 +30,7 @@ let cancelBulkStart = false;
 const delayedStartMessage = 'The start response was delayed. Checking server status; do not start again until its state updates.';
 async function request(body: object) {
   const response = await fetch('/control/pipelines', { method: 'POST', headers: {'Content-Type':'application/json'}, body:JSON.stringify(body), signal:AbortSignal.timeout(10000) });
-  const data = await response.json();
+  const data = await controlResponse(response);
   if (!response.ok) throw new Error(data.error || 'Pipeline settings could not be saved');
   return data;
 }
@@ -61,7 +62,7 @@ export const usePipelines = create<{
     try {
       const response=await fetch('/control/pipelines',{signal:AbortSignal.timeout(10000)});
       if(!response.ok) throw new Error('Pipeline workspace is unavailable; last settings are retained.');
-      const data=await response.json();
+      const data=await controlResponse(response);
       if(revision !== workspaceRevision) return;
       if(!get().busy) {
         const firstLoad = !get().loaded;
@@ -161,7 +162,7 @@ export const usePipelines = create<{
         while(Date.now()<deadline){
           await new Promise(resolve=>setTimeout(resolve,750));
           const response=await fetch('/control/pipelines',{signal:AbortSignal.timeout(10000)});
-          const data=await response.json();
+          const data=await controlResponse(response);
           if(!response.ok)throw new Error(data.error||'Could not confirm execution shutdown');
           const items:PipelineDefinition[]=data.pipelines;
           if(!items.some(p=>p.id===id)){
@@ -189,7 +190,7 @@ export const usePipelines = create<{
         const outcomes=await startPipelines([...get().items],async(item,resume)=>{
           const url=resume?`/control/runs/${encodeURIComponent(item.running!.run_tag)}/resume`:'/control/runs';
           const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(resume?{}:{pipeline_id:item.id}),signal:AbortSignal.timeout(15000)});
-          const run=await response.json();
+          const run=await controlResponse(response);
           if(!response.ok)throw Error(run.error||`Request failed (${response.status})`);
           set(s=>({items:s.items.map(p=>p.id!==item.id?p:resume?{...p,running:p.running?{...p.running,pause_requested:false,execution_state:'running'}:null}:{...p,running:run,latest:run,progress:{}})}));
         },()=>cancelBulkStart);
@@ -204,7 +205,7 @@ export const usePipelines = create<{
     const previousTag=get().items.find(p=>p.id===id)?.latest?.run_tag??null;
     set({busy:true,error:null});
     try{await saveQueue;const response=await fetch('/control/runs',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(15000),body:JSON.stringify({pipeline_id:id,...(options?{execution_mode:options.mode,additional_loops:options.loops,expected_run_tag:options.expectedRunTag}:{})})});
-      const run=await response.json();if(!response.ok)throw new Error(run.error);
+      const run=await controlResponse(response);if(!response.ok)throw new Error(run.error);
       set({items:get().items.map(p=>p.id===id?{...p,running:run,latest:run,progress:{}}:p)});get().select(id);return true;
     }catch(e){
       // A lost response is not a rejected start. Reconcile with a new run for
@@ -218,7 +219,7 @@ export const usePipelines = create<{
     const pipeline=get().items.find(p=>p.id===id);
     const run=pipeline?.running||(!paused&&pipeline?.latest?.recoverable?pipeline.latest:null);if(!run||get().busy)return;
     set({busy:true,error:null});
-    try{const r=await fetch(`/control/runs/${encodeURIComponent(run.run_tag)}/${paused?'pause':'resume'}`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error((await r.json()).error);}
+    try{const r=await fetch(`/control/runs/${encodeURIComponent(run.run_tag)}/${paused?'pause':'resume'}`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error((await controlResponse(r)).error);}
     catch(e){set({error:String(e)});}finally{set({busy:false});void get().poll();}
   },
   stopAll:async()=>{
@@ -226,7 +227,7 @@ export const usePipelines = create<{
     cancelBulkStart=true;
     set({stoppingAll:true,error:null});
     try{await bulkStart;const r=await fetch('/control/stop-all',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(10000)});
-      const body=await r.json();if(!r.ok)throw Error(body.error||'Stop all failed');
+      const body=await controlResponse(r);if(!r.ok)throw Error(body.error||'Stop all failed');
       if(body.errors?.length)throw Error(body.errors.map((e:{pipeline:string;error:string})=>`${e.pipeline}: ${e.error}`).join('; '));
     }catch(e){set({error:String(e)});}finally{set({stoppingAll:false});void get().poll();}
   },
@@ -234,13 +235,13 @@ export const usePipelines = create<{
     const run=get().items.find(p=>p.id===id)?.running;if(!run||get().busy)return false;
     if(expectedRunTag && run.run_tag!==expectedRunTag){set({error:'The execution changed. Review the current execution before ending it.'});return false;}
     set({busy:true,error:null});
-    try{const r=await fetch(`/control/runs/${encodeURIComponent(run.run_tag)}/end`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error((await r.json()).error);return true;}
+    try{const r=await fetch(`/control/runs/${encodeURIComponent(run.run_tag)}/end`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error((await controlResponse(r)).error);return true;}
     catch(e){set({error:String(e)});return false;}finally{set({busy:false});void get().poll();}
   },
   stop:async id=>{
     const run=get().items.find(p=>p.id===id)?.running;if(!run || get().busy)return;set({busy:true,error:null});
     try{const response=await fetch(`/control/runs/${encodeURIComponent(run.run_tag)}/stop`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)});
-      if(!response.ok)throw new Error((await response.json()).error);
+      if(!response.ok)throw new Error((await controlResponse(response)).error);
     }catch(e){set({error:String(e)});}finally{set({busy:false});}
   },
 }));
