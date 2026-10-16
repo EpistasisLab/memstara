@@ -19,6 +19,7 @@ import yaml         # the frontmatter is YAML
 # the imports, rather than beside the two `noqa: E402` imports further down: it has no
 # ordering requirement, so it should not sit among the ones that do.
 from memstara.mcp_servers.frontmatter import matches, merge_locked, parse_field_filter, values_for
+from memstara.knowledge_provenance import document_provenance
 
 #: The name of the tag PyYAML attaches when it decides "this is a date". Below,
 #: only the rules that attach this tag are picked out and removed.
@@ -794,6 +795,7 @@ def _read_documents(refs: str, section: str = "", max_chars: int = 0) -> str:
             # here; the value is passed through as it stands and the caller is left to
             # compare it as a string.
             "export_safe": _text(doc.fields.get("export_safe")),
+            "knowledge_provenance": document_provenance(doc.fields, doc.body),
         }
         if truncated:
             entry["truncated"] = True   # a truncation is always announced
@@ -826,7 +828,8 @@ def okf_read(refs: str, section: str = "", max_chars: int = 0) -> str:
         "tool": "okf_read", "refs": refs, "section": section,
         "results": [{"ref": row.get("ref", refs), "id": row.get("id"),
                      "status": "failed" if "error" in row else "read",
-                     "error": row.get("error")} for row in records],
+                     "error": row.get("error"),
+                     "knowledge_provenance": row.get("knowledge_provenance")} for row in records],
     }
     try:
         # One append syscall per event avoids interleaving between MCP processes.

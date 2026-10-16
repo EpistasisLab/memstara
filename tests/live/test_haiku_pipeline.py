@@ -75,6 +75,7 @@ print(json.dumps({'version': version('memstara'), 'module': memstara.__file__,
     ("synthetic", "okf", "dataset"), ("synthetic", "llm_only", "dataset"),
     ("synthetic", "okf", "proposal"), ("synthetic", "llm_only", "proposal"),
     ("heart_combinations", "okf", "dataset"), ("heart_random", "okf", "dataset"),
+    ("heart_guided", "okf", "dataset"), ("synthetic_paths", "okf", "dataset"),
 ])
 def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowledge, data):
     from memstara import blackboard
@@ -115,6 +116,20 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
     config.update(knowledge_mode=knowledge, data_mode=data)
     for key in ("dataset_path", "knowledge_path"):
         config[key] = str(live_batch["repo"] / config[key])
+    if study == "synthetic_paths":
+        import shutil
+        corpus = area / "path_corpus"
+        if not corpus.exists():
+            shutil.copytree(config["knowledge_path"], corpus)
+            doc = corpus / "observations" / "simulated-risk.md"
+            original = doc.read_text()
+            records = "metapath_instances:\n"
+            for i, name in enumerate(("systolic_pressure", "resting_pulse", "activity_score", "synthetic_marker"), 1):
+                evidence = "predicted" if i % 2 else "observed"
+                records += (f"  - id: p{i}\n    label: '{name} to simulated event'\n"
+                            f"    edges: [{{evidence: {evidence}}}]\n")
+            doc.write_text(original.replace("---\n", "---\n" + records, 1))
+        config["knowledge_path"] = str(corpus)
     combination = None
     books = {"hypothesis": ["hypothesis_general"], "data": ["data_training_heavy"],
              "ml": ["ml_logistic_regression"], "interpreter": ["shared-anil-shap"],
@@ -128,7 +143,7 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
             books["report"] += ["report_heart_failure_cardiorenal"]
             combination = build_plan(books)
             assert combination["total_loops"] == loops
-        else:
+        elif study == "heart_random":
             books.update(hypothesis=["random_features"], ml=["ml_xgboost"], interpreter=["shared-anil-lime"])
             from memstara.combinations import build_plan
             combination = build_plan(books, max_loops=loops)
@@ -297,6 +312,18 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
             assert row and row["status"] == "completed" and row["report"]
             count = await connection.fetchval("SELECT count(*) FROM memstara_execution_costs WHERE run_tag=$1", tag)
             assert count == len(ledger)
+            if study == "synthetic_paths":
+                results = await connection.fetch("SELECT evaluation FROM memstara_results WHERE run_tag=$1", tag)
+                scores = []
+                for result in results:
+                    ev = result["evaluation"]
+                    ev = json.loads(ev) if isinstance(ev, str) else ev
+                    novelty = ev["knowledge_provenance"]["novelty"]
+                    assert novelty["rankable"] and novelty["coverage"] == 1, novelty
+                    assert novelty["paths"] and all(p.get("rationale") for p in novelty["paths"])
+                    scores.append(novelty)
+                assert scores
+                (area / "novelty_audit.json").write_text(json.dumps(scores, indent=2))
         finally:
             await connection.close()
     asyncio.run(persisted())

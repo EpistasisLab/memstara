@@ -109,6 +109,10 @@ def test_task_carries_contract_into_evaluation(monkeypatch):
                      qc.hypothesis_text(contract), ['FEATURE_A'], 'FIXED_TARGET', ['path1'], 10)))
     assert reply.get('task_id') == 20
     assert json.loads(conn.fetchval.call_args.args[-1])['question_contract'] == contract
+    provenance = json.loads(conn.fetchval.call_args.args[-1])['knowledge_provenance']
+    assert provenance['run_tag'] == 'new-run' and provenance['question_id'] == 10
+    assert provenance['counts']['unknown'] == 1
+    assert provenance['novelty_score'] is None
 
 
 def test_tampered_task_cannot_advance_to_next_stage(monkeypatch):

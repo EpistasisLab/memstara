@@ -289,6 +289,13 @@ async def discovery_questions(before: int = Query(default=0, ge=0)):
     return await question_list(before)
 
 
+@app.get("/api/discovery/novelty")
+async def discovery_novelty(offset: int = Query(default=0, ge=0, le=1000000),
+                            run_tag: str = Query(default="", max_length=200)):
+    from discovery import novelty_ranking
+    return await novelty_ranking(offset, run_tag)
+
+
 @app.get("/api/discovery/questions/{question_id}")
 async def discovery_question(question_id: int):
     from discovery import question_detail

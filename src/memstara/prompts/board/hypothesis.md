@@ -98,3 +98,18 @@ Use prior iteration evidence to justify retaining, adding, replacing or simplify
 predictor concepts. Explicitly include retained concepts in the new question and map
 every concept to available columns. Do not force feature counts to grow. Fixed
 baseline predictors are added by extraction; do not invent KG support for them.
+
+
+## Path attribution for KG novelty comparison
+When answering a question, inspect `knowledge_provenance.paths` returned by
+`okf_read`. For each concrete path actually used to justify the hypothesis, pass
+`path_uses` to `create_task`: a list of objects containing `source_id` (the document
+ID), `path_id` (copy the recorded path ID exactly), and `rationale` explaining how
+that path supports the assigned predictor and outcome. Read the relevant source
+section before declaring use. Do not list unused paths to raise a score.
+Cover every metapath source you rely on. Literature without path records, random
+features and no-knowledge runs may omit path_uses; this means unscored, not low novelty.
+The server validates references and computes a versioned predicted-path fraction.
+Do not supply or invent a numerical novelty score, edge annotation or path ID.
+Predicted links are unvalidated relationships, not evidence of causal effects or
+proof that the hypothesis is absent from the literature.

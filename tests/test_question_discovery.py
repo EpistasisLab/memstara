@@ -95,3 +95,30 @@ class LiveOutputsTests(unittest.TestCase):
             second = asyncio.run(discovery.live_outputs(['run-a']))
         self.assertEqual(first['events'][0]['detail'], second['events'][0]['detail'])
         self.assertNotEqual(first['events'][0]['revision'], second['events'][0]['revision'])
+
+
+class NoveltyRankingTests(unittest.TestCase):
+    def test_ranking_is_paginated_and_scoped_without_n_plus_one_reads(self):
+        import json
+        conn = AsyncMock()
+        conn.fetch.return_value = [dict(task_id=i, result_id=i, question_id=i, total=51,
+            score=.5, novelty=json.dumps({'policy':'predicted_path_fraction_v1','score':.5})) for i in range(51)]
+        async def guarded(store, callback, fallback): return await callback(conn)
+        with patch.object(discovery.pools, 'guarded', guarded):
+            result = asyncio.run(discovery.novelty_ranking(0, 'run-a'))
+        self.assertEqual(len(result['items']), 50)
+        self.assertEqual(result['next_offset'], 50)
+        self.assertEqual(result['items'][0]['novelty']['score'], .5)
+        self.assertEqual(conn.fetch.await_count, 1)
+        sql, tag, offset = conn.fetch.call_args.args
+        self.assertEqual(tag, 'run-a')
+        self.assertEqual(offset, 0)
+        self.assertIn('DISTINCT ON (r.task_id)', sql)
+        self.assertIn("q.status <> 'cleared'", sql)
+        self.assertIn('DESC NULLS LAST', sql)
+
+    def test_ranking_outage_is_not_empty_success(self):
+        with patch.object(discovery.pools, 'guarded', AsyncMock(return_value=None)):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(discovery.novelty_ranking())
+            self.assertEqual(caught.exception.status_code, 503)

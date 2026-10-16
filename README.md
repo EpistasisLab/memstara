@@ -1429,3 +1429,16 @@ Legacy model JSON is not loaded automatically. Use the explicit migration comman
 in installation step 2, which makes a restricted backup first. Restart services
 after changing `.env`. Model identities and token estimates are not Azure billing
 receipts; unavailable billing remains unconfirmed.
+
+### Inspect KG novelty
+
+In **Question universe**, open **Novelty ranking** to prioritize recorded
+hypotheses by their **KG novelty proxy**: the fraction of declared-use paths that
+contain predicted edges. Full annotation coverage is required; unknown, literature-only
+and historical records remain **Unscored**, not zero. Filter by run ID to compare
+within the same study/corpus. Inspect paths, rationale and calculation, or open the
+linked agent outputs. AUROC remains separate. This metric does not establish novelty
+across the literature or scientific validity. Existing results are not backfilled.
+
+For supported OKF annotations, custom path metadata and reproducible scoring rules,
+see [Knowledge-source provenance and KG novelty ranking](DEVELOPER_GUIDE.md#knowledge-source-provenance-and-kg-novelty-ranking-issue-186).

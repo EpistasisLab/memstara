@@ -1203,3 +1203,112 @@ prompts remain authoritative on recovery.
 The manifest records preservation hashes, not publication rights. Redistribution
 approval remains pending. Run `python scripts/check_release_readiness.py` for
 content checks and consult [REVIEW_GUIDE.md](REVIEW_GUIDE.md) before sign-off.
+
+## Knowledge-source provenance and KG novelty ranking (issue #186)
+
+New tasks preserve `evaluation.knowledge_provenance`, including document counts,
+source fingerprints, explicit path use and a server-computed `novelty` record.
+No historical result is silently backfilled. This is a source-relative KG novelty
+proxy, not a validated measure of novelty across scientific literature.
+
+### Flow and reproducibility
+
+1. `okf_read` returns document declarations and `knowledge_provenance.paths`, and
+   appends them to the same execution's `knowledge_reads.jsonl`.
+2. The hypothesis agent reads the source and supplies `path_uses` to `create_task`:
+   `[{"source_id":"document-id","path_id":"p1","rationale":"Why this path supports the hypothesis"}]`.
+3. The server checks each declared path against a cited document's recorded reads.
+   Changed fingerprints, ambiguous IDs, conflicting source annotations, missing
+   rationales and missing paths remain unknown. It does not infer use from retrieval.
+4. The server persists the paths, rationale, location, source/row hashes, coverage,
+   counts, formula and policy `predicted_path_fraction_v1` in task/result metadata.
+   Existing run input snapshots separately preserve corpus/configuration identity.
+5. Interpretation and Explanation receive this immutable evidence with the result.
+   They cannot submit a replacement score. Reports distinguish the proxy from LLM
+   qualitative judgments, AUROC and semantic similarity.
+
+### Policy
+
+`score = (predicted paths + mixed paths) / (observed + predicted + mixed paths)`.
+A mixed path contains at least one predicted edge and counts once, just like a
+predicted path. There are no fitted weights or combined AUROC scores. A path is a
+source-local record: duplicate references to the same resolved document/path ID
+count once. Different documents are not assumed to describe the same biological
+path; this is not a graph-wide deduplication algorithm.
+
+A score is rankable only with full annotation coverage, a rationale for every
+claimed path, and path attribution for every cited non-literature document.
+Unknown paths, malformed claims, missing citations or more than 100 claims make
+it unrankable. `known_path_fraction` is diagnostic only for partial evidence, not
+an official score. No paths means unavailable, not zero. An observed-only,
+fully supported set can score zero. Literature without paths, random-feature,
+no-OKF and historical runs remain usable and unscored.
+
+Document counters remain document-level. The older top-level `novelty_score: null`
+and `path_instance_attribution: not_assessed` describe that document summary;
+`novelty` is the separately versioned path-use record. Attribution is declared by
+the agent and checked against source records, not independently scientifically
+validated. High predicted-path share does not establish validity, causality,
+clinical benefit or absence from the literature. Expert validation remains open.
+
+### Source adapters
+
+- Existing numbered `Instances` tables: copy row IDs, locations and hashes.
+  Only unambiguous all-observed/all-predicted document declarations apply uniformly;
+  a document-wide mixed label does not classify individual rows. An explicit row
+  `evidence` column may provide observed/predicted/mixed provenance.
+- `Predicted Edges` documents with `overall rank`, source and target tables:
+  each row is a one-hop predicted path. Consensus/confidence is not a novelty score.
+- Custom OKF frontmatter can explicitly provide paths and edge annotations:
+
+```yaml
+metapath_instances:
+  - id: p1
+    label: Predictor through mediator to outcome
+    edges:
+      - evidence: observed
+      - evidence: predicted
+```
+
+Original corpora and contributed skills are not modified. Conflicting document
+annotations block ranking even if a row has an annotation. Duplicate path IDs
+within a document remain unknown. Unrecognized formats stay unscored and do not
+stop the pipeline. Up to 200 path records per document are exposed; an omitted
+path ID cannot be scored. The separate diagnostic `path_inventory_v1` retains its
+25-row display limit and never asserts hypothesis use.
+
+### UI and API
+
+Open **Question universe → Novelty ranking** for a paginated, descending proxy
+ranking across stored results. Each hypothesis uses its latest result; ties use
+newest result ID. Unscored hypotheses appear after scored hypotheses without a
+rank. Filter by exact run ID to compare within a study/corpus. Results from
+different corpora are not necessarily comparable. Cleared questions are excluded.
+The list uses one query per page, not a request per question. `Open agent outputs`
+opens the exact question/result pair. Detailed panels include score, coverage,
+counts, formula, path labels, declared rationale and source fingerprints.
+
+`GET /api/discovery/novelty?run_tag=...&offset=0` returns up to 50 hypotheses and a
+next offset. Outages return 503, not an empty successful ranking. This view does
+not change Question Universe spatial positions or generation priorities (#145).
+
+### Verification
+
+```bash
+python -m pytest -q tests/test_novelty.py tests/test_knowledge_provenance.py tests/test_question_discovery.py tests/test_question_contract.py tests/test_prompt_files.py
+```
+
+Use `tests/integration/test_novelty_ranking.py --run-integration` with an explicit
+`MEMSTARA_TEST_DATABASE_URL` ending in `_test` for actual SQL ordering/filtering.
+From `viewer/web`, run `npm test`, `npm run build`, and
+`node tests/knowledge-provenance.browser.mjs`. Browser fixtures do not prove model
+execution. Opt-in paid `synthetic_paths-okf-dataset` Haiku acceptance verifies
+agent path declarations and persisted scores; `heart_guided-okf-dataset` verifies
+literature compatibility. Run with `--run-live --live-loops 1 --live-audit-io`.
+Human source-attribution/novelty review is a separate scientific acceptance gate.
+
+`submit_result` treats a nonempty `error` as an explicit failure report. Literal
+absence markers such as `none`, `null`, or `no error` are rejected as ambiguous
+before storage, with instructions to resubmit a successful result with an empty
+or omitted error field, or report an actual failure description. This validation
+does not silently turn failures into successes or alter worker ownership checks.

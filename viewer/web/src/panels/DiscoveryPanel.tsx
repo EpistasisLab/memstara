@@ -13,6 +13,7 @@ import { FeatureAtlas, ModelLens, InterpretationVoices } from '../components/dis
 import LiveOutputDock from '../components/discovery/LiveOutputDock';
 import { useLiveOutputs, type OutputEvent } from '../store/liveOutputs';
 import QuestionSpace from '../components/discovery/QuestionSpace';
+import NoveltyRanking from '../components/NoveltyRanking';
 import ScientificProvenance from '../components/ScientificProvenance';
 import './discovery.css';
 import './question-space.css';
@@ -126,11 +127,25 @@ export default function DiscoveryPanel() {
     }catch(error){if(sequence===openSequence.current)setOpenError(String(error));}
   };
   const openStage=(name:string)=>{setStage(name);studio.current?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});};
+  const [ranking,setRanking]=useState(false);
+  const openRanked=async(questionId:number,recordId:number)=>{
+    const sequence=++openSequence.current;
+    try {
+      const response=await fetch(`/api/discovery/questions/${questionId}`,{signal:AbortSignal.timeout(5000)});
+      if(!response.ok)throw Error('Question evidence unavailable.');
+      const payload=await response.json();
+      if(sequence!==openSequence.current)return;
+      select(payload.question);setResultId(recordId);setStage('Hypothesis');
+      studio.current?.scrollIntoView({behavior:'smooth'});
+    }catch(e){if(sequence===openSequence.current)setOpenError(String(e));}
+  };
   return <div className="universe-page universe-v2">
     <header className="universe-header"><div><span className="universe-eyebrow"><Sparkles size={13} /> MEMSTARA DISCOVERY</span><h1>Follow a question.<br /><span>Discover what follows.</span></h1></div><div className="space-header-note"><p>A living field of agent-generated questions,<br />with their recorded evidence one step away.</p><span className="universe-live">{error ? 'Connection interrupted' : data ? 'Live records · 5s updates' : 'Connecting…'}</span></div></header>
     <ContentOrigin kind="proposal"/><div className="universe-tools"><label><Search size={17} /><input aria-label="Search loaded questions" placeholder="Find a question, rationale, or knowledge tag…" value={search} onChange={e => setSearch(e.target.value)} /></label><button onClick={() => setList(v => !v)} aria-pressed={list}>{list ? <Orbit size={16} /> : <List size={16} />}{list ? 'Question field' : 'Question list'}</button><ClearQuestionMemory onCleared={through=>{openSequence.current++;setClearedThrough(v=>Math.max(v,through));setPages([0]);setSelected(null);setOpenedReport(null);setOpenError('');setMemoryRevision(v=>v+1);}}/></div>
     <div className="universe-context"><span>{questions.length} questions on this page · Active memory across runs</span><span>Explore outputs, evidence and interpretations</span></div>
     {error && <p className="universe-alert" role="alert">{error} {data ? 'Showing the last available questions.' : 'Retrying automatically.'}</p>}
+    <button className="my-3 rounded-lg border border-paper-line p-3" aria-expanded={ranking} onClick={()=>setRanking(v=>!v)}>Novelty ranking</button>
+    {ranking&&<NoveltyRanking open={(q,r)=>{void openRanked(q,r);}}/>}
     <LiveOutputDock open={event=>{void openOutput(event);}}/>
     {openError&&<p role="alert">{openError}</p>}
     {openedReport&&<article className="universe-evidence"><button className="universe-close" onClick={()=>setOpenedReport(null)}>Close report ×</button><h2>Live run report</h2><p className="universe-note">{openedReport} · {liveReports[openedReport]?.status||'Not available'}</p><ReportBody report text={liveReports[openedReport]?.text||liveReports[openedReport]?.error||'No report text is available yet.'}/></article>}

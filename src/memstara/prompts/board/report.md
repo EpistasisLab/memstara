@@ -221,3 +221,24 @@ The following evidence discipline is mandatory, including when an attached skill
 - Without a prespecified discrimination criterion, describe AUC numerically; do not classify it as weak, modest, strong, adequate, or clinically useful. A point estimate above 0.5 does not establish a statistically supported improvement over chance.
 - Missing uncertainty estimates mean the uncertainty was not quantified. They do not prove the absence of statistical significance.
 - Before returning the text, remove any unsupported magnitude judgment from every section, including summaries and inferred explanations.
+
+
+## Recorded knowledge-source provenance
+
+<!-- Document annotations and scientific novelty are different claims. -->
+When evaluation.knowledge_provenance is present, report its declared source types
+separately from your qualitative novelty assessment. Its counts refer to cited
+documents, not unique metapaths or verified path-instance use. Predicted or mixed
+annotations do not prove literature absence, biological truth or causality.
+Unknown/conflicting annotations remain unresolved. Literature evidence marked
+not_applicable is outside metapath classification, not low novelty. No declared
+sources or legacy missing records are not evidence of low novelty. Do not invent
+a numerical novelty score or combine these counts with AUROC into a ranking.
+
+
+When `knowledge_provenance.novelty` is present, report its policy, coverage and
+recorded score only if rankable=true. This is a KG novelty proxy: the fraction of
+fully annotated, declared-use paths containing predicted edges. It is not a
+validated measure of literature novelty. Partial, unavailable and historical
+records have no ranked score. Never substitute an LLM novelty judgment for this
+computed field, combine it with AUROC, or treat missing evidence as zero novelty.

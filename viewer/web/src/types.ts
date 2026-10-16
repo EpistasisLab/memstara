@@ -182,6 +182,7 @@ export interface Result {
   run_tag?: string; pipeline_id?: string; pipeline_name?: string; iteration?: number | null;
   hypothesis_id?: string;
   evaluation?: {
+    knowledge_provenance?: unknown;
     paired_models?: {primary_model: string; primary_selection: string; same_features: boolean; same_splits: boolean; xgboost_minus_lr_auc: number};
     ml_configuration?: {requested: unknown; effective: unknown; resource_limits: unknown};
     model_results?: Record<string, {auc: number; n_train: number; n_test: number; model: string;

@@ -153,3 +153,39 @@ async def live_outputs(tags: list[str]) -> dict[str, Any]:
     # The cap is explicit; browsing archives remains available through the question bank.
     return dict(events=events, questions=questions, results=results, reports=reports,
                 generated_at=datetime.now(timezone.utc).isoformat(), record_limit=200)
+
+
+async def novelty_ranking(offset: int = 0, run_tag: str = '') -> dict[str, Any]:
+    """Rank latest recorded result per hypothesis, never infer historical scores."""
+    async def read(conn):
+        rows = await conn.fetch("""
+            WITH latest AS (
+                SELECT DISTINCT ON (r.task_id) r.task_id, r.result_id, r.question_id,
+                       r.run_tag, r.trial, r.hypothesis, r.auc,
+                       r.evaluation->'knowledge_provenance'->'novelty' AS novelty
+                FROM memstara_results r JOIN memstara_questions q USING (question_id)
+                WHERE q.status <> 'cleared' AND ($1::text = '' OR r.run_tag = $1)
+                ORDER BY r.task_id, r.result_id DESC
+            ), scored AS (
+                SELECT *, CASE WHEN novelty->>'policy' = 'predicted_path_fraction_v1'
+                    AND novelty->>'rankable' = 'true'
+                    AND novelty->>'coverage' IN ('1', '1.0')
+                    AND jsonb_typeof(novelty->'score') = 'number'
+                    THEN (novelty->>'score')::numeric ELSE NULL END AS score
+                FROM latest
+            )
+            SELECT *, count(*) OVER () AS total FROM scored
+            ORDER BY CASE WHEN score BETWEEN 0 AND 1 THEN score ELSE NULL END DESC NULLS LAST,
+                     result_id DESC LIMIT 51 OFFSET $2
+        """, run_tag, offset)
+        items = [{k: v for k, v in dict(row).items() if k not in ('score', 'total')}
+                 for row in rows[:50]]
+        for item in items:
+            item['novelty'] = scene._jsonb(item.get('novelty'), {})
+        return {'items': items, 'total': rows[0]['total'] if rows else 0,
+                'next_offset': offset + 50 if len(rows) > 50 else None,
+                'policy': 'predicted_path_fraction_v1', 'run_tag': run_tag}
+    result = await pools.guarded('memstara', read, None)
+    if result is None:
+        raise HTTPException(503, 'Novelty records are temporarily unavailable.')
+    return result

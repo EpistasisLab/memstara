@@ -1,3 +1,4 @@
+import KnowledgeProvenance from "./KnowledgeProvenance";
 import ContentOrigin from "./ContentOrigin";
 import type { Result, QuestionContract } from '../types';
 import { scientificProvenance } from '../lib/scientificProvenance';
@@ -13,5 +14,6 @@ export default function ScientificProvenance({result, contract}: {result?: Resul
     {lineage?.origin_wave !== undefined && <p className="mt-2">Loop {lineage.origin_wave + 1}</p>}
     {!!lineage?.parent_task_ids?.length && <p className="mt-1">Builds on prior task(s): {lineage.parent_task_ids.join(', ')}</p>}
     {lineage?.learning_goal && <p className="mt-2 text-sm"><ContentOrigin kind="proposal" compact/><strong>What this follow-up tests: </strong>{lineage.learning_goal}</p>}
+    <KnowledgeProvenance value={result?.evaluation?.knowledge_provenance} />
   </div>;
 }

@@ -9,6 +9,7 @@ import os
 import re
 from typing import Any
 from memstara.combinations import task_books
+from memstara.knowledge_provenance import hypothesis_provenance
 from memstara.pipeline.question_contract import QuestionProposal, FeatureMapping
 
 import asyncpg                            # PostgreSQL async driver
@@ -67,7 +68,8 @@ def _pipeline_run() -> str:
 async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: str,
                       columns: list[str], y_column: str,
                       okf_concept_ids: list[str] | None = None,
-                      question_id: int = 0, feature_mapping: list[FeatureMapping] | None = None) -> str:
+                      question_id: int = 0, feature_mapping: list[FeatureMapping] | None = None,
+                      path_uses: list[dict[str, str]] | None = None) -> str:
     """Put a new task on the board. The hypothesis stage uses this.
 
     Args:
@@ -86,6 +88,9 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
         feature_mapping: For each selected column, supply concept (exact assigned predictor),
             column, source_id (one of okf_concept_ids), and clinical rationale.
             Every assigned concept and selected column must be covered for new runs.
+        path_uses: Actual paths used, each with source_id, path_id and rationale.
+            Copy IDs from okf_read knowledge_provenance.paths. Never invent IDs.
+            Optional for literature, random or no-knowledge workflows.
         question_id: which question bank row this trial came from, if the driver gave
             you one. 0 means none — the run used the built-in perspective list instead.
             Recorded so a finished result can be traced back to what was asked, not
@@ -213,6 +218,9 @@ async def create_task(run_tag: str, trial: int, perspective: str, hypothesis: st
                                     **({"kind": contract["kind"]} if contract and "kind" in contract else {})},
                                 "question_contract": contract, "feature_mapping": feature_mapping,
                                 "critic": critic,
+                                "knowledge_provenance": hypothesis_provenance(
+                                    ids, os.environ.get("MEMSTARA_RUN_CONFIG", ""),
+                                    run_tag=run_tag, trial=trial, question_id=question_id, path_uses=path_uses),
                                 **({"feature_selection": feature_selection} if feature_selection else {})}
                                if snapshot else {}),
                 )
