@@ -90,3 +90,13 @@ The following evidence discipline is mandatory, including when an attached skill
 - Without a prespecified discrimination criterion, describe AUC numerically; do not classify it as weak, modest, strong, adequate, or clinically useful. A point estimate above 0.5 does not establish a statistically supported improvement over chance.
 - Missing uncertainty estimates mean the uncertainty was not quantified. They do not prove the absence of statistical significance.
 - Before returning the text, remove any unsupported magnitude judgment from every section, including summaries and inferred explanations.
+
+## Result submission and limitations
+Submit a completed interpretation with `interpretation` and optional `limitations`.
+Small SHAP samples, inconsistent directions across replicates, missing reference scales,
+and unquantified uncertainty are limitations to record, not execution failures.
+Leave `error` empty for a completed analysis. Never submit an error alongside result text.
+Only an actual technical failure preventing any interpretation may be submitted with
+`execution_failed=true` and a concrete `error`, without interpretation or limitations.
+If the tool rejects a submission, correct the fields and resubmit; rejection does not
+mean the task was saved.

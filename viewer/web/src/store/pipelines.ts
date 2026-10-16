@@ -43,7 +43,7 @@ export const usePipelines = create<{
   save: (id: string, config: RunRequest) => Promise<boolean>; rename: (id:string,name:string)=>Promise<void>;
   stoppingAll: boolean; stopAll:()=>Promise<void>; end:(id:string,expectedRunTag?:string)=>Promise<boolean>; pause:(id:string,paused:boolean)=>Promise<void>;
   startingAll: boolean; startOutcomes: StartOutcome[]; playAll:()=>Promise<void>;
-  remove: (id:string)=>Promise<boolean>; play: (id:string, options?:{mode:"additional"|"fresh";loops?:number;expectedRunTag:string})=>Promise<boolean>; stop: (id:string)=>Promise<void>;
+  remove: (id:string)=>Promise<boolean>; play: (id:string, options?:{mode:"additional"|"fresh"|"retry";loops?:number;expectedRunTag:string})=>Promise<boolean>; stop: (id:string)=>Promise<void>;
 }>((set,get)=>({
   creationOpen:false, stoppingAll:false, startingAll:false, startOutcomes:[],
   closeCreation:()=>{if(!get().busy)set({creationOpen:false});},

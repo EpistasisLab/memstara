@@ -438,8 +438,36 @@ async def submit_result(task_id: int, subset_path: str = "",
                         columns_missing: list[str] | None = None, auc: float | None = None,
                         feature_importance: str = "", model: str = "",
                         interpretation: str = "", error: str = "", *, worker: str,
-                        data_plan: dict | None = None) -> str:
-    """Write what you produced and hand the task to the next stage."""
+                        data_plan: dict | None = None, limitations: str = "",
+                        execution_failed: bool = False) -> str:
+    """Save a successful result. Put scientific caveats in limitations, not error.
+
+    error reports a technical inability to execute, never uncertain findings,
+    changing SHAP directions, small samples, absent reference scales or low AUC.
+    A genuine terminal failure requires execution_failed=true and no result text.
+    """
+    # A natural-language absence marker is not a failure report. Require the
+    # caller to disambiguate without mutating the task or silently succeeding.
+    if error and error.strip().casefold().rstrip(".") in {"", "none", "null", "n/a", "no error", "no errors"}:
+        return json.dumps({
+            "error": "Ambiguous error field; task state was not changed.",
+            "code": "ambiguous_error_field",
+            "hint": "If successful, omit error or pass error=\"\" and resubmit the complete result. "
+                    "If execution failed, provide the actual failure description in error.",
+        })
+    if error and (not execution_failed or interpretation.strip() or limitations.strip()):
+        return json.dumps({
+            "error": "Failure was not confirmed; task state was not changed.",
+            "code": "failure_confirmation_required",
+            "hint": "For completed analysis, move caveats to limitations, omit error and resubmit "
+                    "the interpretation. Inconsistent SHAP signs, sample size and missing reference "
+                    "scales are limitations, not execution failures. Only a genuine technical "
+                    "inability to execute may set execution_failed=true, with error and no result text.",
+        })
+    if execution_failed and not error:
+        return json.dumps({"error": "A confirmed technical failure requires an actual error description."})
+    if limitations.strip():
+        interpretation = interpretation.rstrip() + "\n\nAnalysis limitations:\n" + limitations.strip()
     if isinstance(columns_used, str) or isinstance(columns_missing, str):
         return json.dumps(
             {

@@ -1475,6 +1475,18 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     checkpoint = None if args.report_only else Checkpoint(run_dir, resume=args.resume)
     _EXECUTION_GATE.checkpoint = checkpoint
     if checkpoint and not args.resume:
+        first_loop = getattr(args, 'start_loop', 1)
+        if not 1 <= first_loop <= args.waves:
+            raise ValueError('Retry Loop exceeds the frozen schedule')
+        checkpoint.state['next_wave'] = first_loop - 1
+        checkpoint.save()
+        if getattr(args, 'retry_source_run', ''):
+            atomic_json(run_dir / 'retry_lineage.json', {
+                'source_run_tag': args.retry_source_run, 'first_loop': first_loop,
+                'last_loop': args.waves, 'mode': 'new_attempt_from_failed_loop',
+                'prior_results': 'retained_in_source_execution',
+                'validation_reserve': 'new_execution_partition',
+            })
         atomic_json(run_dir / "resume_arguments.json", vars(args))
     from memstara.blackboard import create
     await create()  # Apply additive result/provenance columns before the first tool call.
@@ -2531,8 +2543,12 @@ async def main() -> int:
     ap.add_argument("--data-mode", choices=("dataset", "proposal"), default="dataset")
     ap.add_argument("--research-objective", default="")
     ap.add_argument("--research-input-id", default="", help="Saved user corpus, dataset and prediction target")
+    ap.add_argument("--start-loop", type=int, default=1, help="First ordinal in a new retry attempt")
+    ap.add_argument("--retry-source-run", default="", help="Original failed run retained as evidence")
     ap.add_argument("--resume", action="store_true", help="Recover this execution from its durable checkpoint")
     args = ap.parse_args()
+    if args.start_loop < 1 or (args.start_loop > 1 and not args.retry_source_run):
+        ap.error("Starting after Loop 1 requires an explicit retry source")
     if args.specialist_pilot_config:
         from memstara.pipeline.specialist_pilot import preflight as pilot_preflight, run_study
         config = json.loads(args.specialist_pilot_config.read_text())

@@ -135,3 +135,29 @@ def test_extraction_rejects_other_target_before_reading_dataset(monkeypatch):
     result = json.loads(data.slice_columns(['FEATURE_A'], 'psychiatric', 'wrong'))
     assert 'fixed target' in result['error']
     read.assert_not_called()
+
+
+@pytest.mark.parametrize('error', ['none', 'None.', 'null', 'N/A', 'no error', 'No errors', '  '])
+def test_absence_marker_cannot_mark_task_failed(monkeypatch, error):
+    from memstara.mcp_servers import blackboard as bb
+
+    async def unexpected_connection(*args, **kwargs):
+        raise AssertionError('Ambiguous submissions must not reach storage')
+
+    monkeypatch.setattr(bb.asyncpg, 'connect', unexpected_connection)
+    reply = json.loads(asyncio.run(bb.submit_result(1, worker='interpret#1', error=error)))
+    assert reply['code'] == 'ambiguous_error_field'
+    assert 'resubmit' in reply['hint']
+    assert reply.get('ok') is not True
+
+
+@pytest.mark.parametrize('confirmed', [False, True])
+def test_interpretation_caveat_cannot_become_terminal_failure(monkeypatch, confirmed):
+    async def unexpected(*args, **kwargs):
+        raise AssertionError('No storage access for an ambiguous failure submission')
+    monkeypatch.setattr(bb.asyncpg, 'connect', unexpected)
+    result = json.loads(asyncio.run(bb.submit_result(1203, worker='interpret#1',
+        interpretation='Measured SHAP results.',
+        error='SHAP signs differ across replicates; only 8 rows were explained.', execution_failed=confirmed)))
+    assert result['code'] == 'failure_confirmation_required'
+    assert 'limitations' in result['hint']

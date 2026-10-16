@@ -359,3 +359,11 @@ def test_the_defaults_are_board_pys_defaults():
             f"{flag} defaults to {value!r} in board.py, but DEFAULTS says "
             f"{DEFAULTS[key]!r}"
         )
+
+
+def test_server_owned_retry_metadata_reaches_driver():
+    got = flags(build_argv({"waves": 10, "_retry_from_loop": 6,
+                            "_retry_source_run": "original-run"}, OFFERED))
+    assert got["--start-loop"] == "6"
+    assert got["--waves"] == "10"
+    assert got["--retry-source-run"] == "original-run"

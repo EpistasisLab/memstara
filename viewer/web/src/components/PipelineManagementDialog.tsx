@@ -12,6 +12,7 @@ export default function PipelineManagementDialog({pipeline:p,onSettings,close}:{
   const busy=usePipelines(s=>s.busy), error=usePipelines(s=>s.error);
   const [mlOpen,setMlOpen]=useState(false);
   const [fresh,setFresh]=useState(false);
+  const [retry,setRetry]=useState(false);
   const [confirm,setConfirm]=useState<'delete'|'end'|null>(null);
   const combinations=!!p.configuration.combination_skills&&Object.keys(p.configuration.combination_skills).length>0;
   const paused=!!p.running&&(p.running.pause_requested||p.running.execution_state==='paused');
@@ -34,6 +35,11 @@ export default function PipelineManagementDialog({pipeline:p,onSettings,close}:{
           <div className="pipeline-management-buttons"><button disabled={busy} onClick={()=>setConfirm(null)}>Cancel</button><button disabled={busy} onClick={async()=>{await usePipelines.getState().end(p.id);setConfirm(null);}}>Confirm end</button></div>
         </div>}
       </section>
+      {!p.running&&p.latest&&p.failure?.loop&&<section>
+        <h3>Retry from Loop {p.failure.loop}</h3>
+        <p>Keep completed results and retain the failed attempt in history. A new execution starts at the failed Loop using the original order, with fresh model training and a new validation partition. Earlier completed Loops are not rerun.</p>
+        {!retry?<button disabled={busy} onClick={()=>setRetry(true)}>Retry remaining Loops…</button>:<div className="pipeline-management-buttons"><button disabled={busy} onClick={()=>setRetry(false)}>Cancel</button><button disabled={busy} onClick={async()=>{if(await usePipelines.getState().play(p.id,{mode:'retry',expectedRunTag:p.latest!.run_tag}))close();}}>Start from Loop {p.failure.loop}</button></div>}
+      </section>}
       {error&&<p role="alert">{error}</p>}
     </div>
   </FloorDetailDialog>;

@@ -1312,3 +1312,21 @@ absence markers such as `none`, `null`, or `no error` are rejected as ambiguous
 before storage, with instructions to resubmit a successful result with an empty
 or omitted error field, or report an actual failure description. This validation
 does not silently turn failures into successes or alter worker ownership checks.
+
+### Retrying a failed Loop
+
+The pipeline management dialog offers **Retry remaining Loops…** for an execution
+with a recorded failed Loop. The server verifies ownership, the latest run tag,
+completed earlier outcomes, the unchanged research source and the frozen skill
+combination schedule. A new attempt starts at the failed ordinal and ends at the
+original last ordinal. It does not rerun completed earlier Loops or overwrite the
+failed attempt. `retry_lineage.json` links the two executions. The new attempt has
+fresh agent choices, trained models and a new validation partition; it is not a
+continuation using the old trained models or holdout partition. Earlier results
+remain in the source execution and are not relabeled as newly validated results.
+
+Interpretation submissions must keep scientific limitations in `limitations` or
+the interpretation text. A nonempty `error` alone cannot mark a task failed:
+explicit `execution_failed=true` with no result text is required for an actual
+technical failure. Rejected submissions do not mutate task status. Infrastructure
+failures can still occur and remain visible; this contract does not conceal them.

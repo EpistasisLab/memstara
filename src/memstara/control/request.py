@@ -158,7 +158,9 @@ def build_argv(
 ) -> list[str]:
     """The arguments for one run, or `ValueError` saying which field was wrong."""
     body = normalize_agent_configuration(body)
-    unknown = sorted(set(body) - set(DEFAULTS))
+    # The HTTP boundary rejects these fields from callers; workspace retry owns them.
+    retry_fields = {"_retry_from_loop", "_retry_source_run", "_retry_combination_plan"}
+    unknown = sorted(set(body) - set(DEFAULTS) - retry_fields)
     if unknown:
         raise ValueError(
             f"not something a run takes: {', '.join(unknown)}. "
@@ -231,6 +233,9 @@ def build_argv(
         continuous = False
         if combination_plan['total_loops'] > 10000:
             raise ValueError('Reduce combinations or repetitions to at most 10000 Loops')
+    if body.get('_retry_combination_plan'):
+        from memstara.combinations import validate_plan
+        combination_plan = validate_plan(body['_retry_combination_plan'])
     waves = combination_plan['total_loops'] if combination_plan else _whole_number(body, "waves", _MAX_WAVES)
     hypothesis_agents = _whole_number(body, "hypothesis_agents", _MAX_HYPOTHESIS_AGENTS)
     interpret_agents = _whole_number(body, "interpret_agents", 4)
@@ -346,4 +351,9 @@ def build_argv(
         argv += ["--question", question]
     if combination_plan:
         argv += ["--combination-plan", json.dumps(combination_plan)]
+    if body.get('_retry_from_loop'):
+        start = body['_retry_from_loop']
+        if type(start) is not int or not 1 <= start <= waves:
+            raise ValueError('Retry Loop is outside the saved schedule')
+        argv += ['--start-loop', str(start), '--retry-source-run', body['_retry_source_run']]
     return argv

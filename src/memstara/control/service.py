@@ -815,6 +815,9 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, {"error": f"no route {path}", "routes": _ROUTES})
 
     def _start(self, body: dict[str, Any]) -> None:
+        if any(key.startswith('_retry_') for key in body):
+            self._send(400, {"error": "Retry source metadata is server-owned"})
+            return
         pipeline_id = body.pop("pipeline_id", None)
         if pipeline_id is not None:
             try:
