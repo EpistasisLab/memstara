@@ -84,7 +84,7 @@ Instructions guide model behavior and do not guarantee compliant output.
 
 The agent-configured workflow adds Data allocation skills (training-heavy or balanced,
 both stratified), an LLM-proposed plan for the single user-selected LR or XGBoost model
-within server-enforced resource limits, and SHAP or LIME specialists that receive that
+with validated settings, and SHAP or LIME specialists that receive that
 model's saved artifact and results. Selecting both ML skills creates separate model
 combinations; they are not paired fits on identical splits.
 Explanation specialists consume Interpretation output and scoped knowledge.
@@ -1066,6 +1066,16 @@ to the legacy evaluation mode and are not shown for this selected-model mode. Da
 choose the split policy and seed; split evaluations add fits within a Loop. Review
 actual applied values in saved results, not just the initial defaults.
 
+New executions record unlimited ML resource ceilings (`null`): no fit-count cap,
+wall-time deadline, memory budget, CSV-size cap, encoded-column cap or dense-matrix
+cap. This applies to selected-model training and final validation. Jobs remain
+serialized with one native thread, and input validity, split isolation and frozen
+model settings are still enforced. Large jobs can consume available system memory;
+the operating system can still terminate them. Existing saved execution policies
+remain unchanged and require an explicit recovery/migration before using new limits.
+Provider context limits and transport timeouts are separate from these ML settings.
+
+
 Open **Advanced model settings** below ML evaluation to fix individual parameters.
 Blank inputs and **Auto — ML Agent** leave that setting automatic. Selecting LR
 shows its C, solver, penalty, weighting, iteration and tolerance settings. Selecting
@@ -1195,7 +1205,16 @@ saved before it scores the same reserve once per task. `final_validation.json` s
 separate final-fit provenance, confusion matrices, AUROC, trapezoidal PR-AUC, average
 precision, Brier score and other metrics for every task. Local `final_models/task-*/`
 bundles contain the final model, input, development/reserve row indices, predictions,
-configuration, environment and integrity hashes. The final report receives all results.
+configuration, environment and integrity hashes. Final validation remains available in the final report.
+General Explanation reports receive only the current Loop's results, projected to
+hypotheses, interpretation text, feature importance and scalar evaluation values.
+Raw evaluation arrays and per-row predictions remain in the saved evidence, outside
+model context. Any shortened narrative is explicitly marked in the input receipt.
+`report_io/` stores the exact supplied input, its hash, the source-result hash and
+model response. The general final comparison copies recorded metrics in code rather
+than asking an LLM to reread all detailed results; it retains the independent validation
+record separately. Specialist Explanation continues to use its scoped evidence path.
+
 Final-fit parameters and thresholds are not tuned using the reserve. Historical artifacts
 from the previous no-refit policy are preserved and are not automatically rescored.
 No hypothesis is selected using reserve performance, and scores must not be used to tune
