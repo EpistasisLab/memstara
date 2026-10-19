@@ -15,7 +15,7 @@ url = 'http://127.0.0.1:8072/control/'
 with urllib.request.urlopen(url + 'health', timeout=5) as response:
     health = json.load(response)
 try:
-    with urllib.request.urlopen(url + 'pipelines', timeout=5) as response:
+    with urllib.request.urlopen(url + 'pipelines', timeout=30) as response:
         pipelines = json.load(response)['pipelines']
 except urllib.error.HTTPError as error:
     if error.code != 404:
@@ -54,14 +54,14 @@ with open('/tmp/memstara-v1-control.log', 'ab') as log:
                              stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
 for _ in range(50):
     try:
-        with urllib.request.urlopen(url + 'playbooks', timeout=1) as response:
+        with urllib.request.urlopen(url + 'playbooks', timeout=30) as response:
             menu = json.load(response)
         assert menu['catalog'] and menu['max_hypotheses'] == 4
         if active and identity(active['pid']) == active_identity:
             with urllib.request.urlopen(url + 'health', timeout=2) as response:
                 restored = json.load(response).get('running')
             assert restored and restored['pid'] == active['pid']
-        with urllib.request.urlopen(url + 'pipelines', timeout=2) as response:
+        with urllib.request.urlopen(url + 'pipelines', timeout=30) as response:
             restored_pipelines = {p['id']: p for p in json.load(response)['pipelines']}
         for pipeline_id, live_pid, before in independent:
             if identity(live_pid) == before:
