@@ -707,6 +707,11 @@ async def call_report(*args, **kwargs) -> tuple[str, dict[str, Any]]:
     from memstara.specialist_explanation import execute
     plan = active_plan() or {}
     if not plan.get("specialist_explanation_policy"):
+        if plan.get("run_tag") and _TRACE_DIR is not None:
+            from memstara.report_inputs import execute as execute_scoped_report
+            return await execute_scoped_report(
+                plan, _CURRENT_LOOP.get(), _TRACE_DIR.parent, args, kwargs,
+                _call_report_default, call_board_tool)
         return await _call_report_default(*args, **kwargs)
     run_dir = _TRACE_DIR.parent if _TRACE_DIR else None
     text, entry = await execute(plan, _CURRENT_LOOP.get(), run_dir,

@@ -912,7 +912,8 @@ async def read_board(run_tag: str = "") -> str:
 
 
 @mcp.tool()
-async def read_results(run_tag: str = "", include_match_trace: bool = False) -> str:
+async def read_results(run_tag: str = "", include_match_trace: bool = False,
+                       trial_start: int | None = None, trial_end: int | None = None) -> str:
     """Every finished result of a run. The reporting stage reads this."""
     scope = _pipeline_run()
     if scope:
@@ -930,9 +931,11 @@ async def read_results(run_tag: str = "", include_match_trace: bool = False) -> 
                        y_column, auc, feature_importance, model, interpretation, created_at, evaluation, hypothesis_id
                 FROM memstara_results
                 WHERE ($1 = '' OR run_tag = $1)
+                  AND ($2::integer IS NULL OR trial >= $2)
+                  AND ($3::integer IS NULL OR trial < $3)
                 ORDER BY trial, result_id
                 """,
-                run_tag,
+                run_tag, trial_start, trial_end,
             )
         finally:
             await conn.close()
