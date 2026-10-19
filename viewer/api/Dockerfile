@@ -6,7 +6,7 @@ WORKDIR /app
 COPY requirements.txt requirements-semantic.txt ./
 ARG ENABLE_UNIVERSE_SEMANTICS=0
 RUN pip install --no-cache-dir -r requirements.txt
-RUN if [ "$ENABLE_UNIVERSE_SEMANTICS" = "1" ]; then pip install --no-cache-dir -r requirements-semantic.txt; fi
+RUN if [ "$ENABLE_UNIVERSE_SEMANTICS" = "1" ]; then pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && pip install --no-cache-dir -r requirements-semantic.txt; fi
 
 COPY api/ ./api/
 

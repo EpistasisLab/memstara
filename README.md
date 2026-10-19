@@ -1481,8 +1481,10 @@ never changes experiment data, models, skills or scientific outcomes.
 
 The base viewer works without semantic dependencies. To enable local semantics:
 
-1. Install `viewer/requirements-semantic.txt` in the viewer environment (or set
-   `MEMSTARA_UNIVERSE_SEMANTICS=1` in the project `.env` for the Docker build).
+1. For local Linux installations, first install CPU-only PyTorch with
+   `python -m pip install torch --index-url https://download.pytorch.org/whl/cpu`.
+   Then install `viewer/requirements-semantic.txt` in the viewer environment (or set
+   `MEMSTARA_UNIVERSE_SEMANTICS=1` in the project `.env` for the Docker build; it installs CPU-only PyTorch first).
 2. Cache `pritamdeka/S-PubMedBert-MS-MARCO` at revision
    `96786c7024f95c5aac7f2b9a18086c7b97b23036`. For Docker, place a Hugging Face
    cache tree under `outputs/embedding-cache`, or set `MEMSTARA_EMBEDDING_CACHE`.
