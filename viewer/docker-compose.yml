@@ -12,6 +12,8 @@ services:
     build:
       context: .
       dockerfile: api/Dockerfile
+      args:
+        ENABLE_UNIVERSE_SEMANTICS: ${MEMSTARA_UNIVERSE_SEMANTICS:-0}
     container_name: memstara-viewer-api
     restart: unless-stopped
     environment:
@@ -19,6 +21,8 @@ services:
       CORE_VIEWER_DSN: postgresql://memstara_viewer:viewer@host.docker.internal:5453/motoro
     volumes:
       - ../outputs/runs:/runs:ro
+      - universe-cache:/tmp/memstara-universe
+      - ${MEMSTARA_EMBEDDING_CACHE:-../outputs/embedding-cache}:/root/.cache/huggingface:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -34,3 +38,6 @@ services:
       - api
     ports:
       - "8070:80"
+
+volumes:
+  universe-cache:

@@ -122,3 +122,28 @@ class NoveltyRankingTests(unittest.TestCase):
             with self.assertRaises(HTTPException) as caught:
                 asyncio.run(discovery.novelty_ranking())
             self.assertEqual(caught.exception.status_code, 503)
+
+
+class SemanticQuestionsTests(unittest.TestCase):
+    def test_semantic_service_failure_is_explicit_and_list_stays_available(self):
+        conn = AsyncMock()
+        conn.fetch.return_value = [question(1)]
+        conn.fetchval.return_value = 1
+        async def guarded(store, callback, fallback): return await callback(conn)
+        with patch.object(discovery.pools, 'guarded', guarded), patch('universe_semantics.index', side_effect=RuntimeError('model absent')):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(discovery.semantic_questions())
+            self.assertEqual(caught.exception.status_code, 503)
+            self.assertEqual(len(asyncio.run(discovery.question_list())['questions']), 1)
+
+    def test_semantic_index_receives_active_text_and_reports_coverage(self):
+        conn = AsyncMock()
+        conn.fetch.return_value = [{'question_id': 3, 'text': 'A research question'}]
+        conn.fetchval.return_value = 1
+        async def guarded(store, callback, fallback): return await callback(conn)
+        with patch.object(discovery.pools, 'guarded', guarded), patch('universe_semantics.index', return_value={'points': [], 'neighbors': []}) as index:
+            result = asyncio.run(discovery.semantic_questions('cardiac', 3))
+        self.assertEqual(result['coverage'], 'complete')
+        self.assertEqual(result['total_questions'], 1)
+        index.assert_called_once_with(conn.fetch.return_value, 'cardiac', 3)
+        self.assertIn("status <> 'cleared'", conn.fetch.call_args.args[0])

@@ -189,3 +189,25 @@ async def novelty_ranking(offset: int = 0, run_tag: str = '') -> dict[str, Any]:
     if result is None:
         raise HTTPException(503, 'Novelty records are temporarily unavailable.')
     return result
+
+
+async def semantic_questions(query: str = '', question_id: int | None = None):
+    """Read active question text only; heavy indexing runs off the request event loop."""
+    from universe_semantics import index
+    async def read(conn):
+        rows = await conn.fetch("SELECT question_id,text FROM memstara_questions "
+                                "WHERE status <> 'cleared' ORDER BY question_id DESC")
+        total = await conn.fetchval("SELECT count(*) FROM memstara_questions WHERE status <> 'cleared'")
+        return [dict(row) for row in rows], total
+    source = await pools.guarded('memstara', read, None)
+    if source is None:
+        raise HTTPException(503, 'Question records are temporarily unavailable.')
+    try:
+        result = await asyncio.to_thread(index, source[0], query, question_id)
+    except Exception:
+        # Optional local model/cache failures must not break the regular question browser.
+        raise HTTPException(503, 'Semantic view unavailable. Install viewer semantic dependencies and cache the pinned model; '
+                            'the question list remains available.') from None
+    result['total_questions'] = source[1]
+    result['coverage'] = 'complete' if len(source[0]) == source[1] else 'changed_during_read'
+    return result

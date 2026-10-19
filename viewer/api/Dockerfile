@@ -3,8 +3,10 @@
 FROM python:3.12-slim
 
 WORKDIR /app
-COPY requirements.txt .
+COPY requirements.txt requirements-semantic.txt ./
+ARG ENABLE_UNIVERSE_SEMANTICS=0
 RUN pip install --no-cache-dir -r requirements.txt
+RUN if [ "$ENABLE_UNIVERSE_SEMANTICS" = "1" ]; then pip install --no-cache-dir -r requirements-semantic.txt; fi
 
 COPY api/ ./api/
 

@@ -350,3 +350,10 @@ async def developer_steps(run_id: uuid.UUID,
                           detail: bool = False):
     from developer import steps
     return await steps(run_tag, run_id, offset, detail)
+
+
+@app.get("/api/discovery/semantic")
+async def discovery_semantic(query: str = Query(default='', max_length=1000),
+                             question_id: int | None = Query(default=None, ge=1)):
+    from discovery import semantic_questions
+    return await semantic_questions(query, question_id)

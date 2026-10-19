@@ -1,0 +1,4 @@
+# Optional local inference. Base viewer remains usable without this extra.
+-r requirements.txt
+sentence-transformers==6.1.0
+numpy>=1.26,<3
