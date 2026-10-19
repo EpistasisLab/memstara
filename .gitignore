@@ -19,7 +19,8 @@ __pycache__/
 .mypy_cache/
 CLAUDE.md
 BACKLOG.md
-*_KR*
+# Keep every filename containing kr local, regardless of case.
+*[kK][rR]*
 scripts/backlog_to_issues.py
 docs/
 daily_log/
