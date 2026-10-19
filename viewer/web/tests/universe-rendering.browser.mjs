@@ -60,7 +60,7 @@ try {
   if(lost){await page.waitForTimeout(300);await idle('Canvas fallback must settle');await page.evaluate(()=>window.restoreUniverse());await page.waitForTimeout(300);await idle('Restored WebGL must settle');}
   await page.getByRole('textbox',{name:'Search loaded questions'}).fill('no match');
   await page.locator('.space-empty').waitFor();
-  assert.match(await page.locator('.space-empty').innerText(),/^No matching questions\./);
+  assert.match(await page.locator('.space-empty').innerText(),/^No loaded questions match this search\./);
   assert.equal(await page.locator('.space-label').count(),0);
   assert.equal(await page.getByText(/could not be displayed/).count(),0);
   assert.deepEqual(errors,[]);

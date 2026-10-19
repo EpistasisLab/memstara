@@ -8,7 +8,7 @@ try{
  progress:{stage:'report',exploration:{outcome:'completed',completed:10,blocked:0}}}));
  await p.route('**/control/**',r=>r.fulfill({json:new URL(r.request().url()).pathname==='/control/pipelines'?{pipelines:items}:{}}));
  await p.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Layout fixture'}}));
- await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
+ await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await p.getByRole('button',{name:'Advanced pipeline controls',exact:true}).click();
  for(const width of [1440,1024,768,390,320]){
   await p.setViewportSize({width,height:800});
   await p.getByRole('button',{name:'Workspace settings',exact:true}).click();await p.getByRole('dialog',{name:'Workspace settings',exact:true}).getByRole('button',{name:'Reset window layout',exact:true}).click();await p.keyboard.press('Escape');

@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { Maximize2, Minimize2, ArrowLeft, ArrowRight, BrainCircuit, Columns3, FileText, Lightbulb, Minus, Orbit, Pause, Plus, RotateCcw, ScanSearch } from 'lucide-react';
 import { QuestionFieldRenderer } from './QuestionFieldRenderer';
-import { angleDelta, cameraForPoint, overlaps, pointForId, project, type Camera, type LabelRect } from './geometry';
+import { angleDelta, cameraForPoint, overlaps, pointForId, project, type Camera, type Point3, type LabelRect } from './geometry';
 
-export interface SpaceQuestion { question_id: number; text: string; okf_tags: string[]; status: string; times_used: number }
+export interface SpaceQuestion { question_id: number; text: string; okf_tags: string[]; status: string; times_used: number; best_auc?:number|null }
 export interface EvidenceSummary { hypothesis: string; features: number | null; auc: number | null; interpretations: number | null; hasRun: boolean }
 interface Props {
+  emptyMessage?: string;
+  positions?:Record<number,Point3>; semantic?:boolean; performance?:boolean;
   questions: SpaceQuestion[]; selected: SpaceQuestion | null; select: (id: number) => void;
   clear: () => void; openStage: (stage: string) => void; summary: EvidenceSummary; activeStage: string;
 }
 const palette = ['#769bc8', '#ac8fc7', '#71ae9e', '#ca9d65', '#ce8793'];
-const colorFor = (q: SpaceQuestion) => palette[(q.okf_tags[0] || '').split('').reduce((n, c) => n + c.charCodeAt(0), 0) % palette.length];
+const validAuc = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
+const colorFor = (q: SpaceQuestion, performance=false) => performance ? (!validAuc(q.best_auc)?'#9299a2':q.best_auc<.5?'#ce8793':q.best_auc===.5?'#ca9d65':'#769bc8') : palette[(q.okf_tags[0] || '').split('').reduce((n, c) => n + c.charCodeAt(0), 0) % palette.length];
 const home: Camera = { yaw: .3, pitch: -.12, zoom: 1 };
 
 /** Canvas owns the animation loop; React updates only selection and readable overlays. */
@@ -38,11 +41,11 @@ export default function QuestionSpace(props: Props) {
   const [available, setAvailable] = useState(true);
   const seen = useRef(new Map<number, number>());
   useEffect(() => { orbitRef.current = orbit; invalidate.current(); }, [orbit]);
-  useEffect(() => { invalidate.current(); }, [props.questions, hovered]);
+  useEffect(() => { invalidate.current(); }, [props.questions, props.positions, props.performance, hovered]);
   useEffect(() => {
-    target.current = selectedId !== undefined ? cameraForPoint(pointForId(selectedId)) : { ...home };
+    target.current = selectedId !== undefined ? cameraForPoint(props.positions?.[selectedId]??pointForId(selectedId)) : { ...home };
     invalidate.current();
-  }, [selectedId]);
+  }, [selectedId, props.positions]);
   useEffect(() => {
     const el = host.current, surface = canvas.current;
     if (!el || !surface) return;
@@ -95,21 +98,21 @@ export default function QuestionSpace(props: Props) {
         context.beginPath(); context.ellipse(width/2,height*.49,Math.min(width*.35,height*.38),Math.min(width*.35,height*.38)*.38,tilt,0,Math.PI*2);context.stroke();
       }
       }
-      const points = live.current.questions.map(q => ({ q, ...project(pointForId(q.question_id),c,width,height) })).sort((a,b)=>a.z-b.z);
+      const points = live.current.questions.map(q => ({ q, ...project(live.current.positions?.[q.question_id]??pointForId(q.question_id),c,width,height) })).sort((a,b)=>a.z-b.z);
       hit.current=points;
       const ids=new Set(points.map(p=>p.q.question_id));
       for(const id of seen.current.keys())if(!ids.has(id))seen.current.delete(id);
       if(renderer){
-        const nodes=points.map(p=>{const born=seen.current.get(p.q.question_id)??now;seen.current.set(p.q.question_id,born);return {id:p.q.question_id,color:colorFor(p.q),active:p.q.question_id===focused?.question_id||p.q.question_id===hover.current,arrival:reduced.matches?1:Math.min(1,(now-born)/1000)};});
-        renderer.draw(c,width,height,nodes,rotating?now/1000:0,dark,!!focused);
+        const nodes=points.map(p=>{const born=seen.current.get(p.q.question_id)??now;seen.current.set(p.q.question_id,born);return {id:p.q.question_id,position:live.current.positions?.[p.q.question_id],size:live.current.performance&&validAuc(p.q.best_auc)?35+40*p.q.best_auc:55,color:colorFor(p.q,live.current.performance),active:p.q.question_id===focused?.question_id||p.q.question_id===hover.current,arrival:reduced.matches?1:Math.min(1,(now-born)/1000)};});
+        try {renderer.draw(c,width,height,nodes,rotating?now/1000:0,dark,!!focused);} catch {renderer.dispose();renderer=null;setRendererLabel('Canvas view');}
       }
       if(!renderer)for (const p of points) {
-        const color=colorFor(p.q), active=p.q.question_id===focused?.question_id || p.q.question_id===hover.current;
+        const color=colorFor(p.q,live.current.performance), active=p.q.question_id===focused?.question_id || p.q.question_id===hover.current;
         const born=seen.current.get(p.q.question_id);
         if (born===undefined) seen.current.set(p.q.question_id,now);
         const arrival=reduced.matches?1:Math.min(1,(now-(born??now))/900);
         const alpha=(focused && !active ? .15 : .35+(p.z+1)*.28)*arrival;
-        const r=(active?5.5:2.4)*p.perspective;
+        const r=(active?5.5:live.current.performance&&validAuc(p.q.best_auc)?1.5+2*p.q.best_auc:2.4)*p.perspective;
         context.globalAlpha=alpha;
         const bloom=context.createRadialGradient(p.x,p.y,0,p.x,p.y,r*5);
         bloom.addColorStop(0,color+'80');bloom.addColorStop(1,color+'00');context.fillStyle=bloom;
@@ -130,7 +133,7 @@ export default function QuestionSpace(props: Props) {
         if(button.style.visibility!==visibility){button.style.visibility=visibility;button.style.pointerEvents=visible?'auto':'none';button.tabIndex=visible?0:-1;}
         if(!visible)continue;
         button.style.transform=`translate(${rect.x}px,${rect.y}px)`;
-        button.style.width=`${rect.w}px`;button.style.setProperty('--question-color',colorFor(p.q));
+        button.style.width=`${rect.w}px`;button.style.setProperty('--question-color',colorFor(p.q,live.current.performance));
         if(visible){occupied.push(rect);count++;context.strokeStyle=ink;context.globalAlpha=.26;context.beginPath();context.moveTo(p.x+6,p.y);context.lineTo(rect.x-3,p.y);context.stroke();context.globalAlpha=1;}
       }
       // These spokes represent recorded pipeline stages of the selected question, not similarity between questions.
@@ -200,7 +203,7 @@ export default function QuestionSpace(props: Props) {
         aria-label={`Explore question ${q.question_id}: ${q.text}`} onPointerEnter={()=>{hover.current=q.question_id;setHovered(q.question_id);stop();}} onClick={()=>pick(q.question_id)} onFocus={()=>{hover.current=q.question_id;stop();}} onBlur={()=>{hover.current=null;invalidate.current();}}>
         <span>Q{q.question_id}<i>{q.okf_tags[0] || 'Source not recorded'}</i></span><strong>{q.text}</strong>
       </button>)}</div>
-      {!props.selected && !props.questions.length && <div className="space-empty">No matching questions.<small>Recorded questions will appear here as they arrive.</small></div>}
+      {!props.selected && !props.questions.length && <div className="space-empty">{props.emptyMessage || 'No questions available.'}<small>Use the question list or adjust your search.</small></div>}
       {!props.selected && <div className="space-guide"><span className="space-guide-line"/><h2>A universe of questions.<br />A path to discovery.</h2><p>Move through the field. Select a sphere to explore its evidence.</p></div>}
       {props.selected && <div className="space-focus-layer">
         <button className="space-back" onClick={()=>{stop();props.clear();}}><ArrowLeft size={14}/> Back to question field</button>
@@ -209,7 +212,7 @@ export default function QuestionSpace(props: Props) {
       </div>}
       {!props.selected && hoveredQuestion && <div className="space-hover" role="status"><b>Q{hoveredQuestion.question_id}</b><span>{hoveredQuestion.text}</span></div>}
     </div>
-    <footer className="space-controls"><span>{props.selected?'Recorded question → linked evidence':'Drag to orbit · Shift + scroll to zoom · Select a sphere'}<small>Spheres are recorded questions. Dust and orbits are decorative; position and size do not rank scientific value. Colors follow the first source tag.</small></span><div>
+    <footer className="space-controls"><span>{props.selected?'Recorded question → linked evidence':'Drag to orbit · Shift + scroll to zoom · Select a sphere'}<small>Spheres are recorded questions. Dust and orbits are decorative. {props.semantic?'Indexed questions use a fixed embedding projection; unindexed questions retain decorative positions. Use cosine scores, not screen distance, to compare meaning.':'Position and distance do not represent semantic similarity.'} {props.performance?'Color and size show historical best exploratory AUC, not novelty or clinical value.':'Colors follow the first source tag; size is decorative.'}</small></span><div>
       <button disabled={!!props.selected} aria-label="Rotate cloud left" onClick={()=>{stop();target.current.yaw-=.35;}}><ArrowLeft size={15}/></button>
       <button disabled={!!props.selected} aria-label="Rotate cloud right" onClick={()=>{stop();target.current.yaw+=.35;}}><ArrowRight size={15}/></button>
       <button disabled={!!props.selected} aria-label="Zoom out" onClick={()=>{invalidate.current();target.current.zoom=Math.max(.65,target.current.zoom-.15);}}><Minus size={15}/></button>

@@ -18,8 +18,8 @@ type Item = { id: string; title: string; content: ReactNode };
 const key = "memstara-windows-v1";
 const secondary = ["feed", "results", "report"];
 const collapsible = ["navigation", ...secondary];
-// Show workspace panels by default; users may close them for focused work.
-const initiallyClosed: string[] = [];
+// Keep evidence panel headers accessible while prioritizing the question workspace.
+const initiallyClosed: string[] = ["results", "report"];
 const edges = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 export default function WindowWorkspace({ items, toolbar }: { items: Item[]; toolbar?:ReactNode }) {
   const [pipelineHeader,setPipelineHeader]=useState<HTMLDivElement|null>(null);

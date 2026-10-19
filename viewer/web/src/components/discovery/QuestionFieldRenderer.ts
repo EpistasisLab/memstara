@@ -1,6 +1,6 @@
-import { pointForId, type Camera } from './geometry';
+import { pointForId, type Camera, type Point3 } from './geometry';
 
-interface Node { id:number; color:string; active:boolean; arrival:number }
+interface Node { position?:Point3; size?:number; id:number; color:string; active:boolean; arrival:number }
 // GPU perspective uses the same camera as DOM labels and pointer hit testing.
 const vertex = `
 attribute vec3 a_position;
@@ -100,8 +100,8 @@ export class QuestionFieldRenderer {
     }
     gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.depthMask(true);
     const particles:number[]=[];
-    for(const n of nodes){const p=pointForId(n.id);const rgb=[1,3,5].map(i=>parseInt(n.color.slice(i,i+2),16)/255);
-      particles.push(p.x,p.y,p.z,...rgb,(focused&&!n.active?.2:1)*n.arrival,n.active?82:55);
+    for(const n of nodes){const p=n.position??pointForId(n.id);const rgb=[1,3,5].map(i=>parseInt(n.color.slice(i,i+2),16)/255);
+      particles.push(p.x,p.y,p.z,...rgb,(focused&&!n.active?.2:1)*n.arrival,n.active?82:(n.size??55));
     }
     paint(particles,1,gl.POINTS);gl.disable(gl.DEPTH_TEST);
   }

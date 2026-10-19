@@ -73,3 +73,12 @@
 .universe-question.is-distant .question-label,.universe-question.is-distant .question-number { display:none; }
 .universe-question.is-distant:hover,.universe-question.is-distant:focus-visible { width:155px; height:auto; padding:10px; border-radius:12px; z-index:150 !important; }
 .universe-question.is-distant:hover .question-label,.universe-question.is-distant:focus-visible .question-label { display:-webkit-box; }
+
+/* Research controls remain usable in both docked and full-width Universe views. */
+.universe-section[aria-label="Semantic question explorer"] .universe-tools,
+.universe-section[aria-label="Research workflow"] .universe-tools { flex-wrap:wrap; }
+.universe-section[aria-label="Semantic question explorer"] .universe-tools label { flex-basis:260px; }
+.universe-section[aria-label="Research workflow"] > .research-pipelines { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr)); gap:10px; margin:14px 0; }
+.universe-section[aria-label="Research workflow"] article { border:1px solid rgb(var(--line)); border-radius:12px; padding:12px; }
+.universe-section[aria-label="Research workflow"] article button { border:1px solid rgb(var(--line)); border-radius:8px; padding:6px 10px; margin:4px 6px 0 0; font-size:12px; }
+.universe-section[aria-label="Research workflow"] button:disabled { opacity:.5; cursor:wait; }

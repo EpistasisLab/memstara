@@ -1461,3 +1461,54 @@ across the literature or scientific validity. Existing results are not backfille
 
 For supported OKF annotations, custom path metadata and reproducible scoring rules,
 see [Knowledge-source provenance and KG novelty ranking](DEVELOPER_GUIDE.md#knowledge-source-provenance-and-kg-novelty-ranking-issue-186).
+
+### Question Universe exploration
+
+The default workspace opens Question Universe. **Set up research** reuses the existing
+input registration and pipeline review wizard; **Go** starts a configured, never-run
+pipeline. Existing executions remain available through **Inspect** and Advanced
+pipeline controls. Advanced views preserve Floor plan, telemetry and diagnostics.
+Results/report headers remain available when their panels are initially collapsed.
+
+Decorative placement is explicitly nonsemantic. **Semantic layout and search** uses
+local question-text embeddings, cosine neighbors and a fixed PCA projection. Screen
+distance is approximate, not a clinical association or an exact similarity score.
+New questions require Refresh; existing projection coordinates remain stable. Model
+identity, pinned revision, normalized text hashes, vectors and projection basis are
+retained in the viewer's separate cache. Inputs longer than 512 model tokens use the
+first 512 tokens. Cleared questions are excluded from the active index. This feature
+never changes experiment data, models, skills or scientific outcomes.
+
+The base viewer works without semantic dependencies. To enable local semantics:
+
+1. Install `viewer/requirements-semantic.txt` in the viewer environment (or set
+   `MEMSTARA_UNIVERSE_SEMANTICS=1` in the project `.env` for the Docker build).
+2. Cache `pritamdeka/S-PubMedBert-MS-MARCO` at revision
+   `96786c7024f95c5aac7f2b9a18086c7b97b23036`. For Docker, place a Hugging Face
+   cache tree under `outputs/embedding-cache`, or set `MEMSTARA_EMBEDDING_CACHE`.
+   The API uses local files only and never silently downloads model weights.
+   After installing the optional requirements, explicitly download the pinned public
+   model once from the repository root (internet access is required for this step):
+
+   ```bash
+   python -c "from huggingface_hub import snapshot_download; snapshot_download('pritamdeka/S-PubMedBert-MS-MARCO', revision='96786c7024f95c5aac7f2b9a18086c7b97b23036', cache_dir='outputs/embedding-cache/hub')"
+   ```
+
+   For a non-Docker viewer using this cache, set `HF_HOME=outputs/embedding-cache`
+   before starting the API from the repository root. Embeddings remain local;
+   no paid model API calls are made by this feature.
+3. From the repository root, build the viewer (this updates viewer services, not
+   analysis/control workers):
+
+   ```bash
+   docker compose --env-file .env -f viewer/docker-compose.yml up -d --build api web
+   ```
+4. Open Semantic layout and search. The UI reports indexed/total question counts,
+   model provenance and cosine scores; unavailable semantics does not disable the
+   ordinary question list. Initial indexing can take time and uses one CPU thread.
+
+**Color by historical AUC** uses each question's recorded best exploratory AUC across
+its uses. It is not an independent holdout score or a controlled comparison of models.
+Open an individual result for its model, features and evaluation provenance. Novelty
+ranking remains separate from similarity and performance. AUC below 0.5, exactly 0.5,
+above 0.5 and unavailable values are distinct; none establishes clinical usefulness.

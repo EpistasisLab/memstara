@@ -56,6 +56,7 @@ try{
   });
   await workspace.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Offline UI fixture'}}));
   await workspace.goto(process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:5179');
+  await workspace.getByRole('button',{name:'Add pipeline — set up research',exact:true}).click();
   await workspace.getByRole('button',{name:'Prepare research inputs',exact:true}).click();
   await workspace.getByRole('heading',{name:'Research input preparation',exact:true}).waitFor();
   await workspace.close();

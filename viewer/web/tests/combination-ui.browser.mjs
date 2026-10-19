@@ -43,6 +43,7 @@ try{
  await page.setViewportSize({width:390,height:844});
  if(await dialog.evaluate(e=>e.scrollWidth>e.clientWidth+2))throw Error('Wizard overflow');
  await dialog.getByRole('button',{name:'Create combination design'}).click();
+ await page.getByRole('button',{name:'Advanced pipeline controls',exact:true}).click();
  const grid=page.getByRole('region',{name:'Combination design'});
  const hide=page.getByRole('button',{name:'Hide pipeline list',exact:true});if(await hide.isVisible())await hide.click();await grid.waitFor();
  await grid.locator('.cf-room').first().waitFor();if(await grid.locator('.cf-room').count()!==5)throw Error('Missing agent role');if(await grid.locator('.cf-desk').count()!==10)throw Error('Missing skill variants');

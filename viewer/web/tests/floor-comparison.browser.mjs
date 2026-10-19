@@ -9,23 +9,20 @@ try{
  await p.route('**/control/**',r=>r.fulfill({json:new URL(r.request().url()).pathname==='/control/pipelines'?{pipelines:items}:{}}));
  await p.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Layout fixture'}}));
  items[0].configuration.combination_skills={hypothesis:['h'],data:['d'],ml:['m'],interpreter:['i'],report:['r']};
- await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
+ await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await p.getByRole('button',{name:'Advanced pipeline controls',exact:true}).click();
  for(const width of [1440,390]){
  await p.setViewportSize({width,height:1000});
  if(width<900)await expect(p.locator('.pipeline-browser-toggle')).toHaveAttribute('aria-expanded','false');
  const show=p.getByRole('button',{name:'Show pipeline list',exact:true});if(await show.isVisible())await show.click();
- await p.getByRole('checkbox',{name:'Compare '+items[0].name,exact:true}).check();
- await p.getByRole('checkbox',{name:'Compare '+items[1].name,exact:true}).check();
- await p.getByText('Comparing 2 pipelines',{exact:true}).waitFor();
- assert.equal(await p.locator('.floor-comparison-pane').count(),2);
- assert.equal(await p.locator('.floor-comparison-pane .combination-studio').count(),1);
- assert.equal(await p.locator('.floor-comparison-pane .cf-room').count(),5);
- assert.equal(await p.locator('.floor-comparison-standard .react-flow__node-station').count(),6);
- const grid=p.locator('.floor-comparison-grid');assert(await grid.isVisible());
- assert(await grid.evaluate(e=>e.scrollWidth<=e.clientWidth+2));
- await p.getByRole('button',{name:'Exit comparison (2 selected)',exact:true}).click();
+ // Comparison controls are intentionally hidden; inspect each pipeline independently.
+ assert.equal(await p.getByRole('checkbox',{name:/^Compare /}).count(),0);
+ await p.getByRole('button',{name:'Inspect '+items[1].name,exact:true}).click();
+ await p.locator('.floor-canvas .react-flow').waitFor();
+ const reopen=p.getByRole('button',{name:'Show pipeline list',exact:true});if(await reopen.isVisible())await reopen.click();
+ await p.getByRole('button',{name:'Inspect '+items[0].name,exact:true}).click();
  await p.getByRole('region',{name:'Combination design',exact:true}).waitFor();
- console.log(JSON.stringify({width,mixedComparison:'passed',bothRowsVisible:'passed',exit:'passed'}));
+ assert.equal(await p.locator('.floor-comparison-pane').count(),0);
+ console.log(JSON.stringify({width,comparisonHidden:true,independentInspection:true}));
  }
  assert.deepEqual(errors,[]);
 }finally{await b.close();}

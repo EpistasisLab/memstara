@@ -1,3 +1,4 @@
+import AucAssessment from '../components/AucAssessment';
 import { featureImportance, rankedContributions, contributionScale } from "../lib/featureImportance";
 import SignedContributionBar from "../components/SignedContributionBar";
 import Help from "../components/Help";
@@ -48,7 +49,7 @@ function Evidence({ result }: { result: Result }) {
         <h3>Which measurements were studied?</h3>
         <p className="clinical-caption">These are the recorded dataset column names. Their exact clinical definitions should be confirmed with the study team.</p>
         <div className="clinical-feature-list">{result.columns_used?.length ? result.columns_used.map(feature => <span key={feature}>{feature}</span>) : <p>No measurements were recorded.</p>}</div>
-        <div className="clinical-measurement"><div><span>Ability to distinguish outcomes</span><strong>{result.auc == null ? "Not recorded" : result.auc.toFixed(3)} <small>AUC</small></strong></div><p>AUC measures how well the model ranks people with and without the studied outcome. 0.5 represents chance-level ranking; 1.0 is perfect ranking. It is not the percentage of correct predictions or proof of clinical benefit.</p></div>
+        <AucAssessment auc={result.auc}/><div className="clinical-measurement"><div><span>Ability to distinguish outcomes</span><strong>{result.auc == null ? "Not recorded" : result.auc.toFixed(3)} <small>AUC</small></strong></div><p>AUC measures how well the model ranks people with and without the studied outcome. 0.5 represents chance-level ranking; 1.0 is perfect ranking. It is not the percentage of correct predictions or proof of clinical benefit.</p></div>
         {contributions.note && <p className="clinical-caption">{contributions.note}</p>}{contributions.unsupported && <p>No plottable numeric contributions were recorded.</p>}
         {importance.length > 0 && <section className="clinical-contributions"><h3>What influenced the model?</h3><p className="clinical-caption">Up to eight recorded contributions, ordered by signed value from highest to lowest. Bars extend from the zero marker; negative values extend left. A larger bar is not evidence of a larger biological or causal effect. {(result.evaluation?.explanation?.method || contributions.method) === "holdout_permutation_auc" ? "Values show the change in held-out AUC when a measurement is shuffled. A negative value means shuffling improved the measured score." : "Values use the fitted model’s recorded importance measure."}</p>
           {importance.map(([feature, value]) => <div key={feature} className="clinical-contribution"><div><span>{feature}</span><strong>{value.toPrecision(3)}</strong></div><SignedContributionBar value={value} scale={scale}/></div>)}

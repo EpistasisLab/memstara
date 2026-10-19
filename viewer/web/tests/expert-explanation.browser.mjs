@@ -36,12 +36,12 @@ try {
   await panel.getByText('Addiction Expert · Loop 1 · completed',{exact:true}).click();
   await panel.getByText('HIV Expert · Loop 2 · completed',{exact:true}).click();
   const text=await panel.innerText();
-  for(const value of ['addiction-fixture','hiv-fixture','SHAP','LIME','LR and XGBoost','12','13','[addiction-fixture:a]','[hiv-fixture:h]'])assert(text.includes(value),value);
+  for(const value of ['addiction-fixture','hiv-fixture','SHAP','LIME','selected model','12','13','[addiction-fixture:a]','[hiv-fixture:h]'])assert(text.includes(value),value);
   assert(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+2));
   assert.deepEqual(errors,[]);
   snapshot.report.status='failed';snapshot.report.error='Knowledge database unavailable';
   snapshot.report.specialist_explanation={status:'failed',expert:'hiv',loop:3};
-  await page.reload();
+  await page.reload();await page.getByRole('button',{name:'Expand Results',exact:true}).click();
   await page.getByRole('button',{name:'This execution',exact:true}).click();
   await page.getByText('Open the report for this execution',{exact:true}).click();
   await page.getByTestId('final-report').getByText('Knowledge database unavailable',{exact:true}).waitFor();

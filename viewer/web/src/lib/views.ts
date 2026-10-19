@@ -49,4 +49,4 @@ export const VIEWS: Record<ViewId, ViewMeta> = {
  *  how far along is the run, and then who is touching what. `scene` is called "Floor plan"
  *  here rather than "Agent state" because both views are the agent state — one as a
  *  sequence, one as a place. */
-export const VIEW_ORDER: ViewId[] = ["scene", "clinician", "agents", "report", "discovery"];
+export const VIEW_ORDER: ViewId[] = ["discovery", "clinician", "report", "scene", "agents", "log", "board", "task", "access"];

@@ -22,6 +22,6 @@ await d.getByRole('button',{name:'Create pipeline',exact:true}).click();
 await d.waitFor({state:'hidden'});if(starts.length!==i-1)throw Error('Create started execution');}
 if(items.length!==1||starts.length)throw Error('Design was not saved independently of execution');
 await p.reload();
-await p.getByRole('button',{name:'Run Selected 1',exact:true}).waitFor();
+await p.getByRole('button',{name:'Go · Selected 1',exact:true}).waitFor();
 console.log('Save error survived polling; retry saved and reloaded a design without starting it. All requests mocked.');
 }finally{await b.close();}

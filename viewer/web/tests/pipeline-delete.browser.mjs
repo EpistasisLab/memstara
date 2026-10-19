@@ -22,6 +22,7 @@ try {
   });
   await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Isolated UI fixture'}}));
   await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
+ await page.getByRole('button',{name:'Advanced pipeline controls',exact:true}).click();
   await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
   async function showList(){const b=page.getByRole('button',{name:'Show pipeline list',exact:true});if(await b.isVisible())await b.click();}
   await showList();await page.locator('.pipeline-card-delete').first().waitFor();assert.equal(await page.locator('.pipeline-card-delete').count(),3);
@@ -45,31 +46,20 @@ try {
   await heading.click();await showList();
   await page.getByRole('button',{name:'Delete Research Alpha',exact:true}).click();
   let dialog=page.getByRole('dialog',{name:'Delete pipeline?',exact:true});
-  await dialog.waitFor();assert.equal(await heading.getAttribute('aria-pressed'),'true');assert.match(await dialog.innerText(),/Research Alpha/);assert.match(await dialog.innerText(),/Saved analysis results remain/);
+  await dialog.waitFor();assert.equal(await heading.getAttribute('aria-pressed'),'true');assert.match(await dialog.innerText(),/Research Alpha/);assert.match(await dialog.innerText(),/Saved run artifacts are retained/);
   assert.equal(await dialog.getByRole('button',{name:'Cancel',exact:true}).evaluate(e=>e===document.activeElement),true);
   await dialog.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(attempts,0);
   await page.getByRole('button',{name:'Delete Running research',exact:true}).click();
-  assert.equal(await dialog.getByRole('button',{name:'Delete pipeline',exact:true}).isDisabled(),true);
-  await dialog.getByRole('button',{name:'End execution…',exact:true}).click();
-  await dialog.getByRole('button',{name:'Keep execution',exact:true}).click();
-  assert.equal(endAttempts,0);
-  await dialog.getByRole('button',{name:'End execution…',exact:true}).click();
-  await dialog.getByRole('button',{name:'Confirm end execution',exact:true}).click();
-  await dialog.getByText(/Fixture end rejected/).waitFor();
-  assert.equal(attempts,0);assert.equal(endAttempts,1);
-  failEnd=false;
-  await dialog.getByRole('button',{name:'Confirm end execution',exact:true}).click();
-  await dialog.getByText(/Waiting for the server to confirm/).waitFor();
-  assert.equal(await dialog.getByRole('button',{name:'Delete pipeline',exact:true}).isDisabled(),true);
-  assert.equal(attempts,0);assert.equal(endAttempts,2);
-  items[1].running=null;
-  await dialog.getByText(/Execution ended. You can now delete/).waitFor();
-  assert.equal(await dialog.getByRole('button',{name:'Delete pipeline',exact:true}).isEnabled(),true);
-  await dialog.getByRole('button',{name:'Cancel',exact:true}).focus();
-  await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});assert.equal(attempts,0);
+  // Running pipelines use the same atomic removal endpoint with explicit stop consent.
+  assert.equal(await dialog.getByRole('button',{name:'Stop & delete',exact:true}).isEnabled(),true);
+  await dialog.getByRole('button',{name:'Stop & delete',exact:true}).click();
+  await dialog.getByRole('alert').filter({hasText:'Fixture deletion rejected'}).waitFor();assert.equal(attempts,1);assert.equal(endAttempts,0);
+  assert.equal(await page.locator('.pipeline-card-delete').count(),3);
+  await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+  attempts=0;
   await page.getByRole('button',{name:'Delete Research Alpha',exact:true}).click();
   await dialog.getByRole('button',{name:'Delete pipeline',exact:true}).click();
-  await dialog.getByRole('alert').waitFor();assert.equal(await page.locator('.pipeline-card-delete').count(),3);assert.equal(attempts,1);
+  await dialog.getByRole('alert').filter({hasText:'Fixture deletion rejected'}).waitFor();assert.equal(await page.locator('.pipeline-card-delete').count(),3);assert.equal(attempts,1);
   fail=false;await dialog.getByRole('button',{name:'Delete pipeline',exact:true}).click();
   await dialog.getByRole('button',{name:'Deleting…',exact:true}).waitFor();
   await page.keyboard.press('Escape');assert.equal(await dialog.isVisible(),true);
@@ -78,7 +68,7 @@ try {
   await page.screenshot({path:`/tmp/pipeline-delete-${width}-${theme}.png`});
   while(!release)await new Promise(r=>setTimeout(r,20));release();
   await dialog.waitFor({state:'hidden'});assert.equal(await page.locator('.pipeline-card-delete').count(),2);
-  await page.reload();
+  await page.reload();await page.getByRole('button',{name:'Advanced pipeline controls',exact:true}).click();
   // Wait for loading/layout (including the compact ResizeObserver) before opening the list.
   await page.getByRole('button',{name:'Select pipeline 2: Running research',exact:true,includeHidden:true}).waitFor({state:'attached'});
   await page.locator('.pipeline-browser').evaluate(element=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(element.clientWidth)))));

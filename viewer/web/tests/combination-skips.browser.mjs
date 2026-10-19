@@ -12,10 +12,11 @@ try{
  await page.route('**/control/**',r=>r.fulfill({json:new URL(r.request().url()).pathname==='/control/pipelines'?{pipelines:items}:{}}));
  await page.route('**/api/**',r=>r.fulfill({json:{runs:[],results:[],questions:[],events:[],reports:{}}}));
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
+ await page.getByRole('button',{name:'Advanced pipeline controls',exact:true}).click();
  const list=page.locator('.pipeline-browser-list');
  await list.getByText('Finished with skips',{exact:true}).waitFor();
  await list.getByText('No findings',{exact:true}).waitFor();
- await list.getByText('Needs attention',{exact:true}).waitFor();
+ await list.getByText('Needs attention',{exact:true}).first().waitFor();assert.equal(await list.getByText('Needs attention',{exact:true}).count(),2);
  const failedCheckpoint=list.locator('.pipeline-browser-row').filter({hasText:'Failed checkpoint'});
  await failedCheckpoint.getByText('Needs attention',{exact:true}).waitFor();
  assert.equal(await list.getByText('Completed',{exact:true}).count(),0);

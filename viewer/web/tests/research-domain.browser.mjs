@@ -16,7 +16,7 @@ try {
   return route.fulfill({status:503,json:{error:'No deployment defaults in this fixture'}});
  });
  await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Fixture'}}));
- await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
+ await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await page.getByRole('button',{name:'Advanced pipeline controls',exact:true}).click();
  await page.getByRole('button',{name:/Add pipeline/i}).click();
  await openBuildModeFixture(page);
  const dialog=page.getByRole('dialog',{name:'Create a pipeline',exact:true});
@@ -44,7 +44,7 @@ try {
  assert.equal(await hyp.locator('option[value="addiction-psychiatric"]').count(),0);
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
- await dialog.getByText('Agent-configured LR and XGBoost',{exact:true}).waitFor();
+ await dialog.getByText('Agent-configured selected model',{exact:true}).waitFor();
  assert.equal(await dialog.getByRole('combobox',{name:'ML model',exact:true}).count(),0);
  assert.equal(await dialog.getByRole('spinbutton',{name:'Hyperparameter candidates',exact:true}).count(),0);
  await dialog.getByRole('button',{name:'Next',exact:true}).click();

@@ -10,7 +10,7 @@ if(path==='/control/pipelines'){if(r.request().method()==='GET')return r.fulfill
 if(path==='/control/runs'&&r.request().method()==='POST'){const q=r.request().postDataJSON();starts.push(q.pipeline_id);return r.fulfill({json:{run_tag:'mock-'+q.pipeline_id}});}
 if(r.request().method()==='POST')throw Error('Unexpected write');return r.continue();});
 await p.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Isolated fixture'}}));
-await p.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');
+await p.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');await p.getByRole('button',{name:'Advanced pipeline controls',exact:true}).click();
 for(let i=1;i<=4;i++){
 await p.getByRole('button',{name:/Add pipeline/i}).click();await openBuildModeFixture(p);const d=p.getByRole('dialog',{name:'Create a pipeline',exact:true});await d.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();await d.getByRole('button',{name:'Next',exact:true}).click();
 for(const label of ['Hypothesis','Data','Machine learning','Interpretation','Explanation']){const c=d.getByRole('combobox',{name:label+' skill',exact:true});const value=await c.inputValue();if(!value){const option=await c.locator('option').evaluateAll(os=>os.find(o=>o.value)?.value);await c.selectOption(option);}await d.getByRole('button',{name:'Next',exact:true}).click();}

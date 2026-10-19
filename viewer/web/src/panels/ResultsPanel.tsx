@@ -1,3 +1,4 @@
+import AucAssessment from '../components/AucAssessment';
 import SpecialistEvidence from "../components/SpecialistEvidence";
 import ExecutionStatusNotice from "../components/ExecutionStatusNotice";
 import { floorExecutionState } from '../lib/floorActivity';
@@ -175,11 +176,9 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
                 <section className="mt-3 rounded-lg border border-[#c9d9e8] bg-stage-data/5 p-3" aria-label="Clinical interpretation summary">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h4 className="text-sm font-bold text-ink">Clinical interpretation</h4>
-                    <span className={`rounded-full px-2 py-0.5 text-[12px] font-bold ${r.auc == null ? "bg-slate-100 text-slate-600" : r.auc <= 0.5 ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"}`}>
-                      {r.auc == null ? "Evidence unavailable" : r.auc <= 0.5 ? "Hypothesis not supported by discrimination" : "Exploratory signal · requires validation"}
-                    </span>
+                    <AucAssessment auc={r.auc}/>
                   </div>
-                  <ContentOrigin kind="rule" compact/><p className="text-xs text-ink-soft">The status above uses a fixed rule: AUC unavailable, AUC ≤ 0.5, or AUC &gt; 0.5. It is not a research-priority assessment.</p><p className="mt-2 text-xs text-ink-soft">Predictor inputs used by the model:</p>
+                  <ContentOrigin kind="rule" compact/><p className="text-xs text-ink-soft">The status above uses a fixed rule: AUC unavailable, AUC &lt; 0.5, AUC = 0.5, or AUC &gt; 0.5. It is not a research-priority assessment.</p><p className="mt-2 text-xs text-ink-soft">Predictor inputs used by the model:</p>
                   <div className="mt-2 flex flex-wrap gap-1">
                     {r.evaluation?.feature_selection && <p className="w-full text-xs text-ink-soft">
                       Hypothesis selection: {r.evaluation.feature_selection.mode} · {r.evaluation.feature_selection.actual_count} original predictors

@@ -58,15 +58,15 @@ try {
   const allocationText=await allocation.innerText();
   for(const value of ['50% / 50% of 160 exploration rows','40 independent validation rows','seed 7',
                       'training 80 rows','evaluation 80 rows','0: 64 / 64','1: 16 / 16'])assert(allocationText.includes(value),value);
-  const pair=page.getByRole('region',{name:'Paired ML models'});
+  const pair=page.getByRole('region',{name:'Selected ML model results'});
   await pair.waitFor();
   assert.equal(await pair.getByRole('table',{name:/confusion matrix/}).count(),2);
   assert.equal(await pair.getByRole('table',{name:/attribution summary/}).count(),4);
   assert((await pair.innerText()).includes('LIME local fidelity R²: mean 0.8000'));
   assert((await pair.innerText()).includes('sampled evaluation rows'));
   assert((await pair.innerText()).includes('not classifier accuracy'));
-  assert((await pair.innerText()).includes('XGBoost − LR AUROC: 0.1000'));
-  assert((await pair.innerText()).includes('chosen before fitting'));
+  assert((await pair.innerText()).includes('AUROC 0.6000'));assert((await pair.innerText()).includes('AUROC 0.7000'));
+  assert((await pair.innerText()).includes('exploratory scores, not independent validation'));
   await pair.getByText('Agent proposal and enforced limits',{exact:true}).click();
   assert((await pair.innerText()).includes('Synthetic fixture'));
   assert(await pair.evaluate(el=>el.scrollWidth<=el.clientWidth+2));

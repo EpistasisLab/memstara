@@ -16,6 +16,7 @@ try{
  });
  await page.goto('http://fixture.local/');await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
  for(const name of ['Results','Final report']){
+ const initialRestore=page.getByRole('button',{name:`Expand ${name==='Final report'?'Final Report':name}`,exact:true});if(await initialRestore.count())await initialRestore.click();
  if(await page.getByRole('tab',{name,exact:true}).count())await page.getByRole('tab',{name,exact:true}).click();await page.getByRole('button',{name:`Collapse ${name==='Final report'?'Final Report':name}`,exact:true}).click();
  const restore=page.getByRole('button',{name:`Expand ${name==='Final report'?'Final Report':name}`,exact:true});await restore.waitFor();
  const bounds=await restore.boundingBox();assert(bounds.y>=0&&bounds.y+bounds.height<=1000&&bounds.x+bounds.width<=width);

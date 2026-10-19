@@ -1,3 +1,4 @@
+import {useState} from 'react';
 import Help from "../components/Help";
 import { cn } from "../lib/cn";
 import { VIEWS, VIEW_ORDER } from "../lib/views";
@@ -6,6 +7,7 @@ import { useViewer } from "../store/viewer";
 /** View navigation only; configuration lives beside its pipeline or resource. */
 export default function ControlPanel() {
   const view=useViewer(s=>s.view),setView=useViewer(s=>s.setView);
+  const [advanced,setAdvanced]=useState(false);
   const collapsed=false;
   const wide=undefined;
   return <aside className="h-full min-h-0 overflow-y-auto rounded-xl bg-paper-panel" aria-label="View navigation">
@@ -19,7 +21,8 @@ export default function ControlPanel() {
             View
           </span>
 
-          {VIEW_ORDER.map((id) => {
+          <button aria-expanded={advanced} onClick={()=>setAdvanced(v=>!v)}>Advanced views</button>
+          {VIEW_ORDER.filter(id=>advanced||['discovery','clinician','report'].includes(id)||id===view).map((id) => {
             const item = VIEWS[id];
             const active = view === id;
             const button = (
