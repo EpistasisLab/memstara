@@ -210,3 +210,27 @@ def test_tampered_model_is_rejected_before_refit(tmp_path, monkeypatch):
     (bundle / "model-0.joblib").write_bytes(b"invalid")
     with pytest.raises(ValueError, match="integrity check"):
         evaluate_candidate(task, config, tmp_path)
+
+
+def test_unlimited_final_refit_can_wait_for_busy_ml_lock(tmp_path, monkeypatch):
+    import fcntl
+    from memstara.final_validation import _evaluate_with_budget
+    from memstara.ml_configuration import policy
+
+    _, _, task, config = fixture_run(tmp_path, monkeypatch)
+    config['ml_configuration_policy'] = policy()
+    monkeypatch.setenv('MEMSTARA_OUTPUT_DIR', str(tmp_path))
+    original = fcntl.flock
+    attempts = []
+
+    def initially_busy(fd, operation):
+        attempts.append(operation)
+        if len(attempts) == 1:
+            raise BlockingIOError('synthetic contention')
+        return original(fd, operation)
+
+    monkeypatch.setattr(fcntl, 'flock', initially_busy)
+    result = _evaluate_with_budget(task, config, tmp_path)
+    assert len(attempts) >= 2
+    assert result['status'] == 'completed'
+    assert result['resource_usage']['memory_ceiling_bytes'] is None

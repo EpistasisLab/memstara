@@ -103,8 +103,6 @@ def validate_overrides(value, skills=None, *, replicates=None):
             raise ValueError('LR l1 requires liblinear')
     if 'folds' in value and (type(value['folds']) is not int or value['folds'] not in (0, 2, 3, 4, 5)):
         raise ValueError('Training CV folds must be 0 or 2–5')
-    if 'folds' in value and replicates is not None and replicates * (value['folds'] + 2) > 120:
-        raise ValueError('Reduce split evaluations or training CV folds to remain within the ML fit budget')
     return copy.deepcopy(value)
 
 
@@ -126,13 +124,11 @@ def apply_overrides(proposal, overrides):
 
 
 def policy():
-    import psutil
-    memory = psutil.virtual_memory()
-    # Leave most RAM for the app/OS; the execution-time guard further reduces this.
+    # Null ceilings mean no resource-based rejection for new executions.
+    # Serial scheduling and one native thread avoid parallel oversubscription.
     return {'version': VERSION, 'threads': 1, 'concurrent_jobs': 1,
-            'memory_bytes': min(2 * 1024**3, int(memory.total * .15)),
-            'wall_seconds': 600, 'max_fits': 120, 'max_csv_bytes': 64 * 1024**2,
-            'max_dense_cells': 4_000_000, 'max_encoded_columns': 4096}
+            'memory_bytes': None, 'wall_seconds': None, 'max_fits': None,
+            'max_csv_bytes': None, 'max_dense_cells': None, 'max_encoded_columns': None}
 
 
 def enabled(snapshot):

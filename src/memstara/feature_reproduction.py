@@ -41,7 +41,16 @@ def archive(plan, dataset, knowledge, run_dir):
     """Finish the local-only immutable bundle before any hypothesis model call."""
     destination = run_dir / 'feature_reproduction'
     if destination.exists():
-        result = replay(destination)
+        source_changes = None
+        migration_path = run_dir / 'recovery_migration.json'
+        if migration_path.exists():
+            from memstara.pipeline.checkpoint import code_hash
+            migration = json.loads(migration_path.read_text())
+            if (migration.get('config_hash') != plan['config_hash']
+                    or migration.get('new_code_hash') != code_hash()):
+                raise ValueError('Recovery migration does not match this execution/code')
+            source_changes = migration.get('feature_source_changes', {})
+        result = replay(destination, source_changes=source_changes)
         if result['status'] != 'verified' or json.loads((destination / 'config.json').read_text()) != plan:
             raise ValueError('Existing feature reproduction bundle is inconsistent')
         return destination
@@ -94,7 +103,7 @@ def archive(plan, dataset, knowledge, run_dir):
     return destination
 
 
-def replay(directory):
+def replay(directory, *, source_changes=None):
     directory = Path(directory).resolve()
     manifest = json.loads((directory / 'manifest.json').read_text())
     if manifest.get('version') != VERSION:
@@ -105,8 +114,11 @@ def replay(directory):
         if digest(path) != expected:
             raise ValueError('Bundle integrity mismatch: ' + name)
     for name in CODE:
-        if manifest['code'].get(name) != digest(SOURCE / name):
-            raise ValueError('Installed source differs from archived source: ' + name)
+        previous, current = manifest['code'].get(name), digest(SOURCE / name)
+        if previous != current:
+            allowed = (source_changes or {}).get(name)
+            if allowed != {'before': previous, 'after': current}:
+                raise ValueError('Installed source differs from archived source: ' + name)
     plan = json.loads((directory / 'config.json').read_text())
     saved = json.loads((directory / 'selections.json').read_text())
     actual = [context(plan, wave) for wave in range(plan['combination_plan']['total_loops'])]

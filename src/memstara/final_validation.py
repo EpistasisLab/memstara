@@ -88,7 +88,8 @@ def evaluate_candidate(candidate: dict[str, Any], config: dict, run_dir: Path) -
     if expected_subset and hashlib.sha256(source_bytes).hexdigest() != expected_subset:
         raise ValueError("Hypothesis task input changed after exploratory evaluation")
     limits = config.get("ml_configuration_policy", {})
-    if len(source_bytes) > limits.get("max_csv_bytes", 100 * 1024**2):
+    from memstara.paired_ml import exceeds_limit
+    if exceeds_limit(limits, "max_csv_bytes", len(source_bytes)):
         raise ValueError("Final validation input exceeds the configured CSV size budget")
     from memstara.evaluation import validate_clean_dataset
     frame = validate_clean_dataset(path, target, allow_missing=model_name == "xgboost")
@@ -132,9 +133,9 @@ def evaluate_candidate(candidate: dict[str, Any], config: dict, run_dir: Path) -
             width += sum(x.iloc[development][column].nunique(dropna=False) for column in columns)
         else:
             raise ValueError("Unsupported preprocessing structure for final refit")
-    if width > limits.get("max_encoded_columns", 10000):
+    if exceeds_limit(limits, "max_encoded_columns", width):
         raise ValueError("Final validation input exceeds the configured encoded-column budget")
-    if width * max(len(development), len(reserve)) > limits.get("max_dense_cells", 20_000_000):
+    if exceeds_limit(limits, "max_dense_cells", width * max(len(development), len(reserve))):
         raise ValueError("Final validation input exceeds the configured design-matrix budget")
     fit_started = time.perf_counter()
     with threadpool_limits(limits=1):
@@ -433,7 +434,8 @@ def _evaluate_with_budget(candidate: dict[str, Any], config: dict, run_dir: Path
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     break
                 except BlockingIOError:
-                    if time.monotonic() - wait_started >= limits["wall_seconds"]:
+                    if (limits.get("wall_seconds") is not None
+                            and time.monotonic() - wait_started >= limits["wall_seconds"]):
                         raise RuntimeError(
                             "Final refit could not acquire the ML resource lock within its wait budget"
                         ) from None

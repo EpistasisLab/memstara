@@ -47,6 +47,19 @@ def active_plan() -> dict | None:
             # The independent reserve does not exist until the first Data Agent
             # accepts its run-level seed. Evaluation remains blocked until then.
             plan['validation_partition'] = None
+    override_path = path.parent / 'ml_resource_override.json'
+    if override_path.exists():
+        override = json.loads(override_path.read_text())
+        if (override.get('version') != 1 or override.get('run_tag') != plan.get('run_tag')
+                or override.get('config_hash') != plan.get('config_hash')):
+            raise ValueError('ML resource override does not match the frozen execution')
+        keys = {'memory_bytes', 'wall_seconds', 'max_fits', 'max_csv_bytes',
+                'max_dense_cells', 'max_encoded_columns'}
+        limits = override.get('limits')
+        if not isinstance(limits, dict) or set(limits) != keys or any(v is not None for v in limits.values()):
+            raise ValueError('Invalid explicit unlimited ML resource override')
+        plan['ml_configuration_policy'] = {**plan['ml_configuration_policy'], **limits}
+        plan['ml_resource_override'] = override
     return plan
 
 

@@ -165,6 +165,12 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         # Controlled comparisons retain their precommitted server split.
         state["validation_partition_policy"] = "data_agent_seed_v1"
         state["validation_partition"] = None
+    # Resume retains the original scientific/configuration identity. Resource-only
+    # recovery changes are separately validated and recorded by active_plan().
+    if getattr(args, 'resume', False) and (run_dir / 'config.json').exists():
+        original = json.loads((run_dir / 'config.json').read_text())
+        if 'ml_configuration_policy' in original:
+            state['ml_configuration_policy'] = original['ml_configuration_policy']
     state["config_hash"] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
     location = run_dir / "config.json"
     if location.exists():

@@ -311,3 +311,29 @@ def test_advanced_user_values_reach_real_models_and_replay_with_provenance(exper
         assert replayed.returncode==0,replayed.stdout+replayed.stderr
         assert json.loads(replayed.stdout)['status']=='verified'
     assert json.loads(train_and_score(str(path),'Y',ml_plan=proposal))==result
+
+
+def test_unlimited_policy_accepts_large_fit_estimates():
+    limits = config.policy()
+    for key in ('max_fits', 'wall_seconds', 'memory_bytes', 'max_csv_bytes',
+                'max_dense_cells', 'max_encoded_columns'):
+        assert limits[key] is None
+        assert not paired_ml.exceeds_limit(limits, key, 10**12)
+    assert not paired_ml.exceeds_limit(limits, 'max_fits', 3 * 2 * 21)
+    assert paired_ml.exceeds_limit({'max_fits': 120}, 'max_fits', 126)
+
+
+def test_unlimited_supervisor_records_usage_without_memory_rejection(monkeypatch):
+    import psutil
+    original = psutil.Process.memory_info
+
+    def large_usage(process):
+        return original(process)._replace(rss=4 * 1024**3)
+
+    monkeypatch.setattr(psutil.Process, 'memory_info', large_usage)
+    result = paired_ml.supervise(
+        [sys.executable, '-c', 'import time; time.sleep(.3)'],
+        env=os.environ.copy(), limits=config.policy())
+    assert result['memory_ceiling_bytes'] is None
+    assert result['peak_rss_bytes'] >= 4 * 1024**3
+    assert result['duration_seconds'] >= .3

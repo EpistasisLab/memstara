@@ -2210,7 +2210,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         config_path = run_dir / "config.json"
         if config_path.is_file() and not args.report_only:
             from memstara.final_validation import run as run_final_validation
-            frozen_config = json.loads(config_path.read_text())
+            from memstara.evaluation import active_plan
+            frozen_config = active_plan() or json.loads(config_path.read_text())
             final_validation = run_final_validation(run_dir, frozen_config, report_state["tasks"])
             note("final independent validation: " + str(final_validation.get("status", "unknown")))
         incomplete = [{"trial": t["trial"], "status": t["status"], "error": t.get("error", "")}

@@ -1,4 +1,4 @@
-"""Serialized, bounded child-process execution for the selected ML model."""
+"""Serialized child-process execution for the selected ML model."""
 from __future__ import annotations
 
 import fcntl
@@ -15,6 +15,12 @@ from typing import Any
 from memstara import ml_configuration as config
 
 
+def exceeds_limit(limits, key, value):
+    """Honor explicit historical ceilings; null or absent ceilings are unlimited."""
+    ceiling = limits.get(key)
+    return ceiling is not None and value > ceiling
+
+
 def atomic(path, value):
     with tempfile.NamedTemporaryFile(mode='w', dir=path.parent, delete=False) as stream:
         json.dump(value, stream, allow_nan=False, indent=2)
@@ -25,9 +31,10 @@ def atomic(path, value):
 def supervise(command, *, env, limits, pass_fds=()):
     """Return only after the whole worker process group has exited or been killed."""
     import psutil
-    available = psutil.virtual_memory().available
-    ceiling = min(limits['memory_bytes'], int(available * .4))
-    if ceiling < 256 * 1024**2:
+    memory_limit = limits.get('memory_bytes')
+    ceiling = (min(memory_limit, int(psutil.virtual_memory().available * .4))
+               if memory_limit is not None else None)
+    if ceiling is not None and ceiling < 256 * 1024**2:
         raise RuntimeError('Insufficient free memory to start paired ML safely')
     began = time.monotonic()
     process = subprocess.Popen(command, env=env, stdout=subprocess.DEVNULL,
@@ -36,7 +43,7 @@ def supervise(command, *, env, limits, pass_fds=()):
     try:
         monitor = psutil.Process(process.pid)
         while process.poll() is None:
-            if time.monotonic() - began > limits['wall_seconds']:
+            if limits.get('wall_seconds') is not None and time.monotonic() - began > limits['wall_seconds']:
                 raise RuntimeError('Paired ML exceeded its wall-time budget')
             try:
                 children = monitor.children(recursive=True)
@@ -44,9 +51,9 @@ def supervise(command, *, env, limits, pass_fds=()):
                 peak = max(peak, used)
             except psutil.NoSuchProcess:
                 continue
-            if used > ceiling:
+            if ceiling is not None and used > ceiling:
                 raise RuntimeError('Paired ML exceeded its memory budget')
-            if psutil.virtual_memory().available < 128 * 1024**2:
+            if ceiling is not None and psutil.virtual_memory().available < 128 * 1024**2:
                 raise RuntimeError('Paired ML stopped because system memory is low')
             time.sleep(.1)
         if process.returncode:
@@ -65,7 +72,7 @@ def supervise(command, *, env, limits, pass_fds=()):
 def execute(path, target, evaluation, snapshot, proposal):
     from memstara.paths import DEFAULT_OUTPUT_DIR
     limits = snapshot['ml_configuration_policy']
-    if path.stat().st_size > limits['max_csv_bytes']:
+    if exceeds_limit(limits, 'max_csv_bytes', path.stat().st_size):
         raise ValueError('Input exceeds paired ML CSV size budget')
     accepted = config.validate(proposal, snapshot, evaluation)
     record = config.identity(path, snapshot, evaluation, accepted)
@@ -75,7 +82,7 @@ def execute(path, target, evaluation, snapshot, proposal):
                                   for r in recorded_splits):
         raise ValueError('Reduce training CV folds to the smallest training class count')
     variants = 2 + len(handoff.get('groups', {})) if snapshot.get('comparison_policy') else 1
-    if evaluation['replicates'] * (accepted['folds'] + 2) * variants > limits['max_fits']:
+    if exceeds_limit(limits, 'max_fits', evaluation['replicates'] * (accepted['folds'] + 2) * variants):
         raise ValueError('Reduce training CV folds: selected-model fit count exceeds the resource budget')
     root = Path(os.environ.get('MEMSTARA_OUTPUT_DIR') or DEFAULT_OUTPUT_DIR)
     root.mkdir(parents=True, exist_ok=True)
@@ -139,13 +146,14 @@ def fit(request):
     categorical = X.select_dtypes(exclude='number')
     width = len(X.columns) - len(categorical.columns) + sum(categorical.nunique(dropna=False))
     limits = snapshot['ml_configuration_policy']
-    if width > limits['max_encoded_columns'] or width * len(frame) > limits['max_dense_cells']:
+    if (exceeds_limit(limits, 'max_encoded_columns', width)
+            or exceeds_limit(limits, 'max_dense_cells', width * len(frame))):
         raise DataQualityError('Encoded design matrix exceeds ML memory budget')
     handoff = json.loads(path.with_suffix('.comparison.json').read_text())
     variants = 2 + len(handoff.get('groups', {})) if snapshot.get('comparison_policy') else 1
     models_to_fit = (proposal['primary_model'],)
     estimated_fits = len(models_to_fit) * evaluation['replicates'] * (proposal['folds'] + 2) * variants
-    if estimated_fits > limits['max_fits']:
+    if exceeds_limit(limits, 'max_fits', estimated_fits):
         raise ValueError('Selected-model fit count exceeds the resource budget')
     from memstara.specialist_xai import request as xai_request
     specialist = xai_request(snapshot, handoff['trial'])
@@ -177,7 +185,8 @@ def fit(request):
 def main():
     request = json.loads(Path(sys.argv[1]).read_text())
     # An independent child deadline survives abrupt loss of the supervising server.
-    signal.alarm(request['snapshot']['ml_configuration_policy']['wall_seconds'])
+    deadline = request['snapshot']['ml_configuration_policy'].get('wall_seconds')
+    signal.alarm(deadline if deadline is not None else 0)
     try:
         result = fit(request)
     except Exception as exc:
