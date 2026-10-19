@@ -141,9 +141,46 @@ class SemanticQuestionsTests(unittest.TestCase):
         conn.fetch.return_value = [{'question_id': 3, 'text': 'A research question'}]
         conn.fetchval.return_value = 1
         async def guarded(store, callback, fallback): return await callback(conn)
-        with patch.object(discovery.pools, 'guarded', guarded), patch('universe_semantics.index', return_value={'points': [], 'neighbors': []}) as index:
+        with patch.object(discovery.pools, 'guarded', guarded), patch('universe_semantics.index', return_value={'points': [], 'neighbors': [], 'indexed_count': 1}) as index:
             result = asyncio.run(discovery.semantic_questions('cardiac', 3))
         self.assertEqual(result['coverage'], 'complete')
         self.assertEqual(result['total_questions'], 1)
         index.assert_called_once_with(conn.fetch.return_value, 'cardiac', 3)
         self.assertIn("status <> 'cleared'", conn.fetch.call_args.args[0])
+
+
+    def test_slow_index_returns_progress_without_cancelling_work(self):
+        import time
+        calls = []
+        def slow_index(*args):
+            calls.append(args)
+            time.sleep(.05)
+            return {'points': [], 'neighbors': [], 'indexed_count': 1}
+        async def scenario():
+            with patch.object(discovery.pools, 'guarded', AsyncMock(return_value=([{'question_id': 1, 'text': 'x'}], 1))), patch('universe_semantics.index', slow_index), patch.object(discovery, 'SEMANTIC_WAIT_SECONDS', .001):
+                first = await discovery.semantic_questions('slow')
+                self.assertEqual(first.status_code, 202)
+                await asyncio.sleep(.1)
+                second = await discovery.semantic_questions('slow')
+                self.assertEqual(second['indexed_count'], 1)
+                self.assertEqual(len(calls), 1)
+        asyncio.run(scenario())
+
+
+class WorkspaceRunCountTests(unittest.TestCase):
+    def test_five_live_executions_are_accepted(self):
+        import main
+        with patch.object(discovery, 'live_outputs', AsyncMock(return_value={'events': []})) as live:
+            self.assertEqual(asyncio.run(main.discovery_live('a,b,c,d,e')), {'events': []})
+            live.assert_awaited_once_with(['a', 'b', 'c', 'd', 'e'])
+
+    def test_five_result_executions_are_accepted_without_losing_scope(self):
+        import main
+        from types import SimpleNamespace
+        with patch.object(main.scene, '_results', AsyncMock(return_value=[])) as results, patch.object(
+            main.scene, '_board', AsyncMock(return_value=[])
+        ), patch.object(main.run_artifacts, 'configs', return_value={}), patch.object(
+            main.pools, 'health', SimpleNamespace(as_dict=lambda: {'memstara': {'up': True}})
+        ):
+            self.assertEqual(asyncio.run(main.pipeline_results('a,b,c,d,e')), {'results': [], 'failures': []})
+            self.assertEqual([call.args[0] for call in results.call_args_list], ['a', 'b', 'c', 'd', 'e'])

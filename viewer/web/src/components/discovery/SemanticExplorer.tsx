@@ -14,7 +14,16 @@ export default function SemanticExplorer({selected, onLayout, onChoose}: {
   if(query.trim()&&!selectedOnly)params.set('query',query.trim());
   else if(neighbors&&selected!==null)params.set('question_id',String(selected));
   try {
-   const response=await fetch('/api/discovery/semantic?'+params,{signal:controller.signal});
+   let response:Response;
+   do {
+    response=await fetch('/api/discovery/semantic?'+params,{signal:controller.signal});
+    if(response.status===202)await new Promise<void>((resolve,reject)=>{
+     const abort=()=>{clearTimeout(timer);reject(new DOMException('Aborted','AbortError'));};
+     const timer=setTimeout(()=>{controller.signal.removeEventListener('abort',abort);resolve();},2000);
+     controller.signal.addEventListener('abort',abort,{once:true});
+     if(controller.signal.aborted)abort();
+    });
+   }while(response.status===202&&!controller.signal.aborted);
    if(!response.ok)throw Error('Semantic view is unavailable. The regular question list remains available.');
    const result=await response.json() as SemanticData;
    if(!Array.isArray(result.points)||!Array.isArray(result.neighbors)||result.neighbors.some(n=>!Number.isSafeInteger(n.question_id)||!Number.isFinite(n.similarity)))throw Error('Invalid semantic index response.');

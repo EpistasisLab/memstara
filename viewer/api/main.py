@@ -160,11 +160,11 @@ async def runs() -> dict[str, Any]:
 
 
 @app.get("/api/pipeline-results")
-async def pipeline_results(run_tags: str = Query(min_length=1, max_length=600)):
-    """Return every result for up to three explicitly selected executions."""
+async def pipeline_results(run_tags: str = Query(min_length=1, max_length=6000)):
+    """Return results for explicitly selected workspace executions."""
     tags = list(dict.fromkeys(run_tags.split(",")))
-    if len(tags) > 3 or any(not tag for tag in tags):
-        raise HTTPException(400, "Choose one to three execution IDs")
+    if any(not tag.strip() for tag in tags):
+        raise HTTPException(400, "Execution IDs must not be empty")
     try:
         async with asyncio.timeout(4):
             groups = await asyncio.gather(*(scene._results(tag) for tag in tags))
@@ -309,11 +309,11 @@ async def discovery_report(run_tag: str = Query(min_length=1, max_length=200)):
 
 
 @app.get("/api/discovery/live")
-async def discovery_live(run_tags: str = Query(min_length=1, max_length=600)):
+async def discovery_live(run_tags: str = Query(min_length=1, max_length=6000)):
     from discovery import live_outputs
     tags = list(dict.fromkeys(run_tags.split(',')))
-    if len(tags) > 3 or any(not tag for tag in tags):
-        raise HTTPException(400, 'Choose one to three pipeline executions.')
+    if any(not tag.strip() for tag in tags):
+        raise HTTPException(400, 'Pipeline execution IDs must not be empty.')
     return await live_outputs(tags)
 
 

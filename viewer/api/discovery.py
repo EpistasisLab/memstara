@@ -3,6 +3,9 @@ import asyncio
 from typing import Any
 
 from fastapi import HTTPException
+from fastapi.responses import JSONResponse
+import hashlib
+import json
 from db import pools
 import scene
 import queries
@@ -191,6 +194,10 @@ async def novelty_ranking(offset: int = 0, run_tag: str = '') -> dict[str, Any]:
     return result
 
 
+_semantic_jobs: dict[str, asyncio.Task] = {}
+SEMANTIC_WAIT_SECONDS = 1.0
+
+
 async def semantic_questions(query: str = '', question_id: int | None = None):
     """Read active question text only; heavy indexing runs off the request event loop."""
     from universe_semantics import index
@@ -202,12 +209,29 @@ async def semantic_questions(query: str = '', question_id: int | None = None):
     source = await pools.guarded('memstara', read, None)
     if source is None:
         raise HTTPException(503, 'Question records are temporarily unavailable.')
+    key = hashlib.sha256(json.dumps([query, question_id], sort_keys=True).encode()).hexdigest()
+    task = _semantic_jobs.get(key)
+    if task is None:
+        for old_key, old_task in list(_semantic_jobs.items()):
+            if old_task.done():
+                if not old_task.cancelled():
+                    old_task.exception()  # Retrieve exceptions from abandoned requests.
+                del _semantic_jobs[old_key]
+        if len(_semantic_jobs) >= 4:
+            return JSONResponse({'status': 'indexing', 'retry_after': 2}, status_code=202)
+        task = asyncio.create_task(asyncio.to_thread(index, source[0], query, question_id))
+        _semantic_jobs[key] = task
     try:
-        result = await asyncio.to_thread(index, source[0], query, question_id)
+        result = await asyncio.wait_for(asyncio.shield(task), timeout=SEMANTIC_WAIT_SECONDS)
+    except TimeoutError:
+        return JSONResponse({'status': 'indexing', 'retry_after': 2}, status_code=202)
     except Exception:
+        _semantic_jobs.pop(key, None)
         # Optional local model/cache failures must not break the regular question browser.
         raise HTTPException(503, 'Semantic view unavailable. Install viewer semantic dependencies and cache the pinned model; '
                             'the question list remains available.') from None
+    _semantic_jobs.pop(key, None)
     result['total_questions'] = source[1]
-    result['coverage'] = 'complete' if len(source[0]) == source[1] else 'changed_during_read'
+    result['coverage'] = ('complete' if result.get('indexed_count', 0) + result.get('excluded_empty', 0)
+                          == source[1] else 'changed_during_indexing')
     return result

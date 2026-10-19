@@ -6,14 +6,14 @@ const evidence=id=>({question:question(id),tasks:[],results:[{result_id:id*10,ta
 try{
  for(const width of [1280,390]){
   const page=await browser.newPage({viewport:{width,height:900}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  let release;let requested=false;let offline=false;let semanticOffline=false;
+  let release;let requested=false;let offline=false;let semanticOffline=false;let semanticCalls=0;
   await page.route('**/api/discovery/questions?*',r=>offline?r.fulfill({status:502,body:'<html>Unavailable</html>'}):r.fulfill({json:{questions:[question(1),question(2)],next_before:null}}));
   await page.route('**/api/discovery/questions/*',async r=>{
    const id=Number(new URL(r.request().url()).pathname.split('/').pop());
    if(id===9){requested=true;await new Promise(resolve=>{release=resolve;});}
    await r.fulfill({json:evidence(id)});
   });
-  await page.route('**/api/discovery/semantic?*',r=>semanticOffline?r.fulfill({status:503,json:{detail:'Model unavailable'}}):r.fulfill({json:{status:'ready',indexed_count:2,total_questions:2,coverage:'complete',identity:{model:'fixture',revision:'fixed'},points:[{question_id:1,x:0,y:0,z:0},{question_id:2,x:.1,y:.1,z:.1}],neighbors:[{question_id:2,similarity:.9}]}}));
+  await page.route('**/api/discovery/semantic?*',r=>++semanticCalls===1?r.fulfill({status:202,json:{status:'indexing'}}):semanticOffline?r.fulfill({status:503,json:{detail:'Model unavailable'}}):r.fulfill({json:{status:'ready',indexed_count:2,total_questions:2,coverage:'complete',identity:{model:'fixture',revision:'fixed'},points:[{question_id:1,x:0,y:0,z:0},{question_id:2,x:.1,y:.1,z:.1}],neighbors:[{question_id:2,similarity:.9}]}}));
   await page.goto((process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:4177')+'/tests/question-universe.fixture.html');
   await page.getByRole('button',{name:/Delayed question/}).click();
   await expect.poll(()=>requested).toBe(true);
