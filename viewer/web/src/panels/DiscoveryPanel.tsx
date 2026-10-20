@@ -1,6 +1,4 @@
 import FloorDetailDialog from '../components/FloorDetailDialog';
-import { usePipelines } from '../store/pipelines';
-import ResearchLaunch from '../components/discovery/ResearchLaunch';
 import SemanticExplorer from '../components/discovery/SemanticExplorer';
 import {positions, type SemanticData} from '../lib/semanticLayout';
 import { readDiscoveryResponse } from '../lib/discoveryRecords';
@@ -11,7 +9,7 @@ import ClearQuestionMemory from "../components/ClearQuestionMemory";
 import ContentOrigin from "../components/ContentOrigin";
 import { useLoopLabel } from '../lib/useLoopLabel';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, SlidersHorizontal, MoreHorizontal, Plus, ArrowRight } from 'lucide-react';
+import { Search, SlidersHorizontal, MoreHorizontal, ArrowRight } from 'lucide-react';
 import ReportBody from '../components/ReportBody';
 import ExplanationEvidence from '../components/ExplanationEvidence';
 import type { Result, Task, QuestionContract } from '../types';
@@ -108,10 +106,9 @@ export default function DiscoveryPanel() {
   const [list, setList] = useState(false);
   const [stage, setStage] = useState('Question');
   const [resultId, setResultId] = useState<number | null>(null);
-  const [drawer,setDrawer]=useState<'options'|'novelty'|'semantic'|'pipelines'|'evidence'|'report'|null>(null);
+  const [drawer,setDrawer]=useState<'options'|'novelty'|'semantic'|'evidence'|'report'|null>(null);
   const more=useRef<HTMLDetailsElement>(null);
   const toolbar=useRef<HTMLDivElement>(null);
-  const pipelineBusy=usePipelines(s=>s.busy);
   useEffect(()=>{const dismiss=(event:PointerEvent)=>{if(more.current?.open&&!more.current.contains(event.target as Node))more.current.open=false;};document.addEventListener('pointerdown',dismiss);return()=>document.removeEventListener('pointerdown',dismiss);},[]);
   const closeDrawer=()=>{openSequence.current++;setDrawer(null);requestAnimationFrame(()=>toolbar.current?.querySelector<HTMLButtonElement>('button[aria-haspopup=dialog]')?.focus());};
   const openDrawer=(next:typeof drawer)=>{openSequence.current++;setOpenError('');if(more.current)more.current.open=false;setDrawer(next);};
@@ -157,15 +154,15 @@ export default function DiscoveryPanel() {
       setDrawer('evidence');
     }catch(e){if(sequence===openSequence.current)setOpenError(String(e));}
   };
-  const drawerTitle=drawer==='options'?'View options':drawer==='novelty'?'Novelty proxy ranking':drawer==='semantic'?'Related questions':drawer==='pipelines'?'Pipeline controls':drawer==='report'?'Run report':'Question details';
+  const drawerTitle=drawer==='options'?'View options':drawer==='novelty'?'Novelty proxy ranking':drawer==='semantic'?'Related questions':drawer==='report'?'Run report':'Question details';
   return <div className="universe-page universe-v2 universe-workspace workspace-padding">
-    <header className="universe-workspace-heading"><h2>Question universe</h2><button className="universe-new-research" disabled={pipelineBusy} onClick={()=>void usePipelines.getState().add()}><Plus size={16}/>Add pipeline</button></header>
+    <header className="universe-workspace-heading"><h2>Question universe</h2></header>
     <div className="universe-toolbar" ref={toolbar}>
       <label className="universe-search"><Search size={17}/><input aria-label="Search loaded questions" placeholder="Search this page…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button aria-label="Clear question search" onClick={()=>setSearch('')}>×</button>}</label>
       <button aria-haspopup="dialog" onClick={()=>openDrawer('options')}><SlidersHorizontal size={16}/>View options</button>
       <details className="universe-more" ref={more} onKeyDown={e=>{if(e.key==='Escape'){e.currentTarget.open=false;e.currentTarget.querySelector('summary')?.focus();}}}>
         <summary aria-label="More question actions"><MoreHorizontal size={19}/></summary>
-        <div className="universe-more-actions"><button onClick={()=>openDrawer('pipelines')}>Pipeline controls</button><ClearQuestionMemory onCleared={through=>{openSequence.current++;setClearedThrough(v=>Math.max(v,through));setPages([0]);setSelected(null);setOpenedReport(null);setOpenError('');setMemoryRevision(v=>v+1);if(more.current)more.current.open=false;}}/></div>
+        <div className="universe-more-actions"><ClearQuestionMemory onCleared={through=>{openSequence.current++;setClearedThrough(v=>Math.max(v,through));setPages([0]);setSelected(null);setOpenedReport(null);setOpenError('');setMemoryRevision(v=>v+1);if(more.current)more.current.open=false;}}/></div>
       </details>
     </div>
     <div className="universe-summary"><span>{questions.length} questions on this page</span><span>{error?'Updates interrupted':data?'Live':'Connecting…'}{semantic?.status==='ready'?' · Semantic layout':''}{performance?' · Historical exploratory AUC':''}</span>{current&&<button onClick={()=>openDrawer('evidence')}>Question {current.question_id} details</button>}</div>
@@ -178,7 +175,8 @@ export default function DiscoveryPanel() {
       <div className="universe-pagination"><button disabled={pages.length === 1} onClick={() => {clearSelection();setPages(p => p.slice(0, -1));}}>View recent questions</button><span>Page {pages.length}</span><button disabled={!data?.next_before} onClick={() => { if (data?.next_before) {clearSelection();setPages(p => [...p, data.next_before!]);} }}>View older questions</button></div>
     </section>
     <LiveOutputDock compact open={event=>{void openOutput(event);}}/>
-    {drawer&&<FloorDetailDialog title={drawerTitle} close={closeDrawer} closeLabel="Close Universe panel" className="universe-drawer">
+    {drawer&&<FloorDetailDialog title={drawerTitle} close={closeDrawer} closeLabel="Close Universe panel" className={`universe-drawer universe-drawer-${drawer}`}>
+      {(drawer==='semantic'||drawer==='novelty')&&<button className="universe-drawer-back" onClick={()=>setDrawer('options')}>← View options</button>}
       {drawer==='options'&&<div className="universe-options">
         <fieldset><legend>Display</legend><div className="universe-display-options"><button aria-pressed={!list} onClick={()=>setList(false)}>Question field</button><button aria-pressed={list} onClick={()=>setList(true)}>Question list</button></div></fieldset>
         <label className="universe-option-check"><input type="checkbox" checked={performance} onChange={e=>setPerformance(e.target.checked)}/>Color by historical exploratory AUC</label>
@@ -187,7 +185,6 @@ export default function DiscoveryPanel() {
       </div>}
       {drawer==='novelty'&&<NoveltyRanking open={(q,r)=>{void openRanked(q,r);}}/>}
       {drawer==='semantic'&&<SemanticExplorer selected={current?.question_id??null} onLayout={setSemantic} onChoose={id=>{void openRanked(id,null);}}/>}
-      {drawer==='pipelines'&&<ResearchLaunch/>}
       {drawer==='evidence'&&current&&<EvidencePanel key={current.question_id} question={current} data={evidence.data} error={evidence.error} stage={stage} setStage={setStage} resultId={resultId} setResultId={setResultId}/>}
       {drawer==='report'&&openedReport&&<article className="universe-evidence"><p className="universe-note">{openedReport} · {liveReports[openedReport]?.status||'Not available'}</p><ReportBody compactOrigin report text={liveReports[openedReport]?.text||liveReports[openedReport]?.error||'No report text is available yet.'}/></article>}
       {openError&&<p role="alert">{openError}</p>}

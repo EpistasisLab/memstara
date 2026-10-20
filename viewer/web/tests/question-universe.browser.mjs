@@ -67,9 +67,9 @@ try{
   await more();await page.getByRole('button',{name:'Clear memory',exact:true}).click();
   await expect(page.getByRole('dialog',{name:'Clear Question Universe memory?'})).toBeVisible();
   await page.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(writes,0);
-  await page.getByRole('button',{name:'Pipeline controls',exact:true}).click();
-  const controls=page.locator('.research-controls');await controls.locator('summary').click();
-  await expect(controls).toHaveAttribute('open','');await close();
+  await expect(page.locator('.universe-workspace').getByRole('button',{name:'Add pipeline',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Pipeline controls',exact:true})).toHaveCount(0);
+  await page.keyboard.press('Escape');
   await page.getByRole('button',{name:'Hide outputs',exact:true}).click();
   await expect(page.locator('.live-output-cards')).toHaveCount(0);
   await page.getByRole('button',{name:'Back to question field',exact:true}).click();
