@@ -151,15 +151,18 @@ export default function DiscoveryPanel() {
       studio.current?.scrollIntoView({behavior:'smooth'});
     }catch(e){if(sequence===openSequence.current)setOpenError(String(e));}
   };
-  return <div className="universe-page universe-v2">
+  return <div className="universe-page universe-v2 workspace-padding">
     <header className="universe-header"><div><span className="universe-eyebrow"><Sparkles size={13} /> QUESTION UNIVERSE</span><p>Select a question to explore its hypothesis, analyses and results.</p></div><span className="universe-live">{error ? 'Connection interrupted' : data ? 'Live records · 5s updates' : 'Connecting…'}</span></header>
     <ResearchLaunch/>
     <ContentOrigin kind="proposal"/><div className="universe-tools"><label><Search size={17} /><input aria-label="Search loaded questions" placeholder="Find a question, rationale, or knowledge tag…" value={search} onChange={e => setSearch(e.target.value)} /></label><button onClick={() => setList(v => !v)} aria-pressed={list}>{list ? <Orbit size={16} /> : <List size={16} />}{list ? 'Question field' : 'Question list'}</button><ClearQuestionMemory onCleared={through=>{openSequence.current++;setClearedThrough(v=>Math.max(v,through));setPages([0]);setSelected(null);setOpenedReport(null);setOpenError('');setMemoryRevision(v=>v+1);}}/></div>
     <div className="universe-context"><span>{questions.length} questions on this page · Active memory across runs</span><span>Explore outputs, evidence and interpretations</span></div>
     {error && <p className="universe-alert" role="alert">{error} {data ? 'Showing the last available questions.' : 'Retrying automatically.'}</p>}
-    <button className="my-3 rounded-lg border border-paper-line p-3" aria-expanded={ranking} onClick={()=>setRanking(v=>!v)}>Novelty ranking</button>
+    <div className="universe-tools universe-view-options">
+      <button aria-expanded={ranking} onClick={()=>setRanking(v=>!v)}>Novelty ranking</button>
+      <button aria-expanded={semanticOpen} onClick={()=>setSemanticOpen(v=>!v)}>Semantic layout and search</button>
+      <button aria-pressed={performance} onClick={()=>setPerformance(v=>!v)}>Color by historical AUC</button>
+    </div>
     {ranking&&<NoveltyRanking open={(q,r)=>{void openRanked(q,r);}}/>}
-    <div className="universe-tools"><button aria-expanded={semanticOpen} onClick={()=>setSemanticOpen(v=>!v)}>Semantic layout and search</button><button aria-pressed={performance} onClick={()=>setPerformance(v=>!v)}>Color by historical AUC</button></div>
     {performance&&<p className="universe-note">Historical best exploratory AUC across recorded uses of each question. Gray: unavailable; red: below 0.5; amber: 0.5; blue: above 0.5. Larger nodes indicate higher recorded AUC, with perspective and focus effects. This is not a holdout score or a controlled model comparison. Open the question to inspect individual models and results.</p>}
     {semanticOpen&&<SemanticExplorer selected={current?.question_id??null} onLayout={setSemantic} onChoose={id=>{void openRanked(id,null);}}/>}
     {openError&&<p role="alert">{openError}</p>}

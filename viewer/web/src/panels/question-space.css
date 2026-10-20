@@ -1,10 +1,9 @@
-.universe-v2 { padding:clamp(16px,2.6vw,38px); background:radial-gradient(ellipse at 90% 0%,rgb(118 155 200 / .04),transparent 40%),rgb(var(--paper)); }
-.universe-v2 .universe-header { align-items:center; margin-bottom:22px; }
+.universe-v2 { background:radial-gradient(ellipse at 90% 0%,rgb(118 155 200 / .04),transparent 40%),rgb(var(--paper)); }
+.universe-v2 .universe-header { align-items:center; }
 .universe-v2 .universe-header h1 { font-size:clamp(30px,3.6vw,48px); line-height:1.08; font-weight:520; letter-spacing:-.055em; margin:16px 0 0; }
 .universe-v2 .universe-header h1 > span { color:rgb(var(--ink-faint)); }
 .space-header-note { display:flex; flex-direction:column; align-items:flex-end; gap:14px; }
 .space-header-note p { font-size:13px; text-align:right; line-height:1.75; }
-.universe-v2 .universe-tools { margin-top:0; }
 .universe-v2 .universe-explore { border-radius:20px; background:rgb(var(--panel) / .34); }
 .question-space { container-type:inline-size; isolation:isolate; }
 .space-surface { position:relative; height:clamp(530px,67vh,760px); overflow:hidden; touch-action:none; cursor:grab; }

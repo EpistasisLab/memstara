@@ -25,6 +25,8 @@ export interface PanelProps {
   /** Applied to the scroll region. Pass `overflow-hidden p-0` for a panel that manages
    *  its own surface, such as the React Flow canvas. */
   bodyClassName?: string;
+  /** The enclosing workspace window already supplies the visible title. */
+  embedded?: boolean;
   children: ReactNode;
 }
 
@@ -34,15 +36,17 @@ export default function Panel({
   title,
   status,
   bodyClassName,
+  embedded = false,
   children,
 }: PanelProps) {
   return (
     <section
       id={id}
-      className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border
-                 border-paper-line bg-paper-panel shadow-xs"
+      aria-label={embedded ? title : undefined}
+      className={cn("flex min-h-0 min-w-0 flex-col overflow-hidden bg-paper-panel",
+        !embedded && "rounded-xl border border-paper-line shadow-xs")}
     >
-      <header
+      {(!embedded || status !== undefined) && <header
         className="panel-header flex shrink-0 flex-wrap items-center gap-2 border-b border-paper-line
                    bg-paper-panel/95 px-4 py-2.5 backdrop-blur"
       >
@@ -54,7 +58,7 @@ export default function Panel({
             {status}
           </div>
         )}
-      </header>
+      </header>}
 
       <div className={cn("min-h-0 flex-1 overflow-auto", bodyClassName)}>{children}</div>
     </section>

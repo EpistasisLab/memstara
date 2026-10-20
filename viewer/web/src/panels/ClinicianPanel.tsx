@@ -18,7 +18,7 @@ import type { Result } from "../types";
 import "./clinician.css";
 
 const ReportBody = lazy(() => import("../components/ReportBody"));
-const section = "rounded-2xl border border-paper-line bg-white p-5 sm:p-6";
+const section = "rounded-xl border border-paper-line bg-white workspace-padding";
 
 function Evidence({ result }: { result: Result }) {
   const labelLoop = useLoopLabel();
@@ -99,7 +99,7 @@ export default function ClinicianPanel() {
   const switchMode=(next:'live'|'archive')=>{setMode(next);setSelected(null);setQuery('');};
   const showNewFindings=()=>{setMode('live');setQuery('');setSelected(newestResult);setSeenResult(newestResult);};
   return <main className="clinical-view h-full overflow-auto bg-paper text-ink" data-testid="clinician-view">
-    <div className="mx-auto max-w-[1440px] space-y-5 px-5 py-6 sm:px-8">
+    <div className="workspace-padding mx-auto max-w-[1440px] space-y-4">
       <section className="clinical-hero clinical-hero-simple"><div><p className="clinical-eyebrow">Memstara · Clinical insights</p><h1 className="mt-2 font-semibold">What is your research finding?</h1><p className="mt-3 text-ink-soft">Choose a finding to understand its meaning and what to check next.</p></div></section>
       <details className="clinical-history clinical-disclosure">
         <summary><BookOpen size={18}/><span><strong>Past analyses</strong></span><ChevronDown size={18}/></summary>

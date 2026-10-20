@@ -19,6 +19,12 @@
   --default-ring-color: var(--color-blue-500);
 }
 
+/* Shared panel gutter. Keep spacing in one Tailwind utility rather than
+   competing viewport-dependent padding in each panel's stylesheet. */
+@utility workspace-padding {
+  @apply p-3 min-[760px]:p-4;
+}
+
 html, body, #root { height: 100%; }
 body { @apply bg-paper text-ink font-sans antialiased; }
 

@@ -43,4 +43,9 @@
 .workspace-minimized-window svg { flex-shrink:0; }
 .workspace-minimized-window > button:hover { background:rgb(var(--accent)/.07); }
 .workspace-minimized-window > button:focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:-2px; }
-@media(max-width:759px) { .workspace-minimized-panels { gap:5px; padding:5px 8px; } .workspace-minimized-window > button { min-height:44px; } }
+@media(max-width:759px) {
+ .workspace-minimized-panels { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; padding:8px 0; }
+ .workspace-minimized-window > button { min-height:44px; gap:8px; padding:8px; }
+ .workspace-minimized-window strong { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+ .workspace-minimized-window span { display:none; }
+}

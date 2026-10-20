@@ -47,7 +47,7 @@ function TopRegion() {
   const meta = VIEWS[view];
   const Body = SECONDARY[view];
   return (
-    <Panel icon={meta.icon} title={meta.label}>
+    <Panel embedded icon={meta.icon} title={meta.label}>
       <Suspense fallback={<p className="p-6 text-ink-soft">Loading view…</p>}><Body /></Suspense>
     </Panel>
   );

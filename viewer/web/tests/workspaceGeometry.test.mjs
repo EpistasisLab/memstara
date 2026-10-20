@@ -15,3 +15,13 @@ test('narrow multi-panel layouts use tabs; wide layouts favor report width',()=>
  const wide=workspaceGeometry(2000,1000,['feed','results','report']);assert(!wide.tabbed);
  assert(wide.boxes.report.w>wide.boxes.results.w&&wide.boxes.results.w>wide.boxes.feed.w);
 });
+test('mobile navigation reserves one row and keeps a consistent panel gap',()=>{
+ for(const width of [320,390,759]) {
+  const {boxes}=workspaceGeometry(width,800,[]);
+  assert.equal(boxes.control.h,64);
+  assert.equal(boxes.pipeline.y-boxes.control.h,12);
+ }
+ const {boxes}=workspaceGeometry(760,800,[]);
+ assert.equal(boxes.pipeline.y,0);
+ assert.equal(boxes.pipeline.x-boxes.control.w,12);
+});

@@ -19,15 +19,15 @@
 }
 
 /* Explicit header rows keep context and execution controls aligned. */
-.pipeline-unified-header { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:8px 16px; min-width:0; width:100%; color:rgb(var(--ink)); font-weight:400; }
+.pipeline-unified-header { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); align-items:center; gap:8px 12px; min-width:0; width:100%; color:rgb(var(--ink)); font-weight:400; }
 .pipeline-context-header,.pipeline-context-header .cs-unified-header,.pipeline-context-header .cs-heading-row { display:contents; }
 .pipeline-context-header:empty { display:none; }
-.pipeline-context-header .cs-compact-identity,.pipeline-context-title { grid-column:1; grid-row:1; display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; min-width:0; }
+.pipeline-context-header .cs-compact-identity,.pipeline-context-title { grid-column:1/4; grid-row:1; display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-width:0; }
 .pipeline-context-header .cs-compact-identity h3,.pipeline-context-title strong { margin:0; font-size:15px; line-height:1.4; font-weight:650; overflow-wrap:anywhere; }
 .pipeline-context-header .cs-compact-identity > span,.pipeline-context-title > span { font-size:11px; color:rgb(var(--ink-soft)); background:rgb(var(--ink)/.045); padding:3px 7px; border-radius:5px; }
-.pipeline-context-header .cs-heading-actions { grid-column:2; grid-row:2; display:flex; align-items:center; justify-content:flex-end; gap:8px; width:auto; min-width:0; }
-.pipeline-context-header .cs-control-row { grid-column:1; grid-row:2; display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:0; min-width:0; }
-.pipeline-global-actions { grid-column:2; grid-row:1; display:flex; align-items:center; justify-content:flex-end; gap:8px; min-width:0; }
+.pipeline-context-header .cs-heading-actions { grid-column:8/-1; grid-row:2; display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; width:auto; min-width:0; }
+.pipeline-context-header .cs-control-row { grid-column:1/8; grid-row:2; display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:0; min-width:0; }
+.pipeline-global-actions { grid-column:4/-1; grid-row:1; display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; min-width:0; }
 .pipeline-running-count { display:inline-flex; align-items:center; gap:5px; font-size:11px; color:rgb(var(--ink-soft)); white-space:nowrap; }
 .pipeline-global-actions .master-run-controls { display:flex; width:auto; align-items:center; flex-wrap:wrap; gap:6px; min-width:0; }
 .pipeline-global-actions .master-start-group { display:contents; }
@@ -47,6 +47,7 @@
 .pipeline-unified-header :is(button,input,select):focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:-2px; }
 @container combination-header (max-width:1050px) {
  .pipeline-unified-header { grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+ .pipeline-context-header .cs-compact-identity,.pipeline-context-title { grid-column:1; }
  .pipeline-context-header .cs-heading-actions { grid-column:2; grid-row:1; justify-content:flex-end; flex-wrap:wrap; }
  .pipeline-global-actions { grid-column:1/-1; grid-row:2; justify-content:flex-start; flex-wrap:wrap; }
  .pipeline-context-header .cs-control-row { grid-column:1/-1; grid-row:3; }

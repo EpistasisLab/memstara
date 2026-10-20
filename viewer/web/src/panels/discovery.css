@@ -1,4 +1,4 @@
-.universe-page { container-type: inline-size; height:100%; min-height:0; overflow:auto; color:rgb(var(--ink)); background:rgb(var(--paper)); padding:clamp(14px,2.5vw,30px); }
+.universe-page { container-type: inline-size; height:100%; min-height:0; overflow:auto; color:rgb(var(--ink)); background:rgb(var(--paper)); }
 .universe-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
 .universe-eyebrow { display:flex; align-items:center; gap:7px; color:rgb(var(--ink-soft)); font-size:13px; font-weight:750; letter-spacing:.17em; }
 .universe-header h1 { font-size:clamp(24px,3vw,36px); font-weight:600; letter-spacing:-.04em; line-height:1.2; margin:10px 0; }
@@ -84,8 +84,9 @@
 .universe-section[aria-label="Research workflow"] button:disabled { opacity:.5; cursor:wait; }
 
 /* Preserve all components while giving the map priority. */
-.universe-v2 { padding:16px; }
 .universe-v2 > .universe-tools { margin-top:10px; flex-wrap:wrap; }
+.universe-v2 > .universe-view-options { margin:0 0 12px; gap:8px; }
+.universe-tools > button { min-height:40px; }
 .universe-v2 .universe-header p { margin:6px 0; }
 .research-launch { display:flex; align-items:center; flex-wrap:wrap; gap:8px 16px; margin:10px 0; }
 .research-launch > .universe-tools { margin:0; }
