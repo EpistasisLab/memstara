@@ -19,14 +19,21 @@ def configuration_for_retry(record, configuration, pipeline_id):
     if saved.get('pipeline_id') != pipeline_id or saved.get('run_tag') != tag:
         raise ValueError('Retry source does not belong to this pipeline')
     loop = failure.get('loop')
+    interrupted = failure.get('status') == 'interrupted'
+    if interrupted:
+        candidates = [int(key) for key, value in outcomes.items()
+                      if key.isdigit() and value.get('outcome') == 'interrupted']
+        if len(candidates) != 1:
+            raise ValueError('A unique interrupted Loop is required for retry')
+        loop = candidates[0]
     start = saved.get('start_loop', 1)
     end = saved.get('waves')
-    if (failure.get('status') != 'failed' or type(loop) is not int or type(end) is not int
+    if (failure.get('status') not in ('failed', 'interrupted') or type(loop) is not int or type(end) is not int
             or type(start) is not int or not 1 <= start <= loop <= end):
         raise ValueError('No failed Loop is available for retry')
     if any(outcomes.get(str(i), {}).get('outcome') != 'completed' for i in range(start, loop)):
         raise ValueError('Earlier unfinished Loops require review before retry')
-    if outcomes.get(str(loop), {}).get('outcome') != 'blocked':
+    if outcomes.get(str(loop), {}).get('outcome') != ('interrupted' if interrupted else 'blocked'):
         raise ValueError('The failed Loop outcome is not confirmed')
     if configuration.get('research_input_id', '') != saved.get('research_input_id', ''):
         raise ValueError('Research source changed; use a separate new execution')

@@ -100,3 +100,22 @@ def test_retry_restores_cli_json_settings_as_request_objects(source):
     path.write_text(json.dumps(saved))
     retry = configuration_for_retry(record, config, 'p')
     assert {key: retry[key] for key in values} == values
+
+
+def test_interrupted_loop_retry_preserves_completed_loops_and_evidence(source):
+    from pathlib import Path
+    record, config = source
+    root = Path(record['run_dir'])
+    (root / 'pipeline_status.json').write_text('{"status":"interrupted"}')
+    path = root / 'iteration_outcomes.json'
+    outcomes = json.loads(path.read_text())
+    outcomes['6']['outcome'] = 'interrupted'
+    path.write_text(json.dumps(outcomes))
+    before = {p.name:p.read_bytes() for p in root.iterdir()}
+    retry = configuration_for_retry(record, config, 'p')
+    assert retry['_retry_from_loop'] == 6
+    assert before == {p.name:p.read_bytes() for p in root.iterdir()}
+    outcomes['5']['outcome'] = 'interrupted'
+    path.write_text(json.dumps(outcomes))
+    with pytest.raises(ValueError, match='unique interrupted'):
+        configuration_for_retry(record, config, 'p')
