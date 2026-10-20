@@ -205,9 +205,72 @@ migration, never deleting the database to bypass the error.
 
 Startup makes **no LLM calls** and does not resume or launch an experiment. A
 healthy web page proves application startup, not valid model credentials or a
-successful scientific pipeline. Register the included synthetic research input
-through the research-input UI before running your first pipeline. The bundled
-files are at `/app/examples/research-inputs/` inside the container.
+successful scientific pipeline. Startup automatically prepares and registers the
+bundled HeartFailure demonstration. Select **Heart failure complete-case software
+demonstration** in the app's research-input selector. Its CSV, OKF, target definition
+and corpus-specific skill choices are available without entering container paths.
+The original 1,700-row CSV is preserved; the documented eight-predictor complete-case
+preparation retains 1,671 rows and excludes 29. This is an installation demonstration,
+not a clinically validated prediction task. No pipeline is started automatically.
+
+### Add your own research folder
+
+Put each study under `user-inputs/` (or the host folder set by
+`MEMSTARA_INPUTS_DIR` in `.env`):
+
+```text
+user-inputs/
+└── my-study/
+    ├── research.json
+    ├── dataset.csv
+    └── okf/
+        └── index.md
+```
+
+Create `research.json` with your actual target definition; the following values
+are placeholders to replace, not inferred clinical labels:
+
+```json
+{
+  "name": "My study",
+  "dataset_path": "dataset.csv",
+  "knowledge_path": "okf",
+  "target": {
+    "column": "outcome",
+    "positive_label": "1",
+    "negative_label": "0",
+    "description": "Describe the outcome and what each label means",
+    "prediction_time": "Describe when predictor values are available",
+    "horizon": "Describe the outcome observation period"
+  },
+  "excluded_columns": ["record_id"],
+  "missing_policy": "reject"
+}
+```
+
+Use your CSV's exact column names and labels. Paths in these startup manifests
+are relative to the folder containing `research.json`; no absolute host path is
+needed. CSV and OKF files must be visible inside the Docker mounts. Private HIV
+inputs are not included in GitHub: provide your authorized files in a study folder.
+For research without an OKF, set `knowledge_mode` to `llm_only` and omit
+`knowledge_path`; for proposal-only research without a CSV, set `data_mode` to
+`proposal` and omit `dataset_path`. No training metrics are fabricated in that mode.
+
+Run `./start.sh` after adding or editing a study (finish active experiments first).
+Initialization scans `user-inputs/*/research.json`, validates the data and target,
+and registers valid studies. Unchanged registrations are reused; changed content
+or target definitions produce new versions and do not overwrite old registrations.
+An invalid custom study is skipped, while other studies and the app remain available.
+Read `outputs/bundled-research/registration.json` for per-manifest registration status;
+use **Prepare research inputs** to inspect and correct a rejected study. Custom CSVs
+are never automatically cleaned or imputed. Known corpora use their existing skill
+profiles; unknown corpora use the general profile, not an inferred specialty.
+
+Derived bundled data and preparation evidence are stored under
+`outputs/bundled-research/`. Registered inputs are persisted under
+`outputs/research_inputs/` by default. Startup neither copies old experiments from
+another installation nor sends data to an LLM. `.env` remains the operational
+configuration; each study's manifest describes its research inputs.
 
 ### If startup reports invalid paths
 
@@ -219,9 +282,8 @@ input path by variable name before application services are restarted.
 - For bundled skills, leave custom skill-path variables unset.
 - To choose research inputs in the UI, leave `MEMSTARA_DATASET_PATH` and
   `AGENTIC_OKF_BUNDLE_DIR` unset.
-- For the included HeartFailure default, use `MEMSTARA_DATASET_PATH=examples/heart-failure/dataset.csv`,
-  `AGENTIC_OKF_BUNDLE_DIR=examples/heart-failure/okf` and
-  `MEMSTARA_OUTCOME_COLUMN=chronic_heart_failure` together.
+- For bundled HeartFailure, leave these overrides unset and select the automatically
+  registered demonstration. Do not use its raw CSV as the analysis CSV.
 - For private CSV/OKF inputs, put the files under the configured `MEMSTARA_INPUTS_DIR`
   and reference `user-inputs/...` in `.env`. Private datasets are not downloaded by cloning.
 

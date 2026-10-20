@@ -55,6 +55,7 @@ async def main():
     )
     await grants("MEMSTARA_DATABASE_URL", "MEMSTARA_VIEWER_DSN")
     await grants("MOTORO_DATABASE_URL", "CORE_VIEWER_DSN")
+    subprocess.run([sys.executable, "-m", "memstara.startup_research"], check=True)
     from memstara.local_setup import probe_connections
 
     results = await probe_connections(os.environ)
