@@ -268,9 +268,6 @@ export const useControl = create<ControlState>((set, get) => ({
       const res = await fetch("/control/health", { signal: AbortSignal.timeout(10000) });
       if (!res.ok) throw new Error(await readError(res));
       const body = await res.json();
-      if (body.llm) {
-        set(state => ({ form: { ...state.form, provider: body.llm.provider ?? "", model: body.llm.model ?? "" } }));
-      }
       const wasDown = get().up !== true;
       // Live run metadata must never overwrite the user's independently saved draft.
       const selectedPipeline = usePipelines.getState().items.find(p => p.id === usePipelines.getState().selected);

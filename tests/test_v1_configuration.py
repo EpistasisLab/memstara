@@ -116,8 +116,9 @@ def test_mcp_training_is_concurrent_and_writes_separate_artifacts(clean_data, tm
 
 
 def test_governance_request_rejects_unsupported_or_unsafe_options(monkeypatch):
-    monkeypatch.setenv("MEMSTARA_LLM_PROVIDER", "openai")
-    monkeypatch.setenv("MEMSTARA_LLM_MODEL", "test-deployment")
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', "openai")
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', "test-deployment")
     for plan in ({"folds": 1}, {"seed": True}, {"replicates": 0}, {"search_trials": 11}, {"test_size": float("nan")}):
         with pytest.raises(ValueError):
             validate(plan)
@@ -266,8 +267,9 @@ def test_dirty_input_is_rejected_before_run_configuration_is_frozen(clean_data, 
 
 
 def test_skill_optimization_defaults_reach_frozen_runtime(clean_data, tmp_path, monkeypatch):
-    monkeypatch.setenv("MEMSTARA_LLM_PROVIDER", "openai")
-    monkeypatch.setenv("MEMSTARA_LLM_MODEL", "test-deployment")
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', "openai")
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', "test-deployment")
     skill = catalog.register({'stage': 'ml', 'name': 'replicated',
         'content': '<!-- evaluation: {"replicates": 10, "folds": 2} -->\nUse ten seeded replicates.'})
     argv = build_argv({'playbook_ml': skill['id'], 'evaluation': {'engine': 'logistic_regression'}},

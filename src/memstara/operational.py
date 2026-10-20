@@ -97,47 +97,17 @@ def resolve(environ=None, *, file: Path | None = None):
         values[name] = str(int(value))
     if len({values[k] for k in PORT_DEFAULTS}) != len(PORT_DEFAULTS):
         raise ValueError('Web, API and control ports must be distinct')
-    # Public settings are provider-neutral; adapters retain upstream credential names.
-    credential_keys = {'azure_foundry': 'ANTHROPIC_FOUNDRY_API_KEY',
-                       'anthropic': 'ANTHROPIC_API_KEY', 'openai': 'OPENAI_API_KEY',
-                       'openrouter': 'OPENROUTER_API_KEY'}
-    provider = values.get('MEMSTARA_LLM_PROVIDER', '')
-    key = values.get('MEMSTARA_LLM_API_KEY', '').strip()
-    if key:
-        upstream = credential_keys.get(provider)
-        if not upstream:
-            raise ValueError('MEMSTARA_LLM_API_KEY requires a supported MEMSTARA_LLM_PROVIDER')
-        if values.get(upstream) and values[upstream] != key:
-            raise ValueError('MEMSTARA_LLM_API_KEY conflicts with the legacy provider credential')
-        values[upstream] = key
-    resource = values.get('MEMSTARA_LLM_RESOURCE', '').strip()
-    if resource:
-        if provider != 'azure_foundry':
-            raise ValueError('MEMSTARA_LLM_RESOURCE is only used by azure_foundry; use API_BASE otherwise')
-        if values.get('ANTHROPIC_FOUNDRY_RESOURCE') and values['ANTHROPIC_FOUNDRY_RESOURCE'] != resource:
-            raise ValueError('MEMSTARA_LLM_RESOURCE conflicts with the legacy resource')
-        values['ANTHROPIC_FOUNDRY_RESOURCE'] = resource
-    # The default endpoint and resource must describe the same Foundry account.
-    if values.get('MEMSTARA_LLM_PROVIDER') == 'azure_foundry':
-        from memstara.stage_models import validate_endpoint
-        resource = values.get('ANTHROPIC_FOUNDRY_RESOURCE', '').strip()
-        endpoint = values.get('MEMSTARA_LLM_API_BASE', '').strip()
-        if endpoint:
-            validate_endpoint(endpoint)
-            host = urlsplit(endpoint).hostname or ''
-            suffix = '.services.ai.azure.com'
-            if not host.endswith(suffix) or urlsplit(endpoint).path not in ('', '/'):
-                raise ValueError('MEMSTARA_LLM_API_BASE must be a Foundry resource root URL')
-            inferred = host[:-len(suffix)]
-            if resource and resource != inferred:
-                raise ValueError('Foundry resource and endpoint conflict')
-            resource = inferred
-        if resource:
-            import re
-            if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]*', resource):
-                raise ValueError('MEMSTARA_LLM_RESOURCE must be a resource name, not a URL')
-            values['ANTHROPIC_FOUNDRY_RESOURCE'] = resource
-            values['MEMSTARA_LLM_API_BASE'] = f'https://{resource}.services.ai.azure.com'
+    # Credentials are shared by provider, never selected through a common model.
+    credential_keys = {'MEMSTARA_AZURE_FOUNDRY_API_KEY': 'ANTHROPIC_FOUNDRY_API_KEY',
+                       'MEMSTARA_ANTHROPIC_API_KEY': 'ANTHROPIC_API_KEY',
+                       'MEMSTARA_OPENAI_API_KEY': 'OPENAI_API_KEY',
+                       'MEMSTARA_OPENROUTER_API_KEY': 'OPENROUTER_API_KEY'}
+    for public, upstream in credential_keys.items():
+        key = values.get(public, '').strip()
+        if key:
+            if values.get(upstream) and values[upstream] != key:
+                raise ValueError(f'{public} conflicts with the legacy provider credential')
+            values[upstream] = key
     values['MEMSTARA_CONFIG_MODE'] = mode
     values['MEMSTARA_ENV_FILE'] = str(path)
     return values, {'mode': mode, 'file': str(path) if mode == 'project' else None,
@@ -146,35 +116,41 @@ def resolve(environ=None, *, file: Path | None = None):
                     'restart_required_after_change': True}
 
 
-def model_profiles(values=None):
-    """Construct two public model profiles; credentials never enter the result."""
+def agent_profile(role, values=None):
+    """Read one explicit agent assignment. Never inherit a common model."""
+    from memstara.stage_models import AGENT_ROLES, validate_profiles
+    role = {'interpreter': 'interpretation', 'report': 'explanation'}.get(role, role)
+    if role not in AGENT_ROLES:
+        raise ValueError('Unknown model role')
     values = os.environ if values is None else values
-    base = {k: values.get('MEMSTARA_LLM_' + k.upper(), '').strip()
-            for k in ('provider', 'model', 'api_base')}
-    profiles = {}
-    for family, prefix in (('non_explanation_agents', 'MEMSTARA_NON_EXPLANATION_'),
-                           ('explanation_agent', 'MEMSTARA_EXPLANATION_')):
-        profile = {k: values.get(prefix + k.upper(), '').strip() or v for k, v in base.items()}
-        if profile['provider'] != base['provider'] and not values.get(prefix + 'API_BASE', '').strip():
-            # A different provider must never inherit another provider's endpoint.
-            profile['api_base'] = ''
-        if not profile['provider'] or not profile['model']:
-            raise ValueError('Set MEMSTARA_LLM_PROVIDER and MEMSTARA_LLM_MODEL in project .env before execution')
-        for key, cast in (('temperature', float), ('max_tokens', int)):
-            raw = values.get(prefix + key.upper(), '').strip() or values.get('MEMSTARA_LLM_' + key.upper(), '').strip()
-            if raw:
-                try:
-                    profile[key] = cast(raw)
-                except ValueError:
-                    raise ValueError(f'{prefix}{key.upper()} has an invalid numeric value') from None
-        effort = values.get(prefix + 'EFFORT', '').strip() or values.get('MEMSTARA_LLM_EFFORT', '').strip()
-        if effort:
-            profile['effort'] = effort
-        if not profile['api_base']:
-            profile.pop('api_base')
-        profiles[family] = profile
-    from memstara.stage_models import validate_profiles
-    return validate_profiles(profiles)
+    prefix = 'MEMSTARA_' + role.upper() + '_'
+    profile = {k: values.get(prefix + k.upper(), '').strip() for k in ('provider', 'model', 'api_base')}
+    required = ['provider', 'model']
+    if profile['provider'] in ('azure_foundry', 'local'):
+        required.append('api_base')
+    for key in required:
+        if not profile[key]:
+            raise ValueError(f'{prefix}{key.upper()} is required; no shared model fallback is used')
+    for key, cast in (('temperature', float), ('max_tokens', int)):
+        raw = values.get(prefix + key.upper(), '').strip()
+        if raw:
+            try:
+                profile[key] = cast(raw)
+            except ValueError:
+                raise ValueError(f'{prefix}{key.upper()} has an invalid numeric value') from None
+    effort = values.get(prefix + 'EFFORT', '').strip()
+    if effort:
+        profile['effort'] = effort
+    if not profile['api_base']:
+        profile.pop('api_base')
+    # Reuse strict profile-value validation without reading other agents or secrets.
+    return validate_profiles({r: profile for r in AGENT_ROLES})[role]
+
+
+def model_profiles(values=None):
+    """All six assignments are mandatory for a new pipeline."""
+    from memstara.stage_models import AGENT_ROLES
+    return {role: agent_profile(role, values) for role in AGENT_ROLES}
 
 
 def save_source(directory: Path) -> None:
@@ -232,7 +208,7 @@ def check(values: dict) -> dict:
     for role, profile in profiles.items():
         key = keys.get(profile['provider'])
         if key and (not values.get(key) or values[key].startswith(('YOUR_', 'REPLACE_'))):
-            errors.append(f'{role}: configure MEMSTARA_LLM_API_KEY '
+            errors.append(f'{role}: configure the matching MEMSTARA_<PROVIDER>_API_KEY '
                           '(or the role provider credential) in the selected source')
     return {'configuration_valid': not errors, 'errors': errors,
             'models': profiles, 'ports': {k: values.get(k, str(v)) for k, v in PORT_DEFAULTS.items()},

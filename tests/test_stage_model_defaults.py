@@ -21,6 +21,13 @@ def profiles(tmp_path, monkeypatch):
     monkeypatch.setenv("MEMSTARA_EXPLANATION_MODEL", "claude-sonnet-test")
     monkeypatch.setenv("MEMSTARA_LLM_PROVIDER", "openai")
     monkeypatch.setenv("MEMSTARA_LLM_MODEL", "qwen-test")
+    for role in stage_models.AGENT_ROLES:
+        profile = value['explanation_agent' if role == 'explanation' else 'non_explanation_agents']
+        monkeypatch.setenv(f'MEMSTARA_{role.upper()}_PROVIDER', profile['provider'])
+        monkeypatch.setenv(f'MEMSTARA_{role.upper()}_MODEL', profile['model'])
+        if profile['provider'] == 'azure_foundry':
+            monkeypatch.setenv(f'MEMSTARA_{role.upper()}_API_BASE', 'https://example.services.ai.azure.com')
+            profile['api_base'] = 'https://example.services.ai.azure.com'
     return value
 
 
@@ -28,7 +35,7 @@ def test_new_workspace_and_launch_freeze_deployment_profiles(profiles):
     config = PipelineWorkspace.configuration({})
     assert config["stage_models"] == {}
     argv = build_argv({}, [])
-    assert json.loads(argv[argv.index("--stage-models") + 1]) == profiles
+    assert json.loads(argv[argv.index("--stage-models") + 1]) == stage_models.expanded_profiles(profiles)
     for stage in ("hypothesis", "hypothesis#2", "data", "ml", "interpreter", "interpreter#2"):
         assert stage_models.for_stage(profiles, stage) == profiles["non_explanation_agents"]
     assert stage_models.for_stage(profiles, "report") == profiles["explanation_agent"]
@@ -211,3 +218,39 @@ def test_intermediate_role_names_preserve_routing_and_snapshot(profiles):
     assert stage_models.resolve_run_profiles(profiles, recovering=True, frozen={'stage_models': old}) == profiles
     with pytest.raises(ValueError, match='do not mix'):
         stage_models.validate_profiles({**profiles, 'analysis': old['analysis']})
+
+
+def test_six_agents_route_independently_and_legacy_stays_readable():
+    from motoro.schemas.agent import ModelConfig
+    profiles = {role: {'provider': 'openai', 'model': role + '-model'} for role in stage_models.AGENT_ROLES}
+    for stage, role in [('question0-1', 'question'), ('hypothesis#2', 'hypothesis'),
+                        ('data#2', 'data'), ('ml', 'ml'), ('interpret#1', 'interpretation'),
+                        ('interpreter', 'interpretation'), ('report', 'explanation')]:
+        assert stage_models.for_stage(profiles, stage)['model'] == role + '-model'
+        config = ModelConfig(**stage_models.for_stage(profiles, stage))
+        stage_models.validate_call(config, stage, {'stage_models': profiles})
+    assert stage_models.resolve_run_profiles({}, recovering=True, frozen={'stage_models': profiles}) == profiles
+
+
+def test_question_call_settings_do_not_inherit_hypothesis_overrides():
+    profiles = {role: {'provider': 'openai', 'model': role + '-model'} for role in stage_models.AGENT_ROLES}
+    profiles['hypothesis'].update(temperature=0.2, max_tokens=999, effort='high')
+    profiles['question'].update(temperature=0.8, max_tokens=1234)
+    result = stage_models.call_overrides(profiles, 'question0-1', temperature=0.1)
+    assert result['model'] == 'question-model'
+    assert result['temperature'] == 0.8
+    assert result['max_tokens'] == 1234
+    assert result['effort'] is None
+    profiles['explanation']['max_tokens'] = 5678
+    assert stage_models.call_overrides(profiles, 'report')['max_tokens'] == 5678
+    # Historical runs keep their former overrides and saved models.
+    assert stage_models.call_overrides({}, 'report') == {'max_tokens': 8192}
+
+
+def test_same_assignment_accepts_legacy_saved_design(monkeypatch):
+    legacy = {'non_explanation_agents': {'provider': 'openai', 'model': 'base'},
+              'explanation_agent': {'provider': 'openai', 'model': 'report'}}
+    current = stage_models.expanded_profiles(legacy)
+    monkeypatch.setattr(stage_models, 'deployment_profiles', lambda: current)
+    assert stage_models.resolve_run_profiles(legacy) == current
+    assert stage_models.snapshot_profiles(legacy, legacy) == legacy

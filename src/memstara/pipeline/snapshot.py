@@ -53,7 +53,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     from memstara.pipeline.feature_context import freeze_feature_context
-    from memstara.env import configured_api_base
+    from memstara.stage_models import for_stage
     state = {
         "schema_version": 1,
         "critic_policy": {"version": "deterministic_feasibility_v1", "extra_llm_calls": 0},
@@ -61,7 +61,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         "agent_labels": dict(AGENT_LABELS),
         "combination_plan": combination_plan,
         "recovery_policy": {"version": "artifact_checked_v1", "question_attempts": 2, "hypothesis_attempts": 2},
-        "llm_api_base": configured_api_base(getattr(args, "provider", "")),
+        "llm_api_base": (for_stage(args.stage_models, "hypothesis").get("api_base")
+                         if getattr(args, "stage_models", None) else None),
         "validation_partition": partition,
         "hypothesis_policy": {} if getattr(args, "report_only", False) else {
             "version": "knowledge_only_v1" if combination_plan else "iterative_discovery_v1",

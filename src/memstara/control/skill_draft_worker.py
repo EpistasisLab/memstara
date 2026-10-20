@@ -83,21 +83,22 @@ def extract(output: str) -> str:
 
 async def generate(body: dict) -> dict:
     data = validate(body)
-    from memstara.env import load_env, configured_api_base
+    from memstara.env import load_env
     load_env()
     from memstara.config import Settings
     from motoro import configure
     configure(Settings())
-    from memstara.control.request import configured_llm
-    provider, _ = configured_llm()
+    from memstara.operational import agent_profile
+    profile = agent_profile(data['stage'])
+    if data['model'] != profile['model']:
+        raise ValueError('Skill draft model changed; refresh the agent configuration')
     from motoro.runner import create_agent, create_run, execute_run
-    from motoro.schemas.agent import LLMProvider, ModelConfig
+    from motoro.schemas.agent import ModelConfig
     agent = await create_agent(
         name=f"memstara-{data['stage']}-skill-draft-{uuid.uuid4().hex}",
         goal=f"Generate a reviewable {ROLE_NAMES[data['stage']]} Agent Markdown skill.",
         system_prompt=system_prompt(data['stage']),
-        model_config=ModelConfig(provider=LLMProvider(provider), model=data['model'],
-                                 api_base=configured_api_base(provider), max_tokens=2400),
+        model_config=ModelConfig(**profile),
         pattern_config={'execution_pattern': 'reason_act'},
         max_run_duration_seconds=120,
     )
@@ -108,7 +109,7 @@ async def generate(body: dict) -> dict:
     if result.error or result.status != 'completed':
         raise RuntimeError('Skill generation failed')
     return {'stage': data['stage'], 'content': extract(result.output or ''), 'model': data['model'],
-            'provider': provider, 'run_id': str(run.id),
+            'provider': profile['provider'], 'run_id': str(run.id),
             'cost_estimate_usd': float(result.total_cost or 0)}
 
 

@@ -35,14 +35,17 @@ def validate(body: dict) -> dict:
 
 
 def models() -> dict:
-    from memstara.control.request import configured_llm
-    provider, model = configured_llm()
-    return {'provider': provider, 'default_model': model, 'models': [model]}
+    from memstara.stage_models import deployment_profiles, public_profiles
+    return {'agents': public_profiles(deployment_profiles())}
 
 
 def start(body: dict) -> dict:
     data = validate(body)
-    data['provider'] = models()['provider']
+    from memstara.operational import agent_profile
+    profile = agent_profile(data['stage'])
+    if data['model'] != profile['model']:
+        raise ValueError('Skill draft model differs from the selected agent configuration; refresh settings')
+    data['provider'] = profile['provider']
     with _lock:
         now = time.monotonic()
         for key in list(_jobs):

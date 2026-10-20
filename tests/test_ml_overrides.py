@@ -68,7 +68,7 @@ def test_bad_advanced_structures_rejected(value):
 
 
 def test_selected_skill_and_fit_budget_checked_before_persistence_or_launch(monkeypatch):
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER','openai');monkeypatch.setenv('MEMSTARA_LLM_MODEL','synthetic')
+    monkeypatch.setenv('MEMSTARA_HYPOTHESIS_PROVIDER','openai');monkeypatch.setenv('MEMSTARA_HYPOTHESIS_MODEL','synthetic')
     monkeypatch.setattr('memstara.stage_models.deployment_profiles',lambda:{})
     settings={'version':1,'models':{'logistic_regression':OVERRIDES['models']['logistic_regression']}}
     body={'playbook_ml':'ml_logistic_regression','ml_overrides':settings}

@@ -24,8 +24,8 @@ MARKED = ["hypothesis", "ml"]
 @pytest.fixture(autouse=True)
 def deployment_environment(monkeypatch):
     monkeypatch.setattr("memstara.stage_models.deployment_profiles", lambda: {})
-    monkeypatch.setenv("MEMSTARA_LLM_PROVIDER", "openai")
-    monkeypatch.setenv("MEMSTARA_LLM_MODEL", "test-deployment")
+    monkeypatch.setenv("MEMSTARA_HYPOTHESIS_PROVIDER", "openai")
+    monkeypatch.setenv("MEMSTARA_HYPOTHESIS_MODEL", "test-deployment")
 
 
 def flags(argv: list[str]) -> dict[str, str]:

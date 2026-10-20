@@ -51,22 +51,15 @@ export default function ModelConnectionDialog() {
         <button type="button" aria-label="Close model connection" onClick={() => dialog.current?.close()} className="rounded-lg p-2"><X size={20} /></button>
       </header>
       <div className="space-y-5 p-5" aria-busy={loading}>
-        <p className="text-sm text-ink-soft">Default assignments and each pipeline’s saved or active assignments. Active assignments come from its frozen execution.</p>
+        <p className="text-sm text-ink-soft">Per-agent assignments and each pipeline’s saved or active assignments. Active assignments come from its frozen execution.</p>
         {loading && <p role="status">Loading connection settings…</p>}
         {error && <p role="alert" className="text-sm">{error}</p>}
         {data && <>
           {data.llm.error && <p role="alert">{data.llm.error}</p>}
           {data.stage_model_error && <p role="alert">{data.stage_model_error}</p>}
-          <section className="space-y-2"><h3 className="font-semibold">New pipeline defaults</h3>
+          <section className="space-y-2"><h3 className="font-semibold">Agent model assignments</h3>
             {!data.stage_model_error && <Assignment configuration={{...data.llm, stage_models: data.stage_models}}/>}
           </section>
-          <dl className="space-y-3">
-            {[["Deployment model", data.llm.model], ["Connection provider", data.llm.provider], ["Azure resource", data.llm.resource],
-              ["Endpoint", data.llm.endpoint], ["Configuration source", data.llm.source]].map(([label, value]) =>
-              <div key={label} className="grid grid-cols-1 gap-1 border-b border-paper-line pb-3 sm:grid-cols-[150px_minmax(0,1fr)]">
-                <dt className="text-sm text-ink-soft">{label}</dt><dd className="min-w-0 break-words text-sm font-semibold [overflow-wrap:anywhere]">{value || "Not configured"}</dd>
-              </div>)}
-          </dl>
           <section className="space-y-2">
             <h3 className="font-semibold">Pipeline assignments</h3>
             {data.pipelines.length === 0 ? <p className="text-sm text-ink-soft">No saved pipelines.</p> : data.pipelines.map(p =>

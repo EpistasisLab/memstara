@@ -33,8 +33,9 @@ def test_unrepresentative_holdout_is_rejected_before_training(tmp_path):
 
 
 def test_invalid_input_does_not_create_a_run_or_spawn_process(tmp_path, monkeypatch):
-    monkeypatch.setenv("MEMSTARA_LLM_PROVIDER", "openai")
-    monkeypatch.setenv("MEMSTARA_LLM_MODEL", "test-deployment")
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', "openai")
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', "test-deployment")
     import pytest
     pytest.importorskip("motoro", reason="Requires optional Motoro runtime; exercised in the full development suite")
     from memstara.control import service

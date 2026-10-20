@@ -29,8 +29,9 @@ def study(tmp_path, monkeypatch):
         monkeypatch.setattr(PipelineLLMService, method,
                             AsyncMock(side_effect=AssertionError('Unexpected real provider call')))
     monkeypatch.setattr(stage_models, 'deployment_profiles', lambda: {})
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
-    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'offline-fixture')
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'offline-fixture')
     monkeypatch.setenv('MEMSTARA_DATABASE_URL', 'postgresql://test:secret@localhost:15501/board')
     monkeypatch.setenv('MOTORO_DATABASE_URL', 'postgresql://test:secret@localhost:15502/runtime')
     monkeypatch.setenv('MOTORO_REDIS_URL', 'redis://localhost:16380/0')

@@ -130,8 +130,9 @@ def test_real_data_to_ml_artifact_includes_baseline_and_comparisons(experiment, 
 
 def test_control_transports_baseline_and_blocks_target(monkeypatch):
     from memstara.control.request import build_argv
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
-    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'test')
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'test')
     args = build_argv({'baseline_columns': ['age', '', 'age'], 'y_column': 'Y'}, [])
     assert json.loads(args[args.index('--baseline-columns') + 1]) == ['age']
     with pytest.raises(ValueError, match='target'):

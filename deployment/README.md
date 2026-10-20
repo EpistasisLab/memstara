@@ -10,7 +10,7 @@ commands remain available through `python -m memstara.local_setup`. The old
 
 | Category | Authoritative source | Consumers |
 |---|---|---|
-| Models, credentials and group overrides | Project `.env` | Configuration validation, control, execution workers |
+| Models, credentials and per-agent overrides | Project `.env` | Configuration validation, control, execution workers |
 | Database and Redis identities | Generated private `.memstara/installation.json` (legacy explicit `.env` values retained) | Bootstrap, DB entrypoints, control; only read-only DSNs reach API |
 | Public port and project identity | `.env` web port; generated private project identity and `compose.override.yaml` | Compose, control origin checks |
 | Host directories | `.env` output/cache/input fields | Compose mounts and derived application paths |

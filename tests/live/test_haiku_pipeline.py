@@ -200,18 +200,12 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
         database = urlunsplit(parts._replace(query=urlencode(query)))
         env = {**os.environ, "MEMSTARA_CONFIG_MODE": "environment",
                "MEMSTARA_DATABASE_URL": database, "MEMSTARA_OUTPUT_DIR": str(area),
-               "MEMSTARA_LLM_MODEL": MODEL,
-               "MEMSTARA_LLM_PROVIDER": live_batch["profiles"]["non_explanation_agents"]["provider"],
                "MEMSTARA_ML_ENGINE": "xgboost", "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1",
                "MKL_NUM_THREADS": "1"}
-        profile = live_batch["profiles"]["non_explanation_agents"]
-        if profile.get("api_base"):
-            env["MEMSTARA_LLM_API_BASE"] = profile["api_base"]
-            if profile["provider"] == "azure_foundry" and not env.get("ANTHROPIC_FOUNDRY_RESOURCE"):
-                host = urlsplit(profile["api_base"]).hostname or ""
-                assert host.endswith(".services.ai.azure.com"), (
-                    "An explicit Foundry resource is required for custom endpoints")
-                env["ANTHROPIC_FOUNDRY_RESOURCE"] = host.split(".")[0]
+        from memstara.stage_models import expanded_profiles
+        for agent, profile in expanded_profiles(live_batch["profiles"]).items():
+            for field, value in profile.items():
+                env[f"MEMSTARA_{agent.upper()}_{field.upper()}"] = str(value)
         for key in ("MEMSTARA_RUN_CONFIG", "MEMSTARA_COMPARISON_POLICY_PATH", "MEMSTARA_LEAKAGE_RULES_PATH"):
             env.pop(key, None)
         argv = [*live_batch["worker"], "-m", "memstara.pipeline.board", "--trials", "1", "--waves", str(loops),

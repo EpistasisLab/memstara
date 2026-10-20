@@ -25,6 +25,10 @@ OPENAI_API_KEY=TEST_SECRET_SENTINEL
 MEMSTARA_WEB_PORT=15999
 MEMSTARA_INPUTS_DIR=user-inputs
 """)
+    from memstara.stage_models import AGENT_ROLES
+    with file.open('a') as stream:
+        for role in AGENT_ROLES:
+            stream.write(f'MEMSTARA_{role.upper()}_PROVIDER=openai\nMEMSTARA_{role.upper()}_MODEL=test-model\n')
     return resolve({}, file=file)[0]
 
 
@@ -77,7 +81,7 @@ def test_example_has_unique_keys_and_covers_core_contract():
     text = (Path(__file__).resolve().parents[1] / ".env.example").read_text()
     keys = re.findall(r"^\s*(?:#\s*)?([A-Z][A-Z0-9_]*)=", text, re.M)
     assert len(keys) == len(set(keys))
-    assert {"MEMSTARA_INPUTS_DIR", "MEMSTARA_LLM_MODEL"} <= set(keys)
+    assert {"MEMSTARA_INPUTS_DIR", "MEMSTARA_QUESTION_MODEL"} <= set(keys)
     internal = {"MEMSTARA_VIEWER_DSN", "CORE_VIEWER_DSN", "COMPOSE_FILE", "COMPOSE_PROJECT_NAME"}
     assert not internal & set(keys)
 

@@ -90,8 +90,10 @@ def test_ui_arguments_reach_cli_environment_check_with_prepared_domain(sample, s
     from memstara.pipeline import board
     record = register(sample)
     monkeypatch.setitem(INDEX_PROFILES, record['knowledge']['hashes']['index.md'], scope)
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'azure_foundry')
-    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'claude-haiku-5-5')
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'azure_foundry')
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'claude-haiku-5-5')
+        monkeypatch.setenv(f'MEMSTARA_{role}_API_BASE', 'https://fixture.services.ai.azure.com')
     monkeypatch.setattr('memstara.stage_models.deployment_profiles', lambda: {})
     monkeypatch.setattr(board, 'load_env', lambda: None)
     # Activate really prepares the child environment; monkeypatch tracks rollback.
@@ -282,8 +284,9 @@ def test_activation_and_target_contract_follow_each_study(sample, monkeypatch):
 def test_registered_target_replaces_stale_browser_target(sample, monkeypatch):
     from memstara.control.request import build_argv
     record = register(sample)
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
-    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'test-model')
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'test-model')
     from memstara import stage_models
     monkeypatch.setattr(stage_models, 'resolve_run_profiles', lambda _: {})
     argv = build_argv({'research_input_id': record['id'], 'y_column': 'stale_target'}, [])
@@ -423,8 +426,9 @@ def test_control_launch_uses_selected_inputs_without_changing_server_environment
     source.write_text('\n'.join([lines[0], *(lines[1:] * 30)]) + '\n')
     record = register(sample)
     monkeypatch.setenv('MEMSTARA_DATASET_PATH', str(tmp_path / 'unrelated-missing.csv'))
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
-    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'test-model')
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'test-model')
     monkeypatch.setenv('MEMSTARA_DATABASE_URL', 'postgresql://test:secret@localhost:15501/board')
     monkeypatch.setenv('MOTORO_DATABASE_URL', 'postgresql://test:secret@localhost:15502/runtime')
     monkeypatch.setenv('MOTORO_REDIS_URL', 'redis://localhost:16380/0')

@@ -173,22 +173,13 @@ def allowlist_gaps() -> list[str]:
 
 
 def configured_llm(provider: str, model: str) -> tuple[str, str]:
-    """Deployment-wide selection from the process environment; overrides stale browser drafts."""
+    """Explicit hypothesis selection for legacy scalar metadata; never a shared default."""
     from memstara.control.request import configured_llm as deployment_llm
     return deployment_llm()
 
 
-def configured_api_base(provider: str) -> str | None:
-    """Pass the configured endpoint to Motoro's existing ModelConfig."""
-    from memstara.stage_models import validate_endpoint
-    base = os.environ.get("MEMSTARA_LLM_API_BASE", "").strip()
-    if not base:
-        return None
-    selected = os.environ.get("MEMSTARA_LLM_PROVIDER", "").strip()
-    if selected and selected != provider:
-        return None
-    try:
-        validate_endpoint(base)
-    except ValueError as exc:
-        raise ValueError(f"MEMSTARA_LLM_API_BASE: {exc}") from None
-    return base
+def configured_api_base(provider: str, stage: str = 'hypothesis') -> str | None:
+    """Read an explicit role endpoint; never consult a common endpoint."""
+    from memstara.operational import agent_profile
+    profile = agent_profile(stage)
+    return profile.get('api_base') if profile['provider'] == provider else None

@@ -54,7 +54,8 @@ def test_failure_is_bounded_and_redacted(monkeypatch, failure):
 
 def test_job_capacity(monkeypatch):
     monkeypatch.setattr(drafts, '_jobs', {str(i):{'status':'generating','created':0} for i in range(2)})
-    monkeypatch.setattr(drafts, 'models', lambda: {'provider':'openai'})
+    monkeypatch.setenv('MEMSTARA_HYPOTHESIS_PROVIDER', 'openai')
+    monkeypatch.setenv('MEMSTARA_HYPOTHESIS_MODEL', 'selected-deployment')
     with pytest.raises(ValueError, match='already'):
         drafts.start(body())
 
@@ -66,11 +67,12 @@ def test_motoro_receives_selected_model_and_no_tools(monkeypatch, stage):
     import motoro
     import motoro.runner as runner
     from memstara import env
-    from memstara.control import request
     monkeypatch.setattr(env, 'load_env', lambda: [])
-    monkeypatch.setattr(env, 'configured_api_base', lambda p: 'https://example.org')
+    role = {'interpreter': 'interpretation', 'report': 'explanation'}.get(stage, stage).upper()
+    monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+    monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'selected-deployment')
+    monkeypatch.setenv(f'MEMSTARA_{role}_API_BASE', 'https://example.org')
     monkeypatch.setattr(motoro, 'configure', lambda s: None)
-    monkeypatch.setattr(request, 'configured_llm', lambda: ('openai','default-model'))
     captured = {}
     async def agent(**kw):
         captured.update(kw)

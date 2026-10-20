@@ -26,7 +26,7 @@ export default function ManualPricingSettings(){
     {!settings&&!error&&<p>Loading configured models…</p>}
     {settings?.models.map(m=><fieldset key={m.id} disabled={busy||settings.read_only} className="space-y-2 rounded border border-paper-line p-3">
       <legend>{m.model} · {m.provider}</legend>
-      <p>{m.roles.map(r=>r==='explanation_agent'?'Explanation agent':'Other agents').join(' · ')}</p>
+      <p>{m.roles.map(r=>({question:'Question',hypothesis:'Hypothesis',data:'Data',ml:'ML',interpretation:'Interpretation',explanation:'Explanation',explanation_agent:'Explanation',non_explanation_agents:'Other agents'} as Record<string,string>)[r]||r).join(' · ')}</p>
       <label className="flex gap-2"><input type="checkbox" checked={m.enabled} onChange={e=>update(m.id,{enabled:e.target.checked})}/>Use manually verified rates</label>
       {m.enabled&&<>
         {(['input','output','cache_read'] as const).map(kind=><label key={kind} className="block">{{input:'Input',output:'Output',cache_read:'Cache read (optional)'}[kind]} · USD per 1 million tokens

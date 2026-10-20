@@ -153,8 +153,9 @@ def test_web_launch_freezes_policy_and_delivers_random_input(monkeypatch, tmp_pa
     choices = {s: ['random_features' if s == 'hypothesis' else s] for s in stages}
     monkeypatch.setattr(catalog, 'resolve', lambda k: {'id': k, 'title': k, 'hash': k,
                                                      'stage': 'hypothesis' if k == 'random_features' else k})
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
-    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'test-model')
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'test-model')
     monkeypatch.delenv('MEMSTARA_STUDY_POLICY', raising=False)
     config = PipelineWorkspace.configuration({'combination_skills': choices, 'combination_max_loops': 2})
     argv = build_argv(config, [], [x[0] for x in choices.values()], stages)

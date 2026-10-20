@@ -219,8 +219,9 @@ def test_web_configuration_freezes_both_skill_requests(experiment, monkeypatch, 
                         'stage': 'data' if key in allocation.SKILLS else key})
     monkeypatch.setattr('memstara.pipeline.snapshot.load_prompt',
                         lambda role, book: {'system_prompt': book, 'goal': role})
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
-    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'test')
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'test')
     config = PipelineWorkspace.configuration({'combination_skills': choices})
     argv = build_argv(config, [], [key for values in choices.values() for key in values], stages)
     args = SimpleNamespace(run_tag='web', question='', hypothesis_agents=1, y_column='Y',

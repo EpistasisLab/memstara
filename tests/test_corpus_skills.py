@@ -34,8 +34,9 @@ def test_wrong_corpus_skills_rejected_for_single_and_combination_requests(scope,
     import memstara.research_inputs as research
     monkeypatch.setattr(research, 'load', lambda identifier: profile(scope))
     monkeypatch.setattr('memstara.stage_models.deployment_profiles', lambda: {})
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
-    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'fixture')
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'fixture')
     names = [item['id'] for item in catalog()]
     correct = PROFILES[scope]['hypothesis'][0]
     request = {'research_input_id': 'a' * 32, 'provider': 'openai', 'model': 'fixture',
@@ -73,8 +74,9 @@ def test_two_explanations_reach_report_prompt_and_reject_wrong_corpus(scope, wro
     import memstara.research_inputs as research
     monkeypatch.setattr(research, 'load', lambda identifier: profile(scope))
     monkeypatch.setattr('memstara.stage_models.deployment_profiles', lambda: {})
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
-    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'fixture')
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'fixture')
     rows = {row['id']: row for row in catalog()}
     reports = PROFILES[scope]['report']
     assert len(reports) == 2

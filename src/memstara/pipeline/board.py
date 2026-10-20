@@ -520,11 +520,8 @@ async def _call_agent_uncontrolled(
         prompt += '\n' + INSTRUCTIONS
     check_primary_tools(stage, tools)
 
-    # Overridden only if a temperature was given. None uses the agent's own default.
-    overrides = {"temperature": temperature} if temperature is not None else None
-
-    if stage == "report":
-        overrides = {**(overrides or {}), "max_tokens": 8192}
+    from memstara.stage_models import call_overrides
+    overrides = call_overrides((plan or {}).get('stage_models'), stage, temperature)
 
     # core creates a "run" first and executes it afterwards. Being split in two is what
     # leaves the record in the DB, so it can be retraced later with src/memstara/trace/run.py.
@@ -2637,8 +2634,14 @@ async def main() -> int:
             ap.error(str(exc))
     if args.data_mode == 'proposal' and not args.research_objective:
         ap.error('Proposal mode requires --research-objective or a saved research objective')
-    from memstara.env import configured_llm
-    args.provider, args.model = configured_llm(args.provider, args.model)
+    from memstara.stage_models import for_stage, deployment_profiles
+    frozen_profiles = json.loads(args.stage_models) if isinstance(args.stage_models, str) else args.stage_models
+    if not frozen_profiles and not (args.resume or args.report_only):
+        frozen_profiles = deployment_profiles()
+        args.stage_models = json.dumps(frozen_profiles)
+    if frozen_profiles:
+        metadata_model = for_stage(frozen_profiles, 'hypothesis')
+        args.provider, args.model = metadata_model['provider'], metadata_model['model']
     from memstara.evaluation import validate
     try:
         args.evaluation = json.dumps(validate(json.loads(args.evaluation)))

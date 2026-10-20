@@ -225,7 +225,7 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
 
                 role = "hypothesis" if stage == "question" else stage
                 profile = (
-                    for_stage(state["stage_models"], role)
+                    for_stage(state["stage_models"], stage)
                     if state["stage_models"]
                     else {"provider": args.provider, "model": args.model}
                 )

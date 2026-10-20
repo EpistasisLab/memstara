@@ -15,10 +15,11 @@ try {
   await page.route('**/control/**',async r=>{
    const path=new URL(r.request().url()).pathname;
    if(path==='/control/pipelines')return r.fulfill({json:{pipelines:[]}});
-   if(path==='/control/skills')return r.fulfill({json:{skills:[]}});
+   if(path==='/control/research-inputs')return r.fulfill({json:{inputs:[]}});
+if(path==='/control/skills')return r.fulfill({json:{skills:[]}});
    if(path==='/control/skill-drafts/models'){
     await new Promise(resolve=>{releaseModels=resolve;});
-    return r.fulfill({json:{provider:'openai',default_model:'default-model',models:['default-model']}});
+    return r.fulfill({json:{agents:Object.fromEntries(['question','hypothesis','data','ml','interpretation','explanation'].map(role=>[role,{provider:'openai',model:'selected-model'}]))}});
    }
    if(path==='/control/skill-drafts'){calls.push(r.request().postDataJSON());return r.fulfill({status:202,json:{id:String(calls.length),status:'generating'}});}
    if(path.startsWith('/control/skill-drafts/'))return r.fulfill({json:{status:'ready',content:'# Draft',model:'selected-model',provider:'openai'}});
@@ -35,7 +36,8 @@ try {
   await page.route('**/assets/**',r=>{const name=new URL(r.request().url()).pathname.split('/').at(-1);return r.fulfill({path:new URL('assets/'+name,dist).pathname,contentType:name.endsWith('.css')?'text/css':'application/javascript'});});
   await page.goto(base);await page.getByRole('button',{name:/Add pipeline/i,exact:true}).click();await openBuildModeFixture(page,mode);
   const d=page.getByRole('dialog',{name:mode==='Selected Pipelines'?'Create a pipeline':'All Combinations',exact:true});
-  if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();await d.getByRole('button',{name:'Next',exact:true}).click();}
+  await d.getByLabel('Deployment target column',{exact:true}).fill('fixture_target');
+if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();await d.getByRole('button',{name:'Next',exact:true}).click();}
   else await d.getByRole('button',{name:'Choose skills',exact:true}).click();
   for(let i=0;i<roles.length;i++) {
    if(mode==='All Combinations'){
@@ -49,7 +51,8 @@ try {
    releaseModels();releaseModels=undefined;
    await expect(assistant.getByLabel('Generation model / deployment')).toBeEnabled();
    for(const input of await assistant.locator('fieldset').first().locator('textarea').all())await input.fill('General research priorities');
-   await assistant.getByLabel('Generation model / deployment').fill('selected-model');
+   await expect(assistant.getByLabel('Generation model / deployment')).toHaveValue('selected-model');
+   await expect(assistant.getByLabel('Generation model / deployment')).not.toBeEditable();
    await assistant.getByRole('button',{name:'Generate skill draft',exact:true}).click();
    await expect(assistant.getByLabel('Generated Markdown skill')).toHaveValue('# Draft');
    const save=assistant.getByRole('button',{name:mode==='Selected Pipelines'?'Save and select for this pipeline':'Save and add to combinations'});

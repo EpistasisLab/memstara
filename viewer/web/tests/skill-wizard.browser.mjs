@@ -11,8 +11,9 @@ p.on('pageerror',e=>console.log('PAGE ERROR',e.message));
 await p.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Offline wizard fixture'}}));
 await p.route('**/control/**',r=>{const path=new URL(r.request().url()).pathname;
 if(path==='/control/pipelines')return r.fulfill({json:{pipelines:[]}});
+if(path==='/control/research-inputs')return r.fulfill({json:{inputs:[]}});
 if(path==='/control/skills')return r.fulfill({json:{skills:[]}});
-if(path==='/control/skill-drafts/models')return r.fulfill({json:{provider:'openai',default_model:'default-model',models:['default-model']}});
+if(path==='/control/skill-drafts/models')return r.fulfill({json:{agents:Object.fromEntries(['question','hypothesis','data','ml','interpretation','explanation'].map(role=>[role,{provider:'openai',model:'chosen-model'}]))}});
 if(path==='/control/skill-drafts'){calls.push(r.request().postDataJSON());return r.fulfill({status:202,json:{id:String(++n),status:'generating'}});}
 if(path.startsWith('/control/skill-drafts/')&&n===3&&!transient){transient=true;return r.fulfill({status:503,json:{error:'Temporary connection failure'}});}
 if(path.startsWith('/control/skill-drafts/'))return r.fulfill({json:failure?{status:'failed',error:'Test failure'}:{status:'ready',content:'# Draft '+n,model:'chosen-model',provider:'openai'}});
@@ -20,10 +21,11 @@ if(path==='/control/playbooks'){if(r.request().method()==='GET')return r.fulfill
 if(r.request().method()==='POST')throw Error('Unexpected write '+path);return r.fulfill({json:{}});});
 await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await p.getByRole('button',{name:/Add pipeline/i}).click();await openBuildModeFixture(p,mode);
 const d=p.getByRole('dialog',{name:mode==='Selected Pipelines'?'Create a pipeline':'All Combinations',exact:true});
+await d.getByLabel('Deployment target column',{exact:true}).fill('fixture_target');
 if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();await d.getByRole('button',{name:'Next',exact:true}).click();}else {await d.getByRole('button',{name:'Choose skills'}).click();await d.getByRole('button',{name:/^Create with AI/}).click();}
 await d.getByRole('button',{name:'Create a skill with AI'}).click();
 for(const label of ['What is your clinical domain','What patient population','What clinical features','Are there any variables'])await d.getByLabel(new RegExp('^'+label)).fill('General clinical research');
-await d.getByLabel('Generation model / deployment').fill('chosen-model');await d.getByRole('button',{name:'Generate skill draft',exact:true}).click();await d.getByRole('alert').filter({hasText:'Test failure'}).waitFor();
+await expect(d.getByLabel('Generation model / deployment')).toHaveValue('chosen-model');await d.getByRole('button',{name:'Generate skill draft',exact:true}).click();await d.getByRole('alert').filter({hasText:'Test failure'}).waitFor();
 await expect(d.getByLabel(/^What is your clinical domain/)).toHaveValue('General clinical research');failure=false;
 await d.getByRole('button',{name:'Generate skill draft',exact:true}).click();await expect(d.getByLabel('Generated Markdown skill')).toHaveValue('# Draft 2');if(saves.length)throw Error('Saved before review');
 const save=d.getByRole('button',{name:mode==='Selected Pipelines'?'Save and select for this pipeline':'Save and add to combinations'});await expect(save).toBeDisabled();

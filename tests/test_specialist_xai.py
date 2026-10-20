@@ -225,8 +225,9 @@ def test_specialist_web_configuration_freezes_exact_sources(specification,monkey
         lambda name,book:original_prompt(name,book) if book in xai.SKILLS else {'goal':name,'system_prompt':book})
     choices={s:list(xai.SKILLS) if s=='interpreter' else [s]
              for s in ('hypothesis','data','ml','interpreter','report')}
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER','openai')
-    monkeypatch.setenv('MEMSTARA_LLM_MODEL','synthetic')
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'synthetic')
     value=PipelineWorkspace.configuration({'combination_skills':choices})
     argv=build_argv(value,[],[v for values in choices.values() for v in values],list(choices))
     args=SimpleNamespace(run_tag='web',question='',hypothesis_agents=1,y_column='Y',

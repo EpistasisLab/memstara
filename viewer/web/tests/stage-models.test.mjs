@@ -26,3 +26,9 @@ test('explicit non-explanation and explanation agent groups route independently'
  assert(rows.slice(0,5).every(row=>row.model==='first'));
  assert.equal(rows[5].model,'last');
 });
+
+test('six independent agent models are shown in stage order',()=>{
+ const names=['question','hypothesis','data','ml','interpretation','explanation'];
+ const profiles=Object.fromEntries(names.map(role=>[role,{provider:'openai',model:role+'-model'}]));
+ assert.deepEqual(stageModelRows({stage_models:profiles}).map(row=>row.model),names.map(role=>role+'-model'));
+});

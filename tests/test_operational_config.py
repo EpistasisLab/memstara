@@ -64,23 +64,22 @@ def test_invalid_local_configuration_is_rejected(tmp_path, extra):
         resolve({}, file=file)
 
 
-def test_foundry_resource_and_endpoint_agree(tmp_path):
+def test_foundry_explicit_endpoint_does_not_require_shared_resource(tmp_path):
+    from memstara.operational import agent_profile
     file = tmp_path / '.env'
-    file.write_text('MEMSTARA_LLM_PROVIDER=azure_foundry\nMEMSTARA_LLM_MODEL=deployment\n'
-                    'MEMSTARA_LLM_API_BASE=https://example.services.ai.azure.com\n')
+    file.write_text('MEMSTARA_QUESTION_PROVIDER=azure_foundry\nMEMSTARA_QUESTION_MODEL=deployment\n'
+                    'MEMSTARA_QUESTION_API_BASE=https://example.services.ai.azure.com\n')
     values, _ = resolve({}, file=file)
-    assert values['ANTHROPIC_FOUNDRY_RESOURCE'] == 'example'
-    file.write_text(file.read_text() + 'ANTHROPIC_FOUNDRY_RESOURCE=other\n')
-    with pytest.raises(ValueError, match='conflict'):
-        resolve({}, file=file)
+    assert agent_profile('question', values)['api_base'] == 'https://example.services.ai.azure.com'
+    assert 'ANTHROPIC_FOUNDRY_RESOURCE' not in values
 
 
 def test_single_and_role_models_do_not_expose_credentials():
     values = {'MEMSTARA_LLM_PROVIDER': 'openai', 'MEMSTARA_LLM_MODEL': 'base',
               'OPENAI_API_KEY': 'KEY_SENTINEL', 'MEMSTARA_EXPLANATION_MODEL': 'report-model'}
-    profiles = model_profiles(values)
-    assert profiles['non_explanation_agents']['model'] == 'base'
-    assert profiles['explanation_agent']['model'] == 'report-model'
+    profiles = model_profiles({**explicit_models(), **values})
+    assert profiles['hypothesis']['model'] == 'base'
+    assert profiles['explanation']['model'] == 'report-model'
     assert 'KEY_SENTINEL' not in json.dumps(profiles)
 
 
@@ -93,7 +92,7 @@ def test_design_saves_without_models_and_start_requires_models(tmp_path, monkeyp
     item = workspace.mutate({'action': 'add', 'name': 'Draft'})
     assert item['configuration']['stage_models'] == {}
     assert workspace.path.exists()
-    with pytest.raises(ValueError, match='MEMSTARA_LLM_PROVIDER'):
+    with pytest.raises(ValueError, match='MEMSTARA_HYPOTHESIS_PROVIDER'):
         build_argv(item['configuration'], [])
 
 
@@ -101,7 +100,8 @@ def test_start_rejects_legacy_model_changes_but_resume_preserves_history(monkeyp
     from memstara.stage_models import resolve_run_profiles
     monkeypatch.delenv('MEMSTARA_STAGE_MODELS_PATH', raising=False)
     monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
-    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'current')
+    for key, value in explicit_models('current').items():
+        monkeypatch.setenv(key, value)
     old = {k: {'provider': 'openai', 'model': 'historical'}
            for k in ('non_explanation_agents', 'explanation_agent')}
     with pytest.raises(ValueError, match='Explicitly clear'):
@@ -143,13 +143,14 @@ def test_compose_uses_configured_ports_and_rejects_remote_database():
 
 
 def test_provider_override_does_not_reuse_default_endpoint():
-    profiles = model_profiles({'MEMSTARA_LLM_PROVIDER': 'openai',
+    profiles = model_profiles({**explicit_models(), 'MEMSTARA_HYPOTHESIS_API_BASE': 'https://example.com/v1',
+                               'MEMSTARA_LLM_PROVIDER': 'openai',
                                'MEMSTARA_LLM_MODEL': 'base',
                                'MEMSTARA_LLM_API_BASE': 'https://example.com/v1',
                                'MEMSTARA_EXPLANATION_PROVIDER': 'anthropic',
                                'MEMSTARA_EXPLANATION_MODEL': 'report'})
-    assert 'api_base' not in profiles['explanation_agent']
-    assert profiles['non_explanation_agents']['api_base'] == 'https://example.com/v1'
+    assert 'api_base' not in profiles['explanation']
+    assert profiles['hypothesis']['api_base'] == 'https://example.com/v1'
 
 
 def test_provenance_does_not_include_credentials_or_overwrite_history(tmp_path, monkeypatch):
@@ -300,22 +301,20 @@ def test_absent_deployment_corpus_has_empty_knowledge_menu(monkeypatch):
 ])
 def test_generic_credential_adapts_only_to_selected_provider(tmp_path, provider, upstream):
     file = tmp_path / '.env'
-    file.write_text(f'MEMSTARA_LLM_PROVIDER={provider}\nMEMSTARA_LLM_API_KEY=SECRET_SENTINEL\n')
+    file.write_text(f'MEMSTARA_{provider.upper()}_API_KEY=SECRET_SENTINEL\n')
     values, provenance = resolve({}, file=file)
     assert values[upstream] == 'SECRET_SENTINEL'
     assert 'SECRET_SENTINEL' not in json.dumps(provenance)
-    assert 'SECRET_SENTINEL' not in json.dumps(model_profiles({**values, 'MEMSTARA_LLM_MODEL': 'example'}))
+    assert 'SECRET_SENTINEL' not in json.dumps(model_profiles({**explicit_models(), **values}))
     again, _ = resolve({**values, 'MEMSTARA_CONFIG_MODE': 'environment'}, file=file)
     assert again[upstream] == values[upstream]
 
 
-def test_generic_foundry_resource_and_conflicting_credentials(tmp_path):
+def test_provider_credential_conflicts_fail_without_secret_values(tmp_path):
     file = tmp_path / '.env'
-    file.write_text('MEMSTARA_LLM_PROVIDER=azure_foundry\nMEMSTARA_LLM_RESOURCE=example\n'
-                    'MEMSTARA_LLM_API_KEY=SECRET_ONE\n')
+    file.write_text('MEMSTARA_AZURE_FOUNDRY_API_KEY=SECRET_ONE\n')
     values, _ = resolve({}, file=file)
-    assert values['ANTHROPIC_FOUNDRY_RESOURCE'] == 'example'
-    assert values['MEMSTARA_LLM_API_BASE'] == 'https://example.services.ai.azure.com'
+    assert values['ANTHROPIC_FOUNDRY_API_KEY'] == 'SECRET_ONE'
     file.write_text(file.read_text() + 'ANTHROPIC_FOUNDRY_API_KEY=SECRET_TWO\n')
     with pytest.raises(ValueError, match='conflicts') as error:
         resolve({}, file=file)
@@ -325,7 +324,7 @@ def test_generic_foundry_resource_and_conflicting_credentials(tmp_path):
 def test_generic_key_not_forwarded_to_viewer(tmp_path):
     from memstara.local_setup import child_environment
     file = tmp_path / '.env'
-    file.write_text('MEMSTARA_LLM_PROVIDER=openai\nMEMSTARA_LLM_API_KEY=SECRET_SENTINEL\n')
+    file.write_text('MEMSTARA_OPENAI_API_KEY=SECRET_SENTINEL\n')
     values, _ = resolve({}, file=file)
     for service in ('api', 'web'):
         assert 'SECRET_SENTINEL' not in json.dumps(child_environment(values, service))
@@ -347,3 +346,9 @@ def test_dataset_execution_requires_explicit_ui_target():
     from memstara.control.request import build_argv
     with pytest.raises(ValueError, match='Select a target column'):
         build_argv({'data_mode': 'dataset', 'y_column': ''}, [])
+
+
+def explicit_models(model='base'):
+    from memstara.stage_models import AGENT_ROLES
+    return {f'MEMSTARA_{role.upper()}_{field}': value for role in AGENT_ROLES
+            for field, value in [('PROVIDER', 'openai'), ('MODEL', model)]}

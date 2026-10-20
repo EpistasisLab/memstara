@@ -55,8 +55,9 @@ def test_workspace_and_launch_preserve_full_schedule(skills, monkeypatch):
     import json
     from memstara.control.workspace import PipelineWorkspace
     from memstara.control.request import build_argv
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
-    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'test-model')
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'test-model')
     config = PipelineWorkspace.configuration({'combination_skills': skills, 'combination_repetitions': 2})
     assert config['waves'] == 48
     assert config['trials'] == config['hypothesis_agents'] == config['interpret_agents'] == 1
@@ -233,8 +234,9 @@ def test_workspace_does_not_draw_but_each_new_launch_does(skills, monkeypatch):
     from memstara.control.workspace import PipelineWorkspace
     from memstara.control.request import build_argv
     from memstara.combinations import validate_plan
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
-    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'test-model')
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'test-model')
     monkeypatch.setattr('memstara.combinations.secrets.randbelow', lambda _: pytest.fail('Workspace drew randomness'))
     config = PipelineWorkspace.configuration({'combination_skills': skills,
         'combination_random_start': True, 'combination_max_loops': 7, 'continuous': True})

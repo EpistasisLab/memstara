@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 
+AGENT_ROLES = ("question", "hypothesis", "data", "ml", "interpretation", "explanation")
+
 
 def deployment_profiles() -> dict:
     """Build profiles from the authoritative process settings, never a JSON file."""
@@ -19,7 +21,7 @@ def public_profiles(profiles):
 
 
 def resolve_run_profiles(raw, *, recovering=False, frozen=None):
-    """New launches inherit defaults; recovery cannot change a frozen assignment."""
+    """New launches require all agent settings; recovery keeps its frozen assignment."""
     import json
     profiles = json.loads(raw) if isinstance(raw, str) else raw
     if profiles is None:
@@ -32,7 +34,7 @@ def resolve_run_profiles(raw, *, recovering=False, frozen=None):
             raise ValueError('Recovery model profiles differ from the frozen execution')
         return validate_profiles(expected) if expected else {}
     current = deployment_profiles()
-    if profiles and profiles != current:
+    if profiles and expanded_profiles(profiles) != expanded_profiles(current):
         raise ValueError('Saved model profiles differ from project .env. Explicitly clear stage_models '
                          'on the saved design to adopt project models, or use historical resume.')
     return current
@@ -47,7 +49,7 @@ def validate_call(config, stage, snapshot):
     match = re.match(r'^(question|hypothesis|data|ml|interpret(?:er)?|report)(?:[#0-9-].*)?$', stage)
     if not match:
         raise ValueError('Unknown stage for frozen model routing')
-    role = {'question': 'hypothesis', 'interpret': 'interpreter'}.get(match[1], match[1])
+    role = {'interpret': 'interpreter'}.get(match[1], match[1])
     expected = for_stage(profiles, role)
     provider = getattr(config.provider, 'value', config.provider)
     if (provider, config.model) != (expected['provider'], expected['model']):
@@ -69,9 +71,10 @@ def validate_profiles(profiles: dict) -> dict:
         profiles = {"non_explanation_agents": profiles["analysis"], "explanation_agent": profiles["explanation"]}
     if isinstance(profiles, dict) and set(profiles) == {"qwen", "sonnet"}:
         profiles = {"non_explanation_agents": profiles["qwen"], "explanation_agent": profiles["sonnet"]}
-    if not isinstance(profiles, dict) or set(profiles) != {"non_explanation_agents", "explanation_agent"}:
+    if (not isinstance(profiles, dict) or
+            set(profiles) not in (set(AGENT_ROLES), {"non_explanation_agents", "explanation_agent"})):
         raise ValueError("Provide explicit non_explanation_agents and explanation_agent model profiles "
-                         "(do not mix legacy keys)")
+                         "(or all six agent profiles; do not mix legacy keys)")
     for family, profile in profiles.items():
         if not isinstance(profile, dict) or not profile.get("provider") or not profile.get("model"):
             raise ValueError(f"Explicit {family} provider and deployment name are required")
@@ -121,14 +124,41 @@ def validate_endpoint(endpoint: str) -> None:
 
 
 def for_stage(profiles: dict, stage: str) -> dict:
-    base = stage.split("#", 1)[0]
-    if base not in ("hypothesis", "data", "ml", "interpreter", "report"):
+    import re
+    match = re.fullmatch(
+        r'(question|hypothesis|data|ml|interpretation|interpreter|interpret|explanation|report)(?:[#0-9-].*)?', stage)
+    if not match:
         raise ValueError("Unknown pipeline stage")
-    return validate_profiles(profiles)["explanation_agent" if base == "report" else "non_explanation_agents"]
+    aliases = {"interpreter": "interpretation", "interpret": "interpretation", "report": "explanation"}
+    role = aliases.get(match[1], match[1])
+    checked = validate_profiles(profiles)
+    if set(checked) == set(AGENT_ROLES):
+        return checked[role]
+    return checked["explanation_agent" if role == "explanation" else "non_explanation_agents"]
+
+
+def expanded_profiles(profiles):
+    return {role: for_stage(profiles, role) for role in AGENT_ROLES}
+
+
+def call_overrides(profiles, stage, temperature=None):
+    """Freeze each new call's full model settings, including the question writer.
+
+    Legacy executions retain their original per-call overrides on resume.
+    """
+    if profiles and set(profiles) == set(AGENT_ROLES):
+        from motoro.schemas.agent import ModelConfig
+        profile = ModelConfig(**for_stage(profiles, stage)).model_dump(mode='json')
+        return {key: profile[key] for key in
+                ('provider', 'model', 'api_base', 'temperature', 'max_tokens', 'effort')}
+    overrides = {"temperature": temperature} if temperature is not None else {}
+    if stage == 'report':
+        overrides['max_tokens'] = 8192
+    return overrides or None
 
 
 async def preflight_profiles(profiles):
-    """Resolve both runtime connections without sending inference or exposing secrets."""
+    """Resolve all runtime connections without sending inference or exposing secrets."""
     from motoro.schemas.agent import ModelConfig
     from motoro.services.credentials import resolve
     for family, profile in validate_profiles(profiles).items():

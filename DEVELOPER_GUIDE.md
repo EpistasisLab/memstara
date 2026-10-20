@@ -63,11 +63,9 @@ file does not replace settings already loaded into a running process.
 
 | Setting | Purpose |
 |---|---|
-| `MEMSTARA_LLM_PROVIDER`, `MEMSTARA_LLM_MODEL` | Deployment default model selection |
-| `MEMSTARA_LLM_API_BASE` | Endpoint for the deployment default provider |
-| `OPENAI_API_KEY` | OpenAI-compatible provider credential |
-| `MEMSTARA_LLM_API_KEY` | Default provider credential; adapted to its internal provider variable |
-| `MEMSTARA_LLM_RESOURCE` | Foundry resource name; an alternative to the default `MEMSTARA_LLM_API_BASE` URL |
+| `MEMSTARA_<AGENT>_PROVIDER`, `MEMSTARA_<AGENT>_MODEL` | Required per-agent assignment |
+| `MEMSTARA_<AGENT>_API_BASE` | Agent endpoint; required for Foundry/local |
+| `MEMSTARA_AZURE_FOUNDRY_API_KEY`, `MEMSTARA_OPENAI_API_KEY`, `MEMSTARA_ANTHROPIC_API_KEY`, `MEMSTARA_OPENROUTER_API_KEY` | Provider credentials; never choose a model |
 | `ANTHROPIC_API_KEY` | Native Anthropic credential |
 | `MOTORO_DATABASE_URL` | Motoro agents and execution records |
 | `MEMSTARA_DATABASE_URL` | Memstara tasks and results |
@@ -89,8 +87,9 @@ fallback or automatic model JSON loading is used. Explicit
 resolves paths relative to the selected file, independently of the launch directory.
 `MEMSTARA_ENV_FILE` can select a different project file. Restart after edits.
 
-`MEMSTARA_LLM_*` defines the default profile; `MEMSTARA_NON_EXPLANATION_*` and
-`MEMSTARA_EXPLANATION_*` override the corresponding role group. See `.env.example`
+No common model default is used. `MEMSTARA_QUESTION_*`,
+`MEMSTARA_HYPOTHESIS_*`, `MEMSTARA_DATA_*`, `MEMSTARA_ML_*`,
+`MEMSTARA_INTERPRETATION_*` and `MEMSTARA_EXPLANATION_*` configure individual agents. See `.env.example`
 for supported fields. `python -m memstara.local_setup check` performs static checks,
 not network, database or inference validation.
 
@@ -116,35 +115,41 @@ separately from `MEMSTARA_OUTPUT_DIR` in [paths.py](src/memstara/paths.py).
 
 ## Model profiles and their limits
 
-The current implementation accepts exactly two profile keys, `non_explanation_agents` and `explanation_agent`.
-These model-independent names identify two stage groups; deployment names can belong to other model families. They are not five independently configurable stage slots.
+New executions contain six independent profiles:
 
-| Profile | Roles |
-|---|---|
-| `non_explanation_agents` | Question generation, Hypothesis, Data, ML, Interpretation |
-| `explanation_agent` | Explanation, internally called `report` |
+| Profile | Environment prefix | Runtime role |
+|---|---|---|
+| `question` | `MEMSTARA_QUESTION_` | Question-writing calls |
+| `hypothesis` | `MEMSTARA_HYPOTHESIS_` | Hypothesis generation |
+| `data` | `MEMSTARA_DATA_` | Data preparation |
+| `ml` | `MEMSTARA_ML_` | ML planning (the LLM, not LR/XGBoost) |
+| `interpretation` | `MEMSTARA_INTERPRETATION_` | `interpreter` workers |
+| `explanation` | `MEMSTARA_EXPLANATION_` | `report` workers |
 
-Legacy configurations with exactly `qwen`/`sonnet` or `analysis`/`explanation` are accepted and normalized
-to `non_explanation_agents` and `explanation_agent`. Mixed or duplicate old/new keys are rejected.
-Historical artifacts are not rewritten. Stage routing and model identities do not change.
+Each accepts `PROVIDER`, `MODEL`, `API_BASE`, `TEMPERATURE`, `MAX_TOKENS` and
+`EFFORT`. PROVIDER and MODEL are required for every agent; Foundry/local also
+require API_BASE. Empty generation fields use the model runtime defaults.
+Configure matching provider credentials separately. Settings apply to new executions after
+restart, not to an existing execution's frozen snapshot.
 
-Conceptual profile structure (replace every example endpoint/deployment):
+Question writing shares the hypothesis worker's instructions and tools, but its
+run receives the frozen question profile before calling Motoro. The complete
+per-call model override is saved in the Motoro run. New runs do not replace
+explicit temperature/output settings with the old trial/report defaults.
+Provider compatibility and recorded output-recovery adjustments still apply.
 
-```json
-{
-  "non_explanation_agents": {
-    "provider": "openai",
-    "model": "qwen-your-deployment",
-    "api_base": "https://your-qwen-endpoint.example.com/v1",
-    "max_tokens": 4096
-  },
-  "explanation_agent": {
-    "provider": "azure_foundry",
-    "model": "claude-sonnet-your-deployment",
-    "api_base": "https://your-foundry-resource.example.com",
-    "max_tokens": 4096
-  }
-}
+Historical two-group profiles (`non_explanation_agents`/`explanation_agent`,
+`analysis`/`explanation`, or `qwen`/`sonnet`) remain readable and resumable. Do not
+rewrite those artifacts. New `.env` files must remove `MEMSTARA_NON_EXPLANATION_*`:
+replace them with explicit individual assignments.
+Mixed or incomplete profile formats are rejected.
+
+Example for one agent (repeat for all six; see `.env.example`):
+
+```dotenv
+MEMSTARA_EXPLANATION_PROVIDER=azure_foundry
+MEMSTARA_EXPLANATION_MODEL=YOUR_EXPLANATION_DEPLOYMENT
+MEMSTARA_EXPLANATION_API_BASE=https://YOUR_RESOURCE.services.ai.azure.com
 ```
 
 `model` is the actual deployment identifier. A model catalog entry is not proof that
@@ -196,9 +201,9 @@ for item in pipelines:
     print(item["id"], item["name"], "running:", bool(item.get("running")))
 ```
 
-Select the intended pipeline and change only the desired model fields. This example
-requires an existing two-profile definition. To introduce profiles to a legacy
-pipeline, assign the complete validated structure shown above instead.
+After updating `.env` and restarting, clear a saved design's explicit models to
+adopt the current project assignments on its next new execution. Historical recovery
+continues to use its frozen assignments.
 
 ```python
 pipeline_id = "REPLACE_WITH_PIPELINE_ID"
@@ -207,18 +212,11 @@ if item.get("running"):
     raise RuntimeError("End the execution before changing its configuration")
 
 configuration = copy.deepcopy(item["configuration"])
-profiles = configuration["stage_models"]
-if set(profiles) != {"qwen", "sonnet"}:
-    raise ValueError("This example requires existing Qwen/Sonnet profiles")
-
-profiles["non_explanation_agents"]["model"] = "qwen-your-new-deployment"
-profiles["explanation_agent"]["model"] = "claude-sonnet-your-new-deployment"
-# Preserve provider/api_base only when the new deployment uses the same connection.
-# Otherwise change those fields together and configure the matching credential.
+configuration["stage_models"] = {}
 saved = request("/control/pipelines", {
     "action": "update", "id": pipeline_id, "configuration": configuration
 })
-assert saved["configuration"]["stage_models"] == profiles
+assert saved["configuration"]["stage_models"] == {}
 print("Saved configuration for", saved["id"])
 ```
 
@@ -326,7 +324,7 @@ This protects complete-file publication, not ordering or merging of concurrent
 updates, cross-database transactions, or a tested guarantee against power loss.
 
 For CLI operation, `python -m memstara.pipeline.board --help` lists the supported
-options. `--stage-models` takes a JSON object with the same two profiles. It does not
+options. `--stage-models` takes a JSON object with all six agent profiles (historical two-group profiles remain supported). It does not
 read a JSON filename automatically. CLI flags are not a replacement for the control
 workspace's stored definition; choose one launch path and record it.
 

@@ -44,8 +44,9 @@ def test_all_four_profiles_prepare_without_unselected_input_access(example, monk
 @pytest.mark.parametrize('knowledge_mode', ['okf', 'llm_only'])
 def test_no_csv_full_workflow_records_six_handoffs_and_no_empirical_metrics(example, tmp_path, monkeypatch, knowledge_mode):
     from memstara.pipeline.proposal import run, STAGES
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
-    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'fixture')
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'fixture')
     config = {**example, 'data_mode': 'proposal', 'knowledge_mode': knowledge_mode}
     record = register(config)
     profile = prepare(record['id'])
@@ -86,8 +87,9 @@ def test_no_csv_full_workflow_records_six_handoffs_and_no_empirical_metrics(exam
 def test_no_input_request_requires_objective_and_preserves_modes(monkeypatch):
     from memstara.control.request import build_argv
     from memstara import stage_models
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER','openai')
-    monkeypatch.setenv('MEMSTARA_LLM_MODEL','fixture')
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'fixture')
     monkeypatch.setattr(stage_models,'resolve_run_profiles',lambda _: {})
     request={'knowledge_mode':'llm_only','data_mode':'proposal'}
     with pytest.raises(ValueError,match='research objective'):

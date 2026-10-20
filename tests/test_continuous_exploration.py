@@ -8,8 +8,9 @@ from memstara.pipeline.exploration import rounds
 
 
 def test_continuous_request_is_explicit_and_validated(monkeypatch):
-    monkeypatch.setenv("MEMSTARA_LLM_PROVIDER", "openai")
-    monkeypatch.setenv("MEMSTARA_LLM_MODEL", "test-deployment")
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', "openai")
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', "test-deployment")
     assert "--continuous" not in build_argv({}, [])
     assert "--continuous" in build_argv({"continuous": True}, [])
     for invalid in ("false", "true", 1, None):

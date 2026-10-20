@@ -22,7 +22,7 @@ class Settings(CoreSettings):
         # Keep explicitly selected caches and numerical limits consistent in
         # tool subprocesses. Provider credentials remain outside this allowlist.
         "HF_HOME,HF_HUB_CACHE,HF_HUB_OFFLINE,XDG_CACHE_HOME,"
-        "OMP_NUM_THREADS,OPENBLAS_NUM_THREADS,TOKENIZERS_PARALLELISM,"
+        "OMP_NUM_THREADS,OPENBLAS_NUM_THREADS,MKL_NUM_THREADS,TOKENIZERS_PARALLELISM,"
         "MEMSTARA_DEBUGPY,MEMSTARA_DEBUGPY_WAIT,"
         # debugpy runs its check and prints its warning **the moment** the child
         # Python starts. Switching it off from inside the code is already too late

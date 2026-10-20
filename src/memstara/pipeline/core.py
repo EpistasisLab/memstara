@@ -20,7 +20,7 @@ from motoro.runner import (
     get_agent_by_name,
     update_agent,
 )
-from motoro.schemas.agent import LLMProvider, ModelConfig
+from motoro.schemas.agent import ModelConfig
 
 from memstara.pipeline.scientific_policy import PRIMARY_QUESTION_TOOLS
 from memstara.pipeline.prompts import load_prompt
@@ -242,27 +242,25 @@ async def provision_all(
     No api_key is passed: ModelConfig.api_key is exclude=True, so it does not survive
     being persisted with the agent. Credentials resolve at call time instead.
     """
-    from memstara.env import configured_llm, configured_api_base
-    provider, model = configured_llm(provider, model)
-    mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096,
-                     api_base=configured_api_base(provider))
+    from memstara.stage_models import deployment_profiles, for_stage
+    profiles = deployment_profiles()
     react = {"execution_pattern": "reason_act"}
 
     hypothesis = await _ensure_agent_from_file(
         AGENT_NAMES["hypothesis"], "mvp/hypothesis",
-        model_config=mc, pattern_config=react,
+        model_config=ModelConfig(**for_stage(profiles, "hypothesis")), pattern_config=react,
     )
     data = await _ensure_agent_from_file(
         AGENT_NAMES["data"], "mvp/data",
-        model_config=mc, pattern_config=react,
+        model_config=ModelConfig(**for_stage(profiles, "data")), pattern_config=react,
     )
     ml = await _ensure_agent_from_file(
         AGENT_NAMES["ml"], "mvp/ml",
-        model_config=mc, pattern_config=react,
+        model_config=ModelConfig(**for_stage(profiles, "ml")), pattern_config=react,
     )
     interpreter = await _ensure_agent_from_file(
         AGENT_NAMES["interpreter"], "mvp/interpreter",
-        model_config=mc, pattern_config=react,
+        model_config=ModelConfig(**for_stage(profiles, "interpreter")), pattern_config=react,
     )
 
     return {
@@ -435,23 +433,13 @@ async def provision_board_agents(
     stage_models: dict | None = None,
 ) -> dict[str, uuid.UUID]:
     """Create the board-driven agents (or find the existing ones)."""
-    from memstara.env import configured_llm, configured_api_base
-    if stage_models:
-        from memstara.stage_models import validate_profiles
-        validate_profiles(stage_models)
-    mc = None
-    if not stage_models:
-        provider, model = configured_llm(provider, model)
-        mc = ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=4096,
-                         api_base=configured_api_base(provider))
+    from memstara.stage_models import deployment_profiles, validate_profiles, for_stage
+    profiles = validate_profiles(stage_models) if stage_models else deployment_profiles()
     react = {"execution_pattern": "reason_act"}
 
     out: dict[str, uuid.UUID] = {}
     for key, (name, book) in board_workers(playbooks, namespace).items():
-        selected_model = mc
-        if stage_models:
-            from memstara.stage_models import for_stage
-            selected_model = ModelConfig(**for_stage(stage_models, key))
+        selected_model = ModelConfig(**for_stage(profiles, key))
         agent = await _ensure_agent_from_file(
             name, f"board/{stage_of(key)}", book, model_config=selected_model, pattern_config=react,
         )

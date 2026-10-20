@@ -42,3 +42,22 @@ def test_same_model_refreshes_changed_endpoint_and_generation_settings(monkeypat
     update.reset_mock()
     asyncio.run(core._ensure_agent('fixture', model_config=desired))
     update.assert_not_awaited()
+
+
+def test_six_agent_profiles_reach_workers_and_question_run(monkeypatch):
+    from memstara.stage_models import AGENT_ROLES, call_overrides
+    profiles = {role: {'provider': 'openai', 'model': role + '-model', 'max_tokens': 2345}
+                for role in AGENT_ROLES}
+    ensure = AsyncMock(return_value=SimpleNamespace(id='agent'))
+    monkeypatch.setattr(core, '_ensure_agent_from_file', ensure)
+    asyncio.run(core.provision_board_agents(stage_models=profiles))
+    expected = {'hypothesis': 'hypothesis', 'data': 'data', 'ml': 'ml',
+                'interpreter': 'interpretation', 'report': 'explanation'}
+    for call in ensure.call_args_list:
+        role = expected[call.args[1].split('/')[1]]
+        assert call.kwargs['model_config'].model == role + '-model'
+    # Motoro shallow-merges saved per-run overrides onto the worker definition.
+    worker = ModelConfig(**profiles['hypothesis']).model_dump(mode='json')
+    effective = ModelConfig(**{**worker, **call_overrides(profiles, 'question0-1')})
+    assert effective.model == 'question-model'
+    assert effective.max_tokens == 2345

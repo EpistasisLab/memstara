@@ -49,7 +49,13 @@ export default function HypothesisSkillWizard({ stage = 'hypothesis', disabled, 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   async function loadModels() {
     setError(''); setLoadingModels(true);
-    try { const data = await request('/control/skill-drafts/models'); setProvider(data.provider); setModels(data.models); setModel(current => current || data.default_model); }
+    try {
+      const data = await request('/control/skill-drafts/models');
+      const role = stage === 'interpreter' ? 'interpretation' : stage === 'report' ? 'explanation' : stage;
+      const profile = data.agents?.[role];
+      if (!profile?.model || !profile?.provider) throw Error('Agent model is not configured.');
+      setProvider(profile.provider); setModels([profile.model]); setModel(profile.model);
+    }
     catch { setError('Could not load the model connection. Reopen this assistant to retry.'); }
     finally { if (mounted.current) setLoadingModels(false); }
   }
@@ -93,9 +99,9 @@ export default function HypothesisSkillWizard({ stage = 'hypothesis', disabled, 
       <fieldset disabled={locked}>
         <legend>1. Describe your research perspective</legend>
         {prompts.map(([key, label, placeholder]) => <label key={key}>{label}<textarea rows={2} maxLength={4000} value={answers[key]} placeholder={placeholder} onChange={e => setAnswers(a => ({...a, [key]:e.target.value}))}/></label>)}
-        <label>Generation model / deployment<input list={modelListId} value={model} onChange={e => setModel(e.target.value)} maxLength={160}/></label>
+        <label>Generation model / deployment<input list={modelListId} value={model} readOnly maxLength={160}/></label>
         <datalist id={modelListId}>{models.map(m => <option key={m} value={m}/>)}</datalist>
-        <p className="text-xs text-ink-muted">Connection: {provider || 'Not loaded'}. Select the configured model or enter another deployment available on this connection. This does not change your pipeline model.</p>
+        <p className="text-xs text-ink-muted">Connection: {provider || 'Not loaded'}. Uses this agent’s configured model. Change its assignment in .env and restart to use another model.</p>
       </fieldset>
       {job ? <button type="button" disabled={locked} onClick={() => void generate(true)}>Check generation status</button> : <button type="button" disabled={locked || !provider || !model.trim() || questions.some(([key]) => !answers[key].trim())} onClick={() => void generate()}>{draft ? 'Generate a new draft' : 'Generate skill draft'}</button>}
       {busy && <p role="status">Working… Your answers and existing draft are retained.</p>}

@@ -22,7 +22,7 @@ def test_key_requires_explicit_reveal():
 
 
 def test_foreign_origin_cannot_reveal_key():
-    h = handler('/control/llm/key', {'reveal': True})
+    h = handler('/control/llm/key', {'reveal': True, 'stage': 'hypothesis'})
     h._refuse_stranger = lambda: True
     h.do_POST()
     h._send.assert_not_called()
@@ -30,10 +30,12 @@ def test_foreign_origin_cannot_reveal_key():
 
 def test_reveal_uses_only_selected_provider(monkeypatch):
     from memstara import config
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
-    monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'test-model')
-    monkeypatch.setattr(config, 'Settings', lambda: SimpleNamespace(openai_api_key='synthetic-openai', anthropic_api_key='synthetic-anthropic', anthropic_foundry_api_key='synthetic-foundry'))
-    h = handler('/control/llm/key', {'reveal': True})
+    monkeypatch.setenv('MEMSTARA_HYPOTHESIS_PROVIDER', 'openai')
+    monkeypatch.setenv('MEMSTARA_HYPOTHESIS_MODEL', 'test-model')
+    monkeypatch.setattr(config, 'Settings', lambda: SimpleNamespace(
+        openai_api_key='synthetic-openai', anthropic_api_key='synthetic-anthropic',
+        anthropic_foundry_api_key='synthetic-foundry'))
+    h = handler('/control/llm/key', {'reveal': True, 'stage': 'hypothesis'})
     h.do_POST()
     assert h._send.call_args.args == (200, {'api_key':'synthetic-openai'})
 

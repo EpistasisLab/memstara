@@ -586,24 +586,7 @@ class Handler(BaseHTTPRequestHandler):
                 # default is normal; an explicitly configured broken corpus is not.
                 bundle = ({"configured": False, "documents": 0}
                           if not os.environ.get('AGENTIC_OKF_BUNDLE_DIR') else {"error": str(e)})
-            from memstara.control.request import configured_llm
-            try:
-                provider, model = configured_llm()
-                from memstara.env import configured_api_base
-                from memstara.config import Settings
-                endpoint = configured_api_base(provider)
-                if not endpoint and provider == "azure_foundry":
-                    from motoro.services.credentials import foundry_api_base
-                    endpoint = foundry_api_base(Settings().anthropic_foundry_resource)
-                host = urlsplit(endpoint or "").hostname or ""
-                is_azure = host.endswith((".services.ai.azure.com", ".openai.azure.com"))
-                llm = {"provider": provider, "model": model, "endpoint": endpoint,
-                       "resource": host.split(".")[0] if is_azure else None,
-                       "source": ("project .env" if os.environ.get('MEMSTARA_CONFIG_MODE') == 'project'
-                                  else "explicit process environment"),
-                       "restart_required_after_edit": True}
-            except ValueError as exc:
-                llm = {"provider": "", "model": "", "error": str(exc)}
+            llm = {"source": "project .env agent assignments", "restart_required_after_edit": True}
             from memstara.stage_models import deployment_profiles, public_profiles
             try:
                 stage_models = public_profiles(deployment_profiles())
@@ -756,13 +739,15 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/control/llm/key":
-            if body != {"reveal": True}:
+            if body.get("reveal") is not True or body.get("stage") not in (
+                    "question", "hypothesis", "data", "ml", "interpretation", "explanation"):
+
                 self._send(400, {"error": "Explicit reveal request required"})
                 return
             from memstara.control.request import configured_llm
             from memstara.config import Settings
             try:
-                provider, _ = configured_llm()
+                provider, _ = configured_llm(body["stage"])
                 settings = Settings()
                 key = {"openai": settings.openai_api_key,
                        "azure_foundry": settings.anthropic_foundry_api_key,

@@ -33,14 +33,15 @@ Already have this checkout? Use its existing `.env`; do not overwrite it.
 own deployment details. The model name must be available in your resource.
 
 ```dotenv
-MEMSTARA_LLM_PROVIDER=azure_foundry
-MEMSTARA_LLM_MODEL=YOUR_DEPLOYMENT_NAME
-MEMSTARA_LLM_API_KEY='YOUR_API_KEY'
-MEMSTARA_LLM_RESOURCE=YOUR_RESOURCE_NAME
+MEMSTARA_AZURE_FOUNDRY_API_KEY='YOUR_API_KEY'
+MEMSTARA_QUESTION_PROVIDER=azure_foundry
+MEMSTARA_QUESTION_MODEL=YOUR_DEPLOYMENT_NAME
+MEMSTARA_QUESTION_API_BASE=https://YOUR_RESOURCE.services.ai.azure.com
 ```
 
-`MEMSTARA_LLM_RESOURCE` is the resource name, not a URL. Alternatively, unset it
-and use `MEMSTARA_LLM_API_BASE=https://YOUR_RESOURCE_NAME.services.ai.azure.com`.
+Fill in the same three fields for `HYPOTHESIS`, `DATA`, `ML`, `INTERPRETATION` and
+`EXPLANATION` in the template. Every agent needs its own assignment, even when all
+six use the same deployment. There is no common model fallback.
 For other providers and multiple installations, see [configuration details](#one-configuration-source).
 Keep `.env` private. The remaining template defaults are suitable for a first local installation.
 
@@ -308,11 +309,12 @@ checkout with its own input/output/cache directories. `./start.sh` generates a
 unique Docker project and private database credentials automatically. Do not copy
 another installation's `.memstara/` or `compose.override.yaml`.
 
-`MEMSTARA_LLM_API_KEY` supplies the default provider's credential. Set
-`MEMSTARA_LLM_PROVIDER` to `azure_foundry`, `anthropic`, `openai` or `openrouter`
-and use a model/deployment supported by that provider. For non-Foundry providers,
-remove `MEMSTARA_LLM_RESOURCE` and any Foundry `MEMSTARA_LLM_API_BASE` from `.env`.
-The [model configuration guide](DEVELOPER_GUIDE.md) covers role overrides.
+Provider credentials are separate from model assignments. Use
+`MEMSTARA_AZURE_FOUNDRY_API_KEY`, `MEMSTARA_OPENAI_API_KEY`,
+`MEMSTARA_ANTHROPIC_API_KEY` or `MEMSTARA_OPENROUTER_API_KEY` for the providers
+selected by your agents. Each agent specifies its own provider, model and endpoint.
+A provider's credential is shared by agents using that provider; it does not choose
+a model. The [model configuration guide](DEVELOPER_GUIDE.md) explains the contract.
 
 See [the deployment configuration contract](deployment/README.md) for ownership,
 path mapping, credential separation and maintenance details.
@@ -484,28 +486,30 @@ The file accepts literal values; shell `${...}` interpolation is not supported.
 
 | Settings | Required action |
 |---|---|
-| `MEMSTARA_LLM_PROVIDER`, `MEMSTARA_LLM_MODEL` | Choose the provider and your actual deployed model |
-| `MEMSTARA_LLM_RESOURCE`, `MEMSTARA_LLM_API_KEY` | Obtain your resource name and authorized key for Foundry |
-| `MEMSTARA_LLM_API_BASE` | Optional Foundry resource-root URL; it can replace the resource name, and both must agree if set |
+| `MEMSTARA_<AGENT>_PROVIDER`, `MEMSTARA_<AGENT>_MODEL` | Required independent assignment for each of the six agents |
+| `MEMSTARA_AZURE_FOUNDRY_API_KEY` | Authorized provider credential, shared by Foundry agents |
+| `MEMSTARA_<AGENT>_API_BASE` | Explicit endpoint; required for Azure Foundry |
 | `MEMSTARA_DATABASE_URL`, `MOTORO_DATABASE_URL`, `MOTORO_REDIS_URL` | Select independent service destinations; preserve existing values when migrating |
 | `COMPOSE_PROJECT_NAME` | Choose a unique name for a new Docker installation |
 | `MEMSTARA_WEB_PORT`, `MEMSTARA_API_PORT`, `MEMSTARA_CONTROL_PORT` | Choose free ports; launcher and web proxy use these same values |
 | `MEMSTARA_VIEWER_DSN`, `CORE_VIEWER_DSN` | Read-only database accounts for the observation API |
 | `MEMSTARA_OUTPUT_DIR`, `HF_HOME` | Tool output and model-cache directories |
 
-One default model serves all stages. For example:
+Every agent has its own required model assignment. For example:
 
 ```dotenv
-MEMSTARA_LLM_PROVIDER=azure_foundry
-MEMSTARA_LLM_MODEL=YOUR_DEPLOYMENT_NAME
-MEMSTARA_LLM_RESOURCE=YOUR_RESOURCE_NAME
-MEMSTARA_LLM_API_KEY=YOUR_API_KEY
+MEMSTARA_AZURE_FOUNDRY_API_KEY=YOUR_API_KEY
+# Repeat PROVIDER/MODEL/API_BASE for all six agents, as in .env.example.
+MEMSTARA_QUESTION_PROVIDER=azure_foundry
+MEMSTARA_QUESTION_MODEL=YOUR_DEPLOYMENT_NAME
+MEMSTARA_QUESTION_API_BASE=https://YOUR_RESOURCE.services.ai.azure.com
 ```
 
 To use another model for Explanation, set `MEMSTARA_EXPLANATION_MODEL` in the same
-file. Optional `MEMSTARA_EXPLANATION_PROVIDER` and `MEMSTARA_EXPLANATION_API_BASE`
-select its provider/endpoint. `MEMSTARA_NON_EXPLANATION_*` overrides the other group
-(Question, Hypothesis, Data, ML, Interpretation). Credentials remain provider
+file. Its required `MEMSTARA_EXPLANATION_PROVIDER` and provider-dependent
+`MEMSTARA_EXPLANATION_API_BASE` select its provider/endpoint. Use `MEMSTARA_QUESTION_*`, `MEMSTARA_HYPOTHESIS_*`,
+`MEMSTARA_DATA_*`, `MEMSTARA_ML_*` or `MEMSTARA_INTERPRETATION_*` for the other agents.
+Provider/model values cannot be blank; optional generation fields use model runtime defaults. Credentials remain provider
 settings; selecting an endpoint does not grant access to it. See `.env.example`
 for optional generation limits. Internal profiles are built in memory.
 
@@ -1503,8 +1507,8 @@ schema upgrades. A viewer rebuild does not apply Motoro database migrations.
 | `MEMSTARA_DATASET_PATH` | Cohort CSV |
 | `MEMSTARA_OUTPUT_DIR` | Generated subsets and matcher artifacts |
 | Target column | Selected in the UI research profile; propagated internally to exclude the target from predictor lists |
-| `MEMSTARA_LLM_PROVIDER`, `MEMSTARA_LLM_MODEL` | Deployment default; explicit stage profiles override agent assignments |
-| `MEMSTARA_LLM_API_BASE` | Optional configured provider endpoint |
+| `MEMSTARA_<AGENT>_PROVIDER`, `MEMSTARA_<AGENT>_MODEL` | Independent agent model assignments |
+| `MEMSTARA_<AGENT>_API_BASE` | Agent-specific endpoint |
 
 See [.env.example](.env.example), [config.py](src/memstara/config.py), and
 [request.py](src/memstara/control/request.py) for the configuration contract.
@@ -1669,14 +1673,16 @@ the deployment before resetting them.
 
 ## Stage-specific model configuration
 
-The project `.env` owns model selection. Set `MEMSTARA_LLM_PROVIDER`,
-`MEMSTARA_LLM_MODEL` and the provider credentials. For optional role overrides,
-use `MEMSTARA_NON_EXPLANATION_*` and `MEMSTARA_EXPLANATION_*`; supported suffixes
+The project `.env` owns model selection. Configure all six agents and the credentials
+for their providers. For independent assignments,
+use `MEMSTARA_QUESTION_*`, `MEMSTARA_HYPOTHESIS_*`, `MEMSTARA_DATA_*`,
+`MEMSTARA_ML_*`, `MEMSTARA_INTERPRETATION_*` and `MEMSTARA_EXPLANATION_*`; supported suffixes
 are `PROVIDER`, `MODEL`, `API_BASE`, `TEMPERATURE`, `MAX_TOKENS` and `EFFORT`.
 See [.env.example](.env.example) and installation step 2.
 
-The non-explanation group serves question generation, Hypothesis, Data, ML and
-Interpretation. The explanation group serves both Explanation experts. LR and
+Each agent requires an explicit provider and model. No common fallback is used. The Explanation
+assignment serves the selected Explanation expert. Legacy `MEMSTARA_NON_EXPLANATION_*`
+settings must be replaced by individual agent settings. LR and
 XGBoost are predictive learners, separate from these LLM assignments.
 
 Saved designs keep research choices. New runs resolve project model settings and
@@ -1758,11 +1764,7 @@ Open an individual result for its model, features and evaluation provenance. Nov
 ranking remains separate from similarity and performance. AUC below 0.5, exactly 0.5,
 above 0.5 and unavailable values are distinct; none establishes clinical usefulness.
 
-The default model credential is `MEMSTARA_LLM_API_KEY`, interpreted using
-`MEMSTARA_LLM_PROVIDER`. For Azure Foundry, use `MEMSTARA_LLM_RESOURCE`
-(resource name) or `MEMSTARA_LLM_API_BASE` (resource-root URL).
-Memstara translates these settings to the runtime provider's internal names;
-no Motoro source changes are required. Legacy provider variables remain accepted
-for existing installations and mixed-provider role overrides. Conflicting old
-and new values are rejected without logging credentials. The generic key applies
-only to the default provider; it is never copied to a different role provider.
+Provider-specific `MEMSTARA_<PROVIDER>_API_KEY` values map to Motoro's existing
+credential variables. There is no common model/provider/resource default.
+Legacy provider credential names remain accepted; conflicting values fail validation.
+No Motoro source changes are required. Credentials never enter saved model profiles.

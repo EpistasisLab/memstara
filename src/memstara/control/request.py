@@ -25,7 +25,6 @@ part that stays importable — the same split that put the `fields=` predicate i
 from __future__ import annotations
 
 import re
-import os
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -115,18 +114,13 @@ DEFAULTS: dict[str, Any] = {
 }
 
 
-def configured_llm() -> tuple[str, str]:
-    """Only deployment environment selects the LLM; never a stale run or browser draft."""
-    provider = os.environ.get("MEMSTARA_LLM_PROVIDER", "").strip()
-    model = os.environ.get("MEMSTARA_LLM_MODEL", "").strip()
-    if not provider or not model:
-        raise ValueError("Set MEMSTARA_LLM_PROVIDER and MEMSTARA_LLM_MODEL in Memstara's .env "
-                         "or the process environment before starting a pipeline")
-    if provider not in PROVIDERS:
-        raise ValueError("MEMSTARA_LLM_PROVIDER is unsupported")
-    if not _MODEL.fullmatch(model):
-        raise ValueError("MEMSTARA_LLM_MODEL is not a model identifier")
-    return provider, model
+def configured_llm(stage: str = 'hypothesis') -> tuple[str, str]:
+    """Legacy scalar metadata for the specified agent, never a deployment default."""
+    from memstara.operational import agent_profile
+    profile = agent_profile(stage)
+    if not _MODEL.fullmatch(profile['model']):
+        raise ValueError(f'{stage}: model is not a model identifier')
+    return profile['provider'], profile['model']
 
 
 def _whole_number(body: Mapping[str, Any], key: str, ceiling: int) -> int:
