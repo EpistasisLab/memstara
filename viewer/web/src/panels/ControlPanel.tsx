@@ -1,4 +1,3 @@
-import {useState} from 'react';
 import Help from "../components/Help";
 import { cn } from "../lib/cn";
 import { VIEWS, VIEW_ORDER } from "../lib/views";
@@ -7,7 +6,6 @@ import { useViewer } from "../store/viewer";
 /** View navigation only; configuration lives beside its pipeline or resource. */
 export default function ControlPanel() {
   const view=useViewer(s=>s.view),setView=useViewer(s=>s.setView);
-  const [advanced,setAdvanced]=useState(false);
   const collapsed=false;
   const wide=undefined;
   return <aside className="h-full min-h-0 overflow-y-auto rounded-xl bg-paper-panel" aria-label="View navigation">
@@ -21,8 +19,7 @@ export default function ControlPanel() {
             View
           </span>
 
-          <button aria-expanded={advanced} onClick={()=>setAdvanced(v=>!v)}>Advanced views</button>
-          {VIEW_ORDER.filter(id=>advanced||['discovery','clinician','report'].includes(id)||id===view).map((id) => {
+          {VIEW_ORDER.map((id) => {
             const item = VIEWS[id];
             const active = view === id;
             const button = (
@@ -31,7 +28,7 @@ export default function ControlPanel() {
                 onClick={() => setView(id)}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2 py-3 text-sm transition",
+                  "flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm transition",
                   collapsed && "lg:justify-center",
                   active
                     ? "bg-accent font-bold text-accent-contrast"

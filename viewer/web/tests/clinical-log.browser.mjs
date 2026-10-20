@@ -36,7 +36,7 @@ try {
    try {await r.fulfill({json:{events:[...Array.from({length:12},(_,i)=>event(i)),{...event(99),run_tag:'other-run',detail:'UNRELATED OUTPUT'},...(added?[{...event(20),stage:'report'}]:[])],results:[],questions:[],reports:{},record_limit:200,generated_at:new Date().toISOString()}});} finally{inFlight--;}
   });
   await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
- await page.getByRole('button',{name:'Advanced pipeline controls',exact:true}).click();
+ await page.getByRole('button',{name:'View floor plan',exact:true}).click();
   await page.evaluate(d=>document.documentElement.dataset.theme=d,combination?'dark':'light');
   const panel=page.getByRole('complementary',{name:'Clinical activity log'});
   if(width===390)await panel.getByRole('button',{name:'Expand live log'}).click();

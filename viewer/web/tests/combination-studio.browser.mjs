@@ -24,7 +24,7 @@ try{
  });
  await p.route('**/api/**',r=>r.fulfill({status:503,json:{error:'UI fixture'}}));
  await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
- await p.getByRole('button',{name:'Advanced pipeline controls',exact:true}).click();
+ await p.getByRole('button',{name:'View floor plan',exact:true}).click();
  const studio=p.getByRole('region',{name:'Combination design',exact:true});
  await p.getByRole('navigation',{name:'Combination views'}).getByRole('button',{name:'Floor plan',exact:true}).waitFor();
  for(const theme of ['light','dark'])for(const width of [1440,1024,390,320]){
@@ -72,7 +72,7 @@ try{
   console.log(JSON.stringify({theme,width,architecture:'passed',trace:'passed',versionMismatch:'passed',failure:'passed'}));
  }
  liveFixture=true;pipeline.running={run_tag:'fixture-run',execution_state:'running'};pipeline.progress={iteration:1,stage:'ml'};
- await p.reload();await p.getByRole('button',{name:'Advanced pipeline controls',exact:true}).click();await p.getByText('Loop 1 / 48 · Live',{exact:true}).waitFor();
+ await p.reload();await p.getByRole('button',{name:'View floor plan',exact:true}).click();await p.getByText('Loop 1 / 48 · Live',{exact:true}).waitFor();
  await p.waitForFunction(()=>document.querySelector('.cf-active-room h4')?.textContent==='Machine learning');
  assert.equal(await studio.locator('.cf-active-room h4').innerText(),'Machine learning');
  assert.equal(await studio.locator('.cf-desk.is-selected').count(),5);

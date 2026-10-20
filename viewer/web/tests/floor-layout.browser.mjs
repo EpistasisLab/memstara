@@ -7,7 +7,7 @@ try {
  await page.route('**/control/**',r=>r.fulfill({json:new URL(r.request().url()).pathname==='/control/pipelines'?{pipelines:items}:{}}));
  await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Layout fixture: results unavailable'}}));
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
- await page.getByRole('button',{name:'Advanced pipeline controls',exact:true}).click();
+ await page.getByRole('button',{name:'View floor plan',exact:true}).click();
  await page.locator('.floor-canvas .react-flow').waitFor();
  const resources=page.getByRole('button',{name:'Shared resources',exact:true});
  await resources.click();await page.locator('.react-flow__node[data-id="resources-zone"]').waitFor();

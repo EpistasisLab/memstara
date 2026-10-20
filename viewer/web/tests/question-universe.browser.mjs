@@ -43,8 +43,16 @@ try{
   await expect(page.getByRole('alert').filter({hasText:'Semantic view is unavailable'})).toBeVisible();
   await expect(page.locator('.universe-evidence h2')).toHaveText('Question 2');
   await page.screenshot({path:`/tmp/memstara-universe-${width}.png`});
-  await page.getByRole('button',{name:'Advanced views',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Floor plan',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Advanced views',exact:true})).toHaveCount(0);
+  for(const name of ['Question universe','Floor plan','Clinician view','Final report','Telemetry','Run log','Board','Task life','Access map']) {
+   await expect(page.getByRole('button',{name,exact:true})).toBeVisible();
+  }
+  const controls=page.locator('.research-controls');
+  await expect(controls).not.toHaveAttribute('open','');
+  await controls.locator('summary').click();
+  await expect(controls).toHaveAttribute('open','');
+  await controls.locator('summary').click();
+  await expect(controls).not.toHaveAttribute('open','');
   await page.addInitScript(()=>{HTMLCanvasElement.prototype.getContext=function(){return null;};});
   await page.reload();
   await expect(page.getByText('Canvas is unavailable.',{exact:false})).toBeVisible();

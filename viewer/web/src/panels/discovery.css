@@ -78,7 +78,19 @@
 .universe-section[aria-label="Semantic question explorer"] .universe-tools,
 .universe-section[aria-label="Research workflow"] .universe-tools { flex-wrap:wrap; }
 .universe-section[aria-label="Semantic question explorer"] .universe-tools label { flex-basis:260px; }
-.universe-section[aria-label="Research workflow"] > .research-pipelines { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr)); gap:10px; margin:14px 0; }
+.research-controls > .research-pipelines { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr)); gap:10px; margin:14px 0; }
 .universe-section[aria-label="Research workflow"] article { border:1px solid rgb(var(--line)); border-radius:12px; padding:12px; }
 .universe-section[aria-label="Research workflow"] article button { border:1px solid rgb(var(--line)); border-radius:8px; padding:6px 10px; margin:4px 6px 0 0; font-size:12px; }
 .universe-section[aria-label="Research workflow"] button:disabled { opacity:.5; cursor:wait; }
+
+/* Preserve all components while giving the map priority. */
+.universe-v2 { padding:16px; }
+.universe-v2 > .universe-tools { margin-top:10px; flex-wrap:wrap; }
+.universe-v2 .universe-header p { margin:6px 0; }
+.research-launch { display:flex; align-items:center; flex-wrap:wrap; gap:8px 16px; margin:10px 0; }
+.research-launch > .universe-tools { margin:0; }
+.research-launch > [role="alert"] { flex-basis:100%; }
+.research-launch .research-controls { border:0; padding:0; flex:1 1 260px; min-width:0; }
+.research-controls summary { padding:10px; border:1px solid rgb(var(--line)); border-radius:10px; color:rgb(var(--ink-soft)); }
+.research-controls[open] { flex-basis:100%; }
+.research-controls summary:focus-visible { outline:2px solid #769bc8; outline-offset:3px; }

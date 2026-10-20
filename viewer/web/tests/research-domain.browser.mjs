@@ -16,7 +16,7 @@ try {
   return route.fulfill({status:503,json:{error:'No deployment defaults in this fixture'}});
  });
  await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Fixture'}}));
- await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await page.getByRole('button',{name:'Advanced pipeline controls',exact:true}).click();
+ await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await page.getByRole('button',{name:'View floor plan',exact:true}).click();
  await page.getByRole('button',{name:/Add pipeline/i}).click();
  await openBuildModeFixture(page);
  const dialog=page.getByRole('dialog',{name:'Create a pipeline',exact:true});
