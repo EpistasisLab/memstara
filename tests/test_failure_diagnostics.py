@@ -129,3 +129,17 @@ def test_startup_rejection_visible_without_execution_file_and_without_raw_values
     assert 'PRIVATE_SENTINEL' not in str(result)
     assert visible_failure(tmp_path, include_legacy=False) is None
     assert log.read_text() == original
+
+
+def test_failure_preserves_original_locations_without_sensitive_message(tmp_path):
+    try:
+        raise PermissionError(13, 'secret credential and patient path')
+    except PermissionError as error:
+        with pytest.raises(PipelineExecutionFailure):
+            stop_execution(tmp_path, 'interpret#1', 1, error)
+    raw = (tmp_path / 'pipeline_failure.json').read_text()
+    record = json.loads(raw)
+    location = record['exception_locations'][0]
+    assert location['errno'] == 13
+    assert location['frames'][-1]['function'] == 'test_failure_preserves_original_locations_without_sensitive_message'
+    assert 'secret credential' not in raw

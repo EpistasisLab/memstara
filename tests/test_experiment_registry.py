@@ -101,3 +101,41 @@ async def test_integrity_errors_are_neither_retried_nor_hidden(monkeypatch, tmp_
     with pytest.raises(ValueError, match='Frozen'):
         await registry.sync_after_agent(tmp_path)
     assert attempt.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_permission_error_retries_mirror_without_repeating_agent(monkeypatch, tmp_path):
+    from unittest.mock import AsyncMock
+    from memstara import experiment_registry as registry
+    attempt = AsyncMock(side_effect=[PermissionError(13, 'private path'), None])
+    monkeypatch.setattr(registry, '_sync', attempt)
+    monkeypatch.setattr(registry.asyncio, 'sleep', AsyncMock())
+    await registry.sync_after_agent(tmp_path)
+    assert attempt.await_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('tampered', [False, True])
+async def test_permission_deferred_only_with_verified_evidence(monkeypatch, tmp_path, tampered):
+    import hashlib
+    from unittest.mock import AsyncMock
+    from memstara import experiment_registry as registry
+    raw = b'{"result":"saved"}'
+    (tmp_path / 'steps.json').write_bytes(raw if not tampered else b'{}')
+    (tmp_path / 'calls_checkpoint.json').write_text(json.dumps([{
+        'status': 'completed', 'step_evidence': {
+            'path': 'steps.json', 'sha256': hashlib.sha256(raw).hexdigest()}}]))
+    attempt = AsyncMock(side_effect=PermissionError(13, 'secret input'))
+    monkeypatch.setattr(registry, '_sync', attempt)
+    monkeypatch.setattr(registry.asyncio, 'sleep', AsyncMock())
+    if tampered:
+        with pytest.raises(ValueError, match='evidence changed'):
+            await registry.sync_after_agent(tmp_path)
+        assert not (tmp_path / 'registry_status.json').exists()
+    else:
+        await registry.sync_after_agent(tmp_path)
+        status = (tmp_path / 'registry_status.json').read_text()
+        assert json.loads(status)['status'] == 'pending'
+        assert 'secret input' not in status
+        assert json.loads(status)['exception_locations'][0]['errno'] == 13
+    assert attempt.await_count == 5

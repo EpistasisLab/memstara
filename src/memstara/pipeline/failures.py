@@ -1,6 +1,7 @@
 """Persist the first execution failure and prevent subsequent model calls."""
 import json
 import re
+import traceback
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import NoReturn
@@ -8,6 +9,15 @@ from typing import NoReturn
 
 class PipelineExecutionFailure(RuntimeError):
     """An execution error is not an unproductive research question."""
+
+
+def exception_locations(error):
+    """Preserve source locations without exception messages, arguments or locals."""
+    return [{"type": type(item).__name__, "errno": getattr(item, "errno", None),
+             "frames": [{"file": Path(frame.filename).name, "line": frame.lineno,
+                         "function": frame.name}
+                        for frame in traceback.extract_tb(item.__traceback__)]}
+            for item in exception_chain(error) if isinstance(item, BaseException)]
 
 
 RETRYABLE_SERVER_STATUSES = frozenset({500, 502, 503, 504, 529})
@@ -145,6 +155,7 @@ def stop_execution(run_dir, stage, loop, error, *, code=None, message=None) -> N
     kind, summary = failure_summary(error)
     record = dict(code=code or kind, message=message or summary, stage=stage, loop=loop,
                   exception_types=[type(e).__name__ for e in exception_chain(error)],
+                  exception_locations=exception_locations(error),
                   **provider_error_details(error),
                   at=datetime.now(UTC).isoformat())
     if run_dir:

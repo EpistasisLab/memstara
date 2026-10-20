@@ -609,7 +609,8 @@ async def _call_agent_uncontrolled(
     # Everything this prints happens after its two awaits above, with no await in
     # between, so one call's block reaches the screen in a single slice. Two calls
     # running together interleave block by block, never line by line.
-    await show_what_agent_did(entry)
+    from memstara.pipeline.reporting import show_console_summary
+    await show_console_summary(show_what_agent_did, entry, _TRACE_DIR)
 
     # Agent output is usually JSON shaped like {"result": "..."}. Failing that, the raw text.
     try:

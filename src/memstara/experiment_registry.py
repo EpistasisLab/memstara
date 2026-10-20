@@ -193,6 +193,7 @@ TRANSIENT_MIRROR_ERRORS = (
     asyncpg.DeadlockDetectedError, asyncpg.SerializationError,
     asyncpg.PostgresConnectionError, asyncpg.CannotConnectNowError, TimeoutError,
 )
+RETRYABLE_MIRROR_ERRORS = (*TRANSIENT_MIRROR_ERRORS, PermissionError)
 
 
 async def sync(root: Path, *, evidence=True):
@@ -200,7 +201,7 @@ async def sync(root: Path, *, evidence=True):
     for attempt in range(5):
         try:
             return await _sync(root, evidence=evidence)
-        except TRANSIENT_MIRROR_ERRORS:
+        except RETRYABLE_MIRROR_ERRORS:
             if attempt == 4:
                 raise
             await asyncio.sleep(0.1 * (2 ** attempt))
@@ -214,11 +215,30 @@ async def sync_after_agent(root: Path):
     """
     try:
         await sync(root)
-    except TRANSIENT_MIRROR_ERRORS as exc:
+    except RETRYABLE_MIRROR_ERRORS as exc:
+        # Defer only the mirror, never a failure to persist the primary journal.
+        if isinstance(exc, PermissionError):
+            calls = json.loads((root / 'calls_checkpoint.json').read_text())
+            if not calls or not any(call.get('status') == 'completed' for call in calls):
+                raise
+            for call in calls:
+                if call.get('status') == 'completed':
+                    evidence_path = call.get('step_evidence', {}).get('path')
+                    if not evidence_path or not (root / evidence_path).is_file():
+                        raise
+                    saved = root / evidence_path
+                    if not saved.resolve().is_relative_to(root.resolve()):
+                        raise ValueError('Agent evidence is outside the execution directory') from exc
+                    raw = saved.read_bytes()
+                    if hashlib.sha256(raw).hexdigest() != call['step_evidence'].get('sha256'):
+                        raise ValueError('Agent evidence changed; registry failure cannot be deferred') from exc
+                    json.loads(raw)
         from memstara.pipeline.checkpoint import atomic_json
+        from memstara.pipeline.failures import exception_locations
         atomic_json(root / 'registry_status.json', {
             'status': 'pending', 'error_type': type(exc).__name__,
-            'reason': 'Transient database mirror failure; local evidence retained for reconciliation',
+            'reason': 'Registry mirror unavailable; local evidence retained for reconciliation',
+            'exception_locations': exception_locations(exc),
         })
         print(f'Experiment registry pending: {type(exc).__name__}; agent results retained.')
 
