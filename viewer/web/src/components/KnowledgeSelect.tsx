@@ -22,7 +22,6 @@ export default function KnowledgeSelect({ value, onChange }: { value: string; on
           </option>
         ))}
       </select>
-      <span className="mt-1 block text-[12px] font-normal leading-relaxed text-ink-faint">Choose a filter within the selected deployment corpus. To switch disease studies, select a registered study above.</span>
     </label>
   );
 }
