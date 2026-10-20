@@ -11,17 +11,17 @@ x-runtime: &runtime
     - control-settings:/settings:ro
     - type: bind
       bind:
-        create_host_path: true
+        create_host_path: false
       source: ${MEMSTARA_OUTPUT_DIR:-./outputs}
       target: /app/outputs
     - type: bind
       bind:
-        create_host_path: true
+        create_host_path: false
       source: ${HF_HOME:-./outputs/huggingface}
       target: /app/cache
     - type: bind
       bind:
-        create_host_path: true
+        create_host_path: false
       source: ${MEMSTARA_INPUTS_DIR:-./user-inputs}
       target: /app/user-inputs
       read_only: true
@@ -47,17 +47,17 @@ services:
       - api-settings:/generated/api
       - type: bind
         bind:
-          create_host_path: true
+          create_host_path: false
         source: ${MEMSTARA_OUTPUT_DIR:-./outputs}
         target: /app/outputs
       - type: bind
         bind:
-          create_host_path: true
+          create_host_path: false
         source: ${HF_HOME:-./outputs/huggingface}
         target: /app/cache
       - type: bind
         bind:
-          create_host_path: true
+          create_host_path: false
         source: ${MEMSTARA_INPUTS_DIR:-./user-inputs}
         target: /app/user-inputs
         read_only: true
@@ -139,13 +139,13 @@ services:
       - api-settings:/settings:ro
       - type: bind
         bind:
-          create_host_path: true
+          create_host_path: false
         source: ${MEMSTARA_OUTPUT_DIR:-./outputs}/runs
         target: /runs
         read_only: true
       - type: bind
         bind:
-          create_host_path: true
+          create_host_path: false
         source: ${HF_HOME:-./outputs/huggingface}
         target: /root/.cache/huggingface
         read_only: true

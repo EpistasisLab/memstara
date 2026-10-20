@@ -26,6 +26,30 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
+# Create bind directories on the host, not through Docker Desktop's file-sharing VM.
+# Resolve paths through Compose so .env interpolation and overrides stay authoritative.
+mount_config=$(mktemp)
+mount_paths=$(mktemp)
+trap 'rm -f "$mount_config" "$mount_paths"' EXIT HUP INT TERM
+if ! docker compose config --format json >"$mount_config"; then
+    echo "Cannot resolve Compose settings. Check COMPOSE_FILE and .env." >&2
+    exit 1
+fi
+if ! docker run --rm -i python:3.12-slim python -c "$(cat deployment/mount_directories.py)" <"$mount_config" >"$mount_paths"; then
+    echo "Cannot inspect bind paths. Check Docker and image availability." >&2
+    exit 1
+fi
+while IFS= read -r directory; do
+    if [ -e "$directory" ] && [ ! -d "$directory" ]; then
+        echo "Bind path is not a directory: $directory. Move the file and retry; it was not changed." >&2
+        exit 1
+    fi
+    if ! mkdir -p "$directory"; then
+        echo "Cannot create bind directory: $directory. Check host permissions." >&2
+        exit 1
+    fi
+done <"$mount_paths"
+
 echo "Checking .env and mounted inputs before building or restarting application services..."
 if ! docker compose build configure; then
     echo "Could not build the configuration checker. Check Docker and network access." >&2
@@ -34,6 +58,7 @@ fi
 if ! docker compose run --rm --no-deps configure python /app/deployment/configure.py --check; then
     echo "Preflight failed. Fix the .env fields listed above and run ./start.sh again." >&2
     echo "Application services were not restarted. Do not replace .env with settings from another checkout." >&2
+    echo "For /host_mnt mount errors, check Docker Desktop file sharing for this checkout. Do not delete data volumes." >&2
     exit 1
 fi
 
