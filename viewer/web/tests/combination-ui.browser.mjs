@@ -26,7 +26,7 @@ try{
  await page.getByRole('combobox',{name:'Knowledge sources'}).waitFor();
  await page.getByRole('button',{name:'Cancel',exact:true}).click();
  await page.getByRole('button',{name:/Add pipeline/i}).click();
- await page.getByRole('button',{name:/All Combinations/}).click();
+ await page.getByText('Advanced setup',{exact:true}).click();await page.getByRole('button',{name:/All Combinations/}).click();
  const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});
  await dialog.getByRole('button',{name:'Choose skills'}).click();
  for(const role of roles){ await dialog.getByRole('navigation',{name:'Agent roles'}).getByRole('button').nth(roles.indexOf(role)).click(); await dialog.locator('.comb-skill-picker > summary').click(); for(const s of skills.filter(s=>s.stage===role))await dialog.getByRole('checkbox',{name:new RegExp(s.title)}).check(); }

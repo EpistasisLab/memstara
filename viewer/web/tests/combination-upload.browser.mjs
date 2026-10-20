@@ -6,6 +6,8 @@ try {
  await page.route('**/control/**',async r=>{
   const path=new URL(r.request().url()).pathname;
   if(path==='/control/pipelines')return r.fulfill({json:{pipelines:[]}});
+  if(path==='/control/research-inputs')return r.fulfill({json:{inputs:[]}});
+  if(path==='/control/health')return r.fulfill({json:{input_defaults:{dataset_available:true,knowledge_available:true}}});
   if(path==='/control/playbooks'){
    if(r.request().method()==='GET')return r.fulfill({json:{catalog:skills,playbooks:[],stages:['hypothesis','data','ml','interpreter','report'],references:[]}});
    const b=r.request().postDataJSON();uploads.push(b);
@@ -15,8 +17,10 @@ try {
   if(r.request().method()==='POST')throw Error('Unexpected mutation '+path);
   return r.continue();
  });
- await page.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');await page.getByRole('button',{name:/Add pipeline/i}).click();await page.getByRole('button',{name:/All Combinations/}).click();
- const d=page.getByRole('dialog',{name:'All Combinations',exact:true});await d.getByRole('button',{name:'Choose skills'}).click();
+ await page.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');await page.getByRole('button',{name:/Add pipeline/i}).click();await page.getByText('Advanced setup',{exact:true}).click();await page.getByRole('button',{name:/All Combinations/}).click();
+ const d=page.getByRole('dialog',{name:'All Combinations',exact:true});
+ await d.getByLabel('Deployment target column',{exact:true}).fill('outcome');
+ await d.getByRole('button',{name:'Choose skills'}).click();
  for(let i=0;i<5;i++){
   await d.getByRole('navigation',{name:'Agent roles'}).getByRole('button').nth(i).click();
   await d.getByRole('button',{name:/^Upload or write/}).click();

@@ -54,7 +54,7 @@ try{
  assert.equal(await dialog.getByLabel('Logistic Regression (LR) C',{exact:true}).inputValue(),'0.25');
  await dialog.getByLabel('Logistic Regression (LR) C',{exact:true}).fill('.5');await dialog.getByRole('button',{name:'Save settings',exact:true}).click();await dialog.waitFor({state:'hidden'});
  assert.equal(items[0].configuration.ml_overrides.models.logistic_regression.parameters.C,.5);
- await page.getByRole('button',{name:/Add pipeline/i}).click();await page.getByRole('button',{name:/^All Combinations/}).click();
+ await page.getByRole('button',{name:/Add pipeline/i}).click();await page.getByText('Advanced setup',{exact:true}).click();await page.getByRole('button',{name:/^All Combinations/}).click();
  dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});await dialog.getByRole('button',{name:'Choose skills',exact:true}).click();
  for(const role of ['Hypothesis','Data','Machine learning','Interpretation','Explanation']){
   await dialog.locator('.comb-roles button').filter({hasText:role}).click();await dialog.locator('.comb-skill-picker > summary').click();
