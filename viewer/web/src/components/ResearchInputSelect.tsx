@@ -1,10 +1,10 @@
 import {useEffect, useState} from 'react';
 import {resetResearchSkills,setResearchCorpusProfile,researchSkillProfile} from '../lib/researchSkills';
-import ResearchInputs from './ResearchInputs';
+import ResearchInputs, {type ResearchConfig, type Inspection} from './ResearchInputs';
 import type {RunRequest} from '../store/control';
 
 type Defaults={dataset_available:boolean;knowledge_available:boolean;target_column:string};
-type Record = {corpus_skill_profile?:string;id:string;input_checks_passed:boolean;configuration:{name:string;dataset_path?:string;knowledge_path?:string;knowledge_mode?:'okf'|'llm_only';data_mode?:'dataset'|'proposal';target:{column:string;description:string;prediction_time:string;positive_label?:string;negative_label?:string;horizon?:string}}};
+type Record = {corpus_skill_profile?:string;id:string;input_checks_passed:boolean;configuration:ResearchConfig};
 export default function ResearchInputSelect({value,onChange,disabled=false,onValidityChange}:{value:Partial<RunRequest>;onChange:(patch:Partial<RunRequest>)=>void;disabled?:boolean;onValidityChange?:(error:string)=>void}) {
  const [defaults,setDefaults]=useState<Defaults|null>(null);
  const [records,setRecords]=useState<Record[]>([]),[error,setError]=useState(''),[editing,setEditing]=useState(false);
@@ -20,12 +20,14 @@ export default function ResearchInputSelect({value,onChange,disabled=false,onVal
   : value.data_mode!=='proposal'&&!value.y_column?.trim()?'Specify the exact outcome column, or select a saved research input.'
   : value.data_mode==='proposal'&&!value.research_objective?.trim()?'Describe the research objective before continuing.':'';
  useEffect(()=>{onValidityChange?.(readinessError);},[readinessError,onValidityChange]);
- function select(id:string){const record=records.find(r=>r.id===id);
+ function applyRecord(record:Record|undefined){const id=record?.id??'';
   const modes={knowledge_mode:record?.configuration.knowledge_mode??'okf' as const,data_mode:record?.configuration.data_mode??'dataset' as const};
   onChange({...resetResearchSkills(value,{research_input_id:id,...modes}),research_input_id:id,
   y_column:record?record.configuration.target.column:'',...modes,
   research_objective:record?.configuration.target.description??'',
   ...(id?{playbook_data:value.playbook_data&&value.playbook_data!=='data_exact_features'?value.playbook_data:'data_training_heavy'}:{})});}
+ function select(id:string){applyRecord(records.find(r=>r.id===id));}
+ async function savedRecord(record:Inspection){await reload();if(record.id&&record.input_checks_passed){applyRecord({...record,id:record.id});setEditing(false);}}
  return <div className="min-w-0 space-y-3 rounded border border-paper-line p-3">
   <label className="block">Knowledge sources · research study<select aria-label="Research inputs" className="mt-1 w-full min-w-0 rounded border border-paper-line bg-paper p-2" disabled={disabled} value={value.research_input_id??''} onChange={e=>select(e.target.value)}>
    <option value="">Deployment inputs — configure paths and target explicitly</option>
@@ -50,6 +52,8 @@ export default function ResearchInputSelect({value,onChange,disabled=false,onVal
   {readinessError&&<p role="alert" className="text-sm">{readinessError}</p>}
   {error&&<p role="alert">{error} <button type="button" onClick={()=>void reload()}>Retry</button></p>}
   <button type="button" disabled={disabled} className="underline" onClick={()=>setEditing(!editing)}>{editing?'Close input editor':'Register or revise research inputs'}</button>
-  {editing&&<ResearchInputs onSaved={()=>void reload()}/>}
+  {selected&&<button type="button" disabled={disabled} className="underline" onClick={()=>setEditing(true)}>Edit prediction target</button>}
+  {editing&&<ResearchInputs key={selected?.id??'new'} initialConfig={selected?.configuration} disabled={disabled} onSaved={record=>void savedRecord(record)}/>}
+  {selected&&<p className="text-sm">Target changes are saved as a new research version. Save pipeline settings to use it for future executions; earlier runs and Resume keep their recorded target.</p>}
  </div>;
 }

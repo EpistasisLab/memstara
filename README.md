@@ -295,6 +295,11 @@ After correcting the named settings, rerun `./start.sh`.
 ### One configuration source
 
 Choose the dataset and target in **Data & target** or the research input editor.
+For an existing pipeline, open **Settings and more → Data & target → Edit prediction target**.
+The editor loads the selected research settings. Save a new preparation record,
+then click **Save settings** to attach it to the pipeline. Earlier execution records
+and resumed executions retain their frozen target; the change applies to new executions.
+Target editing is disabled while an execution is active.
 Choose LR/XGBoost through ML agent skills. Installation `.env` target/ML-engine
 defaults are ignored; each execution records its own selected research settings.
 

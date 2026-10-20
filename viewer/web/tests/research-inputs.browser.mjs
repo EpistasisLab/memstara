@@ -44,8 +44,8 @@ try{
  await page.getByText('/fixtures/study-okf',{exact:true}).waitFor();
  await page.getByLabel('Research inputs',{exact:true}).selectOption('');
  const deployment=JSON.parse(await page.getByLabel('Selected research configuration').innerText());
- assert.equal(deployment.y_column,'deployment_target');
- assert.equal(await page.getByLabel('Deployment target column',{exact:true}).inputValue(),'deployment_target');
+ assert.equal(deployment.y_column,'');
+ assert.equal(await page.getByLabel('Deployment target column',{exact:true}).inputValue(),'');
  await page.close();
  for(const width of [390,1280]){
   const workspace=await browser.newPage({viewport:{width,height:900}});

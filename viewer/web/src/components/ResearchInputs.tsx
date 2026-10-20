@@ -1,15 +1,15 @@
 import {useEffect,useState} from 'react';
 
 type Target={column:string;description:string;positive_label:string;negative_label:string;prediction_time:string;horizon:string};
-type ResearchConfig={name:string;dataset_path:string;knowledge_path:string;target:Target;excluded_columns:string[];missing_policy:'reject';knowledge_mode?:'okf'|'llm_only';data_mode?:'dataset'|'proposal'};
-type Inspection={id?:string;configuration:ResearchConfig;fingerprint:string;input_checks_passed:boolean;execution_ready:boolean;execution_note:string;
+export type ResearchConfig={name:string;dataset_path:string;knowledge_path:string;target:Target;excluded_columns:string[];missing_policy:'reject';knowledge_mode?:'okf'|'llm_only';data_mode?:'dataset'|'proposal'};
+export type Inspection={id?:string;configuration:ResearchConfig;fingerprint:string;input_checks_passed:boolean;execution_ready:boolean;execution_note:string;
  dataset:{rows:number;column_count:number;columns:string[];missing_cells:number;eligible_predictor_count:number};
  knowledge:{documents:number;domains:string[]};issues:{code:string;message:string}[]};
 const initial:ResearchConfig={name:'',dataset_path:'',knowledge_path:'',target:{column:'',description:'',positive_label:'',negative_label:'',prediction_time:'',horizon:''},excluded_columns:[],missing_policy:'reject'};
 const style='w-full min-w-0 rounded border border-paper-line bg-paper px-3 py-2 text-sm';
 
-export default function ResearchInputs({onSaved}:{onSaved?:()=>void}={}){
- const [form,setForm]=useState<ResearchConfig>(initial),[result,setResult]=useState<Inspection|null>(null),[saved,setSaved]=useState<Inspection[]>([]);
+export default function ResearchInputs({onSaved,initialConfig,disabled=false}:{onSaved?:(record:Inspection)=>void;initialConfig?:ResearchConfig;disabled?:boolean}={}){
+ const [form,setForm]=useState<ResearchConfig>(initialConfig??initial),[result,setResult]=useState<Inspection|null>(null),[saved,setSaved]=useState<Inspection[]>([]);
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
  async function reload(){try{const r=await fetch('/control/research-inputs');const d=await r.json();if(!r.ok||!Array.isArray(d.inputs))throw Error(d.error||'Research inputs unavailable');setSaved(d.inputs);}catch(e){setError(String(e));}}
  useEffect(()=>{void reload();},[]);
@@ -17,14 +17,14 @@ export default function ResearchInputs({onSaved}:{onSaved?:()=>void}={}){
  async function submit(action:'inspect'|'register'){
   setBusy(true);setError('');setResult(null);
   try{const r=await fetch(`/control/research-inputs/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)});
-   const d=await r.json();if(!r.ok)throw Error(d.error||'Inspection failed');setResult(d);if(action==='register'){await reload();onSaved?.();}
+   const d=await r.json();if(!r.ok)throw Error(d.error||'Inspection failed');setResult(d);if(action==='register'){await reload();onSaved?.(d);}
   }catch(e){setError(String(e));}finally{setBusy(false);}
  }
  return <section className="space-y-4 p-4" aria-label="Research input preparation">
   <h3 className="font-semibold">Research input preparation</h3>
   <p>Register your local OKF bundle, CSV and prediction target. Select the saved version in pipeline settings to use it. Saving does not start an experiment.</p>
   <p className="text-sm">Paths refer to the machine running Memstara. Source files remain unchanged. Missing values are reported; no automatic cleaning is performed.</p>
-  <fieldset disabled={busy} className="min-w-0 space-y-3">
+  <fieldset disabled={busy||disabled} className="min-w-0 space-y-3">
    <label className="block">Knowledge mode<select aria-label="Knowledge mode" className={style} value={form.knowledge_mode??'okf'} onChange={e=>edit({...form,knowledge_mode:e.target.value as ResearchConfig['knowledge_mode']})}><option value="okf">Use my OKF corpus</option><option value="llm_only">LLM knowledge only — no corpus</option></select></label>
    <label className="block">Data mode<select aria-label="Data mode" className={style} value={form.data_mode??'dataset'} onChange={e=>edit({...form,data_mode:e.target.value as ResearchConfig['data_mode']})}><option value="dataset">Use my CSV — empirical evaluation</option><option value="proposal">No CSV — research proposal and analysis plan</option></select></label>
    {form.data_mode==='proposal'&&<p>No dataset is attached. All agents produce a research proposal and analysis plan; training, metrics and SHAP/LIME computations are not executed. Describe the research objective below. A target column and observed label mapping are optional.</p>}
@@ -43,6 +43,6 @@ export default function ResearchInputs({onSaved}:{onSaved?:()=>void}={}){
    <ul className="list-disc pl-5">{result.issues.map(x=><li key={x.code}>{x.message}</li>)}</ul>
    <details><summary>Dataset columns</summary><ul>{result.dataset.columns.map(c=><li className="break-all" key={c}>{c}</li>)}</ul></details>
   </div>}
-  {saved.length>0&&<div><h4 className="font-semibold">Saved research versions</h4><ul>{saved.map(x=><li className="my-2" key={x.id}><button type="button" className="underline" disabled={busy} onClick={()=>{setForm(x.configuration);setResult(null);setError('Saved record loaded. Inspect again and save a new version after editing.');}}>{x.configuration.name} · {x.id?.slice(0,8)}</button> — {x.input_checks_passed?'input checks passed':'input review needed'}</li>)}</ul></div>}
+  {saved.length>0&&<div><h4 className="font-semibold">Saved research versions</h4><ul>{saved.map(x=><li className="my-2" key={x.id}><button type="button" className="underline" disabled={busy||disabled} onClick={()=>{setForm(x.configuration);setResult(null);setError('Saved record loaded. Inspect again and save a new version after editing.');}}>{x.configuration.name} · {x.id?.slice(0,8)}</button> — {x.input_checks_passed?'input checks passed':'input review needed'}</li>)}</ul></div>}
  </section>;
 }
