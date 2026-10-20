@@ -169,7 +169,8 @@ cp .env.example .env
 ./start.sh
 ```
 
-`./start.sh` checks Docker, builds and starts all services, verifies the browser
+`./start.sh` checks Docker and validates `.env` and input paths before building
+or restarting application services. It then builds and starts all services, verifies the browser
 proxy and both backends, and prints the actual application URL. Run it from one
 terminal; services keep running after the terminal closes. If `.env` is missing,
 it creates a private template and stops so you can fill in your credentials.
@@ -207,6 +208,25 @@ healthy web page proves application startup, not valid model credentials or a
 successful scientific pipeline. Register the included synthetic research input
 through the research-input UI before running your first pipeline. The bundled
 files are at `/app/examples/research-inputs/` inside the container.
+
+### If startup reports invalid paths
+
+Start from this branch's `.env.example` and edit your provider settings; do not copy
+a complete `.env` from an older checkout. A path in `.env` does not download a file
+or expose an arbitrary host directory to Docker. The preflight lists every invalid
+input path by variable name before application services are restarted.
+
+- For bundled skills, leave custom skill-path variables unset.
+- To choose research inputs in the UI, leave `MEMSTARA_DATASET_PATH` and
+  `AGENTIC_OKF_BUNDLE_DIR` unset.
+- For the included HeartFailure default, use `MEMSTARA_DATASET_PATH=examples/heart-failure/dataset.csv`,
+  `AGENTIC_OKF_BUNDLE_DIR=examples/heart-failure/okf` and
+  `MEMSTARA_OUTCOME_COLUMN=chronic_heart_failure` together.
+- For private CSV/OKF inputs, put the files under the configured `MEMSTARA_INPUTS_DIR`
+  and reference `user-inputs/...` in `.env`. Private datasets are not downloaded by cloning.
+
+Explicit invalid inputs are never silently substituted with a different dataset.
+After correcting the named settings, rerun `./start.sh`.
 
 ### One configuration source
 

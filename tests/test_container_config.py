@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from memstara.container_config import derive
+from memstara.container_config import ConfigurationError, derive
 from memstara.operational import resolve
 
 
@@ -167,3 +167,40 @@ def test_explicit_viewers_are_not_overwritten(tmp_path):
     from memstara.container_config import provision_viewers
     values = configuration(tmp_path)
     assert provision_viewers(values, {}) == values
+
+
+def test_reports_all_invalid_input_paths_without_disclosing_values(tmp_path):
+    values = configuration(tmp_path)
+    values['MEMSTARA_DATASET_PATH'] = '/private/sensitive-cohort.csv'
+    values['AGENTIC_OKF_BUNDLE_DIR'] = str(tmp_path / 'user-inputs/missing-corpus')
+    values['MEMSTARA_RESULTS_SKILL_PATH'] = '/private/sensitive-skill.md'
+    with pytest.raises(ConfigurationError) as error:
+        derive(values, root=tmp_path)
+    message = str(error.value)
+    assert all(key in message for key in ('MEMSTARA_DATASET_PATH', 'AGENTIC_OKF_BUNDLE_DIR',
+                                         'MEMSTARA_RESULTS_SKILL_PATH'))
+    assert 'sensitive' not in message
+    assert 'missing-corpus' not in message
+
+
+def test_docker_preflight_never_rewrites_persisted_service_settings(tmp_path, monkeypatch):
+    import importlib.util
+    import sys
+    from pathlib import Path as RealPath
+    entry = RealPath(__file__).resolve().parents[1] / 'deployment/configure.py'
+    spec = importlib.util.spec_from_file_location('docker_configure_check', entry)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    values = configuration(tmp_path)
+    persisted = tmp_path / 'generated/control/settings.json'
+    persisted.parent.mkdir(parents=True)
+    persisted.write_text('{"sentinel":"unchanged"}')
+    monkeypatch.setattr(module, 'resolve', lambda *args, **kwargs: (values, {}))
+    monkeypatch.setattr(module, 'Path', lambda value: tmp_path if str(value) == '/app'
+                        else tmp_path / str(value).lstrip('/'))
+    monkeypatch.setattr(sys, 'argv', ['configure.py', '--check'])
+    for key in ('MEMSTARA_WEB_PORT', 'MEMSTARA_OUTPUT_DIR', 'HF_HOME', 'MEMSTARA_INPUTS_DIR', 'COMPOSE_PROJECT_NAME'):
+        monkeypatch.delenv('COMPOSE_' + key, raising=False)
+    assert module.main() == 0
+    assert persisted.read_text() == '{"sentinel":"unchanged"}'
+    assert not (tmp_path / 'generated/board').exists()

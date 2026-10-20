@@ -21,6 +21,7 @@ def launcher(tmp_path, *, env=True):
 printf '%s\\n' "$*" >> "$CALLS"
 case "$*" in
   "info") [ "$FAIL" != daemon ] ;;
+  "compose run "*) [ "$FAIL" != preflight ] ;;
   "compose up "*) [ "$FAIL" != startup ] ;;
   "compose exec "*) [ "$FAIL" != readiness ] ;;
   "compose port web 80") echo '127.0.0.1:15999' ;;
@@ -83,3 +84,16 @@ def test_readiness_failure_is_not_reported_as_success(tmp_path):
     calls = (tmp_path / 'calls').read_text()
     assert calls.count('compose exec') == 30
     assert 'compose port' not in calls
+
+
+def test_preflight_failure_does_not_build_or_restart_application(tmp_path):
+    environment = launcher(tmp_path)
+    environment['FAIL'] = 'preflight'
+    result = run(tmp_path, environment)
+    assert result.returncode == 1
+    assert 'Preflight failed' in result.stderr
+    calls = (tmp_path / 'calls').read_text()
+    assert 'compose build configure' in calls
+    assert '--check' in calls
+    assert 'compose up' not in calls
+    assert 'compose exec' not in calls

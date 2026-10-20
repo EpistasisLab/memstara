@@ -26,6 +26,17 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
+echo "Checking .env and mounted inputs before building or restarting application services..."
+if ! docker compose build configure; then
+    echo "Could not build the configuration checker. Check Docker and network access." >&2
+    exit 1
+fi
+if ! docker compose run --rm --no-deps configure python /app/deployment/configure.py --check; then
+    echo "Preflight failed. Fix the .env fields listed above and run ./start.sh again." >&2
+    echo "Application services were not restarted. Do not replace .env with settings from another checkout." >&2
+    exit 1
+fi
+
 echo "Building and starting Memstara. Existing services will restart to load .env."
 echo "Finish active experiments before running this command. Saved data is retained."
 if ! docker compose up -d --build --force-recreate; then

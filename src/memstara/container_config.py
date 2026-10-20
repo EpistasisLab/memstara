@@ -100,7 +100,8 @@ def derive(values: dict[str, str], *, root: Path) -> dict[str, dict[str, str]]:
     control["HF_HOME"] = str(root / "cache")
     control["MEMSTARA_INPUTS_DIR"] = str(root / "user-inputs")
     allowed = [root / name for name in ("examples", "user-inputs", "outputs", "cache", "src/memstara/resources")]
-    for key in PATH_KEYS - {"MEMSTARA_OUTPUT_DIR", "HF_HOME", "MEMSTARA_INPUTS_DIR"}:
+    path_errors = []
+    for key in sorted(PATH_KEYS - {"MEMSTARA_OUTPUT_DIR", "HF_HOME", "MEMSTARA_INPUTS_DIR"}):
         if control.get(key):
             path = Path(control[key]).resolve()
             for source_key, destination in (
@@ -114,9 +115,17 @@ def derive(values: dict[str, str], *, root: Path) -> dict[str, dict[str, str]]:
                     control[key] = str(path)
                     break
             if not any(path == base or base in path.parents for base in allowed):
-                raise ConfigurationError(
-                    f"{key}: Docker paths must use examples/, user-inputs/, outputs/, cache/ or bundled resources"
+                path_errors.append(
+                    f"{key}: path is outside Docker mounts. Use examples/, user-inputs/, outputs/, "
+                    "cache/ or bundled resources; unset unused defaults."
                 )
+            elif not path.exists() and key not in {"HF_HUB_CACHE", "MEMSTARA_USER_SKILLS_DIR"}:
+                path_errors.append(
+                    f"{key}: file or directory is missing. Supply the input under user-inputs/ "
+                    "and correct .env, or unset this default to choose inputs in the app."
+                )
+    if path_errors:
+        raise ConfigurationError("Fix these .env paths before starting:\n- " + "\n- ".join(path_errors))
     control["MEMSTARA_CONFIG_MODE"] = "environment"
     control["MEMSTARA_CONFIG_ORIGIN_FILE"] = "/app/.env"
     control["MEMSTARA_CONTAINER_MODE"] = "1"

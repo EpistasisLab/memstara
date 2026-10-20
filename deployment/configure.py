@@ -1,5 +1,6 @@
 """Validate the mounted .env and write restricted per-service startup settings."""
 
+import argparse
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,9 @@ from memstara.operational import resolve
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true", help="Validate without writing service credentials")
+    args = parser.parse_args()
     try:
         values, _ = resolve({}, file=Path("/app/.env"))
         # Compose uses shell interpolation for host bindings. Refuse a shell value
@@ -32,6 +36,9 @@ def main():
         previous = json.loads(saved.read_text()) if saved.exists() else {}
         values = provision_viewers(values, previous)
         groups = derive(values, root=Path("/app"))
+        if args.check:
+            print("Preflight passed. No service settings changed; no model call performed.")
+            return 0
         for service, settings in groups.items():
             root = Path("/generated") / service
             root.mkdir(parents=True, exist_ok=True)
