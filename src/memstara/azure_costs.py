@@ -66,11 +66,17 @@ def normalize_meter(items, meter_id, region, now=None):
     return rate, item
 
 
-def refresh(mapping):
+def refresh(mapping=None):
     from memstara.cost_accounting import catalog_path
     from datetime import timedelta
 
-    data = json.loads(Path(mapping).read_text())
+    import os
+    data = json.loads(Path(mapping).read_text() if mapping else
+                      os.environ.get("MEMSTARA_AZURE_PRICING_METERS_JSON", "{}"))
+    if not isinstance(data, dict) or not data.get("profiles"):
+        raise ValueError("Configure MEMSTARA_AZURE_PRICING_METERS_JSON")
+    if catalog_path() is None:
+        raise ValueError("Set MEMSTARA_PRICING_PATH to an output catalog path before refresh")
     profiles = []
     for profile in data["profiles"]:
         rates, evidence = {}, {}
@@ -181,13 +187,15 @@ def main():
     find.add_argument("--filter", required=True)
     find.add_argument("--output", required=True)
     update = commands.add_parser("refresh")
-    update.add_argument("--mapping", required=True)
+    update.add_argument("--mapping", help="Optional legacy mapping file; otherwise read project .env")
     actual = commands.add_parser("actual")
     actual.add_argument("--scope", required=True)
     actual.add_argument("--start", required=True)
     actual.add_argument("--end", required=True)
     actual.add_argument("--output", default="outputs/runs/azure_costs.json")
     args = parser.parse_args()
+    from memstara.env import load_env
+    load_env()
     if args.command == "meters":
         items = fetch_meters(args.filter)
         path = Path(args.output)

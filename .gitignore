@@ -65,3 +65,6 @@ config/azure-pricing-meters.local.json
 /resources/datasets/
 /resources/knowledge/
 /resources/manifests/*.local.json
+
+# User-supplied Docker inputs.
+/user-inputs/

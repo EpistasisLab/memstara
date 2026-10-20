@@ -14,8 +14,8 @@ from memstara import specialist_explanation as explanation
 from memstara import specialist_xai as xai
 
 
-@pytest.fixture
-def sources(tmp_path, monkeypatch):
+@pytest.fixture(params=["file", "inline"])
+def sources(tmp_path, monkeypatch, request):
     path = tmp_path / "knowledge.sqlite"
     connection = sqlite3.connect(path)
     connection.execute("CREATE TABLE documents (id TEXT, text TEXT, domain TEXT)")
@@ -41,7 +41,13 @@ def sources(tmp_path, monkeypatch):
     }
     config = tmp_path / "bindings.json"
     config.write_text(json.dumps(bindings))
-    monkeypatch.setenv("MEMSTARA_EXPLANATION_SOURCES", str(config))
+    monkeypatch.delenv("MEMSTARA_EXPLANATION_SOURCES_JSON", raising=False)
+    monkeypatch.delenv("MEMSTARA_EXPLANATION_SOURCES", raising=False)
+    if request.param == "inline":
+        monkeypatch.setenv("MEMSTARA_EXPLANATION_SOURCES_JSON", config.read_text())
+        config.unlink()
+    else:
+        monkeypatch.setenv("MEMSTARA_EXPLANATION_SOURCES", str(config))
     monkeypatch.setenv("MEMSTARA_OUTPUT_DIR", str(tmp_path))
     return bindings
 
@@ -114,7 +120,8 @@ def frozen(sources, tmp_path, monkeypatch):
 def test_freeze_current_files_and_required_bindings(frozen, sources, monkeypatch):
     assert set(frozen["specialist_explanation_policy"]["skills"]) == set(explanation.SKILLS)
     assert "ARCHIVE" not in json.dumps(frozen)
-    monkeypatch.delenv("MEMSTARA_EXPLANATION_SOURCES")
+    monkeypatch.delenv("MEMSTARA_EXPLANATION_SOURCES", raising=False)
+    monkeypatch.delenv("MEMSTARA_EXPLANATION_SOURCES_JSON", raising=False)
     from memstara import okf_expert
     binding = dict(sources["hiv"])
     monkeypatch.setattr(okf_expert, "freeze", lambda expert: binding)

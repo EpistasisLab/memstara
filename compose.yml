@@ -1,52 +1,180 @@
-# Memstara's own database.
-#
-# The board and the results table used to live inside core's `motoro` database,
-# separated only by an `memstara_` name prefix. That was wrong: Memstara is meant to be an
-# application that owns its own store, not a guest in core's. Sharing a server also
-# means core's container going down takes Memstara's data with it, and a `docker volume
-# rm` aimed at core would destroy results that have nothing to do with core.
-#
-# So: separate container, separate port, separate volume, separate account.
-#
-#     docker compose up -d
-#     psql postgresql://memstara:memstara@localhost:5463/memstara
-#
-# The port is 5463 because core already holds 5453. Neither is the Postgres default,
-# so a stray client cannot land on the wrong one by accident.
+# Canonical, isolated application stack. Set installation values in .env only.
+# No database, API or control port is published; the web entry point is loopback-only.
+name: memstara-app
+
+x-runtime: &runtime
+  build:
+    context: .
+    dockerfile: deployment/Dockerfile
+    target: runtime
+  volumes:
+    - control-settings:/settings:ro
+    - type: bind
+      bind:
+        create_host_path: true
+      source: ${MEMSTARA_OUTPUT_DIR:-./outputs}
+      target: /app/outputs
+    - type: bind
+      bind:
+        create_host_path: true
+      source: ${HF_HOME:-./outputs/huggingface}
+      target: /app/cache
+    - type: bind
+      bind:
+        create_host_path: true
+      source: ${MEMSTARA_INPUTS_DIR:-./user-inputs}
+      target: /app/user-inputs
+      read_only: true
+  init: true
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: memstara-postgres
-    restart: unless-stopped
-    # The password is read from the environment, with the historical local value
-    # as the default, so `docker compose up -d` on a fresh clone still works and
-    # `psql postgresql://memstara:memstara@localhost:5463/memstara` above still
-    # connects. What changes is only that the literal is no longer the sole
-    # source: set POSTGRES_PASSWORD in `.env` and the container follows.
-    #
-    # If you do set it, MEMSTARA_DATABASE_URL in the same `.env` has to carry the
-    # same password. Nothing derives one from the other — the container reads
-    # POSTGRES_PASSWORD, and every client reads the URL. A mismatch surfaces as
-    # a password-authentication failure on the first claim_task, which reads
-    # like a connection problem rather than a configuration one.
+  configure:
+    build:
+      context: .
+      dockerfile: deployment/Dockerfile
+      target: configure
     environment:
-      POSTGRES_USER: memstara
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-memstara}
-      POSTGRES_DB: memstara
-    ports:
-      - "5463:5432"
+      COMPOSE_MEMSTARA_WEB_PORT: ${MEMSTARA_WEB_PORT:-5173}
+      COMPOSE_MEMSTARA_OUTPUT_DIR: ${MEMSTARA_OUTPUT_DIR:-outputs}
+      COMPOSE_HF_HOME: ${HF_HOME:-outputs/huggingface}
+      COMPOSE_MEMSTARA_INPUTS_DIR: ${MEMSTARA_INPUTS_DIR:-user-inputs}
+      COMPOSE_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-memstara-app}
     volumes:
-      - memstara_postgres_data:/var/lib/postgresql/data
+      - ./.env:/app/.env:ro
+      - board-settings:/generated/board
+      - runtime-settings:/generated/runtime
+      - control-settings:/generated/control
+      - api-settings:/generated/api
+      - type: bind
+        bind:
+          create_host_path: true
+        source: ${MEMSTARA_OUTPUT_DIR:-./outputs}
+        target: /app/outputs
+      - type: bind
+        bind:
+          create_host_path: true
+        source: ${HF_HOME:-./outputs/huggingface}
+        target: /app/cache
+      - type: bind
+        bind:
+          create_host_path: true
+        source: ${MEMSTARA_INPUTS_DIR:-./user-inputs}
+        target: /app/user-inputs
+        read_only: true
+
+  board:
+    image: postgres:16-alpine
+    entrypoint: ["/bin/sh", "/postgres.sh"]
+    command: ["postgres"]
+    volumes:
+      - ./deployment/postgres.sh:/postgres.sh:ro
+      - board-settings:/settings:ro
+      - board-data:/var/lib/postgresql/data
+    depends_on:
+      configure: {condition: service_completed_successfully}
     healthcheck:
-      # Without this the pipeline can start against a server that is still replaying
-      # WAL, and the first claim_task fails with a connection error that reads like a
-      # configuration problem.
-      test: ["CMD-SHELL", "pg_isready -U memstara -d memstara"]
+      test: ["CMD-SHELL", ". /settings/postgres.env; pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
       timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  runtime:
+    image: pgvector/pgvector:pg16
+    entrypoint: ["/bin/sh", "/postgres.sh"]
+    command: ["postgres"]
+    volumes:
+      - ./deployment/postgres.sh:/postgres.sh:ro
+      - runtime-settings:/settings:ro
+      - runtime-data:/var/lib/postgresql/data
+    depends_on:
+      configure: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD-SHELL", ". /settings/postgres.env; pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  initialize:
+    <<: *runtime
+    command: ["python", "/app/deployment/initialize.py"]
+    depends_on:
+      board: {condition: service_healthy}
+      runtime: {condition: service_healthy}
+      redis: {condition: service_healthy}
+
+  control:
+    <<: *runtime
+    depends_on:
+      initialize: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8072/control/health',timeout=10)"]
+      interval: 15s
+      timeout: 12s
       retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    stop_grace_period: 60s
+
+  api:
+    build:
+      context: viewer
+      dockerfile: api/Dockerfile
+      args:
+        ENABLE_UNIVERSE_SEMANTICS: ${MEMSTARA_UNIVERSE_SEMANTICS:-0}
+    entrypoint: ["python", "/exec_service.py"]
+    command: ["uvicorn", "main:app", "--app-dir", "api", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+    volumes:
+      - ./deployment/exec_service.py:/exec_service.py:ro
+      - api-settings:/settings:ro
+      - type: bind
+        bind:
+          create_host_path: true
+        source: ${MEMSTARA_OUTPUT_DIR:-./outputs}/runs
+        target: /runs
+        read_only: true
+      - type: bind
+        bind:
+          create_host_path: true
+        source: ${HF_HOME:-./outputs/huggingface}
+        target: /root/.cache/huggingface
+        read_only: true
+      - universe-cache:/tmp/memstara-universe
+    depends_on:
+      initialize: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json',timeout=10)"]
+      interval: 15s
+      timeout: 12s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build: {context: viewer, dockerfile: web/Dockerfile}
+    volumes:
+      - ./deployment/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:${MEMSTARA_WEB_PORT:-5173}:80"
+    depends_on:
+      control: {condition: service_healthy}
+      api: {condition: service_healthy}
+    restart: unless-stopped
 
 volumes:
-  memstara_postgres_data:
-    name: memstara_postgres_data
+  board-data:
+  runtime-data:
+  board-settings:
+  runtime-settings:
+  control-settings:
+  api-settings:
+  universe-cache:

@@ -1,0 +1,11 @@
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!THIRD_PARTY_NOTICES.md
+!licenses/**
+!src/**
+!examples/**
+!deployment/**
+src/**/__pycache__
+src/**/*.pyc

@@ -43,7 +43,7 @@ def check(root: Path, *, publication: bool = False) -> list[str]:
                 errors.append(f'{name}: redistribution approval is pending')
         if publication and manifest.get('publication_status') != 'approved':
             errors.append('Contributed publication status is not approved')
-        decisions = json.loads((root / 'config/release-readiness.json').read_text())
+        decisions = json.loads((root / 'deployment/release-readiness.json').read_text())
         if decisions.get('schema_version') != 1 or decisions.get('public_and_research_same_source') is not True:
             errors.append('Invalid release configuration or divergent source policy')
         if set(decisions.get('decisions', {})) != DECISIONS:

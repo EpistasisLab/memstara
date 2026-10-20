@@ -97,10 +97,8 @@ Design creation and saving do not require model connectivity. Execution does:
 new launches resolve project settings and freeze them. A legacy nonempty
 `stage_models` different from project defaults must be reviewed and explicitly
 cleared through the configuration API before a new launch. Historical recovery
-continues using its frozen assignment. Import old deployment JSON explicitly with
-`python -m memstara.operational migrate-models --from-json <path>`; the command
-creates a restricted backup before editing `.env`. Never place credentials in
-profiles or research definitions.
+continues using its frozen assignment. Configure model fields directly in `.env`.
+Never place credentials in profiles or research definitions.
 
 Storage initialization and local provisioning validate the Memstara/Motoro database
 separation before launching migrations or Docker. New web executions also apply
@@ -508,11 +506,11 @@ Each Interpretation specialist receives only the selected model; choosing SHAP f
 single route does not also execute LIME. Inspect the recorded explanation sample size: bounded XAI
 samples are not automatically summaries of the entire evaluation cohort.
 
-Without an explicit `MEMSTARA_EXPLANATION_SOURCES` binding, current expert Explanation
+Without an explicit `MEMSTARA_EXPLANATION_SOURCES_JSON` binding, current expert Explanation
 uses provisional metadata-keyword scopes over the configured OKF corpus. Scopes may
 overlap, and the policy records that confirmation is still required. These are not
 separate approved clinical databases. Explicit SQLite/PostgreSQL bindings use
-[explanation-sources.example.json](config/explanation-sources.example.json).
+the inline `.env` schema in [deployment settings](deployment/README.md#optional-inline-settings).
 Do not invent corpus taxonomy filters for a clinical domain: query available filters.
 Missing scoped evidence fails explicitly instead of falling back to unrelated sources.
 
@@ -815,15 +813,15 @@ No login is needed for the public Retail Prices API. Discover candidate meters:
 
 Compare actual deployment model/version, deployment type and resource region with
 these items. Never choose a meter from a substring alone: realtime, audio, batch,
-regional and global products can all contain the same model name. Copy
-`config/azure-pricing-meters.example.json` to the ignored
-`config/azure-pricing-meters.local.json` and fill exact identifiers. Remove cache_read
+regional and global products can all contain the same model name. Set
+`MEMSTARA_AZURE_PRICING_METERS_JSON` in `.env` with exact identifiers and set
+`MEMSTARA_PRICING_PATH=outputs/pricing/catalog.json` for generated results.
+Leave `MEMSTARA_PRICING_JSON` unset when using this generated catalog. Remove cache_read
 only if no corresponding meter is available; cached requests then remain unpriced.
 Do not map a Marketplace model to an unrelated Azure OpenAI meter.
 
 ```sh
-.venv/bin/python -m memstara.azure_costs refresh \
-  --mapping config/azure-pricing-meters.local.json
+.venv/bin/python -m memstara.azure_costs refresh
 ```
 
 Refresh downloads exact meter records with pagination, validates USD/Consumption,
@@ -834,7 +832,8 @@ for new estimates for seven days; run this refresh again before they expire. No
 network request runs in the inference path, and this command does not change Azure.
 The source records and refresh dates remain in the local catalog.
 
-`MEMSTARA_PRICING_PATH` optionally overrides `config/pricing.local.json`. Explicit
+`MEMSTARA_PRICING_JSON` supplies rates directly in `.env`; alternatively,
+`MEMSTARA_PRICING_PATH` selects a generated catalog. There is no implicit file lookup. Explicit
 catalog entries match **provider, deployment name and endpoint** exactly. Normalized
 cached input is subtracted from input before applying the cached rate; it is never
 charged twice. Aggregate cache-write counts do not identify TTL, so the explicit

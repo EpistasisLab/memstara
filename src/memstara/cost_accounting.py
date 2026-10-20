@@ -15,16 +15,18 @@ price_receipt: ContextVar[dict[str, Any] | None] = ContextVar("pricing_receipt",
 
 
 def catalog_path():
-    return Path(
-        os.environ.get("MEMSTARA_PRICING_PATH", str(Path(__file__).resolve().parents[2] / "config/pricing.local.json"))
-    )
+    value = os.environ.get("MEMSTARA_PRICING_PATH", "").strip()
+    return Path(value) if value else None
 
 
 def estimate(profile, prompt, output, cached=0, written=0):
     """Normalized LiteLLM prompt count includes cached input. Never guess TTL prices."""
     path = catalog_path()
+    inline = os.environ.get("MEMSTARA_PRICING_JSON", "").strip()
+    if not inline and path is None:
+        return None
     try:
-        raw = path.read_bytes()
+        raw = inline.encode() if inline else path.read_bytes()
         catalog = json.loads(raw)
         matches = [
             p for p in catalog["profiles"] if all(p.get(k) == profile.get(k) for k in ("provider", "model", "api_base"))

@@ -152,29 +152,6 @@ def test_provider_override_does_not_reuse_default_endpoint():
     assert profiles['non_explanation_agents']['api_base'] == 'https://example.com/v1'
 
 
-def test_migration_failure_preserves_original_and_restricted_backup(tmp_path, monkeypatch):
-    from memstara.operational import migrate_models
-    import dotenv
-    env = tmp_path / '.env'
-    original = 'OPENAI_API_KEY=PRIVATE_SENTINEL\nMEMSTARA_LLM_MODEL=original\n'
-    env.write_text(original)
-    (tmp_path / 'outputs').mkdir()
-    legacy = tmp_path / 'profiles.json'
-    legacy.write_text(json.dumps({key: {'provider': 'openai', 'model': 'replacement'}
-                                 for key in ('non_explanation_agents', 'explanation_agent')}))
-    def fail(*args, **kwargs):
-        raise OSError('Simulated write failure')
-    monkeypatch.setattr(dotenv, 'set_key', fail)
-    with pytest.raises(OSError):
-        migrate_models(legacy, env)
-    assert env.read_text() == original
-    backup = next((tmp_path / 'outputs').iterdir())
-    assert backup.stat().st_mode & 0o777 == 0o700
-    assert (backup / '.env').stat().st_mode & 0o777 == 0o600
-    assert (backup / '.env').read_text() == original
-    assert not list(tmp_path.glob('.env-migration-*'))
-
-
 def test_provenance_does_not_include_credentials_or_overwrite_history(tmp_path, monkeypatch):
     from memstara import env
     from memstara.operational import save_source
@@ -219,27 +196,6 @@ def test_connection_probe_rejects_viewer_with_write_privileges(monkeypatch):
     monkeypatch.setattr(asyncpg, 'connect', connect)
     result = asyncio.run(probe_connections({'MEMSTARA_VIEWER_DSN': 'postgresql://test/db'}))
     assert result['services']['MEMSTARA_VIEWER_DSN'] == 'unsafe_write_privileges'
-
-
-@pytest.mark.parametrize('same', [True, False])
-def test_migration_preserves_profiles_without_pinning_redundant_overrides(tmp_path, same):
-    from dotenv import dotenv_values
-    from memstara.operational import migrate_models
-    (tmp_path / 'outputs').mkdir()
-    env = tmp_path / '.env'
-    env.write_text('OPENAI_API_KEY=PRIVATE_SENTINEL\n')
-    profiles = {'non_explanation_agents': {'provider': 'openai', 'model': 'base', 'temperature': 1},
-                'explanation_agent': {'provider': 'openai', 'model': 'base', 'temperature': 1}
-                if same else {'provider': 'openai', 'model': 'other'}}
-    source = tmp_path / 'models.json'
-    source.write_text(json.dumps(profiles))
-    migrate_models(source, env)
-    values = dotenv_values(env, interpolate=False)
-    assert model_profiles(values) == profiles
-    if same:
-        assert not any(k.startswith(('MEMSTARA_NON_EXPLANATION_', 'MEMSTARA_EXPLANATION_')) for k in values)
-        values['MEMSTARA_LLM_MODEL'] = 'changed'
-        assert {p['model'] for p in model_profiles(values).values()} == {'changed'}
 
 
 @pytest.mark.parametrize('command', ['init', 'services'])

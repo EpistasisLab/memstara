@@ -20,7 +20,8 @@ TASKS = {
     "question": "Write a research question for the objective and available knowledge.",
     "hypothesis": "Propose a testable hypothesis and 4–20 provisional predictor concepts with reasons.",
     "data": "Specify required variables, target definition, predictor timing, collection and data quality checks.",
-    "ml": "Propose configuration for the single user-selected ML model, including preprocessing, splits, seeds and evaluation; do not train.",
+    "ml": ("Propose configuration for the single user-selected ML model, including preprocessing, "
+           "splits, seeds and evaluation; do not train."),
     "interpreter": "Plan SHAP/LIME interpretation and uncertainty checks for future measured results.",
     "report": "Synthesize the proposal, conditional meaning, limitations and next empirical testing steps.",
 }

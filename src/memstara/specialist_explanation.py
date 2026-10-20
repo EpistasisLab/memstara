@@ -64,12 +64,13 @@ def freeze(books, prompts):
     if not books.get("interpreter") or any(s not in interpretation_skills for s in books["interpreter"]):
         raise ValueError("Expert Explanation requires recorded SHAP/LIME Interpretation skills")
     location = os.environ.get("MEMSTARA_EXPLANATION_SOURCES", "").strip()
-    if not location:
+    inline = os.environ.get("MEMSTARA_EXPLANATION_SOURCES_JSON", "").strip()
+    if not location and not inline:
         from memstara.okf_expert import freeze as freeze_okf
         bindings = {SKILLS[name]: freeze_okf(SKILLS[name]) for name in selected}
     else:
         try:
-            bindings = json.loads(Path(location).read_text())
+            bindings = json.loads(inline if inline else Path(location).read_text())
         except Exception:
             raise ValueError("Cannot read the Explanation database binding configuration") from None
     if not isinstance(bindings, dict) or set(bindings) - {"addiction", "hiv"}:

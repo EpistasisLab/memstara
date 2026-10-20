@@ -959,14 +959,16 @@ _ROUTES = [
 def serve(port: int = 8072) -> None:
     """Bind the loopback interface and answer until interrupted.
 
-    The address is not configurable. This service starts processes on this machine
-    with this machine's credentials; which interface it listens on is not a setting to
-    be changed in passing, and exposing it is a decision that needs an answer about
-    authentication first.
+    Native execution stays on loopback. The validated Docker entrypoint sets
+    container mode for its private network listener; only the loopback web proxy
+    is published. This is not an authenticated public deployment.
     """
     load_env()
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    print(f"control service on http://127.0.0.1:{port}")
+    # Container listener is private to the Compose network. Compose publishes only
+    # the loopback web proxy; Host/Origin checks remain enforced by Handler.
+    host = "0.0.0.0" if os.environ.get('MEMSTARA_CONTAINER_MODE') == '1' else '127.0.0.1'
+    server = ThreadingHTTPServer((host, port), Handler)
+    print(f"control service on http://{host}:{port}")
     for route in _ROUTES:
         print(f"  {route}")
     try:

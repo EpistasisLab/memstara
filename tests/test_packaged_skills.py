@@ -66,9 +66,9 @@ def test_release_content_and_publication_gates(tmp_path):
     spec = importlib.util.spec_from_file_location('release_check', ROOT / 'scripts/check_release_readiness.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    for path in ('src/memstara/resources/contributed', 'config', 'examples/research-inputs'):
+    for path in ('src/memstara/resources/contributed', 'deployment', 'examples/research-inputs'):
         # Copy only public config used by this check, never local deployment configs.
-        if path == 'config':
+        if path == 'deployment':
             (tmp_path / path).mkdir()
             shutil.copyfile(ROOT / path / 'release-readiness.json', tmp_path / path / 'release-readiness.json')
         else:

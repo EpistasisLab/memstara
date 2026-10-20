@@ -153,7 +153,130 @@ tests/                         Backend tests
 outputs/                       Local datasets, caches, and run artifacts (ignored)
 ```
 
-## Get started
+## Docker quick start
+
+Use this path for a new, isolated installation. Docker Desktop (or Docker Engine
+with Compose v2), Git, network access for image/dependency downloads and your own
+model deployment credentials are required. Host Python, Node and manual SQL are
+not required. The Docker stack is local-only, not an authenticated public server.
+
+From this checkout's root:
+
+```bash
+cp .env.example .env
+# Edit .env: replace model deployment, resource and credential placeholders.
+# Choose a unique COMPOSE_PROJECT_NAME and a free MEMSTARA_WEB_PORT.
+./start.sh
+```
+
+`./start.sh` checks Docker, builds and starts all services, verifies the browser
+proxy and both backends, and prints the actual application URL. Run it from one
+terminal; services keep running after the terminal closes. If `.env` is missing,
+it creates a private template and stops so you can fill in your credentials.
+It never overwrites an existing `.env` or starts an experiment.
+
+The command restarts existing services to load the current `.env`; finish active
+experiments before running it again. Databases and saved results are retained.
+The equivalent direct Docker startup command is:
+
+```bash
+docker compose up -d --build --force-recreate
+```
+
+**Do not overwrite an existing `.env`.** For a new independent installation use a
+new project name and output/cache directories. Do not reuse an older native
+installation's Compose project name or attach its database volumes implicitly.
+
+Open **http://localhost:5173/**, or the port configured by `MEMSTARA_WEB_PORT`.
+The first build downloads dependencies and can take several minutes. Check readiness:
+
+```bash
+docker compose ps -a
+docker compose logs --tail=80 configure initialize control api web
+```
+
+`configure` and `initialize` must exit with code 0. The databases, Redis, control
+and API must be healthy and web must be running. Configuration is checked before
+startup; bootstrap creates the two database schemas and read-only viewer roles.
+Existing passwords are not silently rotated. An authentication failure against an
+existing volume requires correcting credentials or an explicit administrative
+migration, never deleting the database to bypass the error.
+
+Startup makes **no LLM calls** and does not resume or launch an experiment. A
+healthy web page proves application startup, not valid model credentials or a
+successful scientific pipeline. Register the included synthetic research input
+through the research-input UI before running your first pipeline. The bundled
+files are at `/app/examples/research-inputs/` inside the container.
+
+### One configuration source
+
+See [the deployment configuration contract](deployment/README.md) for ownership,
+path mapping, credential separation and maintenance details.
+
+`.env` supplies model profiles/credentials, database identities, read-only
+credentials, public web port and input/output/cache locations. Do not edit Compose,
+proxy configuration or a model JSON.
+
+| Setting | Docker meaning |
+|---|---|
+| `MEMSTARA_DATABASE_URL`, `MOTORO_DATABASE_URL` | Users, passwords and database names provisioned on the two private servers; local host/port are mapped to internal service addresses |
+| `MEMSTARA_VIEWER_DSN`, `CORE_VIEWER_DSN` | Separate read-only users; database names must match their corresponding owner URLs |
+| `MOTORO_REDIS_URL` | Local unauthenticated Redis database index; mapped to the private Redis service |
+| `MEMSTARA_WEB_PORT` | Only published application port, bound to `127.0.0.1` |
+| `MEMSTARA_API_PORT`, `MEMSTARA_CONTROL_PORT` | Native launcher ports; Docker uses private 8000/8072 listeners and never publishes them |
+| `MEMSTARA_OUTPUT_DIR` | Host directory, mounted read/write at `/app/outputs` |
+| `HF_HOME` | Host cache, mounted at `/app/cache` for control and the viewer model cache location for API |
+| `MEMSTARA_INPUTS_DIR` | Host private-input folder, mounted read-only at `/app/user-inputs` |
+| CSV/OKF/skill path settings | Paths inside the checkout/container: `examples/...`, `user-inputs/...`, `outputs/...`, `cache/...` or bundled `src/memstara/resources/...` |
+| `MEMSTARA_UNIVERSE_SEMANTICS` | Optional local embedding dependencies in the viewer image; cache the documented pinned model before using semantic search |
+
+Percent-encode special characters in URL credentials. Quote literal `.env` secrets
+containing spaces, `#` or `$` using single quotes. Do not source `.env`. Remove shell
+overrides for Compose settings: bootstrap rejects conflicting file/shell values.
+No model credentials are passed to the API/web, and the `.env` is excluded from
+image build contexts. It is mounted read-only only in the configuration service;
+restricted generated settings are separated into per-service volumes.
+
+No `config/` directory is required or shipped. Operational settings come from
+`.env`, including optional `MEMSTARA_PRICING_JSON` (a token-rate catalog),
+`MEMSTARA_AZURE_PRICING_METERS_JSON` (verified Azure retail meter mappings), and
+`MEMSTARA_EXPLANATION_SOURCES_JSON` (specialist database bindings). Leave these
+unset for the default workflow; Explanation uses the selected OKF corpus.
+See [optional inline settings](deployment/README.md#optional-inline-settings) for schemas.
+Prices are estimates, never actual Azure billing. An explicitly configured
+`MEMSTARA_PRICING_PATH=outputs/pricing/catalog.json` may instead point at generated
+pricing data; choose inline rates OR a catalog path. Release review metadata lives in
+`deployment/release-readiness.json` and is not a user runtime setting.
+
+Saved research profiles contain research-specific choices; `.env` contains
+installation defaults. Each execution retains its own redacted configuration
+snapshot. Changing `.env` does not rewrite prior results or frozen configurations.
+For private data, place files under your `MEMSTARA_INPUTS_DIR` and select
+`/app/user-inputs/...` in the browser. Files outside the supported mounts are rejected.
+
+### Stop, restart and update
+
+```bash
+docker compose stop             # stops the application; retains data
+# Start again with the same settings:
+docker compose up -d --build
+# After deliberate maintenance and .env changes, recreate consumers:
+docker compose up -d --build --force-recreate
+# Remove containers/network, retaining database volumes and bind-mounted files:
+docker compose down
+```
+
+Stop or pause running experiments deliberately before maintenance; container shutdown
+is not a promise to resume an in-flight model request. Back up database volumes and
+the output directory before upgrading. `docker compose down -v` is destructive and
+is never part of ordinary installation or troubleshooting. Keep the same project
+name to reopen the same Docker databases. Changing passwords in `.env` does not
+change existing PostgreSQL passwords.
+
+The native development workflow below remains available for debugging and separate
+host-managed services. Do not run both launch paths on the same published ports.
+
+## Get started (native development)
 
 This section contains the complete local setup: install Memstara and Motoro,
 start two databases and Redis, configure your model, select data and knowledge,
@@ -230,7 +353,7 @@ The file accepts literal values; shell `${...}` interpolation is not supported.
 | `ANTHROPIC_FOUNDRY_RESOURCE`, `ANTHROPIC_FOUNDRY_API_KEY` | Obtain your resource name and authorized key for Foundry |
 | `MEMSTARA_LLM_API_BASE` | Optional Foundry resource-root URL; it can replace the resource name, and both must agree if set |
 | `MEMSTARA_DATABASE_URL`, `MOTORO_DATABASE_URL`, `MOTORO_REDIS_URL` | Select independent service destinations; preserve existing values when migrating |
-| `MEMSTARA_COMPOSE_PROJECT` | Choose a unique name for a new Docker installation |
+| `COMPOSE_PROJECT_NAME` | Choose a unique name for a new Docker installation |
 | `MEMSTARA_WEB_PORT`, `MEMSTARA_API_PORT`, `MEMSTARA_CONTROL_PORT` | Choose free ports; launcher and web proxy use these same values |
 | `MEMSTARA_VIEWER_DSN`, `CORE_VIEWER_DSN` | Read-only database accounts for the observation API |
 | `MEMSTARA_OUTPUT_DIR`, `HF_HOME` | Tool output and model-cache directories |
@@ -306,7 +429,7 @@ This provisions two PostgreSQL services (Motoro uses pgvector) and Redis. It bin
 only loopback, generates a restricted local Compose definition under the configured
 output directory, and refuses occupied ports or an existing project's containers
 or volumes. It does not stop another installation or adopt its data automatically.
-Do not use the repository's legacy bare `docker compose up -d` for this workflow.
+Do not use the root application Compose stack for this native provisioning workflow.
 
 Inspect health using the generated file (adjust `outputs` if you changed it):
 
@@ -325,26 +448,6 @@ and use it to start/stop its services; `services` is a guarded **new provisionin
 command. Changing a password in `.env` does not rotate an existing PostgreSQL role.
 Deleting the checkout does not delete Docker volumes. Do not use `down -v` unless
 you intend to delete those databases.
-
-#### Migrate an existing model JSON
-
-Preserve your existing DB/Redis/data/output locations. Import model assignments
-explicitly (the command creates a restricted backup under `outputs/`):
-
-```bash
-python -m memstara.operational migrate-models --from-json config/stage-models.local.json
-python -m memstara.local_setup check
-```
-
-The importer does not copy shell credentials. Transfer your authorized provider
-credentials to project `.env` after checking that they belong to the configured
-resource. Remove `MEMSTARA_STAGE_MODELS_PATH` from the selected configuration and
-restart the affected services. Do not delete shell settings used by other projects
-until those projects have their own configuration. Roll back using the restricted
-backup and the preceding code revision; never replace historical run artifacts.
-A saved design with explicit models differing from the project is rejected on a
-new start: explicitly clear its `stage_models` to adopt project settings. Historical
-resume retains its frozen models and uses current credentials for that target.
 
 ### 4. Choose and prepare one research input
 
@@ -1464,10 +1567,12 @@ see [Knowledge-source provenance and KG novelty ranking](DEVELOPER_GUIDE.md#know
 
 ### Question Universe exploration
 
-The default workspace opens Question Universe. **Set up research** reuses the existing
-input registration and pipeline review wizard; **Go** starts a configured, never-run
-pipeline. Existing executions remain available through **Inspect** and Advanced
-pipeline controls. Advanced views preserve Floor plan, telemetry and diagnostics.
+The default workspace opens Question Universe. **New research** reuses the existing
+input registration and pipeline review wizard. Expand **Pipeline controls** for
+**Go**, pause/resume and **Inspect** actions; **View floor plan** opens the existing
+pipeline workspace. Every view remains directly accessible in navigation, including
+Floor plan, Clinician view, Final report, Telemetry, Run log, Board, Task life and
+Access map. Collapsing pipeline controls only changes their visibility.
 Results/report headers remain available when their panels are initially collapsed.
 
 Decorative placement is explicitly nonsemantic. **Semantic layout and search** uses

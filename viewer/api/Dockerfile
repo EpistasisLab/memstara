@@ -12,9 +12,7 @@ COPY api/ ./api/
 
 # Read-only credentials by default. The account holds SELECT and nothing else, so even
 # a bug here cannot change the board.
-ENV MEMSTARA_VIEWER_DSN="postgresql://memstara_viewer:viewer@host.docker.internal:5463/memstara" \
-    CORE_VIEWER_DSN="postgresql://memstara_viewer:viewer@host.docker.internal:5453/motoro" \
-    VIEWER_CORS=""
+ENV VIEWER_CORS=""
 
 EXPOSE 8000
 # Snapshot assembly performs several independent database reads. Keep one slow read

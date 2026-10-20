@@ -16,13 +16,14 @@ from memstara.paths import REPO_ROOT
 
 SELECTORS = {'MEMSTARA_CONFIG_MODE', 'MEMSTARA_ENV_FILE'}
 PREFIXES = ('MEMSTARA_', 'MOTORO_', 'ANTHROPIC_', 'OPENAI_', 'OPENROUTER_', 'AZURE_', 'AGENTIC_')
-EXTRA = {'AGENTIC_OKF_BUNDLE_DIR', 'CORE_VIEWER_DSN', 'VIEWER_CORS', 'HF_HOME',
+EXTRA = {'COMPOSE_PROJECT_NAME', 'AGENTIC_OKF_BUNDLE_DIR', 'CORE_VIEWER_DSN', 'VIEWER_CORS', 'HF_HOME',
          'HF_HUB_CACHE', 'HF_HUB_OFFLINE', 'OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS',
          'MKL_NUM_THREADS', 'TOKENIZERS_PARALLELISM', 'POSTGRES_PASSWORD'}
 PORT_DEFAULTS = {'MEMSTARA_WEB_PORT': 5173, 'MEMSTARA_API_PORT': 8071,
                  'MEMSTARA_CONTROL_PORT': 8072}
 PATH_DEFAULTS = {'MEMSTARA_OUTPUT_DIR': 'outputs', 'HF_HOME': 'outputs/huggingface'}
-PATH_KEYS = {*PATH_DEFAULTS, 'HF_HUB_CACHE', 'MEMSTARA_DATASET_PATH', 'AGENTIC_OKF_BUNDLE_DIR',
+PATH_KEYS = {*PATH_DEFAULTS, 'MEMSTARA_INPUTS_DIR', 'MEMSTARA_PRICING_PATH', 'HF_HUB_CACHE',
+             'MEMSTARA_DATASET_PATH', 'AGENTIC_OKF_BUNDLE_DIR',
              'MEMSTARA_USER_SKILLS_DIR', 'MEMSTARA_SPECIALIST_SKILLS_DIR',
              'MEMSTARA_SHARED_SKILLS_DIR', 'MEMSTARA_RESULTS_SKILL_PATH',
              'MEMSTARA_ML_REFERENCE_PATH', 'MEMSTARA_SKILL_ALIASES_PATH',
@@ -49,12 +50,37 @@ def resolve(environ=None, *, file: Path | None = None):
             raise ValueError('Project .env requires literal values; shell interpolation is not supported')
     else:
         values = {k: v for k, v in source.items() if managed(k) and k not in SELECTORS}
+    if (values.get('COMPOSE_PROJECT_NAME') and values.get('MEMSTARA_COMPOSE_PROJECT')
+            and values['COMPOSE_PROJECT_NAME'] != values['MEMSTARA_COMPOSE_PROJECT']):
+        raise ValueError('COMPOSE_PROJECT_NAME conflicts with legacy MEMSTARA_COMPOSE_PROJECT')
+    import json
+    for key, legacy in (
+        ('MEMSTARA_PRICING_JSON', 'MEMSTARA_PRICING_PATH'),
+        ('MEMSTARA_EXPLANATION_SOURCES_JSON', 'MEMSTARA_EXPLANATION_SOURCES'),
+        ('MEMSTARA_AZURE_PRICING_METERS_JSON', None),
+    ):
+        if not values.get(key, '').strip():
+            continue
+        if legacy and values.get(legacy, '').strip():
+            raise ValueError(f'{key} conflicts with {legacy}; choose one source')
+        try:
+            parsed = json.loads(values[key])
+            if not isinstance(parsed, dict):
+                raise ValueError()
+            if key != 'MEMSTARA_EXPLANATION_SOURCES_JSON' and not isinstance(parsed.get('profiles'), list):
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise ValueError(f'{key} must contain a valid JSON object with the documented schema') from None
     root = path.parent if mode == 'project' else REPO_ROOT
     for name, default in PATH_DEFAULTS.items():
         values.setdefault(name, str(root / default))
+    inputs = Path(values.get('MEMSTARA_INPUTS_DIR') or root / 'user-inputs').expanduser()
+    inputs = (inputs if inputs.is_absolute() else root / inputs).resolve()
     for name in PATH_KEYS:
         if values.get(name):
             p = Path(values[name]).expanduser()
+            if name != 'MEMSTARA_INPUTS_DIR' and not p.is_absolute() and p.parts[:1] == ('user-inputs',):
+                p = inputs.joinpath(*p.parts[1:])
             values[name] = str((p if p.is_absolute() else root / p).resolve())
     for name, port_default in PORT_DEFAULTS.items():
         value = values.get(name, str(port_default))
@@ -132,57 +158,6 @@ def save_source(directory: Path) -> None:
         atomic_json(path, configuration_source(), overwrite=False)
 
 
-def migrate_models(path: Path, destination: Path) -> Path:
-    """Explicitly import legacy profiles, preserving a restricted backup first."""
-    import json
-    import shutil
-    import tempfile
-    from dotenv import set_key, unset_key
-    from memstara.stage_models import validate_profiles
-    profiles = validate_profiles(json.loads(path.read_text()))
-    if not destination.is_file():
-        raise ValueError('Create project .env before importing legacy model settings')
-    backup = Path(tempfile.mkdtemp(prefix='environment-', dir=destination.parent / 'outputs'))
-    backup.chmod(0o700)
-    for source in (destination, path):
-        copied = backup / source.name
-        shutil.copyfile(source, copied)
-        copied.chmod(0o600)
-    # Edit a restricted temporary copy; any validation/write failure leaves the
-    # original installation configuration intact.
-    fd, name = tempfile.mkstemp(prefix='.env-migration-', dir=destination.parent)
-    os.close(fd)
-    temporary = Path(name)
-    try:
-        shutil.copyfile(destination, temporary)
-        existing = dotenv_values(temporary, interpolate=False)
-        fields = ('provider', 'model', 'api_base', 'temperature', 'max_tokens', 'effort')
-        primary, explanation = profiles['non_explanation_agents'], profiles['explanation_agent']
-        base = {key: value for key, value in primary.items()
-                if key in ('provider', 'model') or explanation.get(key) == value}
-        groups = [('MEMSTARA_LLM_', base)]
-        for family, prefix in (('non_explanation_agents', 'MEMSTARA_NON_EXPLANATION_'),
-                               ('explanation_agent', 'MEMSTARA_EXPLANATION_')):
-            groups.append((prefix, {k: v for k, v in profiles[family].items() if base.get(k) != v}))
-        for prefix, assignments in groups:
-            for key in fields:
-                name = prefix + key.upper()
-                if name in existing:
-                    unset_key(str(temporary), name)
-                if key in assignments:
-                    set_key(str(temporary), name, str(assignments[key]))
-        if 'MEMSTARA_STAGE_MODELS_PATH' in existing:
-            unset_key(str(temporary), 'MEMSTARA_STAGE_MODELS_PATH')
-        imported, _ = resolve({}, file=temporary)
-        if model_profiles(imported) != profiles:
-            raise ValueError('Legacy assignments cannot be reproduced exactly; original .env was preserved')
-        temporary.chmod(0o600)
-        os.replace(temporary, destination)
-    finally:
-        temporary.unlink(missing_ok=True)
-    return backup
-
-
 def database_errors(values: dict) -> list[str]:
     """Validate storage destinations before provisioning or schema mutations."""
     errors = []
@@ -214,11 +189,11 @@ def database_errors(values: dict) -> list[str]:
 def check(values: dict) -> dict:
     """Static readiness, deliberately not a successful network or model probe."""
     errors = database_errors(values)
-    for name in PATH_KEYS - set(PATH_DEFAULTS) - {'HF_HUB_CACHE', 'MEMSTARA_USER_SKILLS_DIR'}:
+    for name in PATH_KEYS - set(PATH_DEFAULTS) - {'HF_HUB_CACHE', 'MEMSTARA_USER_SKILLS_DIR', 'MEMSTARA_INPUTS_DIR'}:
         if values.get(name) and not Path(values[name]).exists():
             errors.append(f'{name} does not exist; correct the selected project .env')
     if values.get('MEMSTARA_STAGE_MODELS_PATH'):
-        errors.append('Migrate legacy model JSON and unset MEMSTARA_STAGE_MODELS_PATH')
+        errors.append('Set model fields in .env and remove unsupported MEMSTARA_STAGE_MODELS_PATH')
     profiles = {}
     try:
         profiles = model_profiles(values)
@@ -239,26 +214,16 @@ def main() -> int:
     import argparse
     import json
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('check', 'migrate-models'))
-    parser.add_argument('--from-json', type=Path)
-    args = parser.parse_args()
+    parser.add_argument('command', choices=('check',))
+    parser.parse_args()
     try:
-        if args.command == 'migrate-models':
-            if not args.from_json:
-                raise ValueError('Provide --from-json explicitly')
-            file = Path(os.environ.get('MEMSTARA_ENV_FILE') or REPO_ROOT / '.env')
-            (file.parent / 'outputs').mkdir(exist_ok=True)
-            backup = migrate_models(args.from_json, file)
-            print('Legacy model assignments imported. Restricted backup:', backup)
-            print('Credentials are not imported. Restart services after validating .env.')
-            return 0
         values, source = resolve()
         result = check(values)
         print(json.dumps({'source': source, **result}, indent=2))
         return 0 if result['configuration_valid'] else 1
     except (ValueError, OSError):
         # Parser/IO details may contain credential-bearing input: keep this generic.
-        print('Configuration unavailable. Check selected .env, values and migration source; no values logged.')
+        print('Configuration unavailable. Check selected .env and values; no values logged.')
         return 1
 
 

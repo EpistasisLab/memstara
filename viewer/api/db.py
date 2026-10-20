@@ -30,8 +30,8 @@ T = TypeVar("T")
 #: under uvicorn's real LOGGING_CONFIG.
 logger = logging.getLogger("uvicorn.error.viewer")
 
-MEMSTARA_DSN_DEFAULT = "postgresql://memstara_viewer:viewer@localhost:5463/memstara"
-CORE_DSN_DEFAULT = "postgresql://memstara_viewer:viewer@localhost:5453/motoro"
+MEMSTARA_DSN_DEFAULT = ""
+CORE_DSN_DEFAULT = ""
 
 #: Connections per pool. Two pools, so the servers see at most 2 x this.
 POOL_MAX = 10
@@ -65,6 +65,8 @@ def _dsn(env_name: str, default: str) -> str:
     # copied straight from somewhere else (the pipeline, say) is still one asyncpg
     # accepts.
     url = os.environ.get(env_name, "").strip() or default
+    if not url:
+        raise ValueError(f"{env_name} is required; configure the project .env and restart the API")
     return re.sub(r"^postgresql\+\w+://", "postgresql://", url)
 
 

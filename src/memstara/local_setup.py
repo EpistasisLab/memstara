@@ -54,9 +54,9 @@ def compose_definition(values):
     errors = database_errors(values)
     if errors:
         raise ValueError('; '.join(errors))
-    project = values.get('MEMSTARA_COMPOSE_PROJECT', 'memstara-local')
+    project = values.get('COMPOSE_PROJECT_NAME') or values.get('MEMSTARA_COMPOSE_PROJECT', 'memstara-local')
     if not re.fullmatch('[a-z0-9][a-z0-9_-]*', project):
-        raise ValueError('MEMSTARA_COMPOSE_PROJECT must be a lowercase Compose project identifier')
+        raise ValueError('COMPOSE_PROJECT_NAME must be a lowercase Compose project identifier')
     services = {}
     ports = []
     for name, key, image in (('board', 'MEMSTARA_DATABASE_URL', 'postgres:16-alpine'),
