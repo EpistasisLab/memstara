@@ -7,6 +7,7 @@ credentials stay in bootstrap/control; the viewer receives read-only DSNs only.
 from __future__ import annotations
 
 from pathlib import Path
+import secrets
 from urllib.parse import unquote, urlsplit, urlunsplit
 
 from memstara.operational import PATH_KEYS, check
@@ -39,6 +40,30 @@ def database(url: str, key: str, host: str) -> tuple[str, dict[str, str]]:
         raise ConfigurationError(
             f"{key}: use an explicit local PostgreSQL user, password and database; percent-encode URL credentials"
         ) from None
+
+
+def provision_viewers(values: dict[str, str], previous: dict[str, str]) -> dict[str, str]:
+    """Derive private reader credentials once; reuse persisted credentials on restart."""
+    result = dict(values)
+    for owner_key, host, reader_key in (
+        ("MEMSTARA_DATABASE_URL", "board", "MEMSTARA_VIEWER_DSN"),
+        ("MOTORO_DATABASE_URL", "runtime", "CORE_VIEWER_DSN"),
+    ):
+        if result.get(reader_key, "").strip():
+            continue
+        mapped, owner = database(result.get(owner_key, ""), owner_key, host)
+        if previous.get(reader_key):
+            if previous.get(owner_key) != mapped:
+                raise ConfigurationError(f"{owner_key}: changed owner settings require explicit viewer credentials")
+            result[reader_key] = previous[reader_key]
+            continue
+        role = "memstara_viewer"
+        if owner["POSTGRES_USER"] == role:
+            role = "memstara_readonly"
+        parsed = urlsplit(mapped)
+        result[reader_key] = urlunsplit(("postgresql", role + ":" + secrets.token_urlsafe(32)
+                                        + "@" + host + ":5432", parsed.path, "", ""))
+    return result
 
 
 def derive(values: dict[str, str], *, root: Path) -> dict[str, dict[str, str]]:

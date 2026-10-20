@@ -6,7 +6,7 @@ from pathlib import Path
 import shlex
 import sys
 
-from memstara.container_config import ConfigurationError, derive
+from memstara.container_config import ConfigurationError, derive, provision_viewers
 from memstara.operational import resolve
 
 
@@ -28,6 +28,9 @@ def main():
                 supplied = str((Path("/app") / supplied).resolve())
             if supplied is not None and supplied != expected:
                 raise ConfigurationError(f"{name}: shell/Compose setting differs from .env; unset the shell override")
+        saved = Path("/generated/control/settings.json")
+        previous = json.loads(saved.read_text()) if saved.exists() else {}
+        values = provision_viewers(values, previous)
         groups = derive(values, root=Path("/app"))
         for service, settings in groups.items():
             root = Path("/generated") / service

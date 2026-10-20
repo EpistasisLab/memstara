@@ -121,3 +121,9 @@ billing, and does not make an inference request.
 
 Model assignments are configured directly in `.env`. Release
 review metadata in `deployment/release-readiness.json` does not configure the app.
+
+Docker automatically generates missing viewer credentials and retains them in its
+restricted control-settings volume. Restarting reuses the credentials; it never
+rotates an existing database role silently. Explicit `.env` DSNs override this
+derivation. Preserve the settings volumes together with the databases. A changed
+owner identity with persisted viewer settings requires explicit credentials.

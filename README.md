@@ -220,7 +220,7 @@ proxy configuration or a model JSON.
 | Setting | Docker meaning |
 |---|---|
 | `MEMSTARA_DATABASE_URL`, `MOTORO_DATABASE_URL` | Users, passwords and database names provisioned on the two private servers; local host/port are mapped to internal service addresses |
-| `MEMSTARA_VIEWER_DSN`, `CORE_VIEWER_DSN` | Separate read-only users; database names must match their corresponding owner URLs |
+| `MEMSTARA_VIEWER_DSN`, `CORE_VIEWER_DSN` | Optional overrides for separate read-only users; Docker generates and retains these credentials when omitted |
 | `MOTORO_REDIS_URL` | Local unauthenticated Redis database index; mapped to the private Redis service |
 | `MEMSTARA_WEB_PORT` | Only published application port, bound to `127.0.0.1` |
 | `MEMSTARA_API_PORT`, `MEMSTARA_CONTROL_PORT` | Native launcher ports; Docker uses private 8000/8072 listeners and never publishes them |

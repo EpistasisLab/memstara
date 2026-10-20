@@ -144,3 +144,26 @@ def test_omitted_inputs_path_matches_compose_default(tmp_path):
     values, _ = resolve({}, file=file)
     assert values['MEMSTARA_INPUTS_DIR'] == str(tmp_path / 'user-inputs')
     assert derive(values, root=tmp_path)['control']['MEMSTARA_INPUTS_DIR'] == str(tmp_path / 'user-inputs')
+
+
+def test_auto_viewers_are_private_and_reused_after_restart(tmp_path):
+    from memstara.container_config import provision_viewers
+    values = configuration(tmp_path)
+    for key in ('MEMSTARA_VIEWER_DSN', 'CORE_VIEWER_DSN'):
+        values.pop(key)
+    first = provision_viewers(values, {})
+    groups = derive(first, root=tmp_path)
+    second = provision_viewers(values, groups['control'])
+    for key in ('MEMSTARA_VIEWER_DSN', 'CORE_VIEWER_DSN'):
+        assert first[key] == second[key]
+        assert 'memstara_viewer:' in first[key]
+    assert first['MEMSTARA_VIEWER_DSN'] != first['CORE_VIEWER_DSN']
+    values['MEMSTARA_DATABASE_URL'] = values['MEMSTARA_DATABASE_URL'].replace('/boarddb', '/another')
+    with pytest.raises(ValueError, match='explicit viewer credentials'):
+        provision_viewers(values, groups['control'])
+
+
+def test_explicit_viewers_are_not_overwritten(tmp_path):
+    from memstara.container_config import provision_viewers
+    values = configuration(tmp_path)
+    assert provision_viewers(values, {}) == values
