@@ -50,15 +50,6 @@ def details(tag):
             'groups':[{'stage':k[0],'model':k[1],**v} for k,v in groups.items()], 'records':records}
 
 
-def azure_summary():
-    path = run_artifacts.ROOT / 'azure_costs.json'
-    try:
-        data = json.loads(path.read_text())
-        return {k:data[k] for k in ('status','retrieved_at','period','scope_type','totals','basis')}
-    except (OSError, ValueError, KeyError, TypeError):
-        return {'status':'unavailable','basis':'Azure Cost Management has not been synchronized. No billed amount is assumed.'}
-
-
 def summarize_motoro(tag, calls, runs, steps):
     """Aggregate persisted Motoro amounts only; never apply a token rate."""
     by_id = {c['run_id']: c for c in calls if c.get('run_id')}

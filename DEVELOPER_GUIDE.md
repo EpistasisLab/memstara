@@ -635,7 +635,7 @@ inputs and policies; `trace/` and the developer inspector for full model/tool I/
 splits, seeds, fitted models and XAI outputs. The journal omits prompts, tool arguments,
 endpoint URLs, credential values and raw exception messages. It neither captures raw
 HTTP traffic nor exposes Azure's internal failure cause. Cost receipts remain usage
-and estimates; actual billing must be independently verified through Azure APIs.
+and estimates; actual billing is unavailable unless supplied with evidence by Motoro.
 
 A rigorous one-route acceptance check includes all of the following:
 
@@ -783,13 +783,12 @@ generated snapshot and must be rebuilt after source changes; it is not a live vi
 the filesystem. Keep this guide and API examples synchronized when changing routing
 keys, execution semantics, source bindings, or artifact formats.
 
-## Cost evidence and Azure API integration
+## Motoro cost evidence
 
-The Totals view includes **Cost details and Azure reconciliation** for the selected
-execution. It separates recorded token-based estimates from Azure-reported cost for
-a subscription/resource-group period. These two numbers must never be added together
-or presented as identical scopes. Azure reported actual cost can be delayed and is
-not a final invoice or an agent-level attribution.
+The Totals view reads cost evidence exclusively from Motoro. Memstara does not
+query Azure billing or display historical Azure account snapshots. Current Motoro
+records supply estimates only; actual billed amounts are not provided. Never label
+an estimate as an actual charge or interpret missing evidence as zero.
 
 New pipeline requests write `cost_ledger.jsonl` in their run directory. Records include
 agent invocation, stage, loop, requested/response model, normalized input/output/cache
@@ -821,7 +820,7 @@ Memstara stage/loop; it never computes token prices. Records not persisted by Mo
 are outside that view's coverage. Historical local ledgers and experiment-registry
 snapshots remain archived evidence; they are not the authoritative runtime reader.
 Pipeline/loop wall-clock timing, lifecycle controls, CSV/OKF provenance and ML metrics
-remain Memstara responsibilities. Azure actual billing remains a separate source.
+remain Memstara responsibilities. Actual billing must also come from Motoro; currently it is unavailable.
 
 ### Cost calculation ownership
 
@@ -830,7 +829,7 @@ its pricing function or apply local deployment catalogs, manual rates or pricing
 JSON to model requests. It records Motoro's returned amount and source, including
 unknown prices. Motoro 0.10.0 also uses zero for missing prices in call records;
 Memstara retains that raw value as `reported_cost_estimate` but displays it as
-unknown when a genuine free request cannot be established. Actual Azure billing remains separate.
+unknown when a genuine free request cannot be established. Actual billing is not provided by the current Motoro records.
 Historical receipts remain unchanged. Restart control workers to apply this policy;
 already-running processes retain their loaded code.
 
@@ -869,45 +868,13 @@ Legacy catalog settings and offline estimate helpers remain available for histor
 audits only. They are not consumed by the pipeline request path. The manual-rate
 control endpoint rejects writes; the UI explains Motoro ownership instead.
 
-### Retrieve Azure account costs
+### Actual billed amounts
 
-Install Azure CLI and sign in with a Cost Management reader at the selected scope.
-The inference API key cannot authorize billing access. Do not put login tokens in
-model configuration or expose them to the frontend.
-
-```sh
-az login --use-device-code
-.venv/bin/python -m memstara.azure_costs actual \
-  --scope /subscriptions/YOUR_SUBSCRIPTION_ID/resourceGroups/YOUR_RESOURCE_GROUP \
-  --start 2026-10-07T00:00:00Z --end 2026-10-08T00:00:00Z
-```
-
-Actual expenditure must come from Azure billing evidence in both UI and reports.
-Always show retrieval time, reporting period, currency, and scope. Missing billing
-rows are pending/unavailable, never zero. Do not substitute token estimates or an
-allocated share of aggregate charges for an exact execution charge. Current-period
-ActualCost is not a finalized invoice. Claude CCU aggregates cannot be attributed
-to a specific execution without additional billing evidence. Estimates, if shown,
-must remain separately labeled and secondary.
-
-This read-only Cost Management Query API request aggregates daily actual cost by
-service, retains currencies separately, follows pagination and saves
-`outputs/runs/azure_costs.json`. The viewer already mounts that directory read-only;
-`/api/azure-costs` exposes a scope/period summary, not credentials. A failed query
-preserves the last successful snapshot and never writes a fake zero. Empty rows may
-mean reporting delay. The UI always shows retrieval time and scope; no automatic
-allocation to an individual experiment is implied. Refresh explicitly when needed;
-there is no background Azure synchronization scheduler.
-
-The request ledger is available via `/api/cost-details?run_tag=...`. The API resolves
-only indexed runs and cannot read arbitrary user-supplied paths. Cost totals prefer
-ledger receipts when available and remain partial when any attempt is unpriced.
-Restart the viewer API/web after code changes. New pipeline workers load the pricing
-adapter; no Motoro source or database schema changes are needed.
-
-API references: [Azure retail prices](https://learn.microsoft.com/en-us/rest/api/cost-management/retail-prices/azure-retail-prices),
-[Cost Management Query](https://learn.microsoft.com/en-us/rest/api/cost-management/query/usage?view=rest-cost-management-2025-03-01),
-[Claude billing](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/claude-models-billing).
+Direct Azure billing queries are disabled. The legacy `/api/azure-costs` endpoint
+returns HTTP 410; the legacy CLI `actual` command fails before any network access.
+Historical receipts are retained but are not displayed as current billing evidence.
+Actual amounts require explicit billing evidence supplied by Motoro; the current
+integration has no such field. Cost details remain estimates from Motoro records.
 
 ## Experiment registry
 

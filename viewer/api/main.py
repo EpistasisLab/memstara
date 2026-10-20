@@ -113,8 +113,7 @@ async def cost_details(run_tag: str = Query(min_length=1, max_length=180)):
 
 @app.get('/api/azure-costs')
 async def azure_cost_summary():
-    import cost_details as evidence
-    return await asyncio.to_thread(evidence.azure_summary)
+    raise HTTPException(status_code=410, detail='Direct Azure billing is disabled. Cost information must come from Motoro.')
 # The app itself. Everything below is GET and nothing else.
 
 # During development the Vite dev server (5173) runs on another port, so CORS has to be

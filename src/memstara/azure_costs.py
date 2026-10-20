@@ -1,11 +1,10 @@
-"""Read Azure public meters and account costs; never create or modify resources.
+"""Legacy offline public-meter inspection; direct account billing is disabled.
 
 Run `python -m memstara.azure_costs --help`. No model inference is performed.
 """
 
 import argparse
 import json
-import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
@@ -116,68 +115,8 @@ def refresh(mapping=None):
 
 
 def query_costs(scope, start, end, destination):
-    import re
-
-    if not re.fullmatch(r"/subscriptions/[0-9a-fA-F-]+(?:/resourceGroups/[\w.()\-]+)?", scope):
-        raise ValueError("Use a subscription or resource-group scope")
-    a, b = datetime.fromisoformat(start), datetime.fromisoformat(end)
-    if a >= b:
-        raise ValueError("End must be after start")
-    body = {
-        "type": "ActualCost",
-        "timeframe": "Custom",
-        "timePeriod": {"from": start, "to": end},
-        "dataset": {
-            "granularity": "Daily",
-            "aggregation": {"totalCost": {"name": "Cost", "function": "Sum"}},
-            "grouping": [{"type": "Dimension", "name": "ServiceName"}],
-        },
-    }
-    url = "https://management.azure.com" + scope + "/providers/Microsoft.CostManagement/query?api-version=2025-03-01"
-    pages = []
-    seen: set[str] = set()
-    while url:
-        if url in seen or len(seen) >= 100 or urlsplit(url).hostname != "management.azure.com":
-            raise ValueError("Invalid cost API pagination")
-        seen.add(url)
-        result = subprocess.run(
-            ["az", "rest", "--method", "post", "--url", url, "--body", json.dumps(body), "--output", "json"],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        if result.returncode:
-            raise RuntimeError(
-                "Azure cost query failed. Check az login and Cost Management read access; no zero assumed."
-            )
-        page = json.loads(result.stdout)["properties"]
-        pages.append(page)
-        url = page.get("nextLink")
-    totals: dict[str, float] = {}
-    for page in pages:
-        names = [c["name"] for c in page["columns"]]
-        for row in page["rows"]:
-            value = dict(zip(names, row, strict=True))
-            currency = value["Currency"]
-            totals[currency] = totals.get(currency, 0) + float(value["Cost"])
-    output = {
-        "status": "retrieved",
-        "retrieved_at": datetime.now(UTC).isoformat(),
-        "period": {"from": start, "to": end},
-        "scope_type": "resource group" if "/resourceGroups/" in scope else "subscription",
-        "totals": totals,
-        "pages": pages,
-        "basis": (
-            "Azure reported actual cost for the selected scope and period; "
-            "not a final invoice or per-run attribution"
-        ),
-    }
-    path = Path(destination)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(".tmp")
-    temp.write_text(json.dumps(output, indent=2, allow_nan=False))
-    temp.replace(path)
-    return {"status": "retrieved", "output": str(path)}
+    """Retired entry point; never contact Azure or replace historical receipts."""
+    raise RuntimeError("Direct Azure billing queries are disabled. Cost information must come from Motoro.")
 
 
 def main():

@@ -103,25 +103,17 @@ def test_cost_ui_keeps_unknown_calls_partial(tmp_path, monkeypatch):
     assert cost_details.details("run")["status"] == "unavailable"
 
 
-def test_azure_query_preserves_currency_and_existing_snapshot_on_failure(tmp_path, monkeypatch):
+def test_direct_azure_billing_is_disabled_without_network_or_snapshot_changes(tmp_path, monkeypatch):
     import subprocess
     from memstara import azure_costs
-
-    page = {
-        "properties": {
-            "columns": [{"name": "Cost"}, {"name": "Currency"}, {"name": "ServiceName"}],
-            "rows": [[1.25, "USD", "Foundry"], [2.0, "EUR", "Marketplace"]],
-        }
-    }
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=0, stdout=json.dumps(page)))
+    def forbidden(*args, **kwargs):
+        pytest.fail("Direct billing must not invoke Azure CLI")
+    monkeypatch.setattr(subprocess, "run", forbidden)
     dest = tmp_path / "azure.json"
-    azure_costs.query_costs("/subscriptions/1234", "2026-10-07T00:00:00Z", "2026-10-08T00:00:00Z", dest)
-    before = dest.read_bytes()
-    assert json.loads(before)["totals"] == {"USD": 1.25, "EUR": 2.0}
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=1, stdout=""))
-    with pytest.raises(RuntimeError):
-        azure_costs.query_costs("/subscriptions/1234", "2026-10-07T00:00:00Z", "2026-10-08T00:00:00Z", dest)
-    assert dest.read_bytes() == before
+    dest.write_text('historical receipt')
+    with pytest.raises(RuntimeError, match="must come from Motoro"):
+        azure_costs.query_costs("/subscriptions/1234", "start", "end", dest)
+    assert dest.read_text() == 'historical receipt'
 
 
 @pytest.mark.parametrize("amount,status", [(None,"unknown"),(0.0,"unknown"),(.125,"estimated")])
