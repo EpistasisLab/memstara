@@ -84,7 +84,7 @@
 .universe-popover-body { position:absolute; top:calc(100% + 8px); right:0; z-index:30; width:320px; max-width:calc(100vw - 40px); padding:18px; border:1px solid rgb(var(--line)); border-radius:12px; background:rgb(var(--panel)); box-shadow:0 8px 28px rgb(0 0 0 / .12); }
 .universe-popover-body.universe-options { gap:18px; }
 .universe-popover-body .universe-option-check { display:flex; align-items:flex-start; gap:10px; font-size:13px; line-height:1.5; }
-.universe-popover-body input[type=checkbox] { margin-top:3px; }
+.universe-popover-body input[type=checkbox] { margin-top:3px; min-height:16px; height:16px; width:16px; flex-shrink:0; }
 .universe-popover-body .universe-note { margin:0; font-size:12px; line-height:1.5; color:rgb(var(--ink-soft)); }
 .universe-explore-menu { display:grid; gap:4px; padding:6px; width:270px; }
 .universe-explore-menu button { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px; text-align:left; font-size:13px; border-radius:7px; }

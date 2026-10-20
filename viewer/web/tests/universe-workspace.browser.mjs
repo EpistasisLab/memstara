@@ -30,6 +30,8 @@ try {for(const width of [1440,390]){
  await expect(page.locator('dialog[open]')).toHaveCount(0);
  const sizes=await page.locator('.universe-search, .universe-popover > summary, .universe-clear-questions').evaluateAll(els=>els.map(e=>e.getBoundingClientRect().height));
  assert(sizes.length===4&&sizes.every(h=>Math.abs(h-44)<1),JSON.stringify({width,sizes}));
+ const tops=await page.locator('.universe-popover > summary, .universe-clear-questions').evaluateAll(els=>els.map(e=>e.getBoundingClientRect().top));
+ assert(Math.max(...tops)-Math.min(...tops)<1,JSON.stringify({width,tops}));
  const popup=page.locator('.universe-popover[open] .universe-popover-body');await expect(popup).toBeVisible();
  assert(await popup.evaluate(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&e.scrollWidth<=e.clientWidth+1;}));
  await page.screenshot({path:`/private/tmp/universe-popover-${width}.png`});

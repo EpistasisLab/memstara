@@ -113,7 +113,7 @@ dialog::backdrop { backdrop-filter: blur(3px); }
 .pipeline-toolbar { max-width: calc(100% - 24px); }
 .pipeline-toolbar button { min-height: 36px; }
 @container (max-width: 520px) {
-  .grid[class*="grid-cols-"] { grid-template-columns: minmax(0, 1fr); }
+  .grid[class*="grid-cols-"]:not(.universe-toolbar) { grid-template-columns: minmax(0, 1fr); }
   /* A stale span must not create implicit columns after collapsing a grid. */
   .grid[class*="grid-cols-"] > [class*="col-span-"] { grid-column: 1 / -1; }
   .panel-header { padding: 12px; }
