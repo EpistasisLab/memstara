@@ -11,7 +11,8 @@ SCRIPT = Path(__file__).resolve().parents[1] / 'deployment/build-service.sh'
 @pytest.mark.parametrize('mode,expected_calls,success', [
     ('transient', 2, True), ('persistent', 3, False), ('compile', 1, False),
 ])
-def test_build_retry_classification(tmp_path, mode, expected_calls, success):
+@pytest.mark.parametrize('bootstrap', [False, True])
+def test_build_retry_classification(tmp_path, mode, expected_calls, success, bootstrap):
     docker = tmp_path / 'docker'
     docker.write_text('''#!/bin/sh
 n=0
@@ -30,7 +31,8 @@ exit 1
     count = tmp_path / 'count'
     env = {**os.environ, 'PATH': str(tmp_path) + os.pathsep + os.environ['PATH'],
            'COUNT': str(count), 'MODE': mode}
-    result = subprocess.run(['sh', str(SCRIPT), 'control'], env=env, capture_output=True, text=True)
+    args = ['--bootstrap', str(tmp_path / 'image')] if bootstrap else ['control']
+    result = subprocess.run(['sh', str(SCRIPT), *args], env=env, capture_output=True, text=True)
     assert (result.returncode == 0) == success
     assert int(count.read_text()) == expected_calls
 

@@ -1,7 +1,7 @@
 FROM python:3.12-slim AS configure
 WORKDIR /app
 RUN pip install --no-cache-dir python-dotenv==1.2.1
-COPY src/memstara/__init__.py src/memstara/paths.py src/memstara/operational.py src/memstara/stage_models.py src/memstara/container_config.py /app/src/memstara/
+COPY src/memstara/__init__.py src/memstara/paths.py src/memstara/operational.py src/memstara/installation.py src/memstara/stage_models.py src/memstara/container_config.py /app/src/memstara/
 COPY examples/ /app/examples/
 COPY src/memstara/resources/ /app/src/memstara/resources/
 COPY deployment/ /app/deployment/

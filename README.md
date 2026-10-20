@@ -303,9 +303,10 @@ Target editing is disabled while an execution is active.
 Choose LR/XGBoost through ML agent skills. Installation `.env` target/ML-engine
 defaults are ignored; each execution records its own selected research settings.
 
-For a second installation, choose a different `COMPOSE_PROJECT_NAME` and an unused
-`MEMSTARA_WEB_PORT`. Keep its own `.env`, input/output/cache directories and database
-volumes; do not copy another installation's volume overrides.
+For a second installation, choose an unused `MEMSTARA_WEB_PORT` and use a fresh
+checkout with its own input/output/cache directories. `./start.sh` generates a
+unique Docker project and private database credentials automatically. Do not copy
+another installation's `.memstara/` or `compose.override.yaml`.
 
 `MEMSTARA_LLM_API_KEY` supplies the default provider's credential. Set
 `MEMSTARA_LLM_PROVIDER` to `azure_foundry`, `anthropic`, `openai` or `openrouter`
@@ -316,15 +317,25 @@ The [model configuration guide](DEVELOPER_GUIDE.md) covers role overrides.
 See [the deployment configuration contract](deployment/README.md) for ownership,
 path mapping, credential separation and maintenance details.
 
-`.env` supplies model profiles/credentials, database identities, read-only
-credentials, public web port and input/output/cache locations. Do not edit Compose,
-proxy configuration or a model JSON.
+`.env` supplies model profiles/credentials, the public web port and input/output/cache
+locations. Database owner credentials and the stable Docker identity are generated
+in private `.memstara/installation.json`; `compose.override.yaml` is generated for
+Compose. Read-only accounts are provisioned automatically in Docker settings volumes.
+These are internal installation state, not files users need to edit. Both generated
+paths are excluded from Git and Docker build contexts. Keep them when restarting
+or updating, and back them up securely with the database volumes. Missing or invalid
+state is an error, not permission to silently create replacement databases.
+
+Legacy explicit DB/project/volume settings are preserved during preparation; remove
+those `.env` entries only after verifying that the generated state retains them.
+Custom Compose overrides require migration review. Do not edit Compose, proxy
+configuration or a model JSON for an ordinary installation.
 
 | Setting | Docker meaning |
 |---|---|
-| `MEMSTARA_DATABASE_URL`, `MOTORO_DATABASE_URL` | Users, passwords and database names provisioned on the two private servers; local host/port are mapped to internal service addresses |
-| `MEMSTARA_VIEWER_DSN`, `CORE_VIEWER_DSN` | Optional overrides for separate read-only users; Docker generates and retains these credentials when omitted |
-| `MOTORO_REDIS_URL` | Local unauthenticated Redis database index; mapped to the private Redis service |
+| Database connections | Automatically generated and persisted; no user-supplied DSNs required |
+| Read-only accounts | Automatically provisioned and retained separately from owner accounts |
+| Redis connection | Automatically mapped to the private Redis service |
 | `MEMSTARA_WEB_PORT` | Only published application port, bound to `127.0.0.1` |
 | `MEMSTARA_API_PORT`, `MEMSTARA_CONTROL_PORT` | Native launcher ports; Docker uses private 8000/8072 listeners and never publishes them |
 | `MEMSTARA_OUTPUT_DIR` | Host directory, mounted read/write at `/app/outputs` |

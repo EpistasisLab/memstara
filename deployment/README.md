@@ -11,10 +11,10 @@ commands remain available through `python -m memstara.local_setup`. The old
 | Category | Authoritative source | Consumers |
 |---|---|---|
 | Models, credentials and group overrides | Project `.env` | Configuration validation, control, execution workers |
-| Database and Redis identities | Project `.env` URLs | Bootstrap, DB entrypoints, control; only read-only DSNs reach API |
-| Public port and project identity | `.env` (`MEMSTARA_WEB_PORT`, `COMPOSE_PROJECT_NAME`) | Compose, control origin checks |
+| Database and Redis identities | Generated private `.memstara/installation.json` (legacy explicit `.env` values retained) | Bootstrap, DB entrypoints, control; only read-only DSNs reach API |
+| Public port and project identity | `.env` web port; generated private project identity and `compose.override.yaml` | Compose, control origin checks |
 | Host directories | `.env` output/cache/input fields | Compose mounts and derived application paths |
-| CSV/OKF/target and skill defaults | `.env` | New unregistered research; saved profiles retain their own choices |
+| CSV/OKF/target and skills | App research/pipeline selections | Saved profiles and frozen executions |
 | Optional manual estimate rates | App cost settings; generated `outputs/pricing/manual-rates.json` | Request cost receipts; never actual billing |
 | Advanced rate overrides, meter mappings and specialist sources | Inline JSON in `.env` | Owning backend subsystem; no config directory |
 | Per-research selections | Saved research/pipeline record | Execution preparation |
@@ -37,6 +37,16 @@ The `user-inputs/...` path prefix resolves under `MEMSTARA_INPUTS_DIR` for nativ
 execution and under `/app/user-inputs` in Docker. Output and cache paths similarly
 map to stable container locations. CSV, OKF and skill file contents are never copied
 into `.env`. The default bundled examples require no private files.
+
+Generated installation files are not user configuration. `./start.sh` prepares them
+with Docker before Compose runs. New installations receive unique project names and
+random owner passwords; existing explicit identities and external-volume names are
+retained. The files are ignored by Git and excluded from the Docker build context.
+Back them up securely; do not copy them when creating an independent installation.
+Read-only credentials continue to be provisioned in private settings volumes.
+Ordinary users never need to enter owner/viewer DSNs or set `COMPOSE_FILE`.
+Custom overrides require explicit migration review, and conflicting saved identities
+are rejected before application services restart.
 
 ## Startup and credential boundaries
 

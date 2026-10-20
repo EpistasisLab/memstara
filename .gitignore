@@ -68,3 +68,7 @@ config/azure-pricing-meters.local.json
 
 # User-supplied Docker inputs.
 /user-inputs/
+
+# Generated private Docker installation identity and credentials.
+/.memstara/
+/compose.override.yaml

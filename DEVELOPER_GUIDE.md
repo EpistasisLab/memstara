@@ -66,12 +66,13 @@ file does not replace settings already loaded into a running process.
 | `MEMSTARA_LLM_PROVIDER`, `MEMSTARA_LLM_MODEL` | Deployment default model selection |
 | `MEMSTARA_LLM_API_BASE` | Endpoint for the deployment default provider |
 | `OPENAI_API_KEY` | OpenAI-compatible provider credential |
-| `MEMSTARA_LLM_API_KEY`, `MEMSTARA_LLM_RESOURCE` | Claude-on-Foundry credential/resource; an explicit profile `api_base` can supply the endpoint |
+| `MEMSTARA_LLM_API_KEY` | Default provider credential; adapted to its internal provider variable |
+| `MEMSTARA_LLM_RESOURCE` | Foundry resource name; an alternative to the default `MEMSTARA_LLM_API_BASE` URL |
 | `ANTHROPIC_API_KEY` | Native Anthropic credential |
 | `MOTORO_DATABASE_URL` | Motoro agents and execution records |
 | `MEMSTARA_DATABASE_URL` | Memstara tasks and results |
 | `MEMSTARA_DATASET_PATH` | Input cohort CSV |
-| `MEMSTARA_OUTCOME_COLUMN` | Target excluded from predictor discovery; keep consistent with `y_column` |
+| `MEMSTARA_OUTCOME_COLUMN` | Internal execution target propagated from the selected research settings; project `.env` values are ignored |
 | `AGENTIC_OKF_BUNDLE_DIR` | Knowledge corpus directory |
 | `MEMSTARA_OUTPUT_DIR` | Tool-generated data and model artifact root |
 | `MEMSTARA_EXPLANATION_SOURCES` | Optional explicit expert-source binding JSON |

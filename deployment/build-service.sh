@@ -1,8 +1,8 @@
 #!/bin/sh
 # Retry only recognizable Docker builder transport failures, never compilation errors.
 set -eu
-if [ "$#" -ne 1 ]; then
-    echo "Usage: build-service.sh SERVICE" >&2
+if [ "$#" -ne 1 ] && [ "$#" -ne 2 ]; then
+    echo "Usage: build-service.sh SERVICE | --bootstrap IIDFILE" >&2
     exit 2
 fi
 build_log=$(mktemp)
@@ -10,7 +10,12 @@ trap 'rm -f "$build_log"' EXIT HUP INT TERM
 attempt=1
 while :; do
     echo "Building $1 (attempt $attempt/3); build output follows when this attempt finishes..."
-    if docker compose build "$1" >"$build_log" 2>&1; then
+    if [ "$1" = "--bootstrap" ]; then
+        set -- docker build --target configure --iidfile "$2" -f deployment/Dockerfile .
+    elif [ "$1" != "docker" ]; then
+        set -- docker compose build "$1"
+    fi
+    if "$@" >"$build_log" 2>&1; then
         cat "$build_log"
         exit 0
     fi

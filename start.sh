@@ -26,6 +26,19 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
+# Bootstrap without Compose: users need no project name or DB credentials.
+bootstrap_image=$(mktemp)
+trap 'rm -f "$bootstrap_image"' EXIT HUP INT TERM
+if ! sh deployment/build-service.sh --bootstrap "$bootstrap_image"; then
+    echo "Could not build the installation preparer. Existing services were not changed." >&2
+    exit 1
+fi
+if ! docker run --rm --user "$(id -u):$(id -g)" --mount "type=bind,source=$(pwd),target=/project" "$(cat "$bootstrap_image")" python -m memstara.installation /project; then
+    echo "Could not prepare local installation settings. Do not delete existing data volumes." >&2
+    exit 1
+fi
+rm -f "$bootstrap_image"
+
 # Create bind directories on the host, not through Docker Desktop's file-sharing VM.
 # Resolve paths through Compose so .env interpolation and overrides stay authoritative.
 mount_config=$(mktemp)

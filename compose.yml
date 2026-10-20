@@ -34,13 +34,18 @@ services:
       dockerfile: deployment/Dockerfile
       target: configure
     environment:
+      COMPOSE_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME}
       COMPOSE_MEMSTARA_WEB_PORT: ${MEMSTARA_WEB_PORT:-5173}
       COMPOSE_MEMSTARA_OUTPUT_DIR: ${MEMSTARA_OUTPUT_DIR:-outputs}
       COMPOSE_HF_HOME: ${HF_HOME:-outputs/huggingface}
       COMPOSE_MEMSTARA_INPUTS_DIR: ${MEMSTARA_INPUTS_DIR:-user-inputs}
-      COMPOSE_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-memstara-app}
     volumes:
       - ./.env:/app/.env:ro
+      - type: bind
+        source: ./.memstara
+        target: /app/.memstara
+        read_only: true
+        bind: {create_host_path: false}
       - board-settings:/generated/board
       - runtime-settings:/generated/runtime
       - control-settings:/generated/control

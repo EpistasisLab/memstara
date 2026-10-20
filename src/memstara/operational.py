@@ -46,6 +46,8 @@ def resolve(environ=None, *, file: Path | None = None):
         if not path.is_file():
             raise ValueError('Project .env is missing; copy .env.example and configure this installation')
         raw = dotenv_values(path, interpolate=False)
+        from memstara.installation import read
+        raw = {**read(path.parent), **{k:v for k,v in raw.items() if v is not None}}
         values = {k: v for k, v in raw.items() if v is not None and managed(k) and k not in SELECTORS}
         if any('${' in v for v in values.values()):
             raise ValueError('Project .env requires literal values; shell interpolation is not supported')
