@@ -135,3 +135,12 @@ def test_inline_configuration_errors_are_early_and_redacted(tmp_path, setting):
     with pytest.raises(ValueError) as error:
         resolve({}, file=file)
     assert 'private-invalid-json' not in str(error.value)
+
+
+def test_omitted_inputs_path_matches_compose_default(tmp_path):
+    configuration(tmp_path)
+    file = tmp_path / '.env'
+    file.write_text(file.read_text().replace('MEMSTARA_INPUTS_DIR=user-inputs\n', ''))
+    values, _ = resolve({}, file=file)
+    assert values['MEMSTARA_INPUTS_DIR'] == str(tmp_path / 'user-inputs')
+    assert derive(values, root=tmp_path)['control']['MEMSTARA_INPUTS_DIR'] == str(tmp_path / 'user-inputs')
