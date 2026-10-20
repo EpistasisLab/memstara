@@ -136,3 +136,13 @@ restricted control-settings volume. Restarting reuses the credentials; it never
 rotates an existing database role silently. Explicit `.env` DSNs override this
 derivation. Preserve the settings volumes together with the databases. A changed
 owner identity with persisted viewer settings requires explicit credentials.
+
+### Docker builder connection failures
+
+The launcher builds one service at a time before recreating application services.
+Recognized BuildKit transport failures (`failed to dial gRPC`, h2c upgrade errors,
+or an unavailable RPC connection) retry up to three times per image, with short
+backoff. Build output is printed after each attempt. Compilation, dependency and
+configuration failures stop immediately. Persistent transport failures also stop;
+inspect Docker Desktop diagnostics before trying again. The launcher never restarts
+Docker Desktop or deletes caches, inputs, experiment results or database volumes.

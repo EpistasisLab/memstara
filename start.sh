@@ -51,7 +51,7 @@ while IFS= read -r directory; do
 done <"$mount_paths"
 
 echo "Checking .env and mounted inputs before building or restarting application services..."
-if ! docker compose build configure; then
+if ! sh deployment/build-service.sh configure; then
     echo "Could not build the configuration checker. Check Docker and network access." >&2
     exit 1
 fi
@@ -64,7 +64,15 @@ fi
 
 echo "Building and starting Memstara. Existing services will restart to load .env."
 echo "Finish active experiments before running this command. Saved data is retained."
-if ! docker compose up -d --build --force-recreate; then
+# Separate service builds avoid concurrent BuildKit sessions on older Docker Desktop.
+# Finish every image before replacing application containers.
+for service in control initialize api web; do
+    if ! sh deployment/build-service.sh "$service"; then
+        echo "Image build failed. Existing services were not restarted." >&2
+        exit 1
+    fi
+done
+if ! docker compose up -d --no-build --force-recreate; then
     echo "Startup failed. Correct the reported error, then run ./start.sh again." >&2
     echo "Inspect: docker compose logs --tail=80 configure initialize control api web" >&2
     exit 1
