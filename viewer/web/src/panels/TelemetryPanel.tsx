@@ -1,3 +1,4 @@
+import MotoroRecords from '../components/MotoroRecords';
 import TelemetryTotals, { useTelemetryTotals } from '../components/TelemetryTotals';
 import ExperimentRegistry from '../components/ExperimentRegistry';
 import ExecutionLogs from '../components/ExecutionLogs';
@@ -95,7 +96,7 @@ export default function TelemetryPanel() {
     {!!data?.telemetry.unassigned_calls&&<p className="px-3 py-1 text-xs text-ink-soft">{data.telemetry.unassigned_calls} execution-wide or unassigned calls are included only in All loops.</p>}
     <div key={tab==='Experiments'?'experiments':key} tabIndex={0} role="region" aria-label="Telemetry details" className="telemetry-tab-body min-h-0 flex-1 overflow-auto">
       {tab==='Experiments'?<ExperimentRegistry/>:tab==='Totals'?<TelemetryTotals data={totals.data} error={totals.error} runTag={runTag} loop={loop}/>:!runTag?<p className="p-5">Choose a pipeline with a recorded execution.</p>:!data?<p role="status" className="p-5">{error?'Waiting to retry this selection…':`Preparing ${scope.toLowerCase()} history. Large executions take longer on their first load…`}</p>:<>
-        {tab==='Agents'&&<AgentsTab/>}{tab==='Activity'&&<FeedPanel/>}{tab==='Access'&&<AccessTab/>}
+        {tab==='Agents'&&<><AgentsTab/>{runTag&&<MotoroRecords key={`${runTag}:${loop}`} tag={runTag} loop={loop}/>}</>}{tab==='Activity'&&<FeedPanel/>}{tab==='Access'&&<AccessTab/>}
         {tab==='Results'&&<ResultsPanel telemetry/>}
         {tab==='Tasks'&&<><label className="block p-3 text-sm">Task<select aria-label="Task in selected loop" className="ml-2 max-w-full rounded border border-paper-line bg-paper p-2" value={taskId??''} onChange={e=>setChosenTask(e.target.value?Number(e.target.value):null)}><option value="">Select a task</option>{data.board.tasks.map(t=><option key={t.task_id} value={t.task_id}>#{t.task_id} · {loopLabel(t,data.run_configuration?.trials)} · {t.task_type} · {t.status}</option>)}</select></label><TaskTab taskId={taskId}/></>}
         {tab==='Logs'&&<ExecutionLogs runTag={runTag} loop={loop} lines={data.loop_log.lines} note={data.loop_log.note}/>}

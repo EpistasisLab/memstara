@@ -108,7 +108,7 @@ async def experiment_execution(run_tag: str = Query(min_length=1, max_length=180
 @app.get('/api/cost-details')
 async def cost_details(run_tag: str = Query(min_length=1, max_length=180)):
     import cost_details as evidence
-    return await asyncio.to_thread(evidence.details, run_tag)
+    return await evidence.motoro_details(run_tag)
 
 
 @app.get('/api/azure-costs')
@@ -340,6 +340,19 @@ async def telemetry_conversation(run_tag: str = Query(min_length=1, max_length=2
                                  loop: int | None = Query(default=None, ge=1)):
     from conversation import conversation
     return await conversation(run_tag, loop)
+
+
+@app.get("/api/motoro/execution")
+async def motoro_execution(run_tag: str = Query(min_length=1, max_length=200),
+                           loop: int | None = Query(default=None, ge=1)):
+    from motoro_records import execution
+    return await execution(run_tag, loop)
+
+
+@app.get("/api/motoro/run")
+async def motoro_run(run_id: uuid.UUID, run_tag: str = Query(min_length=1, max_length=200)):
+    from motoro_records import run
+    return await run(run_tag, run_id)
 
 
 @app.get("/api/developer/execution")

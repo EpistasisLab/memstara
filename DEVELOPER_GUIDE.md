@@ -800,6 +800,29 @@ from a single aggregate response. Historical runs without receipts remain histor
 no current price is silently applied to old calls. The UI supports a JSON evidence
 download and shows priced/recorded attempt coverage and partial subtotals.
 
+### Motoro runtime record ownership
+
+Telemetry → More details → Agents exposes **Motoro runtime records**. Memstara's
+saved invocation IDs provide only pipeline/stage/loop attribution. The viewer reads
+agent status, timestamps, token usage, cost and errors directly from Motoro's
+`agent_runs`; selecting an invocation loads its input/output, configuration overrides,
+resolved configuration and recovery snapshot. Selecting a paginated step loads its
+original input/output, LLM call and tool-call records from `run_steps`. Credential
+fields are redacted; missing records are never synthesized from local manifests.
+Stored status is reported as recorded, not treated as proof of process liveness.
+
+Read-only endpoints: `/api/motoro/execution`, `/api/motoro/run`, and
+`/api/developer/steps`. Each payload request verifies execution membership before
+querying Motoro. Full snapshots and tool payloads load on demand, not on every poll.
+
+Workspace/Telemetry usage totals read Motoro run aggregates without local ledger
+overrides. `/api/cost-details` groups persisted Motoro LLM call amounts and usage by
+Memstara stage/loop; it never computes token prices. Records not persisted by Motoro
+are outside that view's coverage. Historical local ledgers and experiment-registry
+snapshots remain archived evidence; they are not the authoritative runtime reader.
+Pipeline/loop wall-clock timing, lifecycle controls, CSV/OKF provenance and ML metrics
+remain Memstara responsibilities. Azure actual billing remains a separate source.
+
 ### Cost calculation ownership
 
 Motoro exclusively calculates execution cost estimates. Memstara does not replace

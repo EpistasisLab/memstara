@@ -102,7 +102,6 @@ async def totals():
                 rows = await pools.guarded('core', query, None) if ids else []
                 if rows is None:
                     raise HTTPException(503, 'Usage records are unavailable; totals are not zero.')
-                rows = await asyncio.to_thread(costs.with_ledgers, rows, [e['tag'] for e in executions])
                 pipelines = []
                 for key, definition in configured.items():
                     records = [e for e in executions if e['pipeline_id'] == key]

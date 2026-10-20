@@ -93,7 +93,6 @@ async def workspace_cost(run_tags):
             rows = await pools.guarded('core', lambda conn: read(conn, ids), None) if ids else []
             if rows is None:
                 raise HTTPException(503, 'Cost records are temporarily unavailable')
-            rows = await asyncio.to_thread(with_ledgers, rows, tags)
             result = summarize(ids, rows, sum(a is None for a in artifacts))
             return {**result, 'run_tags': tags, 'scope': 'latest_execution_per_pipeline'}
     except TimeoutError:

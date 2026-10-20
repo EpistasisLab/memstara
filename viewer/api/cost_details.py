@@ -57,3 +57,70 @@ def azure_summary():
         return {k:data[k] for k in ('status','retrieved_at','period','scope_type','totals','basis')}
     except (OSError, ValueError, KeyError, TypeError):
         return {'status':'unavailable','basis':'Azure Cost Management has not been synchronized. No billed amount is assumed.'}
+
+
+def summarize_motoro(tag, calls, runs, steps):
+    """Aggregate persisted Motoro amounts only; never apply a token rate."""
+    by_id = {c['run_id']: c for c in calls if c.get('run_id')}
+    run_ids = {str(r['id']) for r in runs}
+    missing = len(set(by_id) - run_ids)
+    active = any(r['status'] not in ('completed','failed','cancelled') for r in runs)
+    records = []
+    malformed = 0
+    for step in steps:
+        raw = step['llm_call']
+        try:
+            raw = json.loads(raw) if isinstance(raw,str) else raw
+            values = raw if isinstance(raw,list) else raw.get('calls', [raw]) if isinstance(raw,dict) else []
+            if not isinstance(values,list):
+                raise ValueError('Invalid call collection')
+            for index, value in enumerate(values):
+                if not isinstance(value,dict):
+                    malformed += 1
+                    continue
+                call = by_id.get(str(step['run_id']))
+                if call is None:
+                    continue
+                amount = value.get('cost_estimate')
+                # Motoro 0.10.0 uses zero for missing prices too; do not call it free.
+                known = type(amount) in (int,float) and math.isfinite(amount) and amount > 0
+                records.append({'id':f"{step['id']}:{index}", 'agent_run_id':str(step['run_id']),
+                    'stage':call.get('stage'), 'loop':call.get('loop'), 'model':value.get('model'),
+                    'provider':None, 'source':value.get('pricing_source'), 'record_source':'motoro',
+                    'usd':amount if known else None, 'reported_cost_estimate':amount,
+                    'status':'estimated' if known else 'unknown', 'price_receipt':None,
+                    'reason':None if known else 'Motoro did not record an unambiguous price',
+                    **{k:value.get(k) for k in ('prompt_tokens','completion_tokens','cache_read_input_tokens',
+                                               'cache_creation_input_tokens','latency_ms')}})
+        except (ValueError, TypeError):
+            malformed += 1
+    records = list({r['id']:r for r in records}.values())
+    groups = defaultdict(lambda: {'calls':0,'priced_calls':0,'usd':0.,'input_tokens':0,'output_tokens':0})
+    for record in records:
+        group = groups[(record['stage'],record['model'])]
+        group['calls'] += 1
+        group['priced_calls'] += record['usd'] is not None
+        group['usd'] += record['usd'] or 0
+        group['input_tokens'] += record['prompt_tokens'] or 0
+        group['output_tokens'] += record['completion_tokens'] or 0
+    unknown = sum(r['usd'] is None for r in records) + malformed
+    represented = {r['agent_run_id'] for r in records}
+    missing += sum(str(r['id']) not in represented for r in runs)
+    return {'run_tag':tag, 'source':'motoro', 'currency':'USD', 'estimated':True,
+        'status':'complete' if records and not (unknown or active or missing) else 'partial' if records else 'unavailable',
+        'usd':sum(g['usd'] for g in groups.values()), 'recorded_calls':len(records),
+        'expected_calls':len(records), 'unpriced_calls':unknown, 'missing_runs':missing, 'active':active,
+        'coverage_note':'Persisted Motoro LLM call records only. Requests not persisted by Motoro are not included. Missing or ambiguous zero prices stay unknown; no local rate or ledger substitutes for Motoro.',
+        'groups':[{'stage':k[0],'model':k[1],**v} for k,v in groups.items()], 'records':records}
+
+
+async def motoro_details(tag):
+    from motoro_records import references, read_core
+    calls, ids = await references(tag)
+    async def read(conn):
+        runs = await conn.fetch('SELECT id,status FROM agent_runs WHERE id=ANY($1::uuid[])', list(ids))
+        steps = await conn.fetch('''SELECT id,run_id,llm_call::text AS llm_call FROM run_steps
+            WHERE run_id=ANY($1::uuid[]) AND llm_call IS NOT NULL ORDER BY started_at,id''', list(ids))
+        return runs, steps
+    runs, steps = await read_core(read) if ids else ([],[])
+    return summarize_motoro(tag, calls, runs, steps)

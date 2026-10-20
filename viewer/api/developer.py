@@ -39,7 +39,8 @@ async def steps(tag, run_id, offset=0, detail=False):
                 uuid.UUID(str(run_id)),
                 offset,
             )
-            return [json.loads(r["record"]) for r in rows]
+            from motoro_records import redacted
+            return [redacted(json.loads(r["record"])) for r in rows]
         rows = await conn.fetch(
             """SELECT id, sequence, iteration, phase, started_at, completed_at FROM run_steps
             WHERE run_id=$1 ORDER BY sequence ASC, id ASC
