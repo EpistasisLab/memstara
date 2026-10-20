@@ -13,6 +13,66 @@ in-process library for agent execution, model calls, MCP integration, and runtim
 persistence. Memstara adds the research pipeline, its own database, a host control
 service, and a browser workspace. Motoro and Memstara own separate databases.
 
+## Docker quick start
+
+You need **Git**, **Docker Desktop running** (or Docker Engine with Compose v2),
+and access to a supported model deployment. Docker installs Python, Node,
+PostgreSQL, Redis and the pinned **Motoro 0.10.0** dependency for you.
+
+**1. Download this branch and create your settings file.**
+
+```bash
+git clone --branch feature/question-universe-ui https://github.com/HyunjunA/memstara.git
+cd memstara
+cp .env.example .env
+```
+
+Already have this checkout? Use its existing `.env`; do not overwrite it.
+
+**2. Edit `.env`.** For the Azure Foundry example, replace these values with your
+own deployment details. The model name must be available in your resource.
+
+```dotenv
+MEMSTARA_LLM_PROVIDER=azure_foundry
+MEMSTARA_LLM_MODEL=YOUR_DEPLOYMENT_NAME
+MEMSTARA_LLM_API_KEY='YOUR_API_KEY'
+MEMSTARA_LLM_RESOURCE=YOUR_RESOURCE_NAME
+```
+
+`MEMSTARA_LLM_RESOURCE` is the resource name, not a URL. Alternatively, unset it
+and use `MEMSTARA_LLM_API_BASE=https://YOUR_RESOURCE_NAME.services.ai.azure.com`.
+For other providers and multiple installations, see [configuration details](#one-configuration-source).
+Keep `.env` private. The remaining template defaults are suitable for a first local installation.
+
+**3. Start the app from the same terminal.**
+
+```bash
+./start.sh
+```
+
+Open **http://127.0.0.1:5173/**, or the URL printed by the script if you changed
+`MEMSTARA_WEB_PORT`. The first build may take several minutes. You can close the
+terminal after the ready message. No separate backend/frontend commands are needed.
+
+The bundled **Heart failure complete-case software demonstration** is registered
+automatically, including CSV, OKF and target settings. Select it in the app to
+create a pipeline. Private HIV data is not included. Starting the app does not
+start an experiment or make a paid model request.
+
+| Action | Command |
+|---|---|
+| Start again / apply `.env` changes | `./start.sh` |
+| Stop the app, keeping saved data | `docker compose stop` |
+| Inspect startup errors | `docker compose logs --tail=80 configure initialize control api web` |
+
+Finish active experiments before rerunning `./start.sh`: it recreates services.
+The app is local-only. A successful startup verifies service connectivity, not
+model credentials or a complete research run.
+
+For your own CSV/OKF, see [research folders](#add-your-own-research-folder).
+For Docker troubleshooting, see [deployment guidance](deployment/README.md).
+Native installation is optional and intended for developers.
+
 ## Releases and development
 
 Memstara uses semantic release tags (`vMAJOR.MINOR.PATCH`). The Git tag is the
@@ -28,7 +88,7 @@ Reinstall editable packages after changing revisions to refresh version metadata
 ```bash
 python -c "import memstara; print(memstara.__version__)"
 git rev-parse HEAD
-git -C ../motoro rev-parse HEAD
+python -c "from importlib.metadata import version; print(version('motoro'))"
 ```
 
 To prepare a release, merge and validate the intended revision on `main`, then
@@ -153,65 +213,7 @@ tests/                         Backend tests
 outputs/                       Local datasets, caches, and run artifacts (ignored)
 ```
 
-## Docker quick start
-
-Use this path for a new, isolated installation. Docker Desktop (or Docker Engine
-with Compose v2), Git, network access for image/dependency downloads and your own
-model deployment credentials are required. Host Python, Node and manual SQL are
-not required. The Docker stack is local-only, not an authenticated public server.
-
-From this checkout's root:
-
-```bash
-cp .env.example .env
-# Edit .env: replace model deployment, resource and credential placeholders.
-# Choose a unique COMPOSE_PROJECT_NAME and a free MEMSTARA_WEB_PORT.
-./start.sh
-```
-
-`./start.sh` checks Docker and validates `.env` and input paths before building
-or restarting application services. It then builds and starts all services, verifies the browser
-proxy and both backends, and prints the actual application URL. Run it from one
-terminal; services keep running after the terminal closes. If `.env` is missing,
-it creates a private template and stops so you can fill in your credentials.
-It never overwrites an existing `.env` or starts an experiment.
-
-The command restarts existing services to load the current `.env`; finish active
-experiments before running it again. Databases and saved results are retained.
-The equivalent direct Docker startup command is:
-
-```bash
-docker compose up -d --build --force-recreate
-```
-
-**Do not overwrite an existing `.env`.** For a new independent installation use a
-new project name and output/cache directories. Do not reuse an older native
-installation's Compose project name or attach its database volumes implicitly.
-
-Open **http://localhost:5173/**, or the port configured by `MEMSTARA_WEB_PORT`.
-The first build downloads dependencies and can take several minutes. Check readiness:
-
-```bash
-docker compose ps -a
-docker compose logs --tail=80 configure initialize control api web
-```
-
-`configure` and `initialize` must exit with code 0. The databases, Redis, control
-and API must be healthy and web must be running. Configuration is checked before
-startup; bootstrap creates the two database schemas and read-only viewer roles.
-Existing passwords are not silently rotated. An authentication failure against an
-existing volume requires correcting credentials or an explicit administrative
-migration, never deleting the database to bypass the error.
-
-Startup makes **no LLM calls** and does not resume or launch an experiment. A
-healthy web page proves application startup, not valid model credentials or a
-successful scientific pipeline. Startup automatically prepares and registers the
-bundled HeartFailure demonstration. Select **Heart failure complete-case software
-demonstration** in the app's research-input selector. Its CSV, OKF, target definition
-and corpus-specific skill choices are available without entering container paths.
-The original 1,700-row CSV is preserved; the documented eight-predictor complete-case
-preparation retains 1,671 rows and excludes 29. This is an installation demonstration,
-not a clinically validated prediction task. No pipeline is started automatically.
+## Docker configuration and research inputs
 
 ### Add your own research folder
 
@@ -292,6 +294,20 @@ After correcting the named settings, rerun `./start.sh`.
 
 ### One configuration source
 
+Choose the dataset and target in **Data & target** or the research input editor.
+Choose LR/XGBoost through ML agent skills. Installation `.env` target/ML-engine
+defaults are ignored; each execution records its own selected research settings.
+
+For a second installation, choose a different `COMPOSE_PROJECT_NAME` and an unused
+`MEMSTARA_WEB_PORT`. Keep its own `.env`, input/output/cache directories and database
+volumes; do not copy another installation's volume overrides.
+
+`MEMSTARA_LLM_API_KEY` supplies the default provider's credential. Set
+`MEMSTARA_LLM_PROVIDER` to `azure_foundry`, `anthropic`, `openai` or `openrouter`
+and use a model/deployment supported by that provider. For non-Foundry providers,
+remove `MEMSTARA_LLM_RESOURCE` and any Foundry `MEMSTARA_LLM_API_BASE` from `.env`.
+The [model configuration guide](DEVELOPER_GUIDE.md) covers role overrides.
+
 See [the deployment configuration contract](deployment/README.md) for ownership,
 path mapping, credential separation and maintenance details.
 
@@ -354,10 +370,11 @@ For private data, place files under your `MEMSTARA_INPUTS_DIR` and select
 
 ```bash
 docker compose stop             # stops the application; retains data
-# Start again with the same settings:
-docker compose up -d --build
-# After deliberate maintenance and .env changes, recreate consumers:
-docker compose up -d --build --force-recreate
+# Restart / apply settings after finishing active experiments:
+./start.sh
+# Update this checkout, then rebuild and restart:
+git pull --ff-only
+./start.sh
 # Remove containers/network, retaining database volumes and bind-mounted files:
 docker compose down
 ```
@@ -373,6 +390,12 @@ The native development workflow below remains available for debugging and separa
 host-managed services. Do not run both launch paths on the same published ports.
 
 ## Get started (native development)
+
+**Not required for Docker installation.** Expand only when developing or running
+services directly on the host.
+
+<details>
+<summary>Native installation, CLI execution and detailed workspace walkthrough</summary>
 
 This section contains the complete local setup: install Memstara and Motoro,
 start two databases and Redis, configure your model, select data and knowledge,
@@ -491,7 +514,6 @@ HF_HOME=outputs/huggingface
 # Optional deployment inputs, if not using a saved research profile:
 # MEMSTARA_DATASET_PATH=outputs/heart-failure-demo/dataset.csv
 # AGENTIC_OKF_BUNDLE_DIR=examples/heart-failure/okf
-# MEMSTARA_OUTCOME_COLUMN=chronic_heart_failure
 ```
 
 Create the HeartFailure analysis CSV with the preparation command in step 4 before
@@ -1353,6 +1375,8 @@ The release check without `--publication` validates contents only. A successful
 local run, an ignored resource folder, and a passing test suite do not establish
 that the same files are already published or approved for redistribution.
 
+</details>
+
 ## Using the workspace
 
 **Selected Pipelines** configures and starts individual saved pipelines.
@@ -1438,13 +1462,15 @@ embedding-model download requires network access unless the pinned model is cach
 
 ## Everyday commands
 
-Run these from the Memstara checkout with the `memstara` environment active:
+For the Docker installation, run these from the checkout root:
 
 ```bash
-python -m memstara.trace.board --last 3 --summary   # inspect recent runs
-docker compose -f viewer/docker-compose.yml logs -f api
-docker compose -f viewer/docker-compose.yml up -d --build web
+docker compose logs --tail=80 control api web
+docker compose exec control python -m memstara.trace.board --last 3 --summary
 ```
+
+Use `./start.sh` to rebuild and apply changes after finishing active experiments.
+The separate `viewer/docker-compose.yml` is for the native developer workflow.
 
 Use the workspace's pause/resume and end controls to manage executions. Stop
 and rebuild services separately from pipeline execution; the driver may outlive
@@ -1460,7 +1486,7 @@ schema upgrades. A viewer rebuild does not apply Motoro database migrations.
 | `AGENTIC_OKF_BUNDLE_DIR` | OKF corpus; the legacy prefix is required |
 | `MEMSTARA_DATASET_PATH` | Cohort CSV |
 | `MEMSTARA_OUTPUT_DIR` | Generated subsets and matcher artifacts |
-| `MEMSTARA_OUTCOME_COLUMN` | Target excluded from matcher and data feature lists |
+| Target column | Selected in the UI research profile; propagated internally to exclude the target from predictor lists |
 | `MEMSTARA_LLM_PROVIDER`, `MEMSTARA_LLM_MODEL` | Deployment default; explicit stage profiles override agent assignments |
 | `MEMSTARA_LLM_API_BASE` | Optional configured provider endpoint |
 
