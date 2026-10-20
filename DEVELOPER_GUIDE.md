@@ -66,7 +66,7 @@ file does not replace settings already loaded into a running process.
 | `MEMSTARA_LLM_PROVIDER`, `MEMSTARA_LLM_MODEL` | Deployment default model selection |
 | `MEMSTARA_LLM_API_BASE` | Endpoint for the deployment default provider |
 | `OPENAI_API_KEY` | OpenAI-compatible provider credential |
-| `ANTHROPIC_FOUNDRY_API_KEY`, `ANTHROPIC_FOUNDRY_RESOURCE` | Claude-on-Foundry credential/resource; an explicit profile `api_base` can supply the endpoint |
+| `MEMSTARA_LLM_API_KEY`, `MEMSTARA_LLM_RESOURCE` | Claude-on-Foundry credential/resource; an explicit profile `api_base` can supply the endpoint |
 | `ANTHROPIC_API_KEY` | Native Anthropic credential |
 | `MOTORO_DATABASE_URL` | Motoro agents and execution records |
 | `MEMSTARA_DATABASE_URL` | Memstara tasks and results |

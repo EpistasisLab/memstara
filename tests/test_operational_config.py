@@ -291,3 +291,41 @@ def test_absent_deployment_corpus_has_empty_knowledge_menu(monkeypatch):
     assert sent[0][0] == 200
     assert sent[0][1]['skills'] == []
     assert sent[0][1]['configured'] is False
+
+
+@pytest.mark.parametrize('provider,upstream', [
+    ('azure_foundry', 'ANTHROPIC_FOUNDRY_API_KEY'),
+    ('anthropic', 'ANTHROPIC_API_KEY'), ('openai', 'OPENAI_API_KEY'),
+    ('openrouter', 'OPENROUTER_API_KEY'),
+])
+def test_generic_credential_adapts_only_to_selected_provider(tmp_path, provider, upstream):
+    file = tmp_path / '.env'
+    file.write_text(f'MEMSTARA_LLM_PROVIDER={provider}\nMEMSTARA_LLM_API_KEY=SECRET_SENTINEL\n')
+    values, provenance = resolve({}, file=file)
+    assert values[upstream] == 'SECRET_SENTINEL'
+    assert 'SECRET_SENTINEL' not in json.dumps(provenance)
+    assert 'SECRET_SENTINEL' not in json.dumps(model_profiles({**values, 'MEMSTARA_LLM_MODEL': 'example'}))
+    again, _ = resolve({**values, 'MEMSTARA_CONFIG_MODE': 'environment'}, file=file)
+    assert again[upstream] == values[upstream]
+
+
+def test_generic_foundry_resource_and_conflicting_credentials(tmp_path):
+    file = tmp_path / '.env'
+    file.write_text('MEMSTARA_LLM_PROVIDER=azure_foundry\nMEMSTARA_LLM_RESOURCE=example\n'
+                    'MEMSTARA_LLM_API_KEY=SECRET_ONE\n')
+    values, _ = resolve({}, file=file)
+    assert values['ANTHROPIC_FOUNDRY_RESOURCE'] == 'example'
+    assert values['MEMSTARA_LLM_API_BASE'] == 'https://example.services.ai.azure.com'
+    file.write_text(file.read_text() + 'ANTHROPIC_FOUNDRY_API_KEY=SECRET_TWO\n')
+    with pytest.raises(ValueError, match='conflicts') as error:
+        resolve({}, file=file)
+    assert 'SECRET' not in str(error.value)
+
+
+def test_generic_key_not_forwarded_to_viewer(tmp_path):
+    from memstara.local_setup import child_environment
+    file = tmp_path / '.env'
+    file.write_text('MEMSTARA_LLM_PROVIDER=openai\nMEMSTARA_LLM_API_KEY=SECRET_SENTINEL\n')
+    values, _ = resolve({}, file=file)
+    for service in ('api', 'web'):
+        assert 'SECRET_SENTINEL' not in json.dumps(child_environment(values, service))

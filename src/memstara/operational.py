@@ -90,6 +90,26 @@ def resolve(environ=None, *, file: Path | None = None):
         values[name] = str(int(value))
     if len({values[k] for k in PORT_DEFAULTS}) != len(PORT_DEFAULTS):
         raise ValueError('Web, API and control ports must be distinct')
+    # Public settings are provider-neutral; adapters retain upstream credential names.
+    credential_keys = {'azure_foundry': 'ANTHROPIC_FOUNDRY_API_KEY',
+                       'anthropic': 'ANTHROPIC_API_KEY', 'openai': 'OPENAI_API_KEY',
+                       'openrouter': 'OPENROUTER_API_KEY'}
+    provider = values.get('MEMSTARA_LLM_PROVIDER', '')
+    key = values.get('MEMSTARA_LLM_API_KEY', '').strip()
+    if key:
+        upstream = credential_keys.get(provider)
+        if not upstream:
+            raise ValueError('MEMSTARA_LLM_API_KEY requires a supported MEMSTARA_LLM_PROVIDER')
+        if values.get(upstream) and values[upstream] != key:
+            raise ValueError('MEMSTARA_LLM_API_KEY conflicts with the legacy provider credential')
+        values[upstream] = key
+    resource = values.get('MEMSTARA_LLM_RESOURCE', '').strip()
+    if resource:
+        if provider != 'azure_foundry':
+            raise ValueError('MEMSTARA_LLM_RESOURCE is only used by azure_foundry; use API_BASE otherwise')
+        if values.get('ANTHROPIC_FOUNDRY_RESOURCE') and values['ANTHROPIC_FOUNDRY_RESOURCE'] != resource:
+            raise ValueError('MEMSTARA_LLM_RESOURCE conflicts with the legacy resource')
+        values['ANTHROPIC_FOUNDRY_RESOURCE'] = resource
     # The default endpoint and resource must describe the same Foundry account.
     if values.get('MEMSTARA_LLM_PROVIDER') == 'azure_foundry':
         from memstara.stage_models import validate_endpoint
@@ -108,7 +128,7 @@ def resolve(environ=None, *, file: Path | None = None):
         if resource:
             import re
             if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]*', resource):
-                raise ValueError('ANTHROPIC_FOUNDRY_RESOURCE must be a resource name, not a URL')
+                raise ValueError('MEMSTARA_LLM_RESOURCE must be a resource name, not a URL')
             values['ANTHROPIC_FOUNDRY_RESOURCE'] = resource
             values['MEMSTARA_LLM_API_BASE'] = f'https://{resource}.services.ai.azure.com'
     values['MEMSTARA_CONFIG_MODE'] = mode
@@ -205,7 +225,8 @@ def check(values: dict) -> dict:
     for role, profile in profiles.items():
         key = keys.get(profile['provider'])
         if key and (not values.get(key) or values[key].startswith(('YOUR_', 'REPLACE_'))):
-            errors.append(f'{role}: configure {key} in the selected source')
+            errors.append(f'{role}: configure MEMSTARA_LLM_API_KEY '
+                          '(or the role provider credential) in the selected source')
     return {'configuration_valid': not errors, 'errors': errors,
             'models': profiles, 'ports': {k: values.get(k, str(v)) for k, v in PORT_DEFAULTS.items()},
             'database_connection': 'not_tested', 'model_call': 'not_tested'}

@@ -446,7 +446,7 @@ The file accepts literal values; shell `${...}` interpolation is not supported.
 | Settings | Required action |
 |---|---|
 | `MEMSTARA_LLM_PROVIDER`, `MEMSTARA_LLM_MODEL` | Choose the provider and your actual deployed model |
-| `ANTHROPIC_FOUNDRY_RESOURCE`, `ANTHROPIC_FOUNDRY_API_KEY` | Obtain your resource name and authorized key for Foundry |
+| `MEMSTARA_LLM_RESOURCE`, `MEMSTARA_LLM_API_KEY` | Obtain your resource name and authorized key for Foundry |
 | `MEMSTARA_LLM_API_BASE` | Optional Foundry resource-root URL; it can replace the resource name, and both must agree if set |
 | `MEMSTARA_DATABASE_URL`, `MOTORO_DATABASE_URL`, `MOTORO_REDIS_URL` | Select independent service destinations; preserve existing values when migrating |
 | `COMPOSE_PROJECT_NAME` | Choose a unique name for a new Docker installation |
@@ -459,8 +459,8 @@ One default model serves all stages. For example:
 ```dotenv
 MEMSTARA_LLM_PROVIDER=azure_foundry
 MEMSTARA_LLM_MODEL=YOUR_DEPLOYMENT_NAME
-ANTHROPIC_FOUNDRY_RESOURCE=YOUR_RESOURCE_NAME
-ANTHROPIC_FOUNDRY_API_KEY=YOUR_API_KEY
+MEMSTARA_LLM_RESOURCE=YOUR_RESOURCE_NAME
+MEMSTARA_LLM_API_KEY=YOUR_API_KEY
 ```
 
 To use another model for Explanation, set `MEMSTARA_EXPLANATION_MODEL` in the same
@@ -1715,3 +1715,12 @@ its uses. It is not an independent holdout score or a controlled comparison of m
 Open an individual result for its model, features and evaluation provenance. Novelty
 ranking remains separate from similarity and performance. AUC below 0.5, exactly 0.5,
 above 0.5 and unavailable values are distinct; none establishes clinical usefulness.
+
+The default model credential is `MEMSTARA_LLM_API_KEY`, interpreted using
+`MEMSTARA_LLM_PROVIDER`. For Azure Foundry, use `MEMSTARA_LLM_RESOURCE`
+(resource name) or `MEMSTARA_LLM_API_BASE` (resource-root URL).
+Memstara translates these settings to the runtime provider's internal names;
+no Motoro source changes are required. Legacy provider variables remain accepted
+for existing installations and mixed-provider role overrides. Conflicting old
+and new values are rejected without logging credentials. The generic key applies
+only to the default provider; it is never copied to a different role provider.
