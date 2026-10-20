@@ -183,6 +183,25 @@ def require_tools(by_stage, required, run_dir=None):
                        message=f'Required tools are unavailable ({detail}). No model calls were started.')
 
 
+def startup_failure(problems):
+    """Expose missing setting names, never raw logs, paths or credentials."""
+    names = sorted(set(re.findall(r'\b[A-Z][A-Z0-9_]+(?= is (?:not set|required))', '\n'.join(problems))))
+    detail = (' Missing required settings: ' + ', '.join(names) + '.') if names else ''
+    return {'code': 'startup_environment_rejected', 'stage': 'preflight', 'loop': None,
+            'message': 'Execution stopped during startup validation, before agent execution.' + detail +
+                       ' Review control.log, correct the configuration, and start a new execution.'}
+
+
+def record_startup_failure(run_dir, problems):
+    from memstara.pipeline.checkpoint import atomic_json
+    root = Path(run_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    record = read_failure(root) or startup_failure(problems)
+    atomic_json(root / 'pipeline_failure.json', record)
+    atomic_json(root / 'pipeline_status.json', {'status': 'failed', 'failure': record,
+                                               'message': record['message']})
+
+
 def visible_failure(run_dir, *, include_legacy=True):
     """Surface an older failed run's cause without altering its original artifacts."""
     if failure := read_failure(run_dir):
@@ -202,6 +221,8 @@ def visible_failure(run_dir, *, include_legacy=True):
                 log.seek(0, 2)
                 log.seek(max(0, log.tell() - 16384))
                 tail = log.read().decode('utf-8', errors='replace')
+            if 'Environment is not ready:' in tail:
+                return startup_failure([tail])
             if 'board.py: error:' in tail:
                 if 'skill does not match the selected corpus' in tail:
                     return {'code': 'startup_corpus_mismatch', 'stage': 'preflight', 'loop': None,

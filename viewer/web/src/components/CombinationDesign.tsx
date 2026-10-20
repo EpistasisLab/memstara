@@ -119,6 +119,7 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
    </div>
    {error&&<div className="cs-error" role="alert"><AlertCircle size={17}/><span>{error} {trace?'Showing the last records for this Loop.':'This does not mean the Loop is empty.'}</span><button onClick={()=>setRetry(n=>n+1)}>Retry</button></div>}
    {!trace&&!error?<p className="cs-empty" role="status">Loading this Loop’s execution path…</p>:trace&&<>
+    {trace.failure&&<p role="status" className="cs-note">{trace.failure.message}</p>}
     <div className="cs-path-caption"><span>{trace.planned?`Combination ${trace.planned.combination} · cycle ${trace.planned.repetition}${trace.planned.start_combination ? ` · ${trace.planned.selection_policy==='random_start_then_cycle_v1'?'Random':'Ordered'} start: ${trace.planned.start_combination}` : ''}`:trace.preparing?'Preparing execution…':'No execution plan recorded'}</span><span>{trace.calls.length} recorded calls · refreshes every 0.5 seconds</span></div>
     <CombinationFloor recorded skills={PLAYBOOK_STAGES.map(stage=>{const flavor=trace.calls.filter(c=>callRole(c)===stage).at(-1)?.skill??trace.planned?.agents.find(a=>a.stage===stage);return flavor?[flavor]:[];})} calls={trace.calls} inspect={setDetail}/>
     <details className="cs-stage-details"><summary>Stage details and skill versions</summary><div className="cs-path">{PLAYBOOK_STAGES.map((stage,i)=>{

@@ -32,7 +32,7 @@ from memstara.pipeline.core import (
     run_one_trial,
     save_rows,
 )
-from memstara.env import load_env
+from memstara.env import load_env, model_environment_errors
 from memstara.trace.report import build_report
 from memstara.config import Settings
 from memstara.trace.run import dump_all
@@ -124,18 +124,6 @@ def write_manifest(path: Path, *, args: argparse.Namespace, started: str, summar
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-# The credentials each provider needs. Only the one chosen with `--provider` is checked.
-#
-# While this was absent, empty credentials did not blow up **until the first LLM call.**
-# Stopping before anything starts is better — nothing is written, and what has to be
-# filled in is known right there.
-_PROVIDER_KEYS = {
-    "azure_foundry": ("ANTHROPIC_FOUNDRY_API_KEY", "ANTHROPIC_FOUNDRY_RESOURCE"),
-    "anthropic": ("ANTHROPIC_API_KEY",),
-    "openai": ("OPENAI_API_KEY",),
-}
-
-
 def check_environment(provider: str = "") -> list[str]:
     """Report everything missing at once, before anything starts.
 
@@ -150,18 +138,13 @@ def check_environment(provider: str = "") -> list[str]:
         A list of strings describing the problems. Empty means everything is ready.
 
     Args:
-        provider: the value chosen with `--provider`. Only the credentials matching it
-            are checked.
+        provider: the value chosen with `--provider`. Explicit profiles select the credentials to check.
     """
     problems: list[str] = []
 
     # LLM credentials from the effective process environment after load_env().
-    for name in _PROVIDER_KEYS.get(provider, ()):
-        if not os.environ.get(name, "").strip():
-            problems.append(
-                f"{name} is not set — needed for --provider {provider}. "
-                "Check Memstara's .env or the process environment."
-            )
+    if provider:
+        problems.extend(model_environment_errors(provider))
 
     # The three below are this sandbox's path settings. "not set" and "set but pointing
     # at nothing" are reported apart — a path wrong by a typo is genuinely common.

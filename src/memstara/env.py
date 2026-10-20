@@ -60,15 +60,16 @@ BASE_VARS = {
     "MOTORO_DATABASE_URL": "core's DB — the agents and the run history",
 }
 
-#: Extra keys each provider needs. Only the one picked with `--provider` is checked.
+#: Credentials required by each provider used in the selected agent profiles.
 #:
 #: Before this existed, empty credentials did not surface until the **first LLM
 #: call** — by which point a seeding round had been spent and the board already
 #: carried rows.
 PROVIDER_KEYS = {
-    "azure_foundry": ("ANTHROPIC_FOUNDRY_API_KEY", "ANTHROPIC_FOUNDRY_RESOURCE"),
+    "azure_foundry": ("ANTHROPIC_FOUNDRY_API_KEY",),
     "anthropic": ("ANTHROPIC_API_KEY",),
     "openai": ("OPENAI_API_KEY",),
+    "openrouter": ("OPENROUTER_API_KEY",),
 }
 
 
@@ -116,10 +117,31 @@ def missing_vars(provider: str = "", *, knowledge_mode: str = "okf", data_mode: 
     problems = [f"{name} is not set — {hint}"
                 for name, hint in BASE_VARS.items()
                 if name not in omitted and not os.environ.get(name, "").strip()]
-    problems += [f"{name} is not set — needed for --provider {provider}. "
-                 "Check Memstara's .env or the process environment."
-                 for name in PROVIDER_KEYS.get(provider, ())
-                 if not os.environ.get(name, "").strip()]
+    if provider:
+        problems += model_environment_errors(provider)
+    return problems
+
+
+def model_environment_errors(provider: str = "", profiles=None) -> list[str]:
+    """Validate explicit agent identities/endpoints and provider credentials together.
+
+    Resource-name aliases are unnecessary when an agent supplies its API_BASE.
+    Supplied frozen profiles take precedence over today's deployment on recovery.
+    """
+    from memstara.stage_models import deployment_profiles, validate_profiles
+    problems = []
+    try:
+        selected = deployment_profiles() if profiles is None else validate_profiles(profiles)
+    except ValueError as exc:
+        selected = {}
+        problems.append(str(exc))
+    providers = {p['provider'] for p in selected.values()} or ({provider} if provider else set())
+    for name in sorted({key for p in providers for key in PROVIDER_KEYS.get(p, ())}):
+        if not os.environ.get(name, '').strip():
+            problems.append(f'{name} is not set — configure the matching provider credential in .env')
+    for role, profile in selected.items():
+        if profile['provider'] in ('azure_foundry', 'local') and not profile.get('api_base'):
+            problems.append(f'{role}: an explicit model API_BASE is required')
     return problems
 
 

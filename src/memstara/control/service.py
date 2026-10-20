@@ -621,8 +621,10 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 root = Path(latest['run_dir'])
                 from memstara.combinations import loop_flavors
-                if running and not (root / 'config.json').exists():
-                    self._send(200, {"run_tag": latest['run_tag'], "preparing": True,
+                if not (root / 'config.json').exists():
+                    from memstara.pipeline.failures import visible_failure
+                    failure = None if running else visible_failure(root)
+                    self._send(200, {"run_tag": latest['run_tag'], "preparing": bool(running), "failure": failure,
                                      "planned": None, "executed": None, "calls": []})
                     return
                 plan = json.loads((root / 'config.json').read_text()).get('combination_plan')

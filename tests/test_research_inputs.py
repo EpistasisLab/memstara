@@ -120,8 +120,8 @@ def test_ui_arguments_reach_cli_environment_check_with_prepared_domain(sample, s
         return SimpleNamespace(close=lambda: asyncio.sleep(0))
     monkeypatch.setattr(board.asyncpg, 'connect', connect)
     monkeypatch.setattr(board, 'dsn', lambda: 'postgresql://fixture')
-    monkeypatch.setattr(board, '_PROVIDER_KEYS', {})
     monkeypatch.setenv('MOTORO_DATABASE_URL', 'postgresql://fixture')
+    monkeypatch.setenv('ANTHROPIC_FOUNDRY_API_KEY', 'synthetic-fixture')
     from memstara.matcher import config as matcher_config, embedder
     import numpy as np
     monkeypatch.setattr(embedder, 'sentence_transformer_encoder',

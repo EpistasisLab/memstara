@@ -26,7 +26,7 @@ import asyncpg    # PostgreSQL async driver. Used only to query the board direct
 # below drags litellm in. There used to be a bare `import` of the env module here to force
 # that order. It is gone: reaching this module at all runs `memstara/__init__.py`
 # first, and that is where the variable is now set. See its docstring.
-from memstara.env import load_env
+from memstara.env import load_env, model_environment_errors
 
 # memstara/blackboard.py — the board table's definition and connection details
 from memstara.blackboard import BoardBusy, dsn, release_questions, run_lock
@@ -184,22 +184,10 @@ def _redacted_dsn() -> str:
     return re.sub(r"://([^:/@]+):[^@]*@", r"://\1:***@", dsn())
 
 
-# The credentials each provider needs. Only the one chosen with `--provider` is checked.
-#
-# While this table was absent, empty credentials did not blow up **until the first LLM
-# call.** By then one seeding had already been spent and a row was left on the board.
-# Stopping before anything starts is better — the board stays clean, and what has to be
-# filled in is known right there.
-_PROVIDER_KEYS = {
-    "azure_foundry": ("ANTHROPIC_FOUNDRY_API_KEY", "ANTHROPIC_FOUNDRY_RESOURCE"),
-    "anthropic": ("ANTHROPIC_API_KEY",),
-    "openai": ("OPENAI_API_KEY",),
-}
-
-
 async def check_environment(provider: str = "", y_column: str = "", *,
                             use_okf: bool = True, use_data: bool = True,
-                            prepare_matcher: bool = False, run_dir: Path | None = None) -> list[str]:
+                            prepare_matcher: bool = False, run_dir: Path | None = None,
+                            stage_models: dict | None = None) -> list[str]:
     """Everything missing, reported at once, before anything starts.
 
     What is missing is collected **all together** rather than reported one at a time.
@@ -208,8 +196,9 @@ async def check_environment(provider: str = "", y_column: str = "", *,
     An empty list coming back means "ready".
 
     Args:
-        provider: the value chosen with `--provider`. Only the credentials matching it
-            are checked. An empty string skips the credential check.
+        provider: legacy CLI model metadata. Credentials follow the selected profiles.
+            Omit both provider and stage_models to skip model checks in data-only diagnostics.
+        stage_models: frozen assignments, or current deployment profiles when omitted.
         y_column: the outcome variable chosen with `--y-column`. Checks that the name
             really is in the dataset. An empty string skips it.
     """
@@ -241,12 +230,8 @@ async def check_environment(provider: str = "", y_column: str = "", *,
     # here, it stops without spending anything.
     #
     # main() loads optional environment files before checking effective values.
-    for name in _PROVIDER_KEYS.get(provider, ()):
-        if not os.environ.get(name, "").strip():
-            problems.append(
-                f"{name} is not set — needed for --provider {provider}. "
-                "Check Memstara's .env or the process environment."
-            )
+    if provider or stage_models is not None:
+        problems.extend(model_environment_errors(provider, stage_models))
 
     # Reachability, not just presence. An unreachable board fails later as an opaque
     # tool error inside an agent, which reads like a prompt problem — and then the wrong
@@ -2721,8 +2706,16 @@ async def main() -> int:
     # already finished, so it never opens the dataset. Check the outcome column anyway
     # and the default `outcome` blocks **the very path meant for rescuing an interrupted
     # run** — the means of rescue failing only when rescue is needed.
+    if args.resume or args.report_only:
+        from memstara.pipeline.preparation import frozen_model_source
+        from memstara.stage_models import resolve_run_profiles
+        frozen_profiles = resolve_run_profiles(
+            args.stage_models, recovering=True,
+            frozen=frozen_model_source(args, Path(args.run_dir) if args.run_dir else Path('.')),
+        )
     problems = await check_environment(
         provider=args.provider,
+        stage_models=frozen_profiles or None,
         y_column="" if args.report_only or args.data_mode == "proposal" else args.y_column,
         use_okf=not args.ablate_okf,
         use_data=args.data_mode == "dataset",
@@ -2730,6 +2723,9 @@ async def main() -> int:
         run_dir=Path(args.run_dir) if args.run_dir else None,
     )
     if problems:
+        if args.run_dir:
+            from memstara.pipeline.failures import record_startup_failure
+            record_startup_failure(Path(args.run_dir), problems)
         print("Environment is not ready:", file=sys.stderr)
         for p in problems:
             print(f"  - {p}", file=sys.stderr)
