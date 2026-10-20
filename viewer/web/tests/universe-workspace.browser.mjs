@@ -26,6 +26,7 @@ try {for(const width of [1440,390]){
  await nav.getByRole('button',{name:'Question universe',exact:true}).click();
  await expect(page.locator('#workspace-pipeline')).toBeVisible();
  await expect(page.locator('#workspace-results, #workspace-report')).toHaveCount(0);
+ await expect(page.getByRole('region',{name:'Live pipeline outputs'})).toHaveCount(0);
  const options=page.getByRole('button',{name:'View options',exact:true});await options.click();
  await expect(page.locator('dialog[open]')).toHaveCount(0);
  const sizes=await page.locator('.universe-search, .universe-popover > summary, .universe-clear-questions').evaluateAll(els=>els.map(e=>e.getBoundingClientRect().height));

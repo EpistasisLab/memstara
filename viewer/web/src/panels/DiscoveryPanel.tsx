@@ -14,8 +14,7 @@ import ReportBody from '../components/ReportBody';
 import ExplanationEvidence from '../components/ExplanationEvidence';
 import type { Result, Task, QuestionContract } from '../types';
 import { FeatureAtlas, ModelLens, InterpretationVoices } from '../components/discovery/EvidenceVisuals';
-import LiveOutputDock from '../components/discovery/LiveOutputDock';
-import { useLiveOutputs, type OutputEvent } from '../store/liveOutputs';
+import { useLiveOutputs } from '../store/liveOutputs';
 import QuestionSpace from '../components/discovery/QuestionSpace';
 import NoveltyRanking from '../components/NoveltyRanking';
 import ScientificProvenance from '../components/ScientificProvenance';
@@ -92,8 +91,6 @@ function EvidencePanel({ question, data, error, stage, setStage, resultId, setRe
 
 export default function DiscoveryPanel() {
   const liveQuestions=useLiveOutputs(s=>s.questions);
-  const liveReports=useLiveOutputs(s=>s.reports);
-  const [openedReport,setOpenedReport]=useState<string|null>(null);
   const [openError,setOpenError]=useState('');
   const openSequence=useRef(0);
   const [pages, setPages] = useState<number[]>([0]);
@@ -106,7 +103,7 @@ export default function DiscoveryPanel() {
   const [list, setList] = useState(false);
   const [stage, setStage] = useState('Question');
   const [resultId, setResultId] = useState<number | null>(null);
-  const [drawer,setDrawer]=useState<'novelty'|'semantic'|'evidence'|'report'|null>(null);
+  const [drawer,setDrawer]=useState<'novelty'|'semantic'|'evidence'|null>(null);
   const toolbar=useRef<HTMLDivElement>(null);
   const closePopovers=()=>toolbar.current?.querySelectorAll('details[open]').forEach(el=>el.removeAttribute('open'));
   useEffect(()=>{
@@ -126,23 +123,9 @@ export default function DiscoveryPanel() {
   const current = data?.questions.find(q => q.question_id === selected?.question_id) ?? selected;
   const result=resultId===null?evidence.data?.results[0]:evidence.data?.results.find(r=>r.result_id===resultId);
   const task=evidence.data?.tasks.find(t=>t.task_id===result?.task_id) ?? (!result&&resultId===null?evidence.data?.tasks[0]:undefined);
-  const select=(q: Question)=>{openSequence.current++;setOpenError('');setOpenedReport(null);setSelected(q);setResultId(null);setStage('Question');setDrawer('evidence');};
+  const select=(q: Question)=>{openSequence.current++;setOpenError('');setSelected(q);setResultId(null);setStage('Question');setDrawer('evidence');};
   const clearSelection=()=>{openSequence.current++;setSelected(null);setResultId(null);setOpenError('');setDrawer(null);};
   useEffect(()=>()=>{openSequence.current++;},[]);
-  const openOutput=async(event:OutputEvent)=>{
-    const sequence=++openSequence.current;setOpenError('');
-    if(event.stage==='report'){setOpenedReport(event.run_tag);setDrawer('report');return;}
-    if(event.question_id===null){setOpenError('This output has no recorded question link. It remains visible in the live stream.');return;}
-    try{
-      let question=liveQuestions.find(q=>q.question_id===event.question_id)??data?.questions.find(q=>q.question_id===event.question_id);
-      if(!question){const response=await fetch(`/api/discovery/questions/${event.question_id}`,{signal:AbortSignal.timeout(5000)});if(!response.ok)throw Error('Question evidence is temporarily unavailable.');question=(await readDiscoveryResponse(response, `/api/discovery/questions/${event.question_id}`) as Evidence).question;}
-      if(sequence!==openSequence.current||!question)return;
-      if(question.question_id!==event.question_id)throw Error('The returned evidence does not match the selected question.');
-      select(question);setOpenedReport(null);
-      const names:Record<string,string>={question:'Question',hypothesis:'Hypothesis',data:'Data',ml:'ML',interpretation:'Interpretation',result:'ML'};
-      setStage(names[event.stage]||'Question');if(event.result_id)setResultId(event.result_id);
-    }catch(error){if(sequence===openSequence.current)setOpenError(String(error));}
-  };
   const openStage=(name:string)=>{setStage(name);setDrawer('evidence');};
   const [semantic,setSemantic]=useState<SemanticData|null>(null);
   const semanticPositions=useMemo(()=>positions(semantic),[semantic]);
@@ -159,7 +142,7 @@ export default function DiscoveryPanel() {
       setDrawer('evidence');
     }catch(e){if(sequence===openSequence.current)setOpenError(String(e));}
   };
-  const drawerTitle=drawer==='novelty'?'Novelty proxy ranking':drawer==='semantic'?'Related questions':drawer==='report'?'Run report':'Question details';
+  const drawerTitle=drawer==='novelty'?'Novelty proxy ranking':drawer==='semantic'?'Related questions':'Question details';
   return <div className="universe-page universe-v2 universe-workspace workspace-padding">
     <header className="universe-workspace-heading"><h2>Question universe</h2></header>
     <div className="universe-toolbar grid grid-cols-[minmax(0,1fr)_auto_auto_44px] items-center gap-2 @max-[600px]:grid-cols-[1fr_auto_44px]" ref={toolbar} data-context-help-managed>
@@ -176,7 +159,7 @@ export default function DiscoveryPanel() {
         <summary role="button" aria-label="Explore questions"><Compass size={16}/>Explore</summary>
         <div className="universe-popover-body universe-explore-menu"><button onClick={()=>openDrawer('semantic')}>Related questions<ArrowRight size={16}/></button><button onClick={()=>openDrawer('novelty')}>Novelty proxy ranking<ArrowRight size={16}/></button></div>
       </details>
-      <ClearQuestionMemory iconOnly onCleared={through=>{openSequence.current++;setClearedThrough(v=>Math.max(v,through));setPages([0]);setSelected(null);setOpenedReport(null);setOpenError('');setDrawer(null);setMemoryRevision(v=>v+1);}}/>
+      <ClearQuestionMemory iconOnly onCleared={through=>{openSequence.current++;setClearedThrough(v=>Math.max(v,through));setPages([0]);setSelected(null);setOpenError('');setDrawer(null);setMemoryRevision(v=>v+1);}}/>
 
     </div>
     <div className="universe-summary"><span>{questions.length} questions on this page</span><span>{error?'Updates interrupted':data?'Live':'Connecting…'}{semantic?.status==='ready'?' · Semantic layout':''}{performance?' · Historical exploratory AUC':''}</span>{current&&<button onClick={()=>openDrawer('evidence')}>Question {current.question_id} details</button>}</div>
@@ -188,12 +171,10 @@ export default function DiscoveryPanel() {
         summary={{hypothesis:result?.hypothesis||task?.hypothesis||'',features:result?result.columns_used.length:task?.columns_used.length?task.columns_used.length:null,auc:result?.auc??task?.auc??null,interpretations:result?.evaluation?.interpretations?.length??(result?.interpretation||task?.interpretation?1:null),hasRun:!!(result?.run_tag||task?.run_tag||current?.origin_run)}} />}
       <div className="universe-pagination"><button disabled={pages.length === 1} onClick={() => {clearSelection();setPages(p => p.slice(0, -1));}}>View recent questions</button><span>Page {pages.length}</span><button disabled={!data?.next_before} onClick={() => { if (data?.next_before) {clearSelection();setPages(p => [...p, data.next_before!]);} }}>View older questions</button></div>
     </section>
-    <LiveOutputDock compact open={event=>{void openOutput(event);}}/>
     {drawer&&<FloorDetailDialog title={drawerTitle} close={closeDrawer} closeLabel="Close Universe panel" className={`universe-drawer universe-drawer-${drawer}`}>
       {drawer==='novelty'&&<NoveltyRanking open={(q,r)=>{void openRanked(q,r);}}/>}
       {drawer==='semantic'&&<SemanticExplorer selected={current?.question_id??null} onLayout={setSemantic} onChoose={id=>{void openRanked(id,null);}}/>}
       {drawer==='evidence'&&current&&<EvidencePanel key={current.question_id} question={current} data={evidence.data} error={evidence.error} stage={stage} setStage={setStage} resultId={resultId} setResultId={setResultId}/>}
-      {drawer==='report'&&openedReport&&<article className="universe-evidence"><p className="universe-note">{openedReport} · {liveReports[openedReport]?.status||'Not available'}</p><ReportBody compactOrigin report text={liveReports[openedReport]?.text||liveReports[openedReport]?.error||'No report text is available yet.'}/></article>}
       {openError&&<p role="alert">{openError}</p>}
     </FloorDetailDialog>}
   </div>;
