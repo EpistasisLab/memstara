@@ -37,7 +37,12 @@ try{
   await expect(page.getByRole('button',{name:'Explore questions',exact:true})).toBeFocused();
   await expect(page.locator('.universe-list')).toBeVisible();
   await explore();await page.getByRole('button',{name:'Related questions',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Search meaning',exact:true})).toBeDisabled();
   await page.getByRole('textbox',{name:'Semantic query'}).fill('cardiac disease');
+  assert(await page.locator('.related-search textarea').evaluate(el=>el.getBoundingClientRect().height>=100));
+  assert(await page.locator('.related-primary').evaluate(el=>el.getBoundingClientRect().height>=44));
+  assert(await page.locator('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth+2));
+  await page.screenshot({path:`/private/tmp/memstara-related-${width}.png`});
   await page.getByRole('button',{name:'Search meaning',exact:true}).click();
   await expect(page.getByText('Indexed 2 of 2 active questions',{exact:false})).toBeVisible();
   await page.getByRole('button',{name:'Open question 2 · cosine 0.900'}).click();
@@ -46,6 +51,7 @@ try{
   await expect(page.locator('.universe-evidence h2')).toHaveText('Question 2');
   offline=false;await expect(page.locator('.universe-alert')).toHaveCount(0,{timeout:10000});await close();
   semanticOffline=true;await explore();await page.getByRole('button',{name:'Related questions',exact:true}).click();
+  await page.getByText('Map layout & method',{exact:true}).click();
   await page.getByRole('button',{name:'Refresh semantic layout',exact:true}).click();
   await expect(page.getByRole('alert').filter({hasText:'Semantic view is unavailable'})).toBeVisible();await close();
   await explore();await page.getByRole('button',{name:'Novelty proxy ranking',exact:true}).click();

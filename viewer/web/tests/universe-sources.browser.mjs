@@ -41,6 +41,7 @@ try {
   await page.getByRole('button',{name:'Close Universe panel',exact:true}).click();
   await page.getByRole('button',{name:'Explore questions',exact:true}).click();
   await page.getByRole('button',{name:'Related questions',exact:true}).click();
+  await page.getByText('Map layout & method',{exact:true}).click();
   await page.getByRole('button',{name:'Refresh semantic layout',exact:true}).click();
   await expect(page.getByText('Indexed 1 of 1 active questions',{exact:false})).toBeVisible();
   await page.getByRole('button',{name:'Close Universe panel',exact:true}).click();
