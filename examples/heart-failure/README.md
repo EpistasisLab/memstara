@@ -26,7 +26,12 @@ Target: `chronic_heart_failure`; positive `1`, negative `0`.
 The clinical outcome window and predictor timing have not been independently
 validated. This is a software demonstration, not validated prospective prediction.
 
-From the repository root, after README runtime/model/database setup:
+For the Docker installation, `./start.sh` automatically prepares and registers the
+complete-case demonstration. Select it in Floor plan → Add pipeline. No manual
+preparation commands are needed.
+
+For optional native development, from the repository root after configuring the
+runtime described in [the developer guide](../../DEVELOPER_GUIDE.md):
 
 ```bash
 python scripts/prepare_heart_failure_demo.py \
@@ -48,7 +53,7 @@ and provenance record `preparation.json` under the destination. The contract use
 absolute paths resolved on the installing machine. An existing destination is
 rejected to preserve previous evidence; choose a new path for another preparation.
 
-Then follow root README steps 5–7 for skills, one-Loop execution, verification and
-optional browser startup. Preparation alone does not make model calls or establish
+See [the root README](../../README.md#run-a-pipeline) for starting a pipeline in
+the browser. Preparation alone does not make model calls or establish
 pipeline completion. The generated contract is not committed because its paths
 belong to the user's installation. Keep private credentials out of this directory.
