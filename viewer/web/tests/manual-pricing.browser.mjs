@@ -21,20 +21,15 @@ try{
  });
  await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Isolated fixture'}}));
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
- await page.getByRole('button',{name:'View floor plan',exact:true}).click();
+ await page.getByRole('button',{name:'Floor plan',exact:true}).click();
  await page.getByRole('button',{name:'Settings and more for Pricing fixture',exact:true}).first().click();
  const dialog=page.getByRole('dialog',{name:'Pipeline settings and actions'});
- await dialog.getByText('Cost estimate settings · optional',{exact:true}).click();
- await dialog.getByLabel('Use manually verified rates').check();
- await dialog.getByLabel('Input · USD per 1 million tokens',{exact:true}).fill('2');
- await dialog.getByLabel('Output · USD per 1 million tokens',{exact:true}).fill('8');
- await dialog.getByLabel('Cache read (optional) · USD per 1 million tokens',{exact:true}).fill('1');
- await dialog.getByLabel('Verified rate source (HTTPS URL)').fill('https://example.test/pricing');
- await dialog.getByLabel('Expires at start of this date (UTC)').fill('2099-01-01');
+ await dialog.getByText('How cost estimates work',{exact:true}).click();
+ await dialog.getByText('Motoro calculates model cost estimates.',{exact:false}).waitFor();
+ assert.equal(await dialog.getByRole('button',{name:'Save manual rates',exact:true}).count(),0);
+ assert.equal(await dialog.getByLabel('Use manually verified rates').count(),0);
  for(const width of [390,1440]){await page.setViewportSize({width,height:1000});assert.equal(await dialog.evaluate(el=>el.scrollWidth>el.clientWidth+2),false);}
- await dialog.getByRole('button',{name:'Save manual rates',exact:true}).click();
- await dialog.getByText(/Manual rates saved for subsequent requests/).waitFor();
- assert.equal(saved,1);assert.deepEqual(settings.models[0].rates,{input:2,output:8,cache_read:1});
+ assert.equal(saved,0);
  assert.equal(starts,0);assert.deepEqual(errors,[]);
- console.log('Manual rates edited without JSON; USD units and provenance; mobile layout; no model calls. HTTP mocked.');
+ console.log('Motoro ownership notice, no local rate editor, responsive layout, no writes or model calls. HTTP mocked.');
 }finally{await browser.close();}

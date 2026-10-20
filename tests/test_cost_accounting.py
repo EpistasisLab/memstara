@@ -124,20 +124,21 @@ def test_azure_query_preserves_currency_and_existing_snapshot_on_failure(tmp_pat
     assert dest.read_bytes() == before
 
 
-def test_runtime_adapter_uses_frozen_request_profile_and_rate_receipt(catalog):
-    from memstara import pricing_compat
-
-    profile, _, _ = catalog
-    token = accounting.request_profile.set(profile)
-    receipt_token = accounting.price_receipt.set(None)
+@pytest.mark.parametrize("amount,status", [(None,"unknown"),(0.0,"unknown"),(.125,"estimated")])
+def test_runtime_records_motoro_amount_without_local_receipts(tmp_path, amount, status):
+    token = accounting.price_receipt.set({"usd": 999, "source": "stale-local-rate"})
     try:
-        response = SimpleNamespace(usage=SimpleNamespace(prompt_tokens_details=SimpleNamespace(cached_tokens=200000)))
-        cost, source = pricing_compat.calculate_cost("returned-model-version", 1000000, 100000, response)
-        assert source == "deployment_catalog" and cost == pytest.approx(2.6)
-        assert accounting.price_receipt.get()["rates"]["input"] == 2
+        config = SimpleNamespace(provider="openai", model="model")
+        record = SimpleNamespace(cost_estimate=amount, pricing_source="litellm")
+        accounting.record_attempt((tmp_path,"agent","ml"), 1, config, record)
+        row = json.loads((tmp_path / "cost_ledger.jsonl").read_text())
+        assert row["usd"] == (amount if status == "estimated" else None)
+        assert row["reported_cost_estimate"] == amount
+        assert row["status"] == status
+        assert row["price_receipt"] is None
+        assert row["calculated_by"] == "motoro"
     finally:
-        accounting.request_profile.reset(token)
-        accounting.price_receipt.reset(receipt_token)
+        accounting.price_receipt.reset(token)
 
 
 def test_custom_pricing_requires_explicit_configuration(monkeypatch, tmp_path):

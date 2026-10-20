@@ -15,7 +15,7 @@ commands remain available through `python -m memstara.local_setup`. The old
 | Public port and project identity | `.env` web port; generated private project identity and `compose.override.yaml` | Compose, control origin checks |
 | Host directories | `.env` output/cache/input fields | Compose mounts and derived application paths |
 | CSV/OKF/target and skills | App research/pipeline selections | Saved profiles and frozen executions |
-| Optional manual estimate rates | App cost settings; generated `outputs/pricing/manual-rates.json` | Request cost receipts; never actual billing |
+| Execution cost estimates | Motoro pricing service | Memstara records returned estimates; missing prices stay unknown |
 | Advanced rate overrides, meter mappings and specialist sources | Inline JSON in `.env` | Owning backend subsystem; no config directory |
 | Per-research selections | Saved research/pipeline record | Execution preparation |
 | Per-execution settings | Immutable redacted run snapshot | Execution, audit, historical resume |
@@ -104,14 +104,14 @@ from these checks.
 
 ## Optional inline settings
 
-Manual token rates can be entered in **Settings and more → Cost estimate settings**.
-This is optional and applies across the installation. No pricing JSON is needed.
-The generated catalog lives under the configured output directory, is read by
-subsequent requests and does not rewrite historical receipts. Azure actual billing
-is not computed from this catalog. The form supports flat USD input/output/cache-read
-rates with provenance and expiry; unknown cache-write TTLs remain unpriced.
+Legacy `MEMSTARA_PRICING_JSON` and `MEMSTARA_PRICING_PATH` do not override
+execution costs. Motoro exclusively calculates request estimates.
 
-The following overrides are for advanced automation only and disable the UI editor.
+**Settings and more → How cost estimates work** explains this policy. Local manual
+rate editing is retired; its POST endpoint returns HTTP 410. Historical receipts
+and offline catalog tools remain available, but do not price new requests.
+
+The following settings are for offline audits and advanced source bindings only.
 No `config/` folder is required. Keep optional JSON on one single-quoted line in
 `.env`. These are advanced settings; leave them unset for the standard workflow.
 The following examples are schemas, not verified prices or working database bindings.

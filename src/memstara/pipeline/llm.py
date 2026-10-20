@@ -175,11 +175,6 @@ def record_retry(context, loop, state, attempt, error=None, delay=0):
 
 
 class PipelineLLMService(LLMService):
-    def __init__(self, *args, **kwargs):
-        from memstara.pricing_compat import install
-        install()
-        super().__init__(*args, **kwargs)
-
     async def _request(self, method, config, messages, *args, **kwargs):
         from memstara.pipeline.diagnostics import call_context, call_loop, request_id, record_event
         from memstara.pipeline.failures import stop_execution, retryable_model_error
@@ -213,11 +208,7 @@ class PipelineLLMService(LLMService):
                 })
                 record_event(context, 'input_saved' if input_evidence else 'input_unavailable',
                              evidence=input_evidence)
-                from memstara.cost_accounting import request_profile, price_receipt, record_attempt
-                profile_token = request_profile.set({
-                    'provider': getattr(getattr(config, 'provider', None), 'value', getattr(config, 'provider', None)),
-                    'model': config.model, 'api_base': getattr(config, 'api_base', None)})
-                receipt_token = price_receipt.set(None)
+                from memstara.cost_accounting import record_attempt
                 try:
                     if context:
                         from memstara.evaluation import active_plan
@@ -271,8 +262,6 @@ class PipelineLLMService(LLMService):
                     if attempt:
                         record_retry(context, call_loop.get(), 'recovered', attempt + 1)
                 finally:
-                    request_profile.reset(profile_token)
-                    price_receipt.reset(receipt_token)
                     request_id.reset(identity_token)
                 return result
 

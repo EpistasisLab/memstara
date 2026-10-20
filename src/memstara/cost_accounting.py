@@ -1,4 +1,4 @@
-"""Auditable local estimates; no remote requests in the inference path."""
+"""Record Motoro estimates; legacy catalog helpers are offline utilities only."""
 
 import hashlib
 import json
@@ -79,7 +79,7 @@ def record_attempt(context, loop, config, record=None, error=False):
     from memstara.pipeline.diagnostics import request_id
     if not context:
         return
-    receipt = price_receipt.get()
+    receipt = None  # New request costs come only from the Motoro record.
     source = getattr(record, "pricing_source", "unavailable")
     amount = getattr(record, "cost_estimate", None)
     known = (
@@ -89,8 +89,9 @@ def record_attempt(context, loop, config, record=None, error=False):
         and math.isfinite(amount)
         and amount >= 0
     )
-    # Generic catalogs are estimates, not verified Azure contract prices.
-    if amount == 0 and not receipt:
+    # Motoro 0.10.0 also encodes unavailable prices as zero in call records.
+    # Without evidence distinguishing free usage, keep zero ambiguous.
+    if amount == 0:
         known = False
     row = {
         "id": str(uuid4()),
@@ -104,8 +105,10 @@ def record_attempt(context, loop, config, record=None, error=False):
         "response_model": getattr(record, "model", None),
         "status": "unknown" if not known else "estimated",
         "usd": amount if known else None,
+        "reported_cost_estimate": amount if isinstance(amount, (int, float)) and math.isfinite(amount) else None,
         "currency": "USD",
         "source": source,
+        "calculated_by": "motoro",
         "price_receipt": receipt,
         "reason": "Request failed; provider may still bill usage"
         if error

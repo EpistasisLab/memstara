@@ -768,7 +768,7 @@ checks listed in the main README.
 | [stage_models.py](src/memstara/stage_models.py) | Two-profile validation and role assignment |
 | [pipeline/core.py](src/memstara/pipeline/core.py) | Agent provisioning, settings refresh and runtime integration |
 | [pipeline/llm.py](src/memstara/pipeline/llm.py) | Motoro LLM adapter, request and retry policies |
-| [pricing_compat.py](src/memstara/pricing_compat.py) | Process-local cost API compatibility |
+| [pricing_compat.py](src/memstara/pricing_compat.py) | Legacy delegation to Motoro; no calculator replacement |
 | [pipeline/snapshot.py](src/memstara/pipeline/snapshot.py) | Frozen run configuration |
 | [combinations.py](src/memstara/combinations.py) | Schedule construction and per-Loop choices |
 | [data_allocation.py](src/memstara/data_allocation.py) | Agent-proposed, server-validated data partition |
@@ -793,16 +793,28 @@ not a final invoice or an agent-level attribution.
 
 New pipeline requests write `cost_ledger.jsonl` in their run directory. Records include
 agent invocation, stage, loop, requested/response model, normalized input/output/cache
-token counts, estimated USD, source, and a frozen price receipt when an explicit
-catalog was used. Failed requests without usage remain unpriced: they may still be
+token counts, Motoro-reported cost and source. New records do not use local price
+receipts; historical catalog receipts remain readable. Failed requests without usage remain unpriced: they may still be
 billed. Internal provider retries not exposed by the runtime cannot be reconstructed
 from a single aggregate response. Historical runs without receipts remain historical;
 no current price is silently applied to old calls. The UI supports a JSON evidence
 download and shows priced/recorded attempt coverage and partial subtotals.
 
-### Retrieve public Azure token rates
+### Cost calculation ownership
 
-No login is needed for the public Retail Prices API. Discover candidate meters:
+Motoro exclusively calculates execution cost estimates. Memstara does not replace
+its pricing function or apply local deployment catalogs, manual rates or pricing
+JSON to model requests. It records Motoro's returned amount and source, including
+unknown prices. Motoro 0.10.0 also uses zero for missing prices in call records;
+Memstara retains that raw value as `reported_cost_estimate` but displays it as
+unknown when a genuine free request cannot be established. Actual Azure billing remains separate.
+Historical receipts remain unchanged. Restart control workers to apply this policy;
+already-running processes retain their loaded code.
+
+### Legacy offline Azure rate inspection
+
+The following catalog utilities are retained for offline inspection only. They do
+not price new pipeline requests. No login is needed for the public Retail Prices API:
 
 ```sh
 .venv/bin/python -m memstara.azure_costs meters \
@@ -826,27 +838,13 @@ Do not map a Marketplace model to an unrelated Azure OpenAI meter.
 Refresh downloads exact meter records with pagination, validates USD/Consumption,
 region, effective date, tier and token units, and writes the catalog atomically only
 when every profile succeeds. `1K` prices are multiplied by 1,000 to obtain USD per
-million tokens. Hourly compute and ambiguous matches are rejected. Prices are valid
-for new estimates for seven days; run this refresh again before they expire. No
+million tokens. Hourly compute and ambiguous matches are rejected. Catalog entries carry a seven-day validity window; run this refresh again before they expire. No
 network request runs in the inference path, and this command does not change Azure.
 The source records and refresh dates remain in the local catalog.
 
-`MEMSTARA_PRICING_JSON` supplies rates directly in `.env`; alternatively,
-`MEMSTARA_PRICING_PATH` selects a generated catalog. There is no implicit file lookup. Explicit
-catalog entries match **provider, deployment name and endpoint** exactly. Normalized
-cached input is subtracted from input before applying the cached rate; it is never
-charged twice. Aggregate cache-write counts do not identify TTL, so the explicit
-calculator leaves those calls unresolved rather than guessing between 5-minute and
-1-hour rates. Runtime/library estimates may still be available and are labeled as
-such, not as verified Azure prices. Existing two-rate overrides are not applied to
-cached responses. Unknown/expired catalog entries do not become zero-dollar calls.
-
-Claude/Marketplace rates may not be available through this retail endpoint. A reviewed
-contract/provider rate entry can be supplied in the local catalog with the same profile
-identity, `billing: "tokens"`, `currency: "USD"`, `source`, `retrieved_at`, timezone-aware
-`valid_from`/`valid_until`, and `usd_per_million_tokens` keys `input`, `output`, and
-`cache_read`. Only use verified rates for that deployment and date. Retail rates do
-not include negotiated discounts, taxes, or non-token infrastructure charges.
+Legacy catalog settings and offline estimate helpers remain available for historical
+audits only. They are not consumed by the pipeline request path. The manual-rate
+control endpoint rejects writes; the UI explains Motoro ownership instead.
 
 ### Retrieve Azure account costs
 

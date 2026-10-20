@@ -80,10 +80,8 @@ These commands stop the app, restart/apply settings, and inspect logs respective
 Finish active experiments before rerunning `./start.sh`; it restarts services.
 Saved records are retained. Use an unused web port for a second installation.
 
-## Further details
+## Input and setup help
 
 - [Your own CSV, OKF and target](examples/research-inputs/README.md)
 - [Deployment settings and troubleshooting](deployment/README.md)
 - [HeartFailure data and preparation](examples/heart-failure/README.md)
-- [Developer guide](DEVELOPER_GUIDE.md) · [Code review](REVIEW_GUIDE.md)
-- [Third-party notices](THIRD_PARTY_NOTICES.md)

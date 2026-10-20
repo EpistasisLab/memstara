@@ -1,53 +1,50 @@
-"""Unknown deployment prices cannot crash accounting or become a fabricated zero."""
-from decimal import Decimal
-from collections import OrderedDict
+"""Memstara must never replace or independently calculate Motoro pricing."""
 from unittest.mock import Mock
 import pytest
-
-pytest.importorskip('motoro', reason='Pricing adapter requires the optional Motoro runtime')
+pytest.importorskip('motoro')
 from memstara import pricing_compat as pricing
 
 
-@pytest.fixture(autouse=True)
-def empty_overrides(monkeypatch):
-    monkeypatch.setattr(pricing.pricing_service, '_cache', OrderedDict())
-
-
-def test_fallback_uses_token_api(monkeypatch):
-    response = Mock(side_effect=ValueError('Unknown response deployment'))
-    tokens = Mock(return_value=(.03, .04))
-    monkeypatch.setattr(pricing.litellm, 'completion_cost', response)
-    monkeypatch.setattr(pricing.litellm, 'cost_per_token', tokens)
-    assert pricing.calculate_cost('known-model', 10, 20, object()) == (.07, 'litellm')
-    assert set(response.call_args.kwargs) == {'completion_response'}
-    tokens.assert_called_once_with(model='known-model', prompt_tokens=10, completion_tokens=20)
-
-
-def test_unknown_price_is_not_zero(monkeypatch):
-    monkeypatch.setattr(pricing.litellm, 'cost_per_token', Mock(side_effect=ValueError('Unknown model')))
-    assert pricing.calculate_cost('private-deployment', 10, 20) == (None, 'unavailable')
-
-
-def test_cache_accounting_from_response_preserved(monkeypatch):
-    response = object()
-    monkeypatch.setattr(pricing.litellm, 'completion_cost', Mock(return_value=.0123))
-    fallback = Mock(side_effect=AssertionError('Must preserve response cache accounting'))
-    monkeypatch.setattr(pricing.litellm, 'cost_per_token', fallback)
-    assert pricing.calculate_cost('known', 10, 20, response) == (.0123, 'litellm')
-    fallback.assert_not_called()
-
-
-def test_explicit_override_keeps_precedence(monkeypatch):
-    pricing.pricing_service._cache['deployment'] = (Decimal('2'), Decimal('4'))
-    monkeypatch.setattr(pricing.litellm, 'completion_cost', Mock(side_effect=AssertionError('Override wins')))
-    assert pricing.calculate_cost('openai/deployment', 1000000, 2000000, object()) == (10., 'override')
-
-
-def test_worker_installs_adapter_without_changing_other_workers(monkeypatch):
+def test_worker_leaves_motoro_calculator_untouched():
     from memstara.pipeline.llm import PipelineLLMService
     original = pricing.pricing_service.calculate_cost
-    monkeypatch.setattr(pricing.pricing_service, 'calculate_cost', original)
+    pricing.install()
     PipelineLLMService()
-    assert pricing.pricing_service.calculate_cost is pricing.calculate_cost
     PipelineLLMService()
-    assert pricing.pricing_service.calculate_cost is pricing.calculate_cost
+    assert pricing.pricing_service.calculate_cost is original
+    assert original.__module__ == 'motoro.services.pricing_service'
+
+
+@pytest.mark.parametrize('result', [(None, 'litellm'), (0.0, 'override'), (.123, 'litellm')])
+def test_legacy_entrypoint_only_delegates_even_with_local_rates(monkeypatch, result):
+    from memstara import cost_accounting
+    monkeypatch.setenv('MEMSTARA_PRICING_JSON', '{"profiles":[{"model":"anything"}]}')
+    local = Mock(side_effect=AssertionError('Local estimates must not run'))
+    monkeypatch.setattr(cost_accounting, 'estimate', local)
+    native = Mock(return_value=result)
+    monkeypatch.setattr(pricing.pricing_service, 'calculate_cost', native)
+    response = object()
+    assert pricing.calculate_cost('deployment', 10, 20, response) == result
+    native.assert_called_once_with('deployment', 10, 20, response)
+    local.assert_not_called()
+
+
+def test_motoro_usage_callback_keeps_ownership(monkeypatch):
+    from types import SimpleNamespace
+    from motoro.services import llm_service
+    from memstara.pipeline.llm import PipelineLLMService
+    from memstara import cost_accounting
+    PipelineLLMService()
+    local = Mock(side_effect=AssertionError('No Memstara calculation'))
+    monkeypatch.setattr(cost_accounting, 'estimate', local)
+    native = Mock(return_value=(.42, 'litellm'))
+    monkeypatch.setattr(pricing.pricing_service, 'calculate_cost', native)
+    response = SimpleNamespace(model='deployment', usage=SimpleNamespace(prompt_tokens=100,completion_tokens=10))
+    token = llm_service._last_usage.set(None)
+    try:
+        llm_service._capture_usage_callback({}, response)
+        assert llm_service._last_usage.get()['cost'] == .42
+        native.assert_called_once_with(model='deployment', prompt_tokens=100,completion_tokens=10,completion_response=response)
+        local.assert_not_called()
+    finally:
+        llm_service._last_usage.reset(token)

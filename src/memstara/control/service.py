@@ -538,11 +538,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path.rstrip("/")
 
         if path == "/control/pricing":
-            from memstara.manual_pricing import view
-            try:
-                self._send(200, view())
-            except (OSError, ValueError, TypeError, KeyError):
-                self._send(503, {"error": "Manual rate settings could not be loaded"})
+            self._send(200, {"models": [], "read_only": True, "basis": "motoro",
+                             "note": "Motoro owns execution cost estimates. Local rates are not applied."})
             return
 
         if path == "/control/research-inputs":
@@ -700,13 +697,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/control/pricing":
-            from memstara.manual_pricing import save
-            try:
-                self._send(200, save(body))
-            except (ValueError, TypeError, KeyError, OverflowError) as exc:
-                self._send(400, {"error": str(exc) if isinstance(exc, ValueError) else "Invalid rate settings"})
-            except OSError:
-                self._send(503, {"error": "Manual rates could not be saved"})
+            self._send(410, {"error": "Manual execution pricing is retired. Motoro owns cost estimation."})
             return
 
         if path in ("/control/research-inputs/inspect", "/control/research-inputs/register"):
