@@ -51,8 +51,14 @@ try {
   const beforeTheme=await paints();await page.evaluate(()=>{document.documentElement.dataset.theme=document.documentElement.dataset.theme==='light'?'dark':'light';});
   await page.waitForTimeout(150);assert.ok(await paints()>beforeTheme,'Theme must repaint an idle scene');
   const beforeResize=await paints();await page.setViewportSize({width:width-20,height:1000});await page.waitForTimeout(300);assert.ok(await paints()>beforeResize,'Resize must repaint an idle scene');
+  await page.getByRole('button',{name:'View options',exact:true}).click();
   await page.getByRole('button',{name:'Question list',exact:true}).click();
+  await page.getByRole('button',{name:'Close Universe panel',exact:true}).click();
   await page.locator('.universe-list button').first().click();
+  await page.getByRole('button',{name:'Close Universe panel',exact:true}).click();
+  await page.getByRole('button',{name:'View options',exact:true}).click();
+  await page.getByRole('button',{name:'Question field',exact:true}).click();
+  await page.getByRole('button',{name:'Close Universe panel',exact:true}).click();
   await field.scrollIntoViewIfNeeded();await idle('Selected evidence must settle');
   await page.getByRole('button',{name:'Back to question field',exact:true}).click();
   await idle('Returning from evidence must settle');
