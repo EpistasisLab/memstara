@@ -205,6 +205,10 @@ def build_argv(
         )
 
     y_column = _text(body, "y_column")
+    if data_mode == "proposal" and not y_column:
+        y_column = "outcome"  # Internal placeholder; no dataset is evaluated.
+    if data_mode == "dataset" and not y_column:
+        raise ValueError("Select a target column in Data & target, or select a saved research input")
     if not _COLUMN.match(y_column):
         raise ValueError(f"y_column {y_column!r} is not a column name")
 

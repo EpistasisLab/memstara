@@ -26,9 +26,9 @@ export default function PipelineSettings({id,section,close,title}:{id:string;tit
   return <dialog ref={dialog} onCancel={close} className="workspace-dialog" aria-labelledby="pipeline-settings-title">
     <header><h2 id="pipeline-settings-title">{pipeline.name} · {title??(section==='data'?'Data & target':'Pipeline settings')}</h2><button aria-label="Close pipeline settings" onClick={close}><X size={18}/></button></header>
     {section==='data'?<>
-      <ResearchInputSelect onValidityChange={setSourceError} value={research} disabled={locked} onChange={patch=>{setResearch(current=>({...current,...patch}));if(patch.y_column)setTarget(patch.y_column);}}/>
+      <ResearchInputSelect onValidityChange={setSourceError} value={research} disabled={locked} onChange={patch=>{setResearch(current=>({...current,...patch}));if(patch.y_column!==undefined)setTarget(patch.y_column);}}/>
       <p>A saved research version supplies its own dataset, corpus, target meaning and label mapping. Edit the version to change these together.</p>
-      {research.data_mode!=='proposal'&&<label>Target column (Y)<input className="workspace-input" value={target} onChange={e=>setTarget(e.target.value)} disabled={locked||!!research.research_input_id}/></label>}
+      {research.data_mode!=='proposal'&&<label>Target column (Y)<input className="workspace-input" value={target} onChange={e=>{setTarget(e.target.value);setResearch(current=>({...current,y_column:e.target.value}));}} disabled={locked||!!research.research_input_id}/></label>}
     </>:<>
       <p>The fields below show deployment defaults. Role overrides for non-Explanation agents and the Explanation agent are configured in this installation's .env. Explicit environment injection is reserved for supervised deployments; restart the services after changing them. Predictive models and evaluation settings are configured on the ML agent card.</p>
       {combinations?<label>Maximum Loops per execution<input aria-label="Maximum Loops per execution" className="workspace-input" type="number" min={1} max={10000} step={1} value={Number.isFinite(limit)?limit:''} disabled={locked} onChange={e=>setLimit(e.target.valueAsNumber)}/></label>:<LoopLimitSettings value={limit} disabled={locked} onChange={setLimit}/>}

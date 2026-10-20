@@ -622,7 +622,7 @@ class Handler(BaseHTTPRequestHandler):
                                      Path(os.environ['MEMSTARA_DATASET_PATH']).is_file(),
                                  "knowledge_available": bool(os.environ.get('AGENTIC_OKF_BUNDLE_DIR')) and
                                      (Path(os.environ['AGENTIC_OKF_BUNDLE_DIR']) / 'index.md').is_file(),
-                                 "target_column": os.environ.get('MEMSTARA_OUTCOME_COLUMN', ''),
+                                 "target_column": "",
                              }})
             return
 

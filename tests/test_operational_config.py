@@ -329,3 +329,21 @@ def test_generic_key_not_forwarded_to_viewer(tmp_path):
     values, _ = resolve({}, file=file)
     for service in ('api', 'web'):
         assert 'SECRET_SENTINEL' not in json.dumps(child_environment(values, service))
+
+
+def test_project_defaults_cannot_choose_target_or_predictive_model(tmp_path):
+    file = tmp_path / '.env'
+    file.write_text('MEMSTARA_OUTCOME_COLUMN=private_label\nMEMSTARA_ML_ENGINE=sklearn_hgb\n')
+    values, _ = resolve({}, file=file)
+    assert 'MEMSTARA_OUTCOME_COLUMN' not in values
+    assert 'MEMSTARA_ML_ENGINE' not in values
+    # Frozen child settings retain the target to prevent target leakage into features.
+    values, _ = resolve({'MEMSTARA_CONFIG_MODE': 'environment',
+                         'MEMSTARA_OUTCOME_COLUMN': 'chosen_label'}, file=file)
+    assert values['MEMSTARA_OUTCOME_COLUMN'] == 'chosen_label'
+
+
+def test_dataset_execution_requires_explicit_ui_target():
+    from memstara.control.request import build_argv
+    with pytest.raises(ValueError, match='Select a target column'):
+        build_argv({'data_mode': 'dataset', 'y_column': ''}, [])

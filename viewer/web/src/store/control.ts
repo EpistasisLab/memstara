@@ -106,7 +106,7 @@ export const DEFAULT_REQUEST: RunRequest = {
   continuous: false,
   hypothesis_agents: 1,
   interpret_agents: 1,
-  y_column: "outcome",
+  y_column: "",
   provider: "",
   model: "",
   playbook_hypothesis: "hypothesis_general",

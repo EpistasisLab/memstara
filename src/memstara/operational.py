@@ -51,6 +51,11 @@ def resolve(environ=None, *, file: Path | None = None):
             raise ValueError('Project .env requires literal values; shell interpolation is not supported')
     else:
         values = {k: v for k, v in source.items() if managed(k) and k not in SELECTORS}
+    # Research choices belong to saved UI profiles, not installation defaults.
+    # Child execution environments still carry the frozen target for tool safety.
+    if mode == 'project':
+        values.pop('MEMSTARA_OUTCOME_COLUMN', None)
+        values.pop('MEMSTARA_ML_ENGINE', None)
     if (values.get('COMPOSE_PROJECT_NAME') and values.get('MEMSTARA_COMPOSE_PROJECT')
             and values['COMPOSE_PROJECT_NAME'] != values['MEMSTARA_COMPOSE_PROJECT']):
         raise ValueError('COMPOSE_PROJECT_NAME conflicts with legacy MEMSTARA_COMPOSE_PROJECT')
