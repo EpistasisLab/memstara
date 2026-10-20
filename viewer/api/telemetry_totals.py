@@ -27,6 +27,27 @@ def metrics(calls, rows):
             'cost': cost, 'missing_calls': len(ids) - len(selected)}
 
 
+def recorded_span(calls, rows):
+    """Observed Motoro wall-clock span, not a sum or an assertion of liveness."""
+    ids = {c['run_id'] for c in calls if c.get('run_id')}
+    selected = {str(r['id']): r for r in rows if str(r['id']) in ids}
+    spans = []
+    complete = bool(ids) and len(selected) == len(ids)
+    for row in selected.values():
+        start = row.get('started_at')
+        end = row.get('completed_at') or row.get('last_heartbeat_at')
+        if not isinstance(start, datetime) or not isinstance(end, datetime) or end < start:
+            complete = False
+            continue
+        spans.append((start.timestamp(), end.timestamp()))
+        complete = complete and row.get('completed_at') is not None
+    seconds = max(e for _, e in spans) - min(s for s, _ in spans) if spans else None
+    return {'seconds': seconds, 'duration_status': 'recorded' if complete else 'partial',
+            'duration_basis': 'Motoro first agent/step start to last recorded completion or heartbeat; '
+            'includes gaps and parallel overlap, excludes unrecorded setup/finalization. '
+            'An unfinished record is not proof that its process is running.'}
+
+
 def loop_metrics(calls, rows, outcome):
     starts = [c['started_at'] for c in calls if isinstance(c.get('started_at'), (int, float))]
     ends = [c['started_at'] + c['duration_seconds'] for c in calls
@@ -117,7 +138,7 @@ async def totals():
                         e['outcomes'].get(str(n), {}))} for n in sorted(numbers)]
                     details.append({'run_tag': e['tag'], 'pipeline_id': e['pipeline_id'],
                                     'model': e.get('model'), 'provider': e.get('provider'),
-                                    **metrics(e['calls'], rows), 'loops': loops,
+                                    **metrics(e['calls'], rows), **recorded_span(e['calls'], rows), 'loops': loops,
                                     'loop_summary': completed_summary(loops),
                                     'unassigned': metrics([c for c in e['calls'] if c['loop'] is None], rows)})
                 result = {'scope': 'All saved executions of pipelines currently in this workspace',

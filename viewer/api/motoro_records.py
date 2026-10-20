@@ -81,10 +81,11 @@ async def run(tag, run_id):
     if identity not in ids:
         raise HTTPException(404, 'Invocation does not belong to this execution')
     async def read(conn):
-        return await conn.fetch('SELECT row_to_json(r)::text AS record FROM agent_runs r WHERE id=$1', identity)
+        return await conn.fetch('SELECT row_to_json(r)::text AS record, (SELECT MIN(s.started_at) FROM run_steps s WHERE s.run_id=r.id) AS first_step_started_at FROM agent_runs r WHERE id=$1', identity)
     rows = await read_core(read)
     if not rows:
         raise HTTPException(404, 'Motoro invocation record not found')
     return {'run_tag':tag, 'run_id':str(identity), 'source':'motoro',
             'record':redacted(json.loads(rows[0]['record'])),
+            'first_step_started_at':rows[0].get('first_step_started_at'),
             'note':'Original recorded fields; credential fields are redacted. Missing fields remain missing.'}

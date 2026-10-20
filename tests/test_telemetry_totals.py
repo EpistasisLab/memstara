@@ -103,3 +103,19 @@ def test_tab_projection_does_not_send_results_or_mutate_cached_history():
     assert data['results']==[{'expensive':'document'}]
     assert project(data,'Results')['results']==data['results']
     assert project(data) is data
+
+
+def test_motoro_span_uses_observed_timestamps_not_sum_or_local_clock():
+    from datetime import UTC, datetime
+    from telemetry_totals import recorded_span
+    stamp = lambda n: datetime.fromtimestamp(n, UTC)
+    calls = [{'run_id': 'a'}, {'run_id': 'b'}, {'run_id': 'a'}]
+    rows = [{'id':'a','started_at':stamp(10),'completed_at':stamp(30)},
+            {'id':'b','started_at':stamp(20),'last_heartbeat_at':stamp(40)}]
+    result = recorded_span(calls, rows)
+    assert result['seconds'] == 30 and result['duration_status'] == 'partial'
+    rows[1]['completed_at'] = stamp(45)
+    assert recorded_span(calls, rows)['seconds'] == 35
+    assert recorded_span(calls, rows)['duration_status'] == 'recorded'
+    assert recorded_span(calls, [])['seconds'] is None
+    assert recorded_span(calls, rows[:1])['duration_status'] == 'partial'

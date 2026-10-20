@@ -801,6 +801,13 @@ download and shows priced/recorded attempt coverage and partial subtotals.
 
 ### Motoro runtime record ownership
 
+Overview displays the observed span from the first Motoro agent start (or first recorded step when the run start is absent) to the last
+completion or recorded heartbeat. It is not a sum of parallel durations, does not
+include unrecorded setup/finalization, and is marked partial when records are missing
+or unfinished. It does not advance from the browser clock for a stale running record.
+Loop timing remains separately based on Memstara loop boundaries. Selecting a Motoro
+invocation also shows elapsed time and its start/completion or heartbeat timestamps.
+
 Telemetry → More details → Agents exposes **Motoro runtime records**. Memstara's
 saved invocation IDs provide only pipeline/stage/loop attribution. The viewer reads
 agent status, timestamps, token usage, cost and errors directly from Motoro's

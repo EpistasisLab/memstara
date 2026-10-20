@@ -5,7 +5,7 @@ import { costLabel, usageDuration } from "../lib/loopUsage";
 import { useEffect, useState } from 'react';
 import { usePipelines } from '../store/pipelines';
 
-export type Metric = {calls:number;tokens:number;tokens_status?:string;cost:{usd:number;status:string;missing_costs:number};seconds?:number|null;duration_basis?:string;status?:string;attribution?:string};
+export type Metric = {calls:number;tokens:number;tokens_status?:string;cost:{usd:number;status:string;missing_costs:number};seconds?:number|null;duration_basis?:string;duration_status?:string;status?:string;attribution?:string};
 export type Distribution = {mean:number;median:number;min:number;max:number};
 export type LoopSummary = {sample_count:number;completed_count:number;excluded_completed:number;other_loops:number;seconds:Distribution|null;usd:Distribution|null;tokens:Distribution|null;basis:string};
 export type ExecutionUsage = Metric & {run_tag:string;pipeline_id:string;model?:string;provider?:string;loops:(Metric&{number:number})[];loop_summary:LoopSummary;unassigned:Metric};
@@ -38,11 +38,12 @@ export default function TelemetryTotals({data,error,runTag,loop}:{data:Totals|nu
     {error&&<p role="status">Updates are delayed. {data?'Last available measurements are shown.':'Waiting for measurements; missing values are not zero.'}</p>}
     {!runTag?<p>Choose a pipeline with a recorded execution.</p>:!data?<p role="status">Loading measurements…</p>:!metric?<p>No usage recorded for this selection yet.</p>:<>
       <dl className="telemetry-key-metrics">
-        <div><dt>Elapsed time</dt><dd>{usageDuration(metric.seconds)}</dd></div>
+        <div><dt>{loop===null?'Elapsed time · recorded agent span':'Elapsed time'}</dt><dd>{usageDuration(metric.seconds)}{metric.duration_status==='partial'&&metric.seconds!=null?' · partial':''}</dd></div>
         <div><dt>Estimated cost</dt><dd>{costLabel(metric.cost)}</dd></div>
         <div><dt>Agent calls</dt><dd>{metric.calls.toLocaleString()}</dd></div>
       </dl>
-      <p className="telemetry-usage-note">Cost is an estimate, not the Azure bill.{metric.cost.missing_costs>0?` ${metric.cost.missing_costs} calls have no pricing; the estimate is incomplete.`:''}{metric.cost.status==='partial'?' Only the recorded subtotal is available.':''}</p>
+      {metric.duration_basis&&<p className="telemetry-usage-note">{metric.duration_basis}</p>}
+      <p className="telemetry-usage-note">Cost is a Motoro estimate, not an actual charge.{metric.cost.missing_costs>0?` ${metric.cost.missing_costs} calls have no pricing; the estimate is incomplete.`:''}{metric.cost.status==='partial'?' Only the recorded subtotal is available.':''}</p>
       <details className="telemetry-disclosure"><summary>Usage & billing details</summary><div>
         <p>{metric.tokens.toLocaleString()} tokens{metric.tokens_status==='partial'?' · partial usage':''}{execution?.model?` · ${execution.model}`:''}</p>
         {metric.duration_basis&&<p>{metric.duration_basis}</p>}

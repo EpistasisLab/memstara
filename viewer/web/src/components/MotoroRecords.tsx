@@ -1,9 +1,22 @@
 import {useEffect,useState} from 'react';
+import {usageDuration} from '../lib/loopUsage';
 type Call={run_id:string|null;stage:string;loop:number|null;seq:number;record:Record<string,unknown>|null;availability:string};
 type Page={calls:Call[];note:string};
 type Steps={steps:Record<string,unknown>[];next_offset:number|null};
 async function read<T>(url:string,signal:AbortSignal):Promise<T>{
  const r=await fetch(url,{signal});if(!r.ok)throw Error(`Motoro records unavailable (${r.status}). Retry to refresh.`);return r.json();
+}
+function Timing({record}:{record:Record<string,unknown>}){
+ const startValue=record.started_at??record.first_step_started_at;
+ const start=typeof startValue==='string'?Date.parse(startValue):NaN;
+ const finish=record.completed_at??record.last_heartbeat_at;
+ const end=typeof finish==='string'?Date.parse(finish):NaN;
+ const seconds=Number.isFinite(start)&&Number.isFinite(end)&&end>=start?(end-start)/1000:null;
+ return <dl className="grid grid-cols-1 gap-2 rounded border border-paper-line p-3 text-sm sm:grid-cols-3">
+ <div><dt>Elapsed time</dt><dd>{usageDuration(seconds)}{!record.completed_at&&seconds!==null?' · through last heartbeat':''}</dd></div>
+ <div><dt>{record.started_at?'Started':'First recorded step'}</dt><dd>{Number.isFinite(start)?new Date(start).toLocaleString():'Not recorded'}</dd></div>
+ <div><dt>{record.completed_at?'Completed':'Last heartbeat'}</dt><dd>{Number.isFinite(end)?new Date(end).toLocaleString():'Not recorded'}</dd></div>
+ </dl>;
 }
 function Fields({record}:{record:Record<string,unknown>}){
  return <div className="space-y-2">{Object.entries(record).map(([key,value])=><details className="rounded border border-paper-line p-2" key={key}><summary className="cursor-pointer break-words">{key.replaceAll('_',' ')}</summary><pre className="mt-2 whitespace-pre-wrap break-all text-xs">{JSON.stringify(value,null,2)}</pre></details>)}</div>;
@@ -14,7 +27,7 @@ function Invocation({tag,id}:{tag:string;id:string}){
  const [refresh,setRefresh]=useState(0);
  const query=`run_tag=${encodeURIComponent(tag)}&run_id=${encodeURIComponent(id)}`;
  useEffect(()=>{const c=new AbortController();setError('');setRun(null);
-  read<{record:Record<string,unknown>}>(`/api/motoro/run?${query}`,c.signal).then(d=>{if(!c.signal.aborted)setRun(d.record);}).catch(e=>{if(!c.signal.aborted)setError(String(e));});return()=>c.abort();
+  read<{record:Record<string,unknown>;first_step_started_at?:string|null}>(`/api/motoro/run?${query}`,c.signal).then(d=>{if(!c.signal.aborted)setRun({...d.record,first_step_started_at:d.first_step_started_at});}).catch(e=>{if(!c.signal.aborted)setError(String(e));});return()=>c.abort();
  },[query,refresh]);
  useEffect(()=>{const c=new AbortController();setPage(null);setError('');
   read<Steps>(`/api/developer/steps?${query}&offset=${offset}`,c.signal).then(d=>{if(!c.signal.aborted)setPage(d);}).catch(e=>{if(!c.signal.aborted)setError(String(e));});return()=>c.abort();
@@ -23,6 +36,7 @@ function Invocation({tag,id}:{tag:string;id:string}){
   read<Steps>(`/api/developer/steps?${query}&offset=${selected}&detail=true`,c.signal).then(d=>{if(!c.signal.aborted)setDetail(d.steps[0]??null);}).catch(e=>{if(!c.signal.aborted)setError(String(e));});return()=>c.abort();
  },[query,selected,refresh]);
  return <div className="space-y-3 mt-3"><button onClick={()=>setRefresh(n=>n+1)}>Refresh Motoro record</button>{error&&<p role="alert">{error}</p>}
+ {run&&<Timing record={run}/>}
  <details><summary className="cursor-pointer font-semibold">Run input, output, state and configuration</summary>{run?<Fields record={run}/>:<p>Reading Motoro record…</p>}</details>
  <h4 className="font-semibold">Recorded steps</h4><p className="text-xs text-ink-soft">Select a step to read its model usage, tool arguments/results and input/output. Credential fields are redacted.</p>
  {page?.steps.map((s,i)=><button className="block w-full rounded border border-paper-line p-2 text-left" key={String(s.id)} aria-pressed={selected===offset+i} onClick={()=>setSelected(offset+i)}>Step {String(s.sequence)} · {String(s.phase)} · {String(s.started_at??'Time unavailable')}</button>)}

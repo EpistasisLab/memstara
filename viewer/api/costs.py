@@ -8,7 +8,7 @@ import run_artifacts
 import math
 
 SQL = """
-SELECT r.id, r.status, r.cost_estimate,
+SELECT r.id, r.status, r.cost_estimate, COALESCE(r.started_at, (SELECT MIN(s.started_at) FROM run_steps s WHERE s.run_id=r.id)) AS started_at, r.completed_at, r.last_heartbeat_at,
        (r.token_usage->>'prompt_tokens' IS NOT NULL
         AND r.token_usage->>'completion_tokens' IS NOT NULL) AS tokens_recorded,
        COALESCE((r.token_usage->>'prompt_tokens')::bigint, 0)
