@@ -1,7 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import type {SemanticData} from '../../lib/semanticLayout';
-export default function SemanticExplorer({selected, onLayout, onChoose}: {
- selected:number|null; onLayout:(data:SemanticData|null)=>void; onChoose:(id:number)=>void;
+export default function SemanticExplorer({selected, onLayout, onChoose, source='all'}: {
+ source?:string; selected:number|null; onLayout:(data:SemanticData|null)=>void; onChoose:(id:number)=>void;
 }) {
  const [data,setData]=useState<SemanticData|null>(null),[query,setQuery]=useState('');
  const [error,setError]=useState(''),[busy,setBusy]=useState(false);
@@ -10,7 +10,7 @@ export default function SemanticExplorer({selected, onLayout, onChoose}: {
  const load=async(neighbors=false, selectedOnly=false)=>{
   request.current?.abort();const controller=new AbortController();request.current=controller;
   setBusy(true);setError('');
-  const params=new URLSearchParams();
+  const params=new URLSearchParams({source});
   if(query.trim()&&!selectedOnly)params.set('query',query.trim());
   else if(neighbors&&selected!==null)params.set('question_id',String(selected));
   try {

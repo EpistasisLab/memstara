@@ -10,36 +10,42 @@ from db import pools
 import scene
 import queries
 import run_artifacts
+import discovery_sources
 
 QUESTION_FIELDS = "question_id, question_contract, text, okf_tags, rationale, origin_run, origin_wave, times_used, best_auc, status, created_at, writer"
 
 
-async def question_list(before: int = 0) -> dict[str, Any]:
+async def question_list(before: int = 0, source: str = 'all', query: str = '') -> dict[str, Any]:
+    tags = await discovery_sources.scope(source)
     async def read(conn):
         rows = await conn.fetch(f"SELECT {QUESTION_FIELDS} FROM memstara_questions "
                                 "WHERE status <> 'cleared' AND ($1::integer = 0 OR question_id < $1) "
-                                "ORDER BY question_id DESC LIMIT 121", before)
+                                "AND ($2::text[] IS NULL OR coalesce(origin_run, '') = ANY($2)) "
+                                "AND ($3::text = '' OR strpos(lower(text || ' ' || coalesce(rationale, '') || ' ' || coalesce(okf_tags::text, '')), lower($3)) > 0) "
+                                "ORDER BY question_id DESC LIMIT 121", before, tags, query)
         items = [{**dict(row), 'okf_tags': scene._jsonb(row['okf_tags'], []),
                   'question_contract': scene._jsonb(row.get('question_contract'), {}),
                   'created_at': scene._iso(row['created_at'])} for row in rows[:120]]
         cleared_through = await conn.fetchval("SELECT coalesce(max(question_id), 0) FROM memstara_questions WHERE status='cleared'")
-        return {'cleared_through': cleared_through, 'questions': items, 'next_before': items[-1]['question_id'] if len(rows) > 120 else None}
+        total = await conn.fetchval("SELECT count(*) FROM memstara_questions WHERE status <> 'cleared' AND ($1::text[] IS NULL OR coalesce(origin_run, '') = ANY($1)) AND ($2::text = '' OR strpos(lower(text || ' ' || coalesce(rationale, '') || ' ' || coalesce(okf_tags::text, '')), lower($2)) > 0)", tags, query)
+        return {'source': source, 'total': total, 'cleared_through': cleared_through, 'questions': items, 'next_before': items[-1]['question_id'] if len(rows) > 120 else None}
     result = await pools.guarded('memstara', read, None)
     if result is None:
         raise HTTPException(503, 'Question records are temporarily unavailable.')
     return result
 
 
-async def question_detail(question_id: int) -> dict[str, Any]:
+async def question_detail(question_id: int, source: str = 'all') -> dict[str, Any]:
+    tags = await discovery_sources.scope(source)
     async def read(conn):
         question = await conn.fetchrow(f'SELECT {QUESTION_FIELDS} FROM memstara_questions WHERE question_id=$1', question_id)
-        if question is None:
+        if question is None or (tags is not None and (question['origin_run'] or '') not in tags):
             return None
         # No fuzzy joins on wording: a result is linked only by its persisted question_id.
         tasks = await conn.fetch(queries.BOARD.replace("WHERE ($1 = '' OR run_tag = $1)",
-                                  'WHERE question_id = $1').replace('ORDER BY task_id', 'ORDER BY task_id DESC LIMIT 100'), question_id)
+                                  'WHERE question_id = $1 AND ($2::text[] IS NULL OR run_tag = ANY($2))').replace('ORDER BY task_id', 'ORDER BY task_id DESC LIMIT 100'), question_id, tags)
         results = await conn.fetch(queries.RESULTS.replace("WHERE ($1 = '' OR run_tag = $1)",
-                                    'WHERE question_id = $1').replace('ORDER BY result_id', 'ORDER BY result_id DESC') + ' LIMIT 100', question_id)
+                                    'WHERE question_id = $1 AND ($2::text[] IS NULL OR run_tag = ANY($2))').replace('ORDER BY result_id', 'ORDER BY result_id DESC') + ' LIMIT 100', question_id, tags)
         return {
             'question': {**dict(question), 'question_contract': scene._jsonb(question.get('question_contract'), {}),
                          'okf_tags': scene._jsonb(question['okf_tags'], [])},
@@ -158,8 +164,9 @@ async def live_outputs(tags: list[str]) -> dict[str, Any]:
                 generated_at=datetime.now(timezone.utc).isoformat(), record_limit=200)
 
 
-async def novelty_ranking(offset: int = 0, run_tag: str = '') -> dict[str, Any]:
+async def novelty_ranking(offset: int = 0, run_tag: str = '', source: str = 'all') -> dict[str, Any]:
     """Rank latest recorded result per hypothesis, never infer historical scores."""
+    tags = await discovery_sources.scope(source)
     async def read(conn):
         rows = await conn.fetch("""
             WITH latest AS (
@@ -168,6 +175,7 @@ async def novelty_ranking(offset: int = 0, run_tag: str = '') -> dict[str, Any]:
                        r.evaluation->'knowledge_provenance'->'novelty' AS novelty
                 FROM memstara_results r JOIN memstara_questions q USING (question_id)
                 WHERE q.status <> 'cleared' AND ($1::text = '' OR r.run_tag = $1)
+                  AND ($3::text[] IS NULL OR (coalesce(q.origin_run, '') = ANY($3) AND r.run_tag = ANY($3)))
                 ORDER BY r.task_id, r.result_id DESC
             ), scored AS (
                 SELECT *, CASE WHEN novelty->>'policy' = 'predicted_path_fraction_v1'
@@ -180,7 +188,7 @@ async def novelty_ranking(offset: int = 0, run_tag: str = '') -> dict[str, Any]:
             SELECT *, count(*) OVER () AS total FROM scored
             ORDER BY CASE WHEN score BETWEEN 0 AND 1 THEN score ELSE NULL END DESC NULLS LAST,
                      result_id DESC LIMIT 51 OFFSET $2
-        """, run_tag, offset)
+        """, run_tag, offset, tags)
         items = [{k: v for k, v in dict(row).items() if k not in ('score', 'total')}
                  for row in rows[:50]]
         for item in items:
@@ -198,18 +206,20 @@ _semantic_jobs: dict[str, asyncio.Task] = {}
 SEMANTIC_WAIT_SECONDS = 1.0
 
 
-async def semantic_questions(query: str = '', question_id: int | None = None):
+async def semantic_questions(query: str = '', question_id: int | None = None, source: str = 'all'):
     """Read active question text only; heavy indexing runs off the request event loop."""
     from universe_semantics import index
+    tags = await discovery_sources.scope(source)
+    source_id = source
     async def read(conn):
         rows = await conn.fetch("SELECT question_id,text FROM memstara_questions "
-                                "WHERE status <> 'cleared' ORDER BY question_id DESC")
-        total = await conn.fetchval("SELECT count(*) FROM memstara_questions WHERE status <> 'cleared'")
-        return [dict(row) for row in rows], total
+                                "WHERE status <> 'cleared' AND ($1::text[] IS NULL OR coalesce(origin_run, '') = ANY($1)) ORDER BY question_id DESC", tags)
+        total = len(rows)
+        return [{'question_id': row['question_id'], 'text': row['text']} for row in rows], total
     source = await pools.guarded('memstara', read, None)
     if source is None:
         raise HTTPException(503, 'Question records are temporarily unavailable.')
-    key = hashlib.sha256(json.dumps([query, question_id], sort_keys=True).encode()).hexdigest()
+    key = hashlib.sha256(json.dumps([source_id, source[0], query, question_id], sort_keys=True).encode()).hexdigest()
     task = _semantic_jobs.get(key)
     if task is None:
         for old_key, old_task in list(_semantic_jobs.items()):
@@ -219,7 +229,10 @@ async def semantic_questions(query: str = '', question_id: int | None = None):
                 del _semantic_jobs[old_key]
         if len(_semantic_jobs) >= 4:
             return JSONResponse({'status': 'indexing', 'retry_after': 2}, status_code=202)
-        task = asyncio.create_task(asyncio.to_thread(index, source[0], query, question_id))
+        if source_id == 'all':
+            task = asyncio.create_task(asyncio.to_thread(index, source[0], query, question_id))
+        else:
+            task = asyncio.create_task(asyncio.to_thread(index, source[0], query, question_id, scope=source_id))
         _semantic_jobs[key] = task
     try:
         result = await asyncio.wait_for(asyncio.shield(task), timeout=SEMANTIC_WAIT_SECONDS)

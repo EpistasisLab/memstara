@@ -3,19 +3,19 @@ import {novelty} from '../lib/novelty';
 import NoveltyEvidence from './NoveltyEvidence';
 interface Item {task_id:number; result_id:number; question_id:number; run_tag:string; trial:number; hypothesis:string; auc:number|null; novelty:unknown}
 interface Page {items:Item[]; total:number; next_offset:number|null}
-export default function NoveltyRanking({open}: {open:(question:number,result:number)=>void}) {
+export default function NoveltyRanking({open, source='all'}: {source?:string; open:(question:number,result:number)=>void}) {
  const [page,setPage]=useState<Page|null>(null), [error,setError]=useState('');
  const [offset,setOffset]=useState(0), [run,setRun]=useState(''), [draft,setDraft]=useState('');
  useEffect(()=>{
   let stopped=false; const abort=new AbortController(); let timer:ReturnType<typeof setTimeout>;
   const poll=async()=>{try {
-   const r=await fetch(`/api/discovery/novelty?offset=${offset}&run_tag=${encodeURIComponent(run)}`,{signal:AbortSignal.any([abort.signal,AbortSignal.timeout(5000)])});
+   const r=await fetch(`/api/discovery/novelty?offset=${offset}&source=${encodeURIComponent(source)}&run_tag=${encodeURIComponent(run)}`,{signal:AbortSignal.any([abort.signal,AbortSignal.timeout(5000)])});
    if(!r.ok)throw Error('Novelty records are temporarily unavailable.');
    const data=await r.json(); if(!Array.isArray(data.items))throw Error('Invalid ranking response.');
    if(!stopped){setPage(data);setError('');}
   }catch(e){if(!stopped)setError(String(e));}finally{if(!stopped)timer=setTimeout(poll,10000);}};
   setPage(null);void poll();return()=>{stopped=true;abort.abort();clearTimeout(timer);};
- },[offset,run]);
+ },[offset,run,source]);
  return <section aria-label="KG novelty ranking" className="my-4 rounded-xl border border-paper-line p-4">
   <h2 className="text-lg font-semibold">Novelty ranking · KG proxy</h2>
   <p className="text-sm">Highest predicted-path share first; ties use newest result. Latest result per hypothesis. Unscored hypotheses follow without a rank. Compare within the same corpus and study; scores across different knowledge sources are not equivalent.</p>

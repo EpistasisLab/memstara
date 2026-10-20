@@ -11,6 +11,7 @@ try{
    if(r.request().method()!=='GET'){writes++;return r.abort();}
    return r.fulfill({json:new URL(r.request().url()).pathname==='/control/question-memory'?{count:2,through:2,token:'fixture',blocked:false}:{pipelines:[]}});
   });
+  await page.route('**/api/discovery/sources',r=>r.fulfill({json:{sources:[{id:'all',label:'All sources',count:2}]}}));
   await page.route('**/api/discovery/questions?*',r=>offline?r.fulfill({status:502,body:'<html>Unavailable</html>'}):r.fulfill({json:{questions:[question(1),question(2)],next_before:null}}));
   await page.route('**/api/discovery/questions/*',async r=>{
    const id=Number(new URL(r.request().url()).pathname.split('/').pop());

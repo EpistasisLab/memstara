@@ -284,22 +284,28 @@ async def result(result_id: int) -> dict[str, Any]:
 
 
 @app.get("/api/discovery/questions")
-async def discovery_questions(before: int = Query(default=0, ge=0)):
+async def discovery_questions(before: int = Query(default=0, ge=0), source: str = Query(default='all', max_length=68), query: str = Query(default='', max_length=1000)):
     from discovery import question_list
-    return await question_list(before)
+    return await question_list(before, source, query)
+
+
+@app.get("/api/discovery/sources")
+async def discovery_source_list():
+    from discovery_sources import sources
+    return await sources()
 
 
 @app.get("/api/discovery/novelty")
 async def discovery_novelty(offset: int = Query(default=0, ge=0, le=1000000),
-                            run_tag: str = Query(default="", max_length=200)):
+                            run_tag: str = Query(default="", max_length=200), source: str = Query(default="all", max_length=68)):
     from discovery import novelty_ranking
-    return await novelty_ranking(offset, run_tag)
+    return await novelty_ranking(offset, run_tag, source)
 
 
 @app.get("/api/discovery/questions/{question_id}")
-async def discovery_question(question_id: int):
+async def discovery_question(question_id: int, source: str = Query(default='all', max_length=68)):
     from discovery import question_detail
-    return await question_detail(question_id)
+    return await question_detail(question_id, source)
 
 
 @app.get("/api/discovery/report")
@@ -354,6 +360,6 @@ async def developer_steps(run_id: uuid.UUID,
 
 @app.get("/api/discovery/semantic")
 async def discovery_semantic(query: str = Query(default='', max_length=1000),
-                             question_id: int | None = Query(default=None, ge=1)):
+                             question_id: int | None = Query(default=None, ge=1), source: str = Query(default='all', max_length=68)):
     from discovery import semantic_questions
-    return await semantic_questions(query, question_id)
+    return await semantic_questions(query, question_id, source)

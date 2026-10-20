@@ -14,7 +14,6 @@ import ReportBody from '../components/ReportBody';
 import ExplanationEvidence from '../components/ExplanationEvidence';
 import type { Result, Task, QuestionContract } from '../types';
 import { FeatureAtlas, ModelLens, InterpretationVoices } from '../components/discovery/EvidenceVisuals';
-import { useLiveOutputs } from '../store/liveOutputs';
 import QuestionSpace from '../components/discovery/QuestionSpace';
 import NoveltyRanking from '../components/NoveltyRanking';
 import ScientificProvenance from '../components/ScientificProvenance';
@@ -89,16 +88,25 @@ function EvidencePanel({ question, data, error, stage, setStage, resultId, setRe
   </aside>;
 }
 
+interface KnowledgeSource { id: string; label: string; count: number }
 export default function DiscoveryPanel() {
-  const liveQuestions=useLiveOutputs(s=>s.questions);
+  const [source, setSource] = useState('all');
+  const catalog = useLive<{sources: KnowledgeSource[]}>('/api/discovery/sources');
+  return <QuestionUniverse key={source} source={source} setSource={setSource} sources={catalog.data?.sources ?? [{id:'all',label:'All sources',count:0}]} sourceError={catalog.error}/>;
+}
+
+function QuestionUniverse({source, setSource, sources, sourceError}: {
+  source: string; setSource: (source: string)=>void; sources: KnowledgeSource[]; sourceError?: string;
+}) {
   const [openError,setOpenError]=useState('');
   const openSequence=useRef(0);
   const [pages, setPages] = useState<number[]>([0]);
   const before = pages[pages.length - 1];
   const [memoryRevision,setMemoryRevision]=useState(0);
   const [clearedThrough,setClearedThrough]=useState(0);
-  const { data, error } = useLive<{ questions: Question[]; next_before: number | null; cleared_through?: number }>(`/api/discovery/questions?before=${before}&memory_revision=${memoryRevision}`);
   const [search, setSearch] = useState('');
+  const scope = encodeURIComponent(source);
+  const { data, error } = useLive<{ questions: Question[]; total: number; next_before: number | null; cleared_through?: number }>(`/api/discovery/questions?before=${before}&memory_revision=${memoryRevision}&source=${scope}&query=${encodeURIComponent(search)}`);
   const [selected, setSelected] = useState<Question | null>(null);
   const [list, setList] = useState(false);
   const [stage, setStage] = useState('Question');
@@ -114,12 +122,8 @@ export default function DiscoveryPanel() {
   },[]);
   const closeDrawer=()=>{openSequence.current++;setDrawer(null);requestAnimationFrame(()=>toolbar.current?.querySelector<HTMLElement>('[aria-label="Explore questions"]')?.focus());};
   const openDrawer=(next:typeof drawer)=>{openSequence.current++;setOpenError('');closePopovers();setDrawer(next);};
-  const evidence = useLive<Evidence>(selected ? `/api/discovery/questions/${selected.question_id}` : null);
-  const questions = useMemo(() => {
-    const records=new Map((data?.questions??[]).map(q=>[q.question_id,q]));
-    if(data&&before===0)liveQuestions.forEach(q=>records.set(q.question_id,q));
-    return [...records.values()].filter(q=>q.status!=='cleared'&&q.question_id>Math.max(clearedThrough,data?.cleared_through??0)).sort((a,b)=>b.question_id-a.question_id).slice(0,120).filter(q=>`${q.text} ${q.rationale} ${q.okf_tags.join(' ')}`.toLowerCase().includes(search.toLowerCase()));
-  },[data,liveQuestions,before,search,clearedThrough]);
+  const evidence = useLive<Evidence>(selected ? `/api/discovery/questions/${selected.question_id}?source=${scope}` : null);
+  const questions = useMemo(() => (data?.questions ?? []).filter(q=>q.status!=='cleared'&&q.question_id>Math.max(clearedThrough,data?.cleared_through??0)), [data,clearedThrough]);
   const current = data?.questions.find(q => q.question_id === selected?.question_id) ?? selected;
   const result=resultId===null?evidence.data?.results[0]:evidence.data?.results.find(r=>r.result_id===resultId);
   const task=evidence.data?.tasks.find(t=>t.task_id===result?.task_id) ?? (!result&&resultId===null?evidence.data?.tasks[0]:undefined);
@@ -133,9 +137,9 @@ export default function DiscoveryPanel() {
   const openRanked=async(questionId:number,recordId:number|null)=>{
     const sequence=++openSequence.current;setOpenError('');
     try {
-      const response=await fetch(`/api/discovery/questions/${questionId}`,{signal:AbortSignal.timeout(5000)});
+      const response=await fetch(`/api/discovery/questions/${questionId}?source=${scope}`,{signal:AbortSignal.timeout(5000)});
       if(!response.ok)throw Error('Question evidence unavailable.');
-      const payload=await readDiscoveryResponse(response, `/api/discovery/questions/${questionId}`) as Evidence;
+      const payload=await readDiscoveryResponse(response, `/api/discovery/questions/${questionId}?source=${scope}`) as Evidence;
       if(sequence!==openSequence.current)return;
       if(payload.question?.question_id!==questionId)throw Error('The returned evidence does not match the selected question.');
       select(payload.question);setResultId(recordId);setStage(recordId===null?'Question':'Hypothesis');
@@ -145,8 +149,15 @@ export default function DiscoveryPanel() {
   const drawerTitle=drawer==='novelty'?'Novelty proxy ranking':drawer==='semantic'?'Related questions':'Question details';
   return <div className="universe-page universe-v2 universe-workspace workspace-padding">
     <header className="universe-workspace-heading"><h2>Question universe</h2></header>
+    <label className="universe-source flex flex-wrap items-center gap-2 mb-3 text-sm">Knowledge source
+      <select aria-label="Knowledge source" className="h-11 min-w-0 max-w-full rounded-lg border border-paper-line bg-paper px-3" value={source} onChange={e=>setSource(e.target.value)}>
+        {!sources.some(s=>s.id===source)&&<option value={source}>Selected source unavailable</option>}
+        {sources.map(s=><option key={s.id} value={s.id}>{s.label}{s.count ? ` (${s.count})` : ''}</option>)}
+      </select>
+    </label>
+    {sourceError&&<p className="universe-alert" role="status">Knowledge sources are temporarily unavailable. Retrying automatically.</p>}
     <div className="universe-toolbar grid grid-cols-[minmax(0,1fr)_auto_auto_44px] items-center gap-2 @max-[600px]:grid-cols-[1fr_auto_44px]" ref={toolbar} data-context-help-managed>
-      <label className="universe-search flex h-11 min-w-0 items-center gap-2 rounded-lg px-3 @max-[600px]:col-span-full"><Search size={17}/><input aria-label="Search loaded questions" placeholder="Search this page…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button aria-label="Clear question search" onClick={()=>setSearch('')}>×</button>}</label>
+      <label className="universe-search flex h-11 min-w-0 items-center gap-2 rounded-lg px-3 @max-[600px]:col-span-full"><Search size={17}/><input aria-label="Search questions" placeholder="Search questions…" value={search} onChange={e=>{setSearch(e.target.value);setPages([0]);clearSelection();}}/>{search&&<button aria-label="Clear question search" onClick={()=>{setSearch('');setPages([0]);clearSelection();}}>×</button>}</label>
       <details className="universe-popover" onToggle={e=>{if(e.currentTarget.open)toolbar.current?.querySelectorAll('details[open]').forEach(el=>{if(el!==e.currentTarget)el.removeAttribute('open');});}} onKeyDown={e=>{if(e.key==='Escape'){e.currentTarget.open=false;e.currentTarget.querySelector('summary')?.focus();}}}>
         <summary role="button" aria-label="View options"><SlidersHorizontal size={16}/>View options</summary>
         <div className="universe-popover-body universe-options">
@@ -162,18 +173,18 @@ export default function DiscoveryPanel() {
       <ClearQuestionMemory iconOnly onCleared={through=>{openSequence.current++;setClearedThrough(v=>Math.max(v,through));setPages([0]);setSelected(null);setOpenError('');setDrawer(null);setMemoryRevision(v=>v+1);}}/>
 
     </div>
-    <div className="universe-summary"><span>{questions.length} questions on this page</span><span>{error?'Updates interrupted':data?'Live':'Connecting…'}{semantic?.status==='ready'?' · Semantic layout':''}{performance?' · Historical exploratory AUC':''}</span>{current&&<button onClick={()=>openDrawer('evidence')}>Question {current.question_id} details</button>}</div>
+    <div className="universe-summary"><span>{questions.length} of {data?.total ?? 0} questions</span><span>{error?'Updates interrupted':data?'Live':'Connecting…'}{semantic?.status==='ready'?' · Semantic layout':''}{performance?' · Historical exploratory AUC':''}</span>{current&&<button onClick={()=>openDrawer('evidence')}>Question {current.question_id} details</button>}</div>
     {error&&<p className="universe-alert" role="alert">{error} {data?'Showing saved questions.':'Retrying automatically.'}</p>}
     {openError&&<p className="universe-alert" role="alert">{openError}</p>}
     {performance&&<p className="universe-performance-key">Historical exploratory AUC: gray unavailable · red &lt;0.5 · amber 0.5 · blue &gt;0.5. Not a final holdout score.</p>}
     <section className="universe-explore" aria-label="Question exploration">
-      {!data ? <p className="universe-loading" role="status">{error?'Question field is temporarily unavailable.':'Reading the question bank…'}</p> : list ? <div className="universe-list">{questions.map(q => <button key={q.question_id} aria-pressed={q.question_id === current?.question_id} onClick={() => select(q)}><span>Q{q.question_id} · {q.status}</span><strong>{q.text}</strong><small>{q.okf_tags.join(' · ') || 'No source tags recorded'}</small></button>)}{!questions.length && <p>No matching questions.</p>}</div> : <QuestionSpace positions={semanticPositions} semantic={semantic?.status==='ready'} performance={performance} questions={questions} selected={current} select={id=>{const q=questions.find(q=>q.question_id===id);if(q)select(q);}} clear={clearSelection} emptyMessage={search?'No loaded questions match this search.':'No questions have been recorded on this page.'} openStage={openStage} activeStage={stage}
+      {!data ? <p className="universe-loading" role="status">{error?'Question field is temporarily unavailable.':'Reading the question bank…'}</p> : list ? <div className="universe-list">{questions.map(q => <button key={q.question_id} aria-pressed={q.question_id === current?.question_id} onClick={() => select(q)}><span>Q{q.question_id} · {q.status}</span><strong>{q.text}</strong><small>{q.okf_tags.join(' · ') || 'No source tags recorded'}</small></button>)}{!questions.length && <p>No matching questions.</p>}</div> : <QuestionSpace positions={semanticPositions} semantic={semantic?.status==='ready'} performance={performance} questions={questions} selected={current} select={id=>{const q=questions.find(q=>q.question_id===id);if(q)select(q);}} clear={clearSelection} emptyMessage={search?'No questions match this search in this source.':'No questions have been recorded on this page.'} openStage={openStage} activeStage={stage}
         summary={{hypothesis:result?.hypothesis||task?.hypothesis||'',features:result?result.columns_used.length:task?.columns_used.length?task.columns_used.length:null,auc:result?.auc??task?.auc??null,interpretations:result?.evaluation?.interpretations?.length??(result?.interpretation||task?.interpretation?1:null),hasRun:!!(result?.run_tag||task?.run_tag||current?.origin_run)}} />}
       <div className="universe-pagination"><button disabled={pages.length === 1} onClick={() => {clearSelection();setPages(p => p.slice(0, -1));}}>View recent questions</button><span>Page {pages.length}</span><button disabled={!data?.next_before} onClick={() => { if (data?.next_before) {clearSelection();setPages(p => [...p, data.next_before!]);} }}>View older questions</button></div>
     </section>
     {drawer&&<FloorDetailDialog title={drawerTitle} close={closeDrawer} closeLabel="Close Universe panel" className={`universe-drawer universe-drawer-${drawer}`}>
-      {drawer==='novelty'&&<NoveltyRanking open={(q,r)=>{void openRanked(q,r);}}/>}
-      {drawer==='semantic'&&<SemanticExplorer selected={current?.question_id??null} onLayout={setSemantic} onChoose={id=>{void openRanked(id,null);}}/>}
+      {drawer==='novelty'&&<NoveltyRanking source={source} open={(q,r)=>{void openRanked(q,r);}}/>}
+      {drawer==='semantic'&&<SemanticExplorer source={source} selected={current?.question_id??null} onLayout={setSemantic} onChoose={id=>{void openRanked(id,null);}}/>}
       {drawer==='evidence'&&current&&<EvidencePanel key={current.question_id} question={current} data={evidence.data} error={evidence.error} stage={stage} setStage={setStage} resultId={resultId} setResultId={setResultId}/>}
       {openError&&<p role="alert">{openError}</p>}
     </FloorDetailDialog>}

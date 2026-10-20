@@ -39,7 +39,7 @@ export default function ClearQuestionMemory({onCleared,iconOnly=false}:{onCleare
     {notice&&<p role="status">{notice}</p>}
     {open&&<dialog ref={dialog} className="workspace-dialog universe-clear-dialog" aria-labelledby="clear-memory-title" onCancel={e=>{e.preventDefault();close();}}>
       <h2 id="clear-memory-title">Clear Question Universe memory?</h2>
-      <p>Are you sure you want to clear the active question memory across all pipelines?</p>
+      <p>Are you sure you want to clear the active question memory across all pipelines and knowledge sources?</p>
       <p>This archives the questions from the Universe and excludes them from future question selection and duplicate checks. Saved hypotheses, analyses, results, reports and their question links are retained. New questions can be generated again.</p>
       <p>This does not erase historical data. Restoring questions to active memory is not available in this interface.</p>
       {preview?<p>{preview.count} questions will be cleared.</p>:!error&&<p role="status">Checking the current question memory…</p>}

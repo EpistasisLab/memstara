@@ -110,7 +110,8 @@ class NoveltyRankingTests(unittest.TestCase):
         self.assertEqual(result['next_offset'], 50)
         self.assertEqual(result['items'][0]['novelty']['score'], .5)
         self.assertEqual(conn.fetch.await_count, 1)
-        sql, tag, offset = conn.fetch.call_args.args
+        sql, tag, offset, sources = conn.fetch.call_args.args
+        self.assertIsNone(sources)
         self.assertEqual(tag, 'run-a')
         self.assertEqual(offset, 0)
         self.assertIn('DISTINCT ON (r.task_id)', sql)

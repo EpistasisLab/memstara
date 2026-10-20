@@ -28,11 +28,13 @@ def fingerprint(text):
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def index(rows, query='', question_id=None, encoder=None, directory=None):
+def index(rows, query='', question_id=None, encoder=None, directory=None, scope='all'):
     """Cosine neighbors are authoritative; fixed PCA is only a visual projection."""
     import numpy as np
     encoder = encoder or encode
     directory = Path(directory or os.environ.get('MEMSTARA_UNIVERSE_CACHE', '/tmp/memstara-universe'))
+    if scope != 'all':
+        directory = directory / hashlib.sha256(scope.encode()).hexdigest()
     directory.mkdir(parents=True, exist_ok=True)
     identity = {'model': MODEL, 'revision': REVISION, 'input': 'question text; whitespace normalized',
                 'projection': 'fixed PCA basis v1', 'metric': 'cosine similarity',
