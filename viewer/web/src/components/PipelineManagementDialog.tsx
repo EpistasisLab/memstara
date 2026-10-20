@@ -7,6 +7,7 @@ import AdditionalAnalysisDialog from './AdditionalAnalysisDialog';
 import PipelineNameEditor from './PipelineNameEditor';
 import PipelineDeleteDialog from './PipelineDeleteDialog';
 import PipelineSetupGuide from './PipelineSetupGuide';
+import ManualPricingSettings from './ManualPricingSettings';
 
 export default function PipelineManagementDialog({pipeline:p,onSettings,close}:{pipeline:PipelineDefinition;onSettings:()=>void;close:()=>void}) {
   const busy=usePipelines(s=>s.busy), error=usePipelines(s=>s.error);
@@ -26,6 +27,7 @@ export default function PipelineManagementDialog({pipeline:p,onSettings,close}:{
         <div className="pipeline-management-buttons"><button disabled={busy||combinations} aria-label={`Settings for ${p.name}`} onClick={()=>{close();onSettings();}}><Settings2 size={16}/>Execution settings</button><PipelineNameEditor pipeline={p} buttonLabel="Rename pipeline"/><button disabled={busy} onClick={()=>setMlOpen(true)}>ML evaluation and advanced settings</button></div>
       </section>
       <section aria-label="Agent skills"><h3>Agent skills</h3><p>Review the instructions for the hypothesis, machine learning, interpreter and explanation agents.</p>{combinations?<p>Review all selected flavors in the combination grid. To change the combination schedule, create a new design; saved execution schedules stay fixed.</p>:<PipelineSetupGuide/>}</section>
+      <details><summary>Cost estimate settings · optional</summary><ManualPricingSettings/></details>
       <section className="pipeline-management-danger" aria-label="Execution and removal"><h3>Execution and removal</h3>
         <p>{p.running?'Delete will stop this execution first, then remove the pipeline setup. Saved run artifacts are retained.':'Delete removes this pipeline setup. Saved run artifacts are retained.'}</p>
         <div className="pipeline-management-buttons">{!p.running&&p.latest&&<button disabled={busy} onClick={()=>setFresh(true)}>Start a new execution…</button>}{paused&&<button disabled={busy} onClick={()=>setConfirm('end')}>End execution</button>}

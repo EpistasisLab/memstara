@@ -15,7 +15,8 @@ commands remain available through `python -m memstara.local_setup`. The old
 | Public port and project identity | `.env` (`MEMSTARA_WEB_PORT`, `COMPOSE_PROJECT_NAME`) | Compose, control origin checks |
 | Host directories | `.env` output/cache/input fields | Compose mounts and derived application paths |
 | CSV/OKF/target and skill defaults | `.env` | New unregistered research; saved profiles retain their own choices |
-| Optional rates, meter mappings and specialist sources | Inline JSON in `.env` | Owning backend subsystem; no config directory |
+| Optional manual estimate rates | App cost settings; generated `outputs/pricing/manual-rates.json` | Request cost receipts; never actual billing |
+| Advanced rate overrides, meter mappings and specialist sources | Inline JSON in `.env` | Owning backend subsystem; no config directory |
 | Per-research selections | Saved research/pipeline record | Execution preparation |
 | Per-execution settings | Immutable redacted run snapshot | Execution, audit, historical resume |
 | Release readiness metadata | `deployment/release-readiness.json` | Development/release checks only |
@@ -93,6 +94,14 @@ from these checks.
 
 ## Optional inline settings
 
+Manual token rates can be entered in **Settings and more → Cost estimate settings**.
+This is optional and applies across the installation. No pricing JSON is needed.
+The generated catalog lives under the configured output directory, is read by
+subsequent requests and does not rewrite historical receipts. Azure actual billing
+is not computed from this catalog. The form supports flat USD input/output/cache-read
+rates with provenance and expiry; unknown cache-write TTLs remain unpriced.
+
+The following overrides are for advanced automation only and disable the UI editor.
 No `config/` folder is required. Keep optional JSON on one single-quoted line in
 `.env`. These are advanced settings; leave them unset for the standard workflow.
 The following examples are schemas, not verified prices or working database bindings.

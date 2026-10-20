@@ -320,10 +320,24 @@ image build contexts. It is mounted read-only only in the configuration service;
 restricted generated settings are separated into per-service volumes.
 
 No `config/` directory is required or shipped. Operational settings come from
-`.env`, including optional `MEMSTARA_PRICING_JSON` (a token-rate catalog),
+`.env`, including advanced `MEMSTARA_PRICING_JSON` overrides (not required for installation),
 `MEMSTARA_AZURE_PRICING_METERS_JSON` (verified Azure retail meter mappings), and
 `MEMSTARA_EXPLANATION_SOURCES_JSON` (specialist database bindings). Leave these
 unset for the default workflow; Explanation uses the selected OKF corpus.
+For optional manual cost estimates, open a pipeline's **Settings and more →
+Cost estimate settings**. Enter verified USD rates per million input/output tokens,
+an optional cache-read rate, a source URL and an expiry date. The configured model
+identities are filled in automatically; no JSON or model endpoint entry is required.
+The editor applies to all pipelines in this installation, not just the open card.
+Rates are saved as generated data in `outputs/pricing/manual-rates.json` and apply
+to subsequent requests without a restart. Existing cost receipts are not rewritten.
+Rates are estimates only; Azure actual billing remains a separate evidence source.
+Missing, expired or unsupported cache-write rates are unavailable, not zero. Other
+explicitly labeled estimate sources can still be used when manual rates are disabled.
+Advanced `.env` pricing overrides take precedence and lock the UI editor; remove
+those overrides and restart to switch to UI-managed rates. Do not discard an existing
+catalog without first preserving its verified rates.
+
 See [optional inline settings](deployment/README.md#optional-inline-settings) for schemas.
 Prices are estimates, never actual Azure billing. An explicitly configured
 `MEMSTARA_PRICING_PATH=outputs/pricing/catalog.json` may instead point at generated

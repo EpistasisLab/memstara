@@ -16,7 +16,10 @@ price_receipt: ContextVar[dict[str, Any] | None] = ContextVar("pricing_receipt",
 
 def catalog_path():
     value = os.environ.get("MEMSTARA_PRICING_PATH", "").strip()
-    return Path(value) if value else None
+    if value:
+        return Path(value)
+    from memstara.manual_pricing import path
+    return path() if path().is_file() else None
 
 
 def estimate(profile, prompt, output, cached=0, written=0):

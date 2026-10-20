@@ -537,6 +537,14 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path.rstrip("/")
 
+        if path == "/control/pricing":
+            from memstara.manual_pricing import view
+            try:
+                self._send(200, view())
+            except (OSError, ValueError, TypeError, KeyError):
+                self._send(503, {"error": "Manual rate settings could not be loaded"})
+            return
+
         if path == "/control/research-inputs":
             from memstara.research_inputs import list_inputs
             from memstara.corpus_skills import corpus_profile
@@ -704,6 +712,16 @@ class Handler(BaseHTTPRequestHandler):
             body = self._body()
         except ValueError as e:
             self._send(400, {"error": str(e)})
+            return
+
+        if path == "/control/pricing":
+            from memstara.manual_pricing import save
+            try:
+                self._send(200, save(body))
+            except (ValueError, TypeError, KeyError, OverflowError) as exc:
+                self._send(400, {"error": str(exc) if isinstance(exc, ValueError) else "Invalid rate settings"})
+            except OSError:
+                self._send(503, {"error": "Manual rates could not be saved"})
             return
 
         if path in ("/control/research-inputs/inspect", "/control/research-inputs/register"):

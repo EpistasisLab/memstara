@@ -140,11 +140,12 @@ def test_runtime_adapter_uses_frozen_request_profile_and_rate_receipt(catalog):
         accounting.price_receipt.reset(receipt_token)
 
 
-def test_custom_pricing_requires_explicit_configuration(monkeypatch):
+def test_custom_pricing_requires_explicit_configuration(monkeypatch, tmp_path):
     from memstara.cost_accounting import catalog_path, estimate
 
     monkeypatch.delenv("MEMSTARA_PRICING_PATH", raising=False)
     monkeypatch.delenv("MEMSTARA_PRICING_JSON", raising=False)
+    monkeypatch.setenv("MEMSTARA_OUTPUT_DIR", str(tmp_path))
     assert catalog_path() is None
     assert estimate({"provider": "openai", "model": "example"}, 100, 10) is None
 
