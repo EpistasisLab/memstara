@@ -25,8 +25,7 @@ import { useBoard, useResults, useViewer, useSnapshot } from "../store/viewer";
 /**
  * Finished results — the results table, not the board.
  *
- * Permanently on screen at bottom-right, which is why Results is not in the control
- * panel's nav. It carries `id="results-panel"` so the scene's results place can bring it
+ * Available in the Floor plan analysis area; hidden in other workspace views. It carries `id="results-panel"` so the scene's results place can bring it
  * into view on a narrow screen (see ScenePanel's `onNodeClick`).
  *
  * Read-only, always. Nothing here writes to the store.

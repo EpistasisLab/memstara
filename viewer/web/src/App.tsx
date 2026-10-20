@@ -86,8 +86,8 @@ export default function App() {
     <WindowWorkspace toolbar={<WorkspaceActions only="history"/>} items={[
       { id: "control", title: "Control", content: <ControlPanel /> },
       { id: "pipeline", title: `${VIEWS[view].label}${pipeline && view !== "discovery" ? ` · ${pipeline.name}${view === "agents" ? "" : ` · ${pipelineLoopLabel(pipeline)}`}` : ""}`, content: <TopRegion /> },
-      { id: "results", title: "Results", content: <ResultsPanel /> },
-      { id: "report", title: `Final Report${pipeline ? ` · ${pipeline.name}` : ""}`, content: <ReportPanel /> },
+      ...(view === "scene" ? [{ id: "results", title: "Results", content: <ResultsPanel /> },
+      { id: "report", title: `Final Report${pipeline ? ` · ${pipeline.name}` : ""}`, content: <ReportPanel /> }] : []),
     ]} />
   </Tooltip.Provider>;
 }

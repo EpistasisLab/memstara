@@ -28,8 +28,8 @@ try {
   retired=true;
   await page.getByRole('button',{name:/Question universe/}).first().click();
   await page.getByRole('button',{name:'View options',exact:true}).click();
-  await page.getByRole('button',{name:'Question list',exact:true}).click();
-  await page.getByRole('button',{name:'Close Universe panel',exact:true}).click();
+  await page.getByRole('button',{name:'List',exact:true}).click();
+  await page.keyboard.press('Escape');
   await page.locator('.universe-list button').first().click();
   const stages=page.locator('.universe-stages');
   await stages.getByRole('button',{name:'ML',exact:true}).click();

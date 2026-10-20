@@ -9,7 +9,7 @@ import ClearQuestionMemory from "../components/ClearQuestionMemory";
 import ContentOrigin from "../components/ContentOrigin";
 import { useLoopLabel } from '../lib/useLoopLabel';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, SlidersHorizontal, MoreHorizontal, ArrowRight } from 'lucide-react';
+import { Search, SlidersHorizontal, Compass, ArrowRight } from 'lucide-react';
 import ReportBody from '../components/ReportBody';
 import ExplanationEvidence from '../components/ExplanationEvidence';
 import type { Result, Task, QuestionContract } from '../types';
@@ -106,12 +106,17 @@ export default function DiscoveryPanel() {
   const [list, setList] = useState(false);
   const [stage, setStage] = useState('Question');
   const [resultId, setResultId] = useState<number | null>(null);
-  const [drawer,setDrawer]=useState<'options'|'novelty'|'semantic'|'evidence'|'report'|null>(null);
-  const more=useRef<HTMLDetailsElement>(null);
+  const [drawer,setDrawer]=useState<'novelty'|'semantic'|'evidence'|'report'|null>(null);
   const toolbar=useRef<HTMLDivElement>(null);
-  useEffect(()=>{const dismiss=(event:PointerEvent)=>{if(more.current?.open&&!more.current.contains(event.target as Node))more.current.open=false;};document.addEventListener('pointerdown',dismiss);return()=>document.removeEventListener('pointerdown',dismiss);},[]);
-  const closeDrawer=()=>{openSequence.current++;setDrawer(null);requestAnimationFrame(()=>toolbar.current?.querySelector<HTMLButtonElement>('button[aria-haspopup=dialog]')?.focus());};
-  const openDrawer=(next:typeof drawer)=>{openSequence.current++;setOpenError('');if(more.current)more.current.open=false;setDrawer(next);};
+  const closePopovers=()=>toolbar.current?.querySelectorAll('details[open]').forEach(el=>el.removeAttribute('open'));
+  useEffect(()=>{
+    const dismiss=(event:PointerEvent)=>toolbar.current?.querySelectorAll('details[open]').forEach(el=>{if(!el.contains(event.target as Node))el.removeAttribute('open');});
+    const escape=(event:KeyboardEvent)=>{if(event.key!=='Escape')return;const popover=toolbar.current?.querySelector<HTMLDetailsElement>('details[open]');if(popover){popover.open=false;popover.querySelector('summary')?.focus();}};
+    document.addEventListener('pointerdown',dismiss);document.addEventListener('keydown',escape);
+    return()=>{document.removeEventListener('pointerdown',dismiss);document.removeEventListener('keydown',escape);};
+  },[]);
+  const closeDrawer=()=>{openSequence.current++;setDrawer(null);requestAnimationFrame(()=>toolbar.current?.querySelector<HTMLElement>('[aria-label="Explore questions"]')?.focus());};
+  const openDrawer=(next:typeof drawer)=>{openSequence.current++;setOpenError('');closePopovers();setDrawer(next);};
   const evidence = useLive<Evidence>(selected ? `/api/discovery/questions/${selected.question_id}` : null);
   const questions = useMemo(() => {
     const records=new Map((data?.questions??[]).map(q=>[q.question_id,q]));
@@ -154,16 +159,25 @@ export default function DiscoveryPanel() {
       setDrawer('evidence');
     }catch(e){if(sequence===openSequence.current)setOpenError(String(e));}
   };
-  const drawerTitle=drawer==='options'?'View options':drawer==='novelty'?'Novelty proxy ranking':drawer==='semantic'?'Related questions':drawer==='report'?'Run report':'Question details';
+  const drawerTitle=drawer==='novelty'?'Novelty proxy ranking':drawer==='semantic'?'Related questions':drawer==='report'?'Run report':'Question details';
   return <div className="universe-page universe-v2 universe-workspace workspace-padding">
     <header className="universe-workspace-heading"><h2>Question universe</h2></header>
-    <div className="universe-toolbar" ref={toolbar}>
-      <label className="universe-search"><Search size={17}/><input aria-label="Search loaded questions" placeholder="Search this page…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button aria-label="Clear question search" onClick={()=>setSearch('')}>×</button>}</label>
-      <button aria-haspopup="dialog" onClick={()=>openDrawer('options')}><SlidersHorizontal size={16}/>View options</button>
-      <details className="universe-more" ref={more} onKeyDown={e=>{if(e.key==='Escape'){e.currentTarget.open=false;e.currentTarget.querySelector('summary')?.focus();}}}>
-        <summary aria-label="More question actions"><MoreHorizontal size={19}/></summary>
-        <div className="universe-more-actions"><ClearQuestionMemory onCleared={through=>{openSequence.current++;setClearedThrough(v=>Math.max(v,through));setPages([0]);setSelected(null);setOpenedReport(null);setOpenError('');setMemoryRevision(v=>v+1);if(more.current)more.current.open=false;}}/></div>
+    <div className="universe-toolbar grid grid-cols-[minmax(0,1fr)_auto_auto_44px] items-center gap-2 @max-[600px]:grid-cols-[1fr_auto_44px]" ref={toolbar} data-context-help-managed>
+      <label className="universe-search flex h-11 min-w-0 items-center gap-2 rounded-lg px-3 @max-[600px]:col-span-full"><Search size={17}/><input aria-label="Search loaded questions" placeholder="Search this page…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button aria-label="Clear question search" onClick={()=>setSearch('')}>×</button>}</label>
+      <details className="universe-popover" onToggle={e=>{if(e.currentTarget.open)toolbar.current?.querySelectorAll('details[open]').forEach(el=>{if(el!==e.currentTarget)el.removeAttribute('open');});}} onKeyDown={e=>{if(e.key==='Escape'){e.currentTarget.open=false;e.currentTarget.querySelector('summary')?.focus();}}}>
+        <summary role="button" aria-label="View options"><SlidersHorizontal size={16}/>View options</summary>
+        <div className="universe-popover-body universe-options">
+          <fieldset><legend>Display</legend><div className="universe-display-options"><button aria-pressed={!list} onClick={()=>setList(false)}>Map</button><button aria-pressed={list} onClick={()=>setList(true)}>List</button></div></fieldset>
+          <label className="universe-option-check"><input type="checkbox" checked={performance} onChange={e=>setPerformance(e.target.checked)}/>Color by historical exploratory AUC</label>
+          <p className="universe-note">Color shows exploratory performance, not novelty or final holdout results.</p>
+        </div>
       </details>
+      <details className="universe-popover" onToggle={e=>{if(e.currentTarget.open)toolbar.current?.querySelectorAll('details[open]').forEach(el=>{if(el!==e.currentTarget)el.removeAttribute('open');});}} onKeyDown={e=>{if(e.key==='Escape'){e.currentTarget.open=false;e.currentTarget.querySelector('summary')?.focus();}}}>
+        <summary role="button" aria-label="Explore questions"><Compass size={16}/>Explore</summary>
+        <div className="universe-popover-body universe-explore-menu"><button onClick={()=>openDrawer('semantic')}>Related questions<ArrowRight size={16}/></button><button onClick={()=>openDrawer('novelty')}>Novelty proxy ranking<ArrowRight size={16}/></button></div>
+      </details>
+      <ClearQuestionMemory iconOnly onCleared={through=>{openSequence.current++;setClearedThrough(v=>Math.max(v,through));setPages([0]);setSelected(null);setOpenedReport(null);setOpenError('');setDrawer(null);setMemoryRevision(v=>v+1);}}/>
+
     </div>
     <div className="universe-summary"><span>{questions.length} questions on this page</span><span>{error?'Updates interrupted':data?'Live':'Connecting…'}{semantic?.status==='ready'?' · Semantic layout':''}{performance?' · Historical exploratory AUC':''}</span>{current&&<button onClick={()=>openDrawer('evidence')}>Question {current.question_id} details</button>}</div>
     {error&&<p className="universe-alert" role="alert">{error} {data?'Showing saved questions.':'Retrying automatically.'}</p>}
@@ -176,13 +190,6 @@ export default function DiscoveryPanel() {
     </section>
     <LiveOutputDock compact open={event=>{void openOutput(event);}}/>
     {drawer&&<FloorDetailDialog title={drawerTitle} close={closeDrawer} closeLabel="Close Universe panel" className={`universe-drawer universe-drawer-${drawer}`}>
-      {(drawer==='semantic'||drawer==='novelty')&&<button className="universe-drawer-back" onClick={()=>setDrawer('options')}>← View options</button>}
-      {drawer==='options'&&<div className="universe-options">
-        <fieldset><legend>Display</legend><div className="universe-display-options"><button aria-pressed={!list} onClick={()=>setList(false)}>Question field</button><button aria-pressed={list} onClick={()=>setList(true)}>Question list</button></div></fieldset>
-        <label className="universe-option-check"><input type="checkbox" checked={performance} onChange={e=>setPerformance(e.target.checked)}/>Color by historical exploratory AUC</label>
-        {performance&&<p className="universe-note">Best recorded exploratory AUC per question. Color and size do not indicate novelty or clinical validity. Open a question to inspect individual results.</p>}
-        <div className="universe-option-links"><button onClick={()=>setDrawer('semantic')}>Related questions & semantic layout<ArrowRight size={16}/></button><button onClick={()=>setDrawer('novelty')}>Novelty proxy ranking<ArrowRight size={16}/></button></div>
-      </div>}
       {drawer==='novelty'&&<NoveltyRanking open={(q,r)=>{void openRanked(q,r);}}/>}
       {drawer==='semantic'&&<SemanticExplorer selected={current?.question_id??null} onLayout={setSemantic} onChoose={id=>{void openRanked(id,null);}}/>}
       {drawer==='evidence'&&current&&<EvidencePanel key={current.question_id} question={current} data={evidence.data} error={evidence.error} stage={stage} setStage={setStage} resultId={resultId} setResultId={setResultId}/>}

@@ -47,7 +47,8 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
     drag.current = null;
   };
   const [front, setFront] = useState("");
-  const [maximized, setMaximized] = useState("");
+  const [maximizedId, setMaximized] = useState("");
+  const maximized = items.some(item=>item.id===maximizedId) ? maximizedId : "";
   const drag = useRef<{ id: string; edge: string; x: number; y: number; box: Box } | null>(null);
   useEffect(() => {
     const observer = new ResizeObserver(([entry]) => setBounds({ w: entry.contentRect.width, h: entry.contentRect.height }));

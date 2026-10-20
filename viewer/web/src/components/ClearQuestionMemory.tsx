@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 
 type Preview = {count:number;through:number;token:string;blocked:boolean};
-export default function ClearQuestionMemory({onCleared}:{onCleared:(through:number)=>void}) {
+export default function ClearQuestionMemory({onCleared,iconOnly=false}:{onCleared:(through:number)=>void;iconOnly?:boolean}) {
   const [open,setOpen]=useState(false);
   const [preview,setPreview]=useState<Preview|null>(null);
   const [error,setError]=useState('');
@@ -35,9 +35,9 @@ export default function ClearQuestionMemory({onCleared}:{onCleared:(through:numb
     finally{setBusy(false);}
   };
   return <>
-    <button onClick={()=>{setPreview(null);setError('');setNotice('');request.current=crypto.randomUUID();setOpen(true);}}><Trash2 size={16}/>Clear memory</button>
+    <button className={iconOnly?'universe-clear-questions':undefined} aria-label={iconOnly?'Clear questions':undefined} title={iconOnly?'Clear questions':undefined} onClick={()=>{setPreview(null);setError('');setNotice('');request.current=crypto.randomUUID();setOpen(true);}}><Trash2 size={16}/>{!iconOnly&&'Clear memory'}</button>
     {notice&&<p role="status">{notice}</p>}
-    {open&&<dialog ref={dialog} className="workspace-dialog" aria-labelledby="clear-memory-title" onCancel={e=>{e.preventDefault();close();}}>
+    {open&&<dialog ref={dialog} className="workspace-dialog universe-clear-dialog" aria-labelledby="clear-memory-title" onCancel={e=>{e.preventDefault();close();}}>
       <h2 id="clear-memory-title">Clear Question Universe memory?</h2>
       <p>Are you sure you want to clear the active question memory across all pipelines?</p>
       <p>This archives the questions from the Universe and excludes them from future question selection and duplicate checks. Saved hypotheses, analyses, results, reports and their question links are retained. New questions can be generated again.</p>
