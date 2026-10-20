@@ -35,7 +35,7 @@ async function request(body: object) {
   return data;
 }
 export const usePipelines = create<{
-  creationOpen: boolean; closeCreation: () => void; create: (name: string, configuration: RunRequest, options?:{keepOpen?:boolean}) => Promise<boolean>;
+  creationOpen: boolean; closeCreation: () => void; create: (name: string, configuration: RunRequest) => Promise<boolean>;
   focusRevision: number; focus: (id:string)=>void;
   resultsScope: "all" | "selected"; viewRun: (tag:string|null)=>void;
   items: PipelineDefinition[]; selected: string | null; loaded: boolean; busy: boolean; error: string | null;
@@ -119,13 +119,13 @@ export const usePipelines = create<{
     if(get().busy) return;
     set({creationOpen:true,error:null});
   },
-  create:async(name,configuration,options)=>{
+  create:async(name,configuration)=>{
     if(get().busy) return false;
     set({busy:true,error:null});
     try {
       const item=await request({action:'add',name,configuration:{...newPipelineRequest(configuration),question:"",
         hypothesis_agents:1,interpret_agents:1,trials:1}});
-      set({items:[...get().items,{...item,running:null,latest:null,progress:{}}],creationOpen:!!options?.keepOpen});
+      set({items:[...get().items,{...item,running:null,latest:null,progress:{}}],creationOpen:false});
       get().select(item.id);
       return true;
     }catch(e){set({error:String(e)});return false;}finally{set({busy:false});}

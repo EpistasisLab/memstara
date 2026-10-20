@@ -42,11 +42,7 @@ export const VIEWS: Record<ViewId, ViewMeta> = {
   access: { description: 'See which agents have used each tool or data service.', label: "Access map", icon: Database },
 };
 
-/** Nav order — pipeline first, then the ways of looking at it. A Record has no order of
- *  its own, so the list that renders needs one stated.
- *
- *  `chain` leads and `scene` follows it, which is also the order they answer questions in:
- *  how far along is the run, and then who is touching what. `scene` is called "Floor plan"
- *  here rather than "Agent state" because both views are the agent state — one as a
- *  sequence, one as a place. */
-export const VIEW_ORDER: ViewId[] = ["discovery", "clinician", "report", "scene", "agents", "log", "board", "task", "access"];
+/** The five primary views shown in Control, in their display order.
+ * Diagnostic views retain their metadata for existing internal navigation.
+ */
+export const VIEW_ORDER: ViewId[] = ["discovery", "clinician", "report", "scene", "agents"];

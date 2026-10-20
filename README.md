@@ -76,39 +76,14 @@ Native installation is optional and intended for developers.
 
 ## Your first run in the browser
 
-You do not need the native installation commands below for this workflow.
-
 1. Select **New research** on Question universe, or **Add pipeline** in Floor plan.
-2. Choose **Start a guided study**, then select the bundled **Heart failure**
-   demonstration (or your own registered study). Nothing runs when you select it.
-3. Choose **Review study**. Check the objective, target column and positive/negative
-   labels. Expand the source/skill details if needed, name the pipeline and confirm
-   the review checkbox. Choose **Create one-run pipeline**.
-4. Choose **Start one run** when ready. This is the action that makes model calls
-   and may incur charges. The saved design attempts one hypothesis Loop, using
-   one skill per stage and logistic regression only, with one split evaluation.
-   Internal retries can make additional model calls; one Loop is not a dollar limit.
-5. Choose **Track progress** for Floor plan and Live log. Use **Open final report** for this pipeline’s saved report. Wait for a completed execution and
-   inspect its results; a displayed question or animation does not confirm success.
-   Clinician view remains available separately to browse findings across studies.
-   If the start response is delayed, wait for reconciliation instead of starting
-   another copy.
-
-The basic configuration selects corpus-compatible hypothesis and explanation
-skills, training-heavy Data allocation and SHAP Interpretation. It clears
-previous experiment overrides and leaves model parameters to the agents and
-backend validation. The six LLM deployments still come from your server `.env`.
-If required skills are unavailable, setup explains the issue instead of silently
-substituting a different specialty.
-
-For your own study, choose **Prepare research inputs** first. A proposal-only
-study produces plans and explanations, not fitted models or measured performance.
-The bundled example demonstrates the software workflow, not clinical validation.
-
-**Advanced setup → All Combinations** retains custom skills, other model choices,
-ML parameter overrides and multiple-Loop schedules. It is optional for a first run.
-The [detailed walkthrough](#heartfailure-browser-walkthrough-one-combination-one-loop)
-describes this advanced path.
+2. Choose **Prepare research inputs** to register your CSV, OKF corpus and target,
+   or **All Combinations** to configure a pipeline using a registered study.
+3. Select the study and agent skills, review the combinations and maximum Loops,
+   then create the pipeline. For the bundled example, follow the
+   [HeartFailure walkthrough](#heartfailure-browser-walkthrough-one-combination-one-loop).
+4. Press **Play** when ready. Starting a run makes model calls and may incur charges.
+   Follow Floor plan and Live log, then inspect the completed results in Final report.
 
 ## Releases and development
 
@@ -159,7 +134,7 @@ and remaining approval gates are tracked in [RELEASE_CHECKLIST.md](RELEASE_CHECK
 | **Coordination** | Durable task claims, retries, results, and execution records on a shared board |
 | **Evaluation** | Model scores, feature contributions, configured comparisons, and evidence views |
 | **Agent skills** | Role-specific instructions, Markdown upload, custom writing, and Hypothesis-only assisted drafting |
-| **Pipeline design** | Guided one-run setup and advanced All Combinations skill schedules |
+| **Pipeline design** | Selected Pipelines and bounded All Combinations skill schedules |
 | **Browser workspace** | Live execution, clinician-facing findings, run controls, and saved configurations |
 | **Traceability** | Frozen settings and prompts, per-Loop skill provenance, and recorded actual calls |
 
@@ -1134,7 +1109,7 @@ and the control service's local origin allowance follow the selected ports. You 
 not edit Vite config or export separate DSNs. An occupied port stops startup; choose
 a free port in `.env` and restart the relevant services.
 
-In Floor plan, choose **Add pipeline → Advanced setup → All Combinations**, select the research
+In Floor plan, choose **Add pipeline → All Combinations**, select the research
 version saved in step 4, and choose compatible skills from the displayed corpus
 profile. For HeartFailure, follow the one-Loop walkthrough below. The tutorial CLI
 skill IDs are not the same as the built-in domain choices shown in that picker.
@@ -1175,7 +1150,7 @@ printed by the startup command: the documented development frontend normally use
 `http://localhost:8070`. These can point at different installations. Check the
 selected study and source paths rather than assuming two URLs share state.
 
-1. Open **Add pipeline → Advanced setup → All Combinations**. **Prepare research inputs** is the
+1. Open **Add pipeline → All Combinations**. **Prepare research inputs** is the
    alternative for inspecting/registering new input files; the CLI preparation above
    has already registered this example on this installation.
 2. In **Research inputs**, select the saved HeartFailure study. Open **Selected
