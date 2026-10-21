@@ -44,9 +44,28 @@ def test_out_of_scope_result_cannot_reach_model(tmp_path):
 
 
 def test_final_comparison_does_not_call_model(tmp_path):
-    invoke = AsyncMock()
+    invoke = AsyncMock(return_value=('Saved explanation', {'status': 'completed'}))
+    asyncio.run(execute({'run_tag': 'test'}, 13, tmp_path, ('agent',),
+                        {'registry': None}, invoke, AsyncMock(return_value={'results': [row()]})))
+    invoke.reset_mock()
     text, entry = asyncio.run(execute({'run_tag': 'test'}, None, tmp_path, ('agent',),
                                      {'registry': None}, invoke, AsyncMock(return_value={'results': [row()]})))
     invoke.assert_not_awaited()
     assert '| 12 | 7 | xgboost | 0.7 |' in text
     assert entry['status'] == 'completed'
+
+
+@pytest.mark.parametrize('output', [None, {'output': 'Text', 'execution': {'status': 'failed'}},
+                                   {'output': '', 'execution': {'status': 'completed'}}])
+def test_final_comparison_cannot_hide_missing_or_failed_explanation(tmp_path, output):
+    directory = tmp_path / 'report_io'
+    directory.mkdir()
+    if output is not None:
+        (directory / 'loop-13-result-7-output.json').write_text(json.dumps(output))
+    invoke = AsyncMock()
+    text, entry = asyncio.run(execute({'run_tag': 'test'}, None, tmp_path, ('agent',),
+                                     {'registry': None}, invoke, AsyncMock(return_value={'results': [row()]})))
+    assert text == ''
+    assert entry['status'] == 'failed'
+    assert entry['missing_result_ids'] == [7]
+    invoke.assert_not_awaited()

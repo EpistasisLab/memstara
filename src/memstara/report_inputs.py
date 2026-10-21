@@ -42,6 +42,22 @@ async def execute(plan, loop, run_dir, args, kwargs, invoke, read):
         raise ValueError('Report evidence could not be read')
     rows = data['results']
     if loop is None:
+        # A numeric comparison is not proof that an Explanation agent ran.
+        missing = []
+        for row in rows:
+            result_loop = int(row['trial']) // trials + 1
+            output = directory / f"loop-{result_loop}-result-{row['result_id']}-output.json"
+            try:
+                saved = json.loads(output.read_text())
+                complete = (saved.get('execution', {}).get('status') == 'completed'
+                            and bool(str(saved.get('output') or '').strip()))
+            except (OSError, ValueError, TypeError, AttributeError):
+                complete = False
+            if not complete:
+                missing.append(row['result_id'])
+        if missing or not rows:
+            return '', {'status': 'failed', 'error': 'Missing completed per-result explanations',
+                        'missing_result_ids': missing}
         # Numbers are copied by code. No model rereads all detailed loop results.
         lines = ['# Recorded experiment results', '',
                  'Each row is one saved result. AUROC is exploratory, not independent validation.', '',

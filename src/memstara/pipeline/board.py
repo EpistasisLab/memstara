@@ -2140,7 +2140,11 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             record_round(run_dir, wave + 1, "analysis_complete" if analysis_complete else "blocked",
                          "" if analysis_complete else "One or more hypotheses produced no task or an analysis failed.")
 
-            if combination_plan or args.continuous or args.waves > 1:
+            # Scoped final reports aggregate existing explanations; even a single
+            # ordinary Loop must create its explanation before aggregation.
+            scoped_report = bool((active_plan() or {}).get("run_tag")) and not (
+                active_plan() or {}).get("specialist_explanation_policy")
+            if combination_plan or args.continuous or args.waves > 1 or scoped_report:
                 write_progress(run_dir, wave + 1, "report")
                 text, report_entry = await checkpoint.phase(
                     f"{wave}:report",

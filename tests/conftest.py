@@ -71,7 +71,7 @@ def fake_encoder():
 
 
 @pytest.fixture(autouse=True)
-def isolated_operational_environment(request):
+def isolated_operational_environment(request, tmp_path_factory, monkeypatch):
     """A direct load_env call must not leak project settings into the next test."""
     if request.config.getoption('--run-live'):
         yield
@@ -84,6 +84,11 @@ def isolated_operational_environment(request):
         if managed(key) and not key.startswith('MEMSTARA_TEST_'):
             os.environ.pop(key, None)
     os.environ['MEMSTARA_CONFIG_MODE'] = 'environment'
+    # Offline ML tools must never publish synthetic bundles into an installation.
+    test_outputs = tmp_path_factory.mktemp('offline_outputs')
+    os.environ['MEMSTARA_OUTPUT_DIR'] = str(test_outputs)
+    from memstara.matcher import config as matcher_config
+    monkeypatch.setattr(matcher_config, 'CATALOG_JSON', test_outputs / 'matcher_catalog.json')
     env._loaded_source, env._provenance = None, {}
     try:
         yield

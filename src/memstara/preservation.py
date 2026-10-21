@@ -65,7 +65,7 @@ def require_quiet(services):
 
 def database_command(container, action, *, stdout=None):
     actions = {
-        'dump': 'exec pg_dump -Fc --no-owner --no-acl -U "$POSTGRES_USER" "$POSTGRES_DB"',
+        'dump': 'exec pg_dump -Fc -Z1 --no-owner --no-acl -U "$POSTGRES_USER" "$POSTGRES_DB"',
         'clients': ('exec psql -X -At -U "$POSTGRES_USER" "$POSTGRES_DB" -c "SELECT count(*) FROM pg_stat_activity '
                     'WHERE datname=current_database() AND backend_type=\'client backend\' AND pid<>pg_backend_pid()"'),
     }
@@ -96,7 +96,7 @@ def inventory(root):
 
 def archive_tree(source, destination):
     before = inventory(source)
-    with tarfile.open(destination, 'w:gz') as tar:
+    with tarfile.open(destination, 'w:gz', compresslevel=1) as tar:
         tar.add(source, arcname='data', recursive=True)
     if before != inventory(source):
         raise PreservationError('Source changed during backup; backup is incomplete')
