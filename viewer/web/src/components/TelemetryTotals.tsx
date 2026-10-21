@@ -22,10 +22,10 @@ export function useTelemetryTotals(){
 }
 export function UsageCards({metric}:{metric:Metric}){
   const cards=[
-    {label:'Agent calls',value:metric.calls.toLocaleString()},
+    {label:'Agent executions',value:metric.calls.toLocaleString()},
     {label:'Tokens',value:`${metric.tokens.toLocaleString()}${metric.tokens_status==='partial'?' · partial':''}`},
-    {label:'Estimated cost',value:costLabel(metric.cost),note:metric.cost.missing_costs?`Pricing unavailable for ${metric.cost.missing_costs} calls`:metric.cost.status==='partial'?'Incomplete · recorded subtotal only':undefined},
-    ...(metric.duration_basis?[{label:'End-to-end time',value:usageDuration(metric.seconds),note:metric.duration_basis}]:[]),
+    {label:'Estimated cost',value:costLabel(metric.cost),note:metric.cost.missing_costs?`Pricing unavailable for ${metric.cost.missing_costs} agent executions`:metric.cost.status==='partial'?'Incomplete · recorded subtotal only':undefined},
+    ...(metric.duration_basis?[{label:'Recorded elapsed time',value:usageDuration(metric.seconds),note:metric.duration_basis}]:[]),
   ];
   return <dl className="usage-metric-cards">{cards.map(({label,value,note})=><div key={label} className="min-w-0 rounded-lg border border-paper-line bg-paper p-3"><dt className="text-xs text-ink-soft">{label}</dt><dd className="mt-1 break-words text-lg font-bold text-ink">{value}</dd>{note&&<p className="mt-1 break-words text-xs leading-5 text-ink-soft">{note}</p>}</div>)}</dl>;
 }
@@ -40,21 +40,21 @@ export default function TelemetryTotals({data,error,runTag,loop}:{data:Totals|nu
       <dl className="telemetry-key-metrics">
         <div><dt>{loop===null?'Elapsed time · recorded agent span':'Elapsed time'}</dt><dd>{usageDuration(metric.seconds)}{metric.duration_status==='partial'&&metric.seconds!=null?' · partial':''}</dd></div>
         <div><dt>Estimated cost</dt><dd>{costLabel(metric.cost)}</dd></div>
-        <div><dt>Agent calls</dt><dd>{metric.calls.toLocaleString()}</dd></div>
+        <div><dt>Agent executions</dt><dd>{metric.calls.toLocaleString()}</dd></div>
       </dl>
       {metric.duration_basis&&<p className="telemetry-usage-note">{metric.duration_basis}</p>}
-      <p className="telemetry-usage-note">Cost is a Motoro estimate, not an actual charge.{metric.cost.missing_costs>0?` ${metric.cost.missing_costs} calls have no pricing; the estimate is incomplete.`:''}{metric.cost.status==='partial'?' Only the recorded subtotal is available.':''}</p>
-      <details className="telemetry-disclosure"><summary>Usage & billing details</summary><div>
+      <p className="telemetry-usage-note">Cost is a Motoro estimate, not an actual charge.{metric.cost.missing_costs>0?` ${metric.cost.missing_costs} agent executions have no pricing; the estimate is incomplete.`:''}{metric.cost.status==='partial'?' Only the recorded subtotal is available.':''}</p>
+      <details className="telemetry-disclosure"><summary>Usage & cost details</summary><div>
         <p>{metric.tokens.toLocaleString()} tokens{metric.tokens_status==='partial'?' · partial usage':''}{execution?.model?` · ${execution.model}`:''}</p>
         {metric.duration_basis&&<p>{metric.duration_basis}</p>}
-        <CostEvidence runTag={runTag}/>
-        <p className="text-xs text-ink-soft">Billing evidence covers the scope stated in that record; it is not automatically attributable to the selected Loop. Parallel agent durations are not added to calculate elapsed time.</p>
+        <CostEvidence key={`${runTag}:${loop}`} runTag={runTag} loop={loop}/>
+        <p className="text-xs text-ink-soft">Overview sums distinct Motoro agent execution records for the selected scope. Request details use saved LLM requests in that same scope. Elapsed time is a span, not the sum of parallel durations.</p>
       </div></details>
     </>}
     {execution&&<details className="telemetry-disclosure"><summary>Compare loops <span>{execution.loops.length} recorded</span></summary><div><LoopUsage execution={execution} updatedAt={data?.updated_at}/></div></details>}
     {data&&<details className="telemetry-disclosure"><summary>All pipelines <span>{data.pipelines.length} pipelines</span></summary><div>
       <p className="text-sm text-ink-soft">All saved executions · {data.scope}</p><UsageCards metric={data.total}/>
-      <div className="overflow-x-auto"><table className="w-full text-left text-sm"><caption className="sr-only">Usage across all saved pipeline executions</caption><thead><tr>{['Pipeline','Calls','Estimated cost'].map(t=><th key={t} className="p-2">{t}</th>)}</tr></thead><tbody>{data.pipelines.map(p=><tr key={p.id} className="border-t border-paper-line"><td className="p-2"><button className="text-accent underline" onClick={()=>usePipelines.getState().select(p.id)}>{p.name}</button></td><td className="p-2">{p.calls}</td><td className="p-2">{costLabel(p.cost)}{p.cost.missing_costs>0&&<small className="block">{p.cost.missing_costs} unpriced calls</small>}</td></tr>)}</tbody></table></div>
+      <div className="overflow-x-auto"><table className="w-full text-left text-sm"><caption className="sr-only">Usage across all saved pipeline executions</caption><thead><tr>{['Pipeline','Agent executions','Estimated cost'].map(t=><th key={t} className="p-2">{t}</th>)}</tr></thead><tbody>{data.pipelines.map(p=><tr key={p.id} className="border-t border-paper-line"><td className="p-2"><button className="text-accent underline" onClick={()=>usePipelines.getState().select(p.id)}>{p.name}</button></td><td className="p-2">{p.calls}</td><td className="p-2">{costLabel(p.cost)}{p.cost.missing_costs>0&&<small className="block">{p.cost.missing_costs} unpriced agent executions</small>}</td></tr>)}</tbody></table></div>
     </div></details>}
     {data&&<p className="telemetry-updated">Updated {new Date(data.updated_at).toLocaleTimeString()} · refreshes automatically</p>}
   </section>;

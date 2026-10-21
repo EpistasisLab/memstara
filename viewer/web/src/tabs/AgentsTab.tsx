@@ -34,7 +34,7 @@ const COLUMNS = [
       </span>
     ),
   }),
-  col.accessor("runs", { header: "Agent calls", meta: { align: "right" } }),
+  col.accessor("runs", { header: "Agent executions", meta: { align: "right" } }),
   col.accessor("completed", { header: "Completed", meta: { align: "right" } }),
   col.accessor("avg_iterations", {
     header: "Avg reasoning steps", meta: { align: "right" },
@@ -45,7 +45,7 @@ const COLUMNS = [
     cell: (c) => <span className="font-mono text-xs">{c.getValue().toLocaleString()}</span>,
   }),
   col.accessor("cost", {
-    header: "Cost", meta: { align: "right" },
+    header: "Estimated cost", meta: { align: "right" },
     cell: (c) => <span className="font-mono text-xs">{costLabel({usd:c.getValue(),status:c.row.original.runs ? 'partial' : 'complete'})}</span>,
   }),
 ];
@@ -77,11 +77,11 @@ export default function AgentsTab() {
 
   return (
     <div className="space-y-4 p-4">
-      <details className="text-sm text-ink-soft"><summary className="cursor-pointer">How to read these numbers</summary><p className="mt-2">Agent calls are individual agent invocations. Reasoning steps are internal to a call; neither counts complete pipeline loops. Usage and estimated cost cover only the selected scope identified above. The workspace header combines multiple pipelines.</p></details>
+      <details className="text-sm text-ink-soft"><summary className="cursor-pointer">How to read these numbers</summary><p className="mt-2">Agent executions are individual agent invocations. Reasoning steps are internal to a call; neither counts complete pipeline loops. Usage and estimated cost cover only the selected scope identified above. The workspace header combines multiple pipelines.</p></details>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { icon: Repeat, label: "Agent calls", value: runs.toLocaleString() },
-          { icon: Coins, label: "Recorded cost subtotal", value: costLabel({usd:cost,status:runs?'partial':'complete'}) },
+          { icon: Repeat, label: "Agent executions", value: runs.toLocaleString() },
+          { icon: Coins, label: "Recorded estimate subtotal", value: costLabel({usd:cost,status:runs?'partial':'complete'}) },
           { icon: Repeat, label: "Agents", value: `${totals.length}` },
         ].map((s) => (
           <div key={s.label} className="rounded-lg border border-paper-line bg-white p-4">

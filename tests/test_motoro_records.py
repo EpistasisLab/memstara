@@ -99,3 +99,19 @@ def test_workspace_totals_ignore_local_ledger(monkeypatch):
     mock_database(monkeypatch,conn)
     monkeypatch.setattr(costs,'with_ledgers',lambda *args:pytest.fail('Local override must not be applied'))
     assert asyncio.run(costs.workspace_cost(['selected']))['usd']==.3
+
+
+def test_cost_details_filter_loop_before_reading_motoro(monkeypatch):
+    other='22222222-2222-2222-2222-222222222222'
+    conn=AsyncMock();conn.fetch.side_effect=[[{'id':RUN,'status':'completed'}],[{'id':'s','run_id':RUN,'llm_call':{'model':'m','cost_estimate':.5}}]]
+    mock_database(monkeypatch,conn)
+    monkeypatch.setattr(records.run_artifacts,'lookup',lambda tag:{'calls':[
+        *ARCHIVE['calls'],{'run_id':other,'stage':'ml','loop':2,'seq':1}]})
+    result=asyncio.run(cost_details.motoro_details('selected',1))
+    assert result['loop']==1 and result['usd']==.5
+    for call in conn.fetch.call_args_list:
+        assert [str(x) for x in call.args[1]]==[RUN]
+    conn.fetch.reset_mock()
+    empty=asyncio.run(cost_details.motoro_details('selected',3))
+    assert empty['loop']==3 and empty['status']=='unavailable'
+    conn.fetch.assert_not_called()

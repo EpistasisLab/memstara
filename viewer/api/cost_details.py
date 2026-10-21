@@ -101,17 +101,17 @@ def summarize_motoro(tag, calls, runs, steps):
         'status':'complete' if records and not (unknown or active or missing) else 'partial' if records else 'unavailable',
         'usd':sum(g['usd'] for g in groups.values()), 'recorded_calls':len(records),
         'expected_calls':len(records), 'unpriced_calls':unknown, 'missing_runs':missing, 'active':active,
-        'coverage_note':'Persisted Motoro LLM call records only. Requests not persisted by Motoro are not included. Missing or ambiguous zero prices stay unknown; no local rate or ledger substitutes for Motoro.',
+        'coverage_note':'Persisted Motoro LLM call records only. Motoro agent totals are stored to six decimal places, so request subtotals may differ slightly due to rounding. Requests not persisted by Motoro are not included. Missing or ambiguous zero prices stay unknown; no local rate or ledger substitutes for Motoro.',
         'groups':[{'stage':k[0],'model':k[1],**v} for k,v in groups.items()], 'records':records}
 
 
-async def motoro_details(tag):
+async def motoro_details(tag, loop=None):
     from motoro_records import references, read_core
-    calls, ids = await references(tag)
+    calls, ids = await references(tag, loop)
     async def read(conn):
         runs = await conn.fetch('SELECT id,status FROM agent_runs WHERE id=ANY($1::uuid[])', list(ids))
         steps = await conn.fetch('''SELECT id,run_id,llm_call::text AS llm_call FROM run_steps
             WHERE run_id=ANY($1::uuid[]) AND llm_call IS NOT NULL ORDER BY started_at,id''', list(ids))
         return runs, steps
     runs, steps = await read_core(read) if ids else ([],[])
-    return summarize_motoro(tag, calls, runs, steps)
+    return {**summarize_motoro(tag, calls, runs, steps), 'loop':loop}

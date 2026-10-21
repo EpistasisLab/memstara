@@ -106,9 +106,9 @@ async def experiment_execution(run_tag: str = Query(min_length=1, max_length=180
 
 
 @app.get('/api/cost-details')
-async def cost_details(run_tag: str = Query(min_length=1, max_length=180)):
+async def cost_details(run_tag: str = Query(min_length=1, max_length=180), loop: int | None = Query(default=None, ge=1)):
     import cost_details as evidence
-    return await evidence.motoro_details(run_tag)
+    return await evidence.motoro_details(run_tag, loop)
 
 
 @app.get('/api/azure-costs')

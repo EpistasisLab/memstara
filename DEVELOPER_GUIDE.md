@@ -785,6 +785,14 @@ keys, execution semantics, source bindings, or artifact formats.
 
 ## Motoro cost evidence
 
+Telemetry distinguishes **Agent executions** (unique Motoro run IDs) from
+**recorded LLM requests** (saved step-level call records). Overview sums agent-run
+estimates; expanded details sum persisted LLM requests and disclose missing evidence.
+The selected loop applies to both views, including the JSON export. These subtotals
+can differ when Motoro request evidence is incomplete, or because agent totals are
+stored as NUMERIC(10,6) while request JSON retains more decimal places. All pipelines includes all
+saved executions for each pipeline; Overview covers the selected execution or loop.
+
 The Totals view reads cost evidence exclusively from Motoro. Memstara does not
 query Azure billing or display historical Azure account snapshots. Current Motoro
 records supply estimates only; actual billed amounts are not provided. Never label
