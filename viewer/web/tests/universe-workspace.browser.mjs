@@ -1,10 +1,12 @@
-import {chromium,expect} from '@playwright/test';
+import {expect} from '@playwright/test';
+import {launchResponsiveBrowser} from './responsive-browser.mjs';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {resolve,basename} from 'node:path';
+import {resolve,basename,join} from 'node:path';
+import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('../',import.meta.url));
-const browser=await chromium.launch({headless:true});
+const browser=await launchResponsiveBrowser();
 try {for(const width of [1440,390]){
  const page=await browser.newPage({viewport:{width,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/*',async r=>{
@@ -35,7 +37,7 @@ try {for(const width of [1440,390]){
  assert(Math.max(...tops)-Math.min(...tops)<1,JSON.stringify({width,tops}));
  const popup=page.locator('.universe-popover[open] .universe-popover-body');await expect(popup).toBeVisible();
  assert(await popup.evaluate(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&e.scrollWidth<=e.clientWidth+1;}));
- await page.screenshot({path:`/private/tmp/universe-popover-${width}.png`});
+ await page.screenshot({path:join(tmpdir(),`universe-popover-${width}.png`)});
  await page.keyboard.press('Escape');await expect(popup).toHaveCount(0);
  await page.getByRole('button',{name:'Explore questions',exact:true}).click();await expect(page.getByRole('button',{name:'Related questions',exact:true})).toBeVisible();
  await page.locator('.universe-search input').click();await expect(page.locator('.universe-popover[open]')).toHaveCount(0);

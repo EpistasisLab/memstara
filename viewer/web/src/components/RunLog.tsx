@@ -71,6 +71,16 @@ export default function RunLog({ lines, skipped, tail }: RunLogProps) {
     if (following && box.current) box.current.scrollTop = box.current.scrollHeight;
   }, [lines, tail, following]);
 
+  // Resizing or browser zoom reflows wrapped lines without changing log data.
+  // Keep following only when the reader has not intentionally scrolled away.
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el || !following) return;
+    const observer = new ResizeObserver(() => { el.scrollTop = el.scrollHeight; });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [following]);
+
   useEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -86,7 +96,7 @@ export default function RunLog({ lines, skipped, tail }: RunLogProps) {
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       <label className="flex items-center gap-2 border-b border-paper-line px-3 py-2 text-xs text-ink-soft"><input type="checkbox" checked={showPolling} onChange={e => setShowPolling(e.target.checked)} />Show routine polling messages ({pollingCount}{showPolling ? " shown" : " hidden"})</label>
-      <div ref={box} className="min-h-0 flex-1 overflow-auto bg-ink/[0.02] px-3 py-2">
+      <div ref={box} role="region" aria-label="Execution log" tabIndex={0} className="min-h-0 flex-1 overflow-auto bg-ink/[0.02] px-3 py-2">
         {skipped > 0 && (
           <div className="mb-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1
                           text-[12px] font-bold text-amber-800">

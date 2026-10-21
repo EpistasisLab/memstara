@@ -1,6 +1,6 @@
-import {chromium} from '@playwright/test';
+import {launchResponsiveBrowser} from './responsive-browser.mjs';
 import assert from 'node:assert/strict';
-const b=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
+const b=await launchResponsiveBrowser();
 try{
  const p=await b.newPage();p.setDefaultTimeout(15000);const errors=[];p.on('pageerror',e=>errors.push(e.message));
  const items=Array.from({length:30},(_,i)=>({id:'layout-'+i,number:i+1,name:'Research '+(i+1)+' — substance use and clinical outcomes',configuration:{skill:'test',waves:10,hypothesis_agents:1,interpreter_agents:1},running:null,
@@ -8,7 +8,7 @@ try{
  progress:{stage:'report',exploration:{outcome:'completed',completed:10,blocked:0}}}));
  await p.route('**/control/**',r=>r.fulfill({json:new URL(r.request().url()).pathname==='/control/pipelines'?{pipelines:items}:{}}));
  await p.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Layout fixture'}}));
- await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await p.getByRole('button',{name:'View floor plan',exact:true}).click();
+ await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await p.locator('[aria-label="View navigation"]').getByRole('button',{name:'Floor plan',exact:true}).click();
  for(const width of [1440,1024,768,390,320]){
   await p.setViewportSize({width,height:800});
   await p.getByRole('button',{name:'Workspace settings',exact:true}).click();await p.getByRole('dialog',{name:'Workspace settings',exact:true}).getByRole('button',{name:'Reset window layout',exact:true}).click();await p.keyboard.press('Escape');

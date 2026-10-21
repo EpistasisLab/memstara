@@ -178,3 +178,6 @@ button[aria-label^="Help:"] {min-width:24px;min-height:24px;}
 .combination-dialog .comb-footer button { min-width:0; white-space:normal; }
 .combination-dialog .comb-budget > div { min-width:0; overflow-wrap:anywhere; }
 .combination-dialog .comb-selected-skills > span { min-width:0; }
+
+/* Browser zoom can leave less than 200 CSS pixels for loop navigation. */
+.telemetry-loop-controls > div { display:flex; flex-wrap:wrap; min-width:0; gap:8px; }

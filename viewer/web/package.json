@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:responsive": "playwright test --config playwright.responsive.config.ts"
   },
   "dependencies": {
     "@radix-ui/react-tabs": "^1.1.21",

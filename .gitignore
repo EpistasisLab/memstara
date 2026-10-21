@@ -45,6 +45,7 @@ coverage.xml
 htmlcov/
 .import_linter_cache/
 /viewer/web/playwright-report/
+/viewer/web/responsive-report/
 /viewer/web/test-results/
 
 /test-results/

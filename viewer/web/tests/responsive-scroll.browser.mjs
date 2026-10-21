@@ -1,6 +1,7 @@
-import {chromium,expect} from '@playwright/test';
+import {expect} from '@playwright/test';
+import {launchResponsiveBrowser} from './responsive-browser.mjs';
 import assert from 'node:assert/strict';
-const browser=await chromium.launch({headless:true});
+const browser=await launchResponsiveBrowser();
 const root=process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:4177';
 try{
  for(const [width,height] of [[360,700],[390,500],[768,700],[1024,500],[1280,900],[1440,700],[1920,900]]){
@@ -17,7 +18,7 @@ try{
   const scrolls=await dialog.evaluate(d=>[d,...d.querySelectorAll('*')].filter(e=>/auto|scroll/.test(getComputedStyle(e).overflowY)&&e.scrollHeight>e.clientHeight+2).map(e=>e.className));
   assert.equal(scrolls.length,1,JSON.stringify({width,height,scrolls}));
   assert(await dialog.evaluate(d=>d.scrollWidth<=d.clientWidth+2),'dialog horizontal overflow');
-  const scroller=height<=550?dialog:dialog.locator('.comb-step-content');
+  const scroller=await page.evaluate(()=>innerHeight<=550)?dialog:dialog.locator('.comb-step-content');
   await scroller.evaluate(e=>e.scrollTop=0);
   const box=await scroller.boundingBox();await page.mouse.move(box.x+box.width*.75,box.y+Math.min(box.height*.65,150));
   await page.mouse.wheel(0,350);

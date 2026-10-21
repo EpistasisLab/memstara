@@ -1,7 +1,8 @@
-import {chromium,expect} from '@playwright/test';
+import {expect} from '@playwright/test';
+import {launchResponsiveBrowser} from './responsive-browser.mjs';
 import assert from 'node:assert/strict';
 const root=process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:4177';
-const browser=await chromium.launch({headless:true});
+const browser=await launchResponsiveBrowser();
 const metric={calls:5,tokens:12345,cost:{usd:.5,status:'complete',missing_costs:0},seconds:125,status:'completed',duration_basis:'Synthetic timing basis '.repeat(15)};
 const loops=Array.from({length:50},(_,i)=>({...metric,number:i+1}));
 const summary={sample_count:0,completed_count:50,excluded_completed:50,other_loops:0,seconds:null,usd:null,tokens:null,basis:'Synthetic fixture'};
@@ -22,8 +23,9 @@ try{for(const [width,height] of [[360,500],[390,700],[768,500],[1024,700],[1440,
  const pane=page.locator('.telemetry-workspace');
  const owners=await pane.evaluate(d=>[d,...d.querySelectorAll('*')].filter(e=>/auto|scroll/.test(getComputedStyle(e).overflowY)&&e.scrollHeight>e.clientHeight+2).map(e=>e.className));
  assert.equal(owners.length,1,JSON.stringify({width,height,owners}));
- assert(await pane.evaluate(e=>e.scrollWidth<=e.clientWidth+2),'telemetry overflow');
- await pane.evaluate(e=>e.scrollTop=0);const box=await pane.boundingBox();await page.mouse.move(box.x+box.width*.6,box.y+height*.7);await page.mouse.wheel(0,400);
+ const overflow=await pane.evaluate(e=>({width:e.clientWidth,scroll:e.scrollWidth,items:[...e.querySelectorAll('*')].filter(n=>n.getBoundingClientRect().right>e.getBoundingClientRect().right+2).slice(0,12).map(n=>({tag:n.tagName,cls:n.className,text:n.textContent?.slice(0,80)}))}));
+ assert(overflow.scroll<=overflow.width+2,JSON.stringify(overflow));
+ await pane.evaluate(e=>e.scrollTop=0);const box=await pane.boundingBox();await page.mouse.move(box.x+box.width*.6,box.y+box.height*.7);await page.mouse.wheel(0,400);
  await expect.poll(()=>pane.evaluate(e=>e.scrollTop)).toBeGreaterThan(0);
  await page.getByRole('combobox',{name:'Loop to inspect'}).focus();await expect(page.getByRole('combobox',{name:'Loop to inspect'})).toBeInViewport();
  await page.getByRole('combobox',{name:'Loop to inspect'}).selectOption('2');
