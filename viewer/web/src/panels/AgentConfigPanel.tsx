@@ -167,7 +167,7 @@ function Editor({ close }: { close: () => void }) {
       {coach===2&&<p className="agent-click-hint" role="status"><ArrowDown size={17} aria-hidden="true"/>Click here to read this skill's instructions.</p>}
       <details className="mt-2 text-xs"><summary className={`cursor-pointer rounded p-2 font-bold ${coach===2?'agent-click-target':''}`}>Read full instructions and source</summary>
         <p className="mt-2 text-ink-faint">{selected.source} · version {selected.hash.slice(0, 12)}</p>
-        <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-sans leading-relaxed">{selected.content}</pre>
+        <pre className="mt-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-sans leading-relaxed">{selected.content}</pre>
       </details>
       {coach===2&&<button type="button" className="mt-3 rounded border border-paper-line px-3 py-2 text-xs font-semibold text-ink" onClick={()=>setCoach(3)}>Reviewed · show save button</button>}
     </div>:<p className="text-xs text-ink-soft">Choose a skill in step 1 to see its purpose and full instructions here.</p>}

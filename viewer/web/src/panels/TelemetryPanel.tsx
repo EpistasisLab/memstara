@@ -94,7 +94,7 @@ export default function TelemetryPanel() {
     {data?.stale&&<p role="status" className="px-3 py-2 text-sm text-ink-soft">{data.health.core.up && data.health.memstara.up ? 'Refreshing this scope. Previously loaded records remain visible until the update finishes.' : 'Updates are delayed. This is not confirmation of an empty or completed loop.'}</p>}
     {data?.telemetry.legacy_attribution&&<p className="px-3 py-2 text-xs text-ink-soft">Legacy archive: agent calls are grouped using recorded loop start times. New executions record the loop directly.</p>}
     {!!data?.telemetry.unassigned_calls&&<p className="px-3 py-1 text-xs text-ink-soft">{data.telemetry.unassigned_calls} execution-wide or unassigned calls are included only in All loops.</p>}
-    <div key={tab==='Experiments'?'experiments':key} tabIndex={0} role="region" aria-label="Telemetry details" className="telemetry-tab-body min-h-0 flex-1 overflow-auto">
+    <div key={tab==='Experiments'?'experiments':key} tabIndex={0} role="region" aria-label="Telemetry details" className="telemetry-tab-body">
       {tab==='Experiments'?<ExperimentRegistry/>:tab==='Totals'?<TelemetryTotals data={totals.data} error={totals.error} runTag={runTag} loop={loop}/>:!runTag?<p className="p-5">Choose a pipeline with a recorded execution.</p>:!data?<p role="status" className="p-5">{error?'Waiting to retry this selection…':`Preparing ${scope.toLowerCase()} history. Large executions take longer on their first load…`}</p>:<>
         {tab==='Agents'&&<><AgentsTab/>{runTag&&<MotoroRecords key={`${runTag}:${loop}`} tag={runTag} loop={loop}/>}</>}{tab==='Activity'&&<FeedPanel/>}{tab==='Access'&&<AccessTab/>}
         {tab==='Results'&&<ResultsPanel telemetry/>}

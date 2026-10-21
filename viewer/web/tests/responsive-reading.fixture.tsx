@@ -1,0 +1,15 @@
+import {createRoot} from 'react-dom/client';
+import TelemetryPanel from '../src/panels/TelemetryPanel';
+import ReportBody from '../src/components/ReportBody';
+import DataTable from '../src/components/DataTable';
+import {useViewer} from '../src/store/viewer';
+import {usePipelines} from '../src/store/pipelines';
+import '../src/index.css';
+import '../src/readability.css';
+import '../src/workspace-layout.css';
+useViewer.setState({runTag:'responsive-fixture'});
+usePipelines.setState({items:[{id:'fixture',name:'Long pipeline '.repeat(15),latest:{run_tag:'responsive-fixture'},progress:{},configuration:{}}] as never});
+const markdown='# Long report\n\nUnbroken prose '+ 'Identifier'.repeat(200)+'\n\n| Feature | Model | Evidence |\n| --- | --- | --- |\n'+Array.from({length:40},(_,i)=>`| Feature ${i} | ${'ModelName'.repeat(12)} | ${'Description '.repeat(20)} |`).join('\n')+'\n\n```text\n'+'raw_record_'.repeat(150)+'\n```';
+const rows=Array.from({length:65},(_,i)=>({id:i,label:'Long table value '+ 'Identifier'.repeat(80)}));
+const report=new URLSearchParams(location.search).has('report');
+createRoot(document.getElementById('root')!).render(report?<main style={{height:'100dvh',overflow:'auto',padding:12}} aria-label="Reading fixture"><ReportBody text={markdown}/><DataTable data={rows} columns={[{accessorKey:'id',header:'ID'},{accessorKey:'label',header:'Recorded value'}]}/></main>:<TelemetryPanel/>);

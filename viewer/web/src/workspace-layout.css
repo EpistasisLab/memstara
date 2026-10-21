@@ -15,9 +15,9 @@
 .pipeline-creation-dialog .pipeline-creation-progress li { flex-direction:row; justify-content:center; text-align:left; }
 .pipeline-creation-dialog .pipeline-creation-body { padding:16px; scrollbar-gutter:stable; }
 .pipeline-creation-dialog .pipeline-creation-footer { padding:12px 16px; }
-.workspace-dialog.combination-dialog[open] { height:calc(100dvh - 24px); max-height:64rem; }
-.workspace-dialog.combination-dialog > .floor-detail-dialog-body { flex:1; overflow:hidden; padding:0; }
-.combination-dialog .comb-builder { height:100%; min-height:0; display:flex; flex-direction:column; gap:10px; }
+.workspace-dialog.combination-dialog[open] { display:flex; flex-direction:column; overflow:hidden; height:calc(100dvh - 24px); max-height:64rem; }
+.workspace-dialog.combination-dialog > .floor-detail-dialog-body { display:flex; flex:1; overflow:hidden; padding:0; }
+.combination-dialog .comb-builder { flex:1; min-width:0; height:100%; min-height:0; display:flex; flex-direction:column; gap:10px; }
 .combination-dialog .comb-intro { flex:none; gap:10px; padding:0; }
 .combination-dialog .comb-intro h3 { font-size:17px; }
 .combination-dialog .comb-intro p { margin:3px 0; font-size:13px; }
@@ -32,8 +32,8 @@
 .combination-dialog .comb-fields label { display:grid; grid-template-columns:minmax(6rem,1fr) minmax(0,1.3fr); align-items:center; gap:8px; }
 .combination-dialog .comb-fields input { margin:0; }
 .agent-settings-dialog:not(.pipeline-creation-dialog) { max-height:calc(100dvh - 24px); width:min(52rem,calc(100vw - 24px)); scroll-padding-bottom:90px; scrollbar-gutter:stable; }
-.agent-settings-dialog .agent-settings-footer { position:sticky; bottom:-20px; z-index:3; padding:12px 0; background:rgb(var(--panel)); border-top:1px solid rgb(var(--line)); }
-.pipeline-management .pipeline-management-buttons:last-child { position:sticky; bottom:-4px; padding:10px 0; background:rgb(var(--panel)); z-index:2; border-top:1px solid rgb(var(--line)); }
+.agent-settings-dialog .agent-settings-footer { position:static; z-index:3; padding:12px 0; background:rgb(var(--panel)); border-top:1px solid rgb(var(--line)); }
+.pipeline-management .pipeline-management-buttons:last-child { position:static; padding:10px 0; background:rgb(var(--panel)); z-index:2; border-top:1px solid rgb(var(--line)); }
 /* Label and input stay together; descriptions remain readable below. */
 .compact-evaluation > .grid > label { display:grid; grid-template-columns:minmax(0,1fr) minmax(8rem,1fr); gap:6px 12px; align-items:center; }
 .compact-evaluation > .grid > label > input,.compact-evaluation > .grid > label > select { margin:0; }
@@ -92,20 +92,27 @@
 .pipeline-browser-row[data-state=running] .pipeline-state-badge,
 .pipeline-browser-row[data-state=completed] .pipeline-state-badge {color:rgb(var(--ink));}
 
-/* Reserve reading space for telemetry instead of allowing controls to consume it. */
-.telemetry-workspace {overflow:auto; container-type:inline-size;}
-.telemetry-scope-region {flex:0 1 auto; min-height:70px; max-height:40%; overflow:auto; overscroll-behavior:contain;}
-.telemetry-tab-body {min-height:160px; overscroll-behavior:contain;}
-.telemetry-workspace > nav {flex-wrap:nowrap; overflow-x:auto; min-height:48px;}
-.telemetry-workspace > nav button {white-space:nowrap; min-height:40px;}
-.telemetry-workspace > p {max-height:90px; overflow:auto;}
-.telemetry-loop-controls {gap:8px; padding:10px 12px;}
-.telemetry-loop-controls > p {flex-basis:100%; font-size:12px;}
-.telemetry-loop-controls select {min-width:0; width:100%;}
-@container (max-width:480px) {
- .telemetry-scope-region .execution-context-row {flex-direction:column; align-items:stretch;}
- .telemetry-scope-region .execution-context-row > * {min-width:0; max-width:100%;}
- .telemetry-loop-controls label {flex:1 1 180px;}
+/* Telemetry owns one vertical scroll region. Controls, notices and tab content
+   participate in its flow; tables may scroll horizontally within that flow. */
+.telemetry-workspace { overflow:auto; container-type:inline-size; overscroll-behavior:contain; scrollbar-gutter:stable; }
+.telemetry-scope-region { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); flex:none; min-height:0; max-height:none; overflow:visible; }
+.telemetry-tab-body { flex:none; min-height:0; overflow:visible; min-width:0; }
+.telemetry-workspace > nav, .telemetry-workspace > p { flex:none; }
+.telemetry-workspace > p { overflow-wrap:anywhere; }
+.telemetry-workspace > nav { flex-wrap:wrap; }
+.telemetry-workspace > nav button { min-height:40px; }
+.telemetry-loop-controls { gap:8px; padding:10px 12px; }
+.telemetry-loop-controls > p { flex-basis:100%; font-size:12px; }
+.telemetry-loop-controls select { min-width:0; width:100%; }
+.telemetry-scope-region .execution-context-row > div { display:none; }
+.telemetry-scope-region .execution-context-row > label { flex:1; min-width:0; }
+.telemetry-scope-region .execution-context { padding:10px 12px; min-width:0; }
+.telemetry-scope-region .telemetry-loop-controls { align-content:start; align-items:center; border-bottom:0; min-width:0; }
+@container (max-width:600px) {
+ .telemetry-scope-region { grid-template-columns:minmax(0,1fr); }
+ .telemetry-scope-region .execution-context-row { flex-direction:column; align-items:stretch; }
+ .telemetry-scope-region .execution-context-row > * { min-width:0; max-width:100%; }
+ .telemetry-loop-controls label { flex:1 1 180px; }
 }
 
 [data-theme="dark"] .text-amber-800[role="status"],
@@ -113,35 +120,25 @@
 [data-theme="dark"] a[target="_blank"] {color:rgb(var(--accent));}
 button[aria-label^="Help:"] {min-width:24px;min-height:24px;}
 
-.telemetry-scope-region {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:132px;max-height:45%;}
-.telemetry-scope-region .execution-context-row > div {display:none;}
-.telemetry-scope-region .execution-context-row > label {flex:1;min-width:0;}
-.telemetry-scope-region .execution-context {padding:10px 12px;}
-.telemetry-scope-region .telemetry-loop-controls {align-content:start;align-items:center;border-bottom:0;}
-@container (max-width:600px) {
- .telemetry-scope-region {grid-template-columns:minmax(0,1fr);min-height:200px;}
-}
-
 .table-pagination {display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 0;font-size:13px;}
 .table-pagination label {display:flex;gap:6px;align-items:center;}
 .table-pagination button,.table-pagination select {border:1px solid rgb(var(--line));border-radius:6px;padding:6px 10px;background:rgb(var(--panel));}
 .table-pagination button:disabled {opacity:.45;}
 
-.table-pagination {position:sticky;top:0;z-index:3;background:rgb(var(--panel));}
+.table-pagination {position:static;background:rgb(var(--panel));}
 
 /* Keep the diagram provider attribution readable in both themes. */
 .react-flow__attribution {background:rgb(var(--panel)) !important;}
 .react-flow__attribution a {color:rgb(var(--ink)) !important;}
 
 /* Telemetry keeps the selected execution first; technical evidence stays expandable. */
-.telemetry-workspace .telemetry-scope-region {min-height:0;max-height:40%;flex-shrink:0;}
 .telemetry-workspace .execution-context > details {display:none;}
 .telemetry-simple-nav {display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid rgb(var(--line));flex-wrap:wrap;}
 .telemetry-simple-nav button,.telemetry-simple-nav select {padding:7px 10px;font-size:13px;border-radius:7px;background:rgb(var(--panel));border:1px solid rgb(var(--line));color:rgb(var(--ink));}
 .telemetry-simple-nav button[aria-pressed="true"] {background:rgb(var(--accent));color:rgb(var(--accent-contrast));border-color:transparent;}
-.telemetry-detail-picker {margin-left:auto;min-width:0;}
+.telemetry-detail-picker {margin-left:auto;min-width:0;max-width:100%;}
 .telemetry-detail-picker select {max-width:100%;}
-.telemetry-overview {padding:16px;display:grid;gap:12px;}
+.telemetry-overview {padding:16px;display:grid;gap:12px;min-width:0;overflow-wrap:anywhere;}
 .telemetry-overview header h3 {font-size:15px;font-weight:650;}
 .telemetry-overview header p,.telemetry-usage-note,.telemetry-updated {font-size:12px;color:rgb(var(--ink-soft));line-height:1.5;}
 .telemetry-key-metrics {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
@@ -158,3 +155,26 @@ button[aria-label^="Help:"] {min-width:24px;min-height:24px;}
  .telemetry-key-metrics dd {margin:0;font-size:18px;}
  .telemetry-overview {padding:12px;}
 }
+
+/* On short screens the dialog itself scrolls. This keeps every control reachable
+   instead of squeezing the step between tall, fixed headers and footers. */
+@media (max-height:550px) {
+  .workspace-dialog.floor-detail-dialog[open], .pipeline-creation-dialog[open] {
+    display:block; height:auto; max-height:calc(100dvh - 12px); overflow:auto;
+    overscroll-behavior:contain; scrollbar-gutter:stable;
+  }
+  .workspace-dialog.floor-detail-dialog > .floor-detail-dialog-body,
+  .combination-dialog .comb-builder, .combination-dialog .comb-step-content,
+  .pipeline-creation-form, .pipeline-creation-dialog .pipeline-creation-body {
+    display:block; height:auto; max-height:none; overflow:visible;
+  }
+  .combination-dialog .comb-roles { position:static; }
+}
+/* Text and actions must wrap inside the available column, including at zoom. */
+.workspace-dialog > header > h2 { min-width:0; overflow-wrap:anywhere; }
+.workspace-dialog > header > button { flex-shrink:0; }
+.workspace-dialog footer, .pipeline-creation-footer { flex-wrap:wrap; }
+.combination-dialog .comb-footer > div { flex-wrap:wrap; min-width:0; }
+.combination-dialog .comb-footer button { min-width:0; white-space:normal; }
+.combination-dialog .comb-budget > div { min-width:0; overflow-wrap:anywhere; }
+.combination-dialog .comb-selected-skills > span { min-width:0; }

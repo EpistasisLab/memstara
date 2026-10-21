@@ -472,7 +472,7 @@ dialog::backdrop { backdrop-filter: blur(3px); }
 .loop-usage-averages dt { display:flex; align-items:center; gap:7px; font-size:11px; color:rgb(var(--ink-soft)); }
 .loop-usage-averages dd { font-size:21px; font-weight:750; margin:6px 0; overflow-wrap:anywhere; }
 .loop-usage-averages small { font-size:10px; color:rgb(var(--ink-soft)); }
-.loop-usage-table { overflow:auto; max-height:340px; border:1px solid rgb(var(--line)); border-radius:8px; margin-top:14px; }
+.loop-usage-table { overflow-x:auto; max-height:none; border:1px solid rgb(var(--line)); border-radius:8px; margin-top:14px; }
 .loop-usage-table table { width:100%; text-align:left; border-collapse:collapse; font-size:12px; }
 .loop-usage-table caption { text-align:left; padding:10px 12px; font-weight:650; }
 .loop-usage-table th,.loop-usage-table td { padding:10px 12px; border-top:1px solid rgb(var(--line)); white-space:nowrap; }
