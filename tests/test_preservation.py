@@ -59,7 +59,8 @@ def test_active_application_refuses_backup(service):
         p.require_quiet(services)
 
 
-def test_drill_cleans_owned_container_on_restore_failure(tmp_path, monkeypatch):
+@pytest.mark.parametrize('host_storage', [False, True])
+def test_drill_cleans_owned_container_on_restore_failure(tmp_path, monkeypatch, host_storage):
     root = bundle(tmp_path)
     calls = []
     def run(args, **kwargs):
@@ -69,10 +70,26 @@ def test_drill_cleans_owned_container_on_restore_failure(tmp_path, monkeypatch):
         return b''
     monkeypatch.setattr(p, 'command', run)
     with pytest.raises(p.PreservationError):
-        p.drill(root)
+        p.drill(root, storage_parent=tmp_path if host_storage else None)
     assert calls[-1][:4] == ['docker', 'rm', '--force', '--volumes']
     assert calls[-1][-1].startswith('memstara-restore-drill-')
     assert not any('compose' in args for args in calls)
+    assert any('pg_isready -h 127.0.0.1' in arg for args in calls for arg in args)
+    create = next(args for args in calls if args[:2] == ['docker', 'create'])
+    assert any('dst=/var/lib/postgresql/data' in arg for arg in create) == host_storage
+    assert not list(tmp_path.glob('memstara-restore-*'))
+
+
+def test_host_restore_data_is_retained_if_container_removal_fails(tmp_path, monkeypatch):
+    root = bundle(tmp_path)
+    def run(args, **kwargs):
+        if args[:2] == ['docker', 'rm']:
+            raise p.PreservationError('container may still be running')
+        return b''
+    monkeypatch.setattr(p, 'command', run)
+    with pytest.raises(p.PreservationError, match='still be running'):
+        p.drill(root, storage_parent=tmp_path)
+    assert len(list(tmp_path.glob('memstara-restore-*'))) == 1
 
 
 @pytest.mark.parametrize('state', ['intact', 'missing', 'changed', 'outside'])

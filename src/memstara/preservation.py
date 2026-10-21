@@ -7,9 +7,11 @@ from datetime import UTC, datetime
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import tarfile
+import tempfile
 import uuid
 from typing import Any
 
@@ -197,21 +199,26 @@ def backup(destination):
     return destination
 
 
-def drill(root, image='pgvector/pgvector:pg16'):
+def drill(root, image='pgvector/pgvector:pg16', storage_parent=None):
     """Restore dumps only in an owned, network-isolated ephemeral container."""
     root = Path(root).resolve()
     verify(root)
     command(['docker', 'image', 'inspect', image])  # No implicit downloads.
     name = 'memstara-restore-drill-' + uuid.uuid4().hex
     created = False
+    storage = None
     try:
+        mounts = []
+        if storage_parent is not None:
+            storage = tempfile.mkdtemp(prefix='memstara-restore-', dir=Path(storage_parent).resolve())
+            mounts = ['--mount', f'type=bind,src={storage},dst=/var/lib/postgresql/data']
         command(['docker', 'create', '--name', name, '--network', 'none', '--memory', '768m',
                  '--cpus', '1', '-e', 'POSTGRES_HOST_AUTH_METHOD=trust',
-                 '--mount', f'type=bind,src={root},dst=/backup,readonly', image])
+                 '--mount', f'type=bind,src={root},dst=/backup,readonly', *mounts, image])
         created = True
         command(['docker', 'start', name])
         command(['docker', 'exec', name, 'sh', '-ec',
-                 'i=0; until pg_isready -U postgres; do i=$((i+1)); [ "$i" -lt 60 ]; sleep 1; done'])
+                 'i=0; until pg_isready -h 127.0.0.1 -U postgres; do i=$((i+1)); [ "$i" -lt 60 ]; sleep 1; done'])
         for database in ('board', 'runtime'):
             command(['docker', 'exec', name, 'createdb', '-U', 'postgres', database])
             command(['docker', 'exec', name, 'pg_restore', '--exit-on-error', '--no-owner', '--no-acl',
@@ -221,6 +228,8 @@ def drill(root, image='pgvector/pgvector:pg16'):
     finally:
         if created:
             command(['docker', 'rm', '--force', '--volumes', name])
+        if storage is not None:
+            shutil.rmtree(storage)
 
 
 def audit_records(previous_output_root=None):
@@ -272,6 +281,7 @@ def main():
     parser.add_argument('action', choices=['inspect', 'audit', 'backup', 'verify', 'drill'])
     parser.add_argument('path', nargs='?')
     parser.add_argument('--previous-output-root', help='Explicit old absolute outputs root for read-only audit')
+    parser.add_argument('--restore-storage-parent', help='Existing host directory for isolated temporary restore data')
     args = parser.parse_args()
     try:
         if args.action == 'audit':
@@ -288,7 +298,10 @@ def main():
         else:
             if not args.path:
                 parser.error('path is required')
-            result = {'backup': backup, 'verify': verify, 'drill': drill}[args.action](args.path)
+            if args.restore_storage_parent and args.action != 'drill':
+                parser.error('--restore-storage-parent is only valid for drill')
+            result = (drill(args.path, storage_parent=args.restore_storage_parent)
+                      if args.action == 'drill' else {'backup': backup, 'verify': verify}[args.action](args.path))
             print(json.dumps({'status': 'passed', 'action': args.action,
                               'result': str(result) if isinstance(result, Path) else result}, indent=2))
     except (PreservationError, OSError, ValueError, subprocess.TimeoutExpired, tarfile.TarError) as exc:

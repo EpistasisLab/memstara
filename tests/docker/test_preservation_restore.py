@@ -20,7 +20,7 @@ def test_paired_dump_and_isolated_restore(tmp_path):
         created = True
         p.command(['docker', 'start', name])
         p.command(['docker', 'exec', name, 'sh', '-ec',
-                   'i=0; until pg_isready -U postgres; do i=$((i+1)); [ "$i" -lt 60 ]; sleep 1; done'])
+                   'i=0; until pg_isready -h 127.0.0.1 -U postgres; do i=$((i+1)); [ "$i" -lt 60 ]; sleep 1; done'])
         root = tmp_path / 'backup'
         root.mkdir()
         for db in ('board', 'runtime'):
