@@ -33,14 +33,14 @@ def role(stage):
 @pytest.fixture(scope="session")
 def live_batch(pytestconfig):
     from memstara.env import load_env
-    from memstara.paths import DEFAULT_OUTPUT_DIR, REPO_ROOT
+    from memstara.paths import output_dir, REPO_ROOT
     from memstara.stage_models import deployment_profiles
 
     load_env()
     profiles = deployment_profiles()
     assert profiles and all(p["model"] == MODEL for p in profiles.values()), "All stages must use Haiku 5.5"
     identifier = "haiku_live_" + datetime.now(UTC).strftime("%Y%m%dt%H%M%S") + "_" + uuid.uuid4().hex[:8]
-    verification = Path(DEFAULT_OUTPUT_DIR).resolve() / "verification"
+    verification = output_dir() / "verification"
     chosen = pytestconfig.getoption("--live-batch")
     root = Path(chosen).resolve() if chosen else verification / identifier
     assert root.parent == verification and re.fullmatch(r"haiku_live_[a-z0-9_]+", root.name)
