@@ -1,3 +1,4 @@
+import CompactActivityRow from '../components/CompactActivityRow';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { agentDisplayName, TOOL_ACTIONS } from '../lib/telemetry';
 import { Radio, ChevronDown, Search } from 'lucide-react';
@@ -83,6 +84,13 @@ export default function FeedPanel({stage, compact = false}: {stage?: string; com
   const activeKind=compact?'all':kind;
   const matching=scoped.filter(e=>(!activeAgent||(e.name||'Unknown agent')===activeAgent)&&
     (activeKind==='all'||e.kind===activeKind)&&[e.name,e.label,...(e.kind==='text'?[e.message.text,e.message.kind_label,e.message.stage]:[e.event.tool,e.event.server,STORE_LABEL[e.event.store],TOOL_ACTIONS[e.event.tool]])].join(' ').toLowerCase().includes(needle));
+  if(compact)return <div className="compact-activity">
+    {conversation.error&&<p className="compact-activity-notice" role="status">Agent text unavailable. Tool records remain visible; retrying.</p>}
+    {!conversation.data&&!conversation.error&&snapshot?.run_tag&&<p className="compact-activity-notice" role="status">Loading agent text…</p>}
+    <div className="compact-activity-caption">{matching.length} recent records · Newest first · Local time</div>
+    {!matching.length?<p className="compact-activity-notice">No activity recorded yet.</p>:<ul className="compact-activity-list" aria-label="Recorded activities">{matching.map(e=>e.kind==='tool'?<CompactActivityRow key={e.key} event={e.event}/>:<CompactActivityRow key={e.key} message={e.message}/>)}</ul>}
+    {conversation.data?.limited&&<p className="compact-activity-notice">Showing recent saved output only.</p>}
+  </div>;
   return <Panel icon={Radio} title="Activity" bodyClassName="p-0">
     <div className="telemetry-activity-controls">
       {!compact&&stage==='question'&&<p className="text-sm">Question-generation tool calls share the Hypothesis agent identity. Related Hypothesis tool calls in this loop are included; agent text is restricted to question generation.</p>}

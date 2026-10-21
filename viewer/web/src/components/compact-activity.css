@@ -1,0 +1,27 @@
+.activity-browser-heading { display:flex; flex-direction:column; gap:4px; padding:4px 0 12px; border-bottom:1px solid rgb(var(--line)); }
+.clinical-log-detail-view .activity-browser-heading h4 { margin:0; font-size:13px; overflow-wrap:anywhere; }
+.activity-browser-heading span,.compact-activity-caption { font-size:11px; color:rgb(var(--ink-soft)); }
+.compact-activity-caption { margin:10px 0 4px; }
+.compact-activity-list { list-style:none; padding:0; margin:0; }
+.compact-activity-row { border-bottom:1px solid rgb(var(--line)/.65); }
+.compact-activity-row summary { display:block; padding:12px 2px; cursor:pointer; list-style:none; }
+.compact-activity-row summary::-webkit-details-marker { display:none; }
+.compact-activity-row summary:hover { background:rgb(var(--accent)/.035); }
+.compact-activity-row summary:focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:-2px; border-radius:6px; }
+.compact-activity-meta { display:flex; justify-content:space-between; gap:8px; align-items:baseline; font-size:11px; color:rgb(var(--ink-soft)); }
+.compact-activity-meta span { min-width:0; overflow-wrap:anywhere; }
+.compact-activity-meta time { flex-shrink:0; font-variant-numeric:tabular-nums; font-size:10px; }
+.compact-activity-title { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:5px; font-size:12px; font-weight:600; line-height:1.5; }
+.compact-activity-title span { min-width:0; overflow-wrap:anywhere; }
+.compact-activity-title svg { flex-shrink:0; color:rgb(var(--ink-soft)); }
+.compact-activity-row details[open] .compact-activity-title svg { transform:rotate(180deg); }
+.compact-activity-state { display:block; margin-top:3px; font-size:10px; color:rgb(var(--ink-soft)); }
+.compact-activity-row[data-error] .compact-activity-state { color:#ac382c; }
+[data-theme=dark] .compact-activity-row[data-error] .compact-activity-state { color:#ffada5; }
+.clinical-log-detail-view .compact-activity-error { font-size:12px; margin:6px 0 0; overflow-wrap:anywhere; }
+.compact-activity-detail { padding:10px; margin:0 0 12px; border-radius:7px; background:rgb(var(--paper)); font-size:12px; overflow-wrap:anywhere; min-width:0; }
+.compact-activity-detail dl { display:grid; grid-template-columns:auto minmax(0,1fr); gap:6px 10px; }
+.compact-activity-detail dt { color:rgb(var(--ink-soft)); }
+.compact-activity-detail dd { margin:0; overflow-wrap:anywhere; }
+.compact-activity-detail pre { white-space:pre-wrap; overflow-wrap:anywhere; }
+.compact-activity-notice { font-size:12px; color:rgb(var(--ink-soft)); padding:8px 0; }

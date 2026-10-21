@@ -36,8 +36,7 @@ export default function ActivityDetails({event}: {event: ActivityScope}) {
     return () => {disposed = true; clearTimeout(timer); request?.abort();};
   }, [event.run_tag, loop]);
   return <section aria-label="Activity details">
-    <h4>{event.pipeline_name} · {clinicalRoles[event.stage] ?? (event.stage || 'All activity')}</h4>
-    <p>{loop === null ? 'All loops' : `Loop ${loop}`} · Latest activity first</p>
+    <header className="activity-browser-heading"><h4>{event.pipeline_name}</h4><span>{loop === null ? 'All loops' : `Loop ${loop}`}{event.stage?` · ${clinicalRoles[event.stage]??event.stage}`:''}</span></header>
     {event.detail && <details><summary>Saved output excerpt</summary><p>{event.detail}</p></details>}
     {error && <p role="status">{error}</p>}
     {!snapshot && !error && <p role="status">Loading detailed activity…</p>}
