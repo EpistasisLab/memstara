@@ -45,6 +45,10 @@ Overrides are available for `QUESTION`, `HYPOTHESIS`, `DATA`, `ML`,
 When overriding `PROVIDER` with a different service, also set that agent's `MODEL`,
 its `API_BASE` if required (Azure Foundry/local), and the matching provider API key.
 Common endpoints and generation settings are not inherited across providers.
+The template lists provider-specific requirements. Local servers accept HTTP/HTTPS
+and an optional `MEMSTARA_LOCAL_API_KEY`. Bedrock requires `AWS_REGION` and either
+`AWS_BEARER_TOKEN_BEDROCK` or AWS access credentials (plus a session token for temporary
+credentials). Docker receives these from `.env`; host AWS profiles are not mounted.
 Restart after editing `.env`; saved executions retain their recorded model profiles.
 Keep the remaining defaults for a first installation.
 Database credentials are generated automatically. Keep `.env` private; do not

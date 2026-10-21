@@ -139,6 +139,8 @@ def model_environment_errors(provider: str = "", profiles=None) -> list[str]:
     for name in sorted({key for p in providers for key in PROVIDER_KEYS.get(p, ())}):
         if not os.environ.get(name, '').strip():
             problems.append(f'{name} is not set — configure the matching provider credential in .env')
+    from memstara.operational import provider_errors
+    problems.extend(provider_errors(os.environ, selected))
     for role, profile in selected.items():
         if profile['provider'] in ('azure_foundry', 'local') and not profile.get('api_base'):
             problems.append(f'{role}: an explicit model API_BASE is required')

@@ -51,6 +51,7 @@ pilot = ["shap==0.52.0", "lime==0.2.0.1"]
 runtime = [
     "motoro @ git+https://github.com/EpistasisLab/motoro.git@bd0b461c3b2eaef1b1f5c54cc18027647d01cb58",
     "litellm==1.97.0",
+    "boto3>=1.35,<2",  # Bedrock SigV4 and bearer-token request support.
     "torch==2.13.0",
 ]
 dev = [

@@ -100,15 +100,15 @@ def validate_profiles(profiles: dict) -> dict:
             raise ValueError("temperature must be between 0 and 2")
     for profile in profiles.values():
         if profile.get("api_base"):
-            validate_endpoint(profile["api_base"])
+            validate_endpoint(profile["api_base"], allow_http=profile["provider"] == "local")
     return deepcopy(profiles)
 
 
-def validate_endpoint(endpoint: str) -> None:
+def validate_endpoint(endpoint: str, *, allow_http: bool = False) -> None:
     """Apply the same endpoint contract to profiles and environment defaults."""
     from urllib.parse import urlsplit
 
-    message = ("Model endpoints require a valid HTTPS URL and port (1-65535), "
+    message = ("Model endpoints require a valid HTTPS URL (HTTP allowed for local only) and port (1-65535), "
                "without whitespace, control characters, embedded credentials or query parameters")
     # urlsplit silently removes some control characters and defers port validation.
     if any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in endpoint):
@@ -118,7 +118,7 @@ def validate_endpoint(endpoint: str) -> None:
         port = url.port
     except ValueError:
         raise ValueError(message) from None
-    if (url.scheme != "https" or not url.hostname or url.username or url.password
+    if (url.scheme not in (("https", "http") if allow_http else ("https",)) or not url.hostname or url.username or url.password
             or url.query or url.fragment or port == 0):
         raise ValueError(message)
 
@@ -159,6 +159,11 @@ def call_overrides(profiles, stage, temperature=None):
 
 async def preflight_profiles(profiles):
     """Resolve all runtime connections without sending inference or exposing secrets."""
+    import os
+    from memstara.operational import provider_errors
+    errors = provider_errors(os.environ, profiles)
+    if errors:
+        raise ValueError('; '.join(errors))
     from motoro.schemas.agent import ModelConfig
     from motoro.services.credentials import resolve
     for family, profile in validate_profiles(profiles).items():

@@ -15,7 +15,7 @@ from dotenv import dotenv_values
 from memstara.paths import REPO_ROOT
 
 SELECTORS = {'MEMSTARA_CONFIG_MODE', 'MEMSTARA_ENV_FILE'}
-PREFIXES = ('MEMSTARA_', 'MOTORO_', 'ANTHROPIC_', 'OPENAI_', 'OPENROUTER_', 'AZURE_', 'AGENTIC_')
+PREFIXES = ('MEMSTARA_', 'MOTORO_', 'ANTHROPIC_', 'OPENAI_', 'OPENROUTER_', 'AZURE_', 'AGENTIC_', 'AWS_', 'LOCAL_LLM_')
 EXTRA = {'COMPOSE_PROJECT_NAME', 'AGENTIC_OKF_BUNDLE_DIR', 'CORE_VIEWER_DSN', 'VIEWER_CORS', 'HF_HOME',
          'HF_HUB_CACHE', 'HF_HUB_OFFLINE', 'OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS',
          'MKL_NUM_THREADS', 'TOKENIZERS_PARALLELISM', 'POSTGRES_PASSWORD'}
@@ -101,7 +101,8 @@ def resolve(environ=None, *, file: Path | None = None):
     credential_keys = {'MEMSTARA_AZURE_FOUNDRY_API_KEY': 'ANTHROPIC_FOUNDRY_API_KEY',
                        'MEMSTARA_ANTHROPIC_API_KEY': 'ANTHROPIC_API_KEY',
                        'MEMSTARA_OPENAI_API_KEY': 'OPENAI_API_KEY',
-                       'MEMSTARA_OPENROUTER_API_KEY': 'OPENROUTER_API_KEY'}
+                       'MEMSTARA_OPENROUTER_API_KEY': 'OPENROUTER_API_KEY',
+                       'MEMSTARA_LOCAL_API_KEY': 'LOCAL_LLM_API_KEY'}
     for public, upstream in credential_keys.items():
         key = values.get(public, '').strip()
         if key:
@@ -201,6 +202,26 @@ def database_errors(values: dict) -> list[str]:
     return errors
 
 
+def provider_errors(values, profiles):
+    """Validate explicit Bedrock authentication without network or secret output."""
+    if not any(p['provider'] == 'bedrock' for p in profiles.values()):
+        return []
+    errors = []
+    def present(key):
+        value = values.get(key, '').strip()
+        return bool(value) and not value.startswith(('YOUR_', 'REPLACE_'))
+    if not present('AWS_REGION'):
+        errors.append('AWS_REGION is required for bedrock')
+    bearer = present('AWS_BEARER_TOKEN_BEDROCK')
+    access, secret = present('AWS_ACCESS_KEY_ID'), present('AWS_SECRET_ACCESS_KEY')
+    session = present('AWS_SESSION_TOKEN')
+    if bearer and (access or secret or session):
+        errors.append('Choose AWS_BEARER_TOKEN_BEDROCK or AWS access credentials, not both')
+    elif not bearer and not (access and secret):
+        errors.append('Bedrock requires AWS_BEARER_TOKEN_BEDROCK or both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY')
+    return errors
+
+
 def check(values: dict) -> dict:
     """Static readiness, deliberately not a successful network or model probe."""
     errors = database_errors(values)
@@ -214,6 +235,7 @@ def check(values: dict) -> dict:
         profiles = model_profiles(values)
     except ValueError as exc:
         errors.append(str(exc))
+    errors.extend(provider_errors(values, profiles))
     keys = {'azure_foundry': 'ANTHROPIC_FOUNDRY_API_KEY', 'anthropic': 'ANTHROPIC_API_KEY',
             'openai': 'OPENAI_API_KEY', 'openrouter': 'OPENROUTER_API_KEY'}
     for role, profile in profiles.items():
