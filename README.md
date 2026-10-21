@@ -29,19 +29,24 @@ complete-case dataset and preserves the supplied files. Private HIV data is not 
 
 ### 2. Configure `.env`
 
-Enter your provider API key and assign a provider, model and endpoint to **all six
-agents**: `QUESTION`, `HYPOTHESIS`, `DATA`, `ML`, `INTERPRETATION`, `EXPLANATION`.
-For example, with Azure Foundry:
+Enter your provider API key and one common model for all agents. For Azure Foundry:
 
 ```dotenv
 MEMSTARA_AZURE_FOUNDRY_API_KEY=YOUR_API_KEY
-MEMSTARA_QUESTION_PROVIDER=azure_foundry
-MEMSTARA_QUESTION_MODEL=YOUR_DEPLOYMENT_NAME
-MEMSTARA_QUESTION_API_BASE=https://YOUR_RESOURCE.services.ai.azure.com
+MEMSTARA_LLM_PROVIDER=azure_foundry
+MEMSTARA_LLM_MODEL=YOUR_DEPLOYMENT_NAME
+MEMSTARA_LLM_API_BASE=https://YOUR_RESOURCE.services.ai.azure.com
 ```
 
-Fill the corresponding fields for the other five agents in the template, even
-when using the same model. Keep the remaining defaults for a first installation.
+Leave agent overrides blank to inherit these defaults. To use a different model
+for Explanation on the same service, set `MEMSTARA_EXPLANATION_MODEL`.
+Overrides are available for `QUESTION`, `HYPOTHESIS`, `DATA`, `ML`,
+`INTERPRETATION` and `EXPLANATION`, including generation settings.
+When overriding `PROVIDER` with a different service, also set that agent's `MODEL`,
+its `API_BASE` if required (Azure Foundry/local), and the matching provider API key.
+Common endpoints and generation settings are not inherited across providers.
+Restart after editing `.env`; saved executions retain their recorded model profiles.
+Keep the remaining defaults for a first installation.
 Database credentials are generated automatically. Keep `.env` private; do not
 replace an existing installation's `.env` with another checkout's settings.
 

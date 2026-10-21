@@ -117,28 +117,39 @@ def resolve(environ=None, *, file: Path | None = None):
 
 
 def agent_profile(role, values=None):
-    """Read one explicit agent assignment. Never inherit a common model."""
+    """Resolve an agent override against explicit common defaults."""
     from memstara.stage_models import AGENT_ROLES, validate_profiles
     role = {'interpreter': 'interpretation', 'report': 'explanation'}.get(role, role)
     if role not in AGENT_ROLES:
         raise ValueError('Unknown model role')
     values = os.environ if values is None else values
     prefix = 'MEMSTARA_' + role.upper() + '_'
-    profile = {k: values.get(prefix + k.upper(), '').strip() for k in ('provider', 'model', 'api_base')}
+    common_provider = values.get('MEMSTARA_LLM_PROVIDER', '').strip()
+    provider = values.get(prefix + 'PROVIDER', '').strip() or common_provider
+    same_provider = not common_provider or provider == common_provider
+
+    def setting(key):
+        override = values.get(prefix + key.upper(), '').strip()
+        # A different provider must supply its own model and endpoint; provider-
+        # specific generation settings must not cross that boundary either.
+        return override or (values.get('MEMSTARA_LLM_' + key.upper(), '').strip()
+                            if same_provider else '')
+
+    profile = {'provider': provider, 'model': setting('model'), 'api_base': setting('api_base')}
     required = ['provider', 'model']
     if profile['provider'] in ('azure_foundry', 'local'):
         required.append('api_base')
     for key in required:
         if not profile[key]:
-            raise ValueError(f'{prefix}{key.upper()} is required; no shared model fallback is used')
+            raise ValueError(f'{prefix}{key.upper()} is required (set this agent override or the matching MEMSTARA_LLM_ default)')
     for key, cast in (('temperature', float), ('max_tokens', int)):
-        raw = values.get(prefix + key.upper(), '').strip()
+        raw = setting(key)
         if raw:
             try:
                 profile[key] = cast(raw)
             except ValueError:
                 raise ValueError(f'{prefix}{key.upper()} has an invalid numeric value') from None
-    effort = values.get(prefix + 'EFFORT', '').strip()
+    effort = setting('effort')
     if effort:
         profile['effort'] = effort
     if not profile['api_base']:
@@ -148,7 +159,7 @@ def agent_profile(role, values=None):
 
 
 def model_profiles(values=None):
-    """All six assignments are mandatory for a new pipeline."""
+    """Expand common defaults and agent overrides into six frozen assignments."""
     from memstara.stage_models import AGENT_ROLES
     return {role: agent_profile(role, values) for role in AGENT_ROLES}
 

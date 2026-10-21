@@ -1,4 +1,4 @@
-"""Independent agent settings: no shared model fallback or secret serialization."""
+"""Common defaults and independent overrides without secret serialization."""
 import pytest
 from memstara.operational import model_profiles, resolve
 from memstara.stage_models import AGENT_ROLES
@@ -29,20 +29,21 @@ def test_individual_setting_reaches_model_schema(tmp_path, role, suffix, value, 
 
 @pytest.mark.parametrize('role', AGENT_ROLES)
 @pytest.mark.parametrize('field', ['PROVIDER', 'MODEL'])
-def test_missing_assignment_never_uses_shared_defaults(role, field):
+def test_missing_assignment_uses_shared_defaults(role, field):
     values = explicit_values()
     key = f'MEMSTARA_{role.upper()}_{field}'
     del values[key]
-    values.update(MEMSTARA_LLM_PROVIDER='openai', MEMSTARA_LLM_MODEL='forbidden-fallback')
-    with pytest.raises(ValueError, match=key):
-        model_profiles(values)
+    values.update(MEMSTARA_LLM_PROVIDER='openai', MEMSTARA_LLM_MODEL='shared-model')
+    assert model_profiles(values)[role][field.lower()] == values['MEMSTARA_LLM_' + field]
 
 
-def test_shared_sampling_and_endpoint_values_are_ignored():
+def test_shared_sampling_and_endpoint_values_are_inherited():
     values = explicit_values()
     values.update(MEMSTARA_LLM_TEMPERATURE='1.8', MEMSTARA_LLM_MAX_TOKENS='999',
                   MEMSTARA_LLM_EFFORT='high', MEMSTARA_LLM_API_BASE='https://ignored.example')
-    assert all(set(p) == {'provider', 'model'} for p in model_profiles(values).values())
+    assert all(p['temperature'] == 1.8 and p['max_tokens'] == 999
+               and p['effort'] == 'high' and p['api_base'] == 'https://ignored.example'
+               for p in model_profiles(values).values())
 
 
 def test_provider_credentials_do_not_require_shared_model(tmp_path):
@@ -66,3 +67,32 @@ def test_compute_limits_are_allowed_in_tool_subprocesses():
     allowed = set(Settings.model_fields['mcp_allowed_env_vars'].default.split(','))
     assert {'OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS',
             'TOKENIZERS_PARALLELISM', 'HF_HOME'} <= allowed
+
+
+def test_common_only_reaches_actual_runtime_overrides():
+    from memstara.stage_models import call_overrides
+    profiles = model_profiles({'MEMSTARA_LLM_PROVIDER': 'openai', 'MEMSTARA_LLM_MODEL': 'shared'})
+    for role in AGENT_ROLES:
+        assert call_overrides(profiles, role)['model'] == 'shared'
+
+
+def test_provider_change_does_not_inherit_endpoint_or_sampling():
+    values = {'MEMSTARA_LLM_PROVIDER': 'azure_foundry', 'MEMSTARA_LLM_MODEL': 'common',
+              'MEMSTARA_LLM_API_BASE': 'https://example.services.ai.azure.com',
+              'MEMSTARA_LLM_TEMPERATURE': '1', 'MEMSTARA_LLM_EFFORT': 'high',
+              'MEMSTARA_EXPLANATION_PROVIDER': 'openai', 'MEMSTARA_EXPLANATION_MODEL': 'other'}
+    profiles = model_profiles(values)
+    assert profiles['explanation'] == {'provider': 'openai', 'model': 'other'}
+    del values['MEMSTARA_EXPLANATION_MODEL']
+    with pytest.raises(ValueError, match='MEMSTARA_EXPLANATION_MODEL'):
+        model_profiles(values)
+
+
+def test_blank_override_inherits_and_zero_overrides():
+    values = {'MEMSTARA_LLM_PROVIDER': 'openai', 'MEMSTARA_LLM_MODEL': 'common',
+              'MEMSTARA_LLM_TEMPERATURE': '1', 'MEMSTARA_ML_MODEL': '  ',
+              'MEMSTARA_ML_TEMPERATURE': '0'}
+    profiles = model_profiles(values)
+    assert profiles['ml']['model'] == 'common'
+    assert profiles['ml']['temperature'] == 0
+    assert profiles['question']['temperature'] == 1
