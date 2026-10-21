@@ -1,7 +1,7 @@
 import {test} from '@playwright/test';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-for(const file of ['responsive-scroll','responsive-reading','responsive-history','universe-workspace','pipeline-list-layout','responsive-touch']){
+for(const file of ['combination-review','responsive-scroll','responsive-reading','responsive-history','universe-workspace','pipeline-list-layout','responsive-touch']){
  test(file,async({},info)=>{
   const [engine,percent]=info.project.name.split('-');
   test.skip(file==='responsive-touch'&&(engine==='firefox'||!!percent),'Touch emulation is covered separately in Chromium and WebKit');

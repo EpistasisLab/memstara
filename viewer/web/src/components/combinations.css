@@ -41,11 +41,6 @@
 .comb-skill-card details { padding:0 16px 12px 45px; font-size:12px; }
 .comb-skill-card summary { cursor:pointer; color:rgb(var(--ink-soft)); }
 .comb-skill-card pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:none; overflow:visible; padding-top:10px; }
-.comb-review-roles { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; margin:16px 0 24px; }
-.comb-review-roles>div { border:1px solid rgb(var(--line)); border-radius:10px; padding:12px; min-width:0; }
-.comb-review-roles span { display:block; font-size:11px; color:rgb(var(--ink-soft)); }
-.comb-review-roles strong { display:block; margin:5px 0; }
-.comb-review-roles p { font-size:11px; margin:0; overflow-wrap:anywhere; }
 .comb-fields { display:grid; grid-template-columns:2fr 1fr; gap:16px; }
 .comb-fields label { font-weight:600; }
 .comb-fields input { display:block; width:100%; padding:11px 12px; border:1px solid rgb(var(--line)); border-radius:9px; background:rgb(var(--panel)); margin-top:7px; font-weight:400; }
@@ -69,7 +64,7 @@
  .comb-budget { gap:8px; padding:14px 10px; }.comb-budget strong { font-size:23px; }.comb-budget span { font-size:10px; }
  .comb-skill-layout { grid-template-columns:minmax(0,1fr); gap:16px; }
  .comb-roles { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px; }.comb-roles button { padding:9px; font-size:12px; }.comb-roles button>svg:last-child { display:none; }
- .comb-review-roles { grid-template-columns:repeat(2,minmax(0,1fr)); }.comb-fields { grid-template-columns:minmax(0,1fr); }
+ .comb-fields { grid-template-columns:minmax(0,1fr); }
  .comb-footer { flex-direction:column; align-items:stretch; }.comb-footer>div { justify-content:flex-end; }.comb-footer button { flex:1; white-space:normal; }
 }
 /* Scope overrides to this wizard; shared dialogs retain their existing layout. */
@@ -139,3 +134,50 @@
 }
 
 .comb-selection-summary > div { min-width:0; }
+
+/* Final review: editable settings beside an ordered, readable agent summary. */
+.comb-review { display:grid; gap:20px; min-width:0; }
+.comb-review-heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px 24px; }
+.comb-review-heading p { margin:6px 0 0; font-size:13px; }
+.comb-review-count { display:flex; align-items:baseline; gap:8px; color:rgb(var(--ink-soft)); font-size:12px; }
+.comb-review-count strong { font-size:24px; color:rgb(var(--accent)); font-variant-numeric:tabular-nums; }
+.comb-review-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.15fr); gap:20px; align-items:start; }
+.comb-review-card { min-width:0; padding:20px; border:1px solid rgb(var(--line)); border-radius:12px; background:rgb(var(--panel)); }
+.comb-review-card h4 { font-size:14px; font-weight:650; margin:0 0 16px; }
+.comb-review-fields { display:grid; gap:16px; }
+.comb-review-fields label { display:grid; gap:7px; font-size:12px; font-weight:600; }
+.comb-review-fields input { width:100%; min-width:0; padding:10px 12px; border:1px solid rgb(var(--line)); border-radius:8px; background:rgb(var(--paper)); font-size:14px; font-weight:400; }
+.comb-review .comb-review-hint { font-size:12px; margin:8px 0 18px; }
+.comb-review-random strong,.comb-review-confirm strong { display:block; font-size:13px; font-weight:600; }
+.comb-review-random small,.comb-review-confirm small { display:block; margin-top:4px; font-size:12px; color:rgb(var(--ink-soft)); }
+.comb-review-rules { margin-top:16px; font-size:12px; color:rgb(var(--ink-soft)); }
+.comb-review-rules summary { cursor:pointer; padding:6px 0; }
+.comb-review-rules p { margin:6px 0 0; }
+.comb-review-evaluation { border-top:1px solid rgb(var(--line)); margin-top:20px; padding-top:16px; }
+.comb-review-evaluation>div { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:12px; }
+.comb-review-evaluation h4 { margin:0; }
+.comb-review-evaluation p { font-size:12px; margin:0; }
+.comb-review-evaluation dl { display:grid; gap:8px; font-size:12px; }
+.comb-review-evaluation dl>div { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 12px; }
+.comb-review-evaluation dt { color:rgb(var(--ink-soft)); }
+.comb-review-evaluation dd { margin:0; font-weight:600; }
+.comb-review-agents { list-style:none; margin:0; padding:0; }
+.comb-review-agents>li { padding:14px 0; border-top:1px solid rgb(var(--line)); }
+.comb-review-agents>li:first-child { padding-top:0; border-top:0; }
+.comb-review-agents>li:last-child { padding-bottom:0; }
+.comb-review-agent-heading { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; }
+.comb-review-agent-heading svg { color:rgb(var(--accent)); flex-shrink:0; }
+.comb-review-agent-heading h5 { font-size:13px; font-weight:600; margin:0; overflow-wrap:anywhere; }
+.comb-review-agent-heading>span { color:rgb(var(--ink-soft)); font-size:11px; }
+.comb-review-agent-heading button { margin-left:auto; }
+.comb-review-card button { padding:4px 6px; min-height:32px; font-size:12px; color:rgb(var(--accent)); border-radius:6px; }
+.comb-review-card button:hover { background:rgb(var(--accent)/.08); }
+.comb-review-agents ul { list-style:none; display:flex; flex-wrap:wrap; gap:6px; padding:8px 0 0 26px; }
+.comb-review-agents ul li { max-width:100%; border-radius:5px; padding:3px 7px; font-size:12px; background:rgb(var(--ink)/.04); overflow-wrap:anywhere; }
+.comb-review-confirm { border-top:1px solid rgb(var(--line)); padding-top:16px; }
+.comb-review :is(input,button,summary):focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:3px; }
+@media(max-width:700px) {
+ .comb-review-layout { grid-template-columns:minmax(0,1fr); gap:12px; }
+ .comb-review-card { padding:16px; }
+ .comb-review-heading { align-items:start; }
+}

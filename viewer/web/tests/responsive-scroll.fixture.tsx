@@ -15,7 +15,7 @@ const catalog=PLAYBOOK_STAGES.flatMap(stage=>Array.from({length:16},(_,i)=>({
 })));
 const initial=useControl.getState().form;
 useControl.setState({catalog,form:{...initial,knowledge_mode:'llm_only',data_mode:'proposal',research_objective:'Synthetic research objective',research_input_id:'',skill:'',playbook_hypothesis:'user-hypothesis-0'},loadPlaybooks:async()=>{},loadSkills:async()=>{}});
-usePipelines.setState({creationOpen:true,creationMode:null,closeCreation:()=>{document.body.dataset.closed='true';}} as Parameters<typeof usePipelines.setState>[0]);
+usePipelines.setState({creationOpen:true,creationMode:null,create:async(name,configuration)=>{document.body.dataset.created=JSON.stringify({name,configuration});return true;},closeCreation:()=>{document.body.dataset.closed='true';}} as Parameters<typeof usePipelines.setState>[0]);
 const single=new URLSearchParams(location.search).has('single');
 const editor=new URLSearchParams(location.search).has('editor');
 if(editor)useControl.setState({editor:{stage:'hypothesis',slot:0,add:false}});
