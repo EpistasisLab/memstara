@@ -1,13 +1,14 @@
+import {createPortal} from 'react-dom';
 import {floorActivityRows, floorExecutionState, type FloorActivity} from '../lib/floorActivity';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { MessageSquareText, ChevronLeft, ChevronRight, ArrowDown } from 'lucide-react';
+import { MessageSquareText, ArrowDown } from 'lucide-react';
 import { useLiveOutputs } from '../store/liveOutputs';
 import { usePipelines, type PipelineDefinition } from '../store/pipelines';
 import { clinicalEventText, clinicalPipelineStatus, clinicalRoles, scopedClinicalEvents } from '../lib/clinicalLog';
 import ActivityDetails, { type ActivityScope } from './ActivityDetails';
 import './clinical-log.css';
 
-export default function ClinicalLogPanel({pipelines,floorActivity}: {pipelines: PipelineDefinition[];floorActivity?:FloorActivity|null}) {
+export default function ClinicalLogPanel({pipelines,floorActivity,toggleHost}: {toggleHost:HTMLElement|null;pipelines: PipelineDefinition[];floorActivity?:FloorActivity|null}) {
   const live = useLiveOutputs();
   const pipelineError = usePipelines(s => s.error);
   const [narrow, setNarrow] = useState(false);
@@ -22,7 +23,8 @@ export default function ClinicalLogPanel({pipelines,floorActivity}: {pipelines: 
   const collapsed = preference ?? narrow;
   const scope = pipelines.map(p => `${p.id}:${(p.running ?? p.latest)?.run_tag ?? ''}`).join('|');
   return <aside ref={panel} className={`clinical-log ${collapsed ? 'is-collapsed' : ''}`} aria-label="Clinical activity log">
-    <header className="clinical-log-heading"><MessageSquareText size={17}/><h3>Live log</h3><button aria-label={collapsed ? 'Expand live log' : 'Collapse live log'} aria-expanded={!collapsed} onClick={() => setPreference(!collapsed)}>{collapsed ? <ChevronLeft size={17}/> : <ChevronRight size={17}/>}</button></header>
+    {toggleHost&&createPortal(<button className="floor-panel-toggle" aria-label={collapsed?'Expand live log':'Collapse live log'} aria-expanded={!collapsed} aria-pressed={!collapsed} onClick={()=>setPreference(!collapsed)}><MessageSquareText size={16} aria-hidden="true"/><span>Live log</span><span className="floor-panel-indicator" aria-hidden="true"/></button>,toggleHost)}
+    <header className="clinical-log-heading"><MessageSquareText size={17}/><h3>Live log</h3></header>
     {!collapsed && <ClinicalLogBody key={`${scope}:${floorActivity?.loop??''}:${floorActivity?.mode??''}`} pipelines={pipelines} live={live} pipelineError={pipelineError} floorActivity={floorActivity}/>}
   </aside>;
 }

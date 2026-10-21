@@ -1,3 +1,4 @@
+import {createPortal} from 'react-dom';
 import { useMemo, useState, useRef, useLayoutEffect, useEffect } from 'react';
 import { PanelLeftClose, PanelLeftOpen, Trash2 } from 'lucide-react';
 import type { PipelineDefinition } from '../store/pipelines';
@@ -8,9 +9,9 @@ import {researchSkillProfile} from '../lib/researchSkills';
 import {useControl} from '../store/control';
 import {usePipelines} from '../store/pipelines';
 import {pipelineState} from '../lib/pipelineState';
-export default function PipelineBrowser({items, selected, onSelect, compare, onCompare, onSettings}: {
-  items: PipelineDefinition[]; selected: string | null; onSelect: (id:string)=>void;
-  compare: string[]; onCompare:(ids:string[])=>void; onSettings:(id:string)=>void;
+export default function PipelineBrowser({items, selected, onSelect, compare, onCompare,toggleHost}: {
+  toggleHost:HTMLElement|null; items: PipelineDefinition[]; selected: string | null; onSelect: (id:string)=>void;
+  compare: string[]; onCompare:(ids:string[])=>void;
 }) {
   // Profile bindings arrive with the catalog; refresh the source label with it.
   useControl(s=>s.catalog);
@@ -42,9 +43,9 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
     const top=list.scrollTop+card.getBoundingClientRect().top-list.getBoundingClientRect().top-2;
     list.scrollTo({top:Math.max(0,top),behavior:'instant'});
   },[selected,open,current,selectionRevision]);
-  const activePipeline=items.find(p=>p.id===selected);
   return <aside ref={browser} className={`pipeline-browser ${open?'':'is-closed'}`} aria-label="Pipeline browser">
-    <button className="pipeline-browser-toggle" aria-label={open?"Hide pipeline list":"Show pipeline list"} title={open?"Hide pipeline list":"Show pipeline list"} aria-expanded={open} aria-controls="pipeline-browser-content" onClick={()=>setOpen(!open)}>{open?<PanelLeftClose size={16}/>:<PanelLeftOpen size={16}/>}<span className="pipeline-browser-title">Pipelines</span><span className="pipeline-browser-count">{items.length}</span></button>
+    {toggleHost&&createPortal(<button className="floor-panel-toggle" aria-label={open?"Hide pipeline list":"Show pipeline list"} aria-expanded={open} aria-pressed={open} aria-controls="pipeline-browser-content" onClick={()=>setOpen(!open)}>{open?<PanelLeftClose size={16}/>:<PanelLeftOpen size={16}/>}<span>Pipelines</span><span className="floor-panel-count">{items.length}</span></button>,toggleHost)}
+    <div className="pipeline-browser-heading"><h3>Pipelines</h3><span>{items.length}</span></div>
     <div id="pipeline-browser-content" hidden={!open}>
       <div className="pipeline-browser-list" tabIndex={0} aria-label="Scrollable pipeline list">
         {ordered.slice(current*25,current*25+25).map(p=>{
@@ -59,19 +60,17 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
             <button type="button" className="pipeline-card-delete" aria-label={`Delete ${p.name}`} title={`Delete ${p.name}`} aria-haspopup="dialog" onClick={()=>setDeleting(p)}><Trash2 size={16} aria-hidden="true"/></button>
             </div>
           </div>
-          <button className="pipeline-card-select" data-help="Inspect this pipeline" data-help-description="Select this card to focus its diagram and view its execution controls. The Loop counter refers to this pipeline’s latest execution." aria-label={`Inspect ${p.name}`} aria-pressed={selected===p.id} onClick={()=>choose(p.id)}>
+          <button className="pipeline-card-select" data-help="Inspect this pipeline" data-help-description="Select this card to focus its diagram. Use the buttons on this card to control this pipeline. The Loop counter refers to this pipeline’s latest execution." aria-label={`Inspect ${p.name}`} aria-pressed={selected===p.id} onClick={()=>choose(p.id)}>
             <strong className="pipeline-card-name" title={p.name}>{p.name}</strong>
             <span className="pipeline-card-stage pipeline-card-context" title={`Corpus: ${corpus} · Target: ${target}`}>{corpus} · {target}</span>
             <span className="pipeline-card-position"><span className="pipeline-card-loop">{pipelineLoopLabel(p)}</span></span>
             {p.progress.stage&&<span className="pipeline-card-stage">{p.running?'Current':'Last'}: {stageNames[p.progress.stage]??p.progress.stage}</span>}
           </button>
-
-
+          <PipelineRowActions compact pipeline={p}/>
         </div>})}
         {!ordered.length&&<p className="pipeline-browser-help">No pipelines yet.</p>}
       </div>
       {deleting&&<PipelineDeleteDialog pipeline={deleting} close={()=>setDeleting(null)} onDeleted={()=>onCompare(compare.filter(id=>id!==deleting.id))}/>}
-      {activePipeline&&<section className="pipeline-selected-controls" aria-label="Selected pipeline controls"><strong title={activePipeline.name}>{activePipeline.name}</strong><PipelineRowActions compact key={activePipeline.id} pipeline={activePipeline} onSettings={()=>onSettings(activePipeline.id)}/></section>}
       <div className="pipeline-browser-footer" hidden={pages===1&&!compare.length}>{pages>1&&<div className="pipeline-browser-pagination"><button disabled={!current} onClick={()=>setPage(current-1)}>Previous</button><span>Page {current+1} of {pages}</span><button disabled={current===pages-1} onClick={()=>setPage(current+1)}>Next</button></div>}
       {!!compare.length&&<button className="pipeline-compare-clear" onClick={()=>onCompare([])}>Exit comparison ({compare.length} selected)</button>}
       </div>

@@ -70,23 +70,7 @@ try{
  await dialog.getByLabel('Name',{exact:true}).fill('Advanced paired fixture');await dialog.getByRole('checkbox',{name:/I reviewed the total Loops/}).check();await dialog.getByRole('button',{name:'Create combination design',exact:true}).click();await dialog.waitFor({state:'hidden'});
  const paired=items[1].configuration.ml_overrides;
  assert.equal(paired.models.logistic_regression.parameters.C,1.5);assert.equal(paired.models.xgboost.parameters.n_estimators,40);assert.equal(paired.models.xgboost.threshold,.4);
- await page.reload();await page.getByRole('button',{name:'View floor plan',exact:true}).click();
- await page.getByRole('button',{name:'Settings and more for Advanced paired fixture',exact:true}).first().click();
- await page.getByRole('button',{name:'ML evaluation and advanced settings',exact:true}).click();
- dialog=page.getByRole('dialog',{name:'Advanced paired fixture · ML evaluation and advanced settings',exact:true});
- await dialog.getByText(/^Advanced model settings/).click();
- assert.equal(await dialog.getByLabel('Logistic Regression (LR) C',{exact:true}).inputValue(),'1.5');
- assert.equal(await dialog.getByLabel('XGBoost n_estimators',{exact:true}).inputValue(),'40');
- await dialog.getByLabel('XGBoost n_estimators',{exact:true}).fill('60');
- await dialog.getByRole('button',{name:'Save ML settings',exact:true}).click();await dialog.waitFor({state:'hidden'});
- assert.equal(items[1].configuration.ml_overrides.models.xgboost.parameters.n_estimators,60);
- const active={run_tag:'mock-running',configuration:{y_column:'Y',waves:10,books:items[1].configuration.combination_skills}};items[1]={...items[1],running:active,latest:active,progress:{iteration:1,stage:'ml'}};
- await page.reload();await page.getByRole('button',{name:'View floor plan',exact:true}).click();await page.getByRole('button',{name:'Select pipeline 2: Advanced paired fixture',exact:true}).click();await page.getByRole('button',{name:'Settings and more for Advanced paired fixture',exact:true}).first().click();
- await page.getByRole('button',{name:'ML evaluation and advanced settings',exact:true}).click();
- dialog=page.getByRole('dialog',{name:'Advanced paired fixture · ML evaluation and advanced settings',exact:true});
- await dialog.getByText(/^Advanced model settings/).click();
- assert.equal(await dialog.getByLabel('XGBoost n_estimators',{exact:true}).isEnabled(),false);
- assert.equal(await dialog.getByRole('button',{name:'Save ML settings',exact:true}).isEnabled(),false);
+ assert.equal(await page.getByRole('button',{name:/^Settings and more for /}).count(),0);
  assert.equal(starts,0);assert.deepEqual(errors,[]);
- console.log('Selected LR and paired-combination advanced settings validated, saved, reloaded and edited; separate models; mobile layout; zero executions. HTTP mocked.');
+ console.log('Selected LR and paired-combination advanced settings validated, saved during creation; separate models; mobile layout; zero executions. HTTP mocked.');
 }catch(error){throw new Error(String(error)+'\nFixture body:\n'+(await page.locator('body').innerText()).slice(0,7500));}finally{await browser.close();}

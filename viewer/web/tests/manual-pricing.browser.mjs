@@ -22,14 +22,9 @@ try{
  await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Isolated fixture'}}));
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
  await page.getByRole('button',{name:'Floor plan',exact:true}).click();
- await page.getByRole('button',{name:'Settings and more for Pricing fixture',exact:true}).first().click();
- const dialog=page.getByRole('dialog',{name:'Pipeline settings and actions'});
- await dialog.getByText('How cost estimates work',{exact:true}).click();
- await dialog.getByText('Motoro calculates model cost estimates.',{exact:false}).waitFor();
- assert.equal(await dialog.getByRole('button',{name:'Save manual rates',exact:true}).count(),0);
- assert.equal(await dialog.getByLabel('Use manually verified rates').count(),0);
- for(const width of [390,1440]){await page.setViewportSize({width,height:1000});assert.equal(await dialog.evaluate(el=>el.scrollWidth>el.clientWidth+2),false);}
+ assert.equal(await page.getByRole('button',{name:'Settings and more for Pricing fixture',exact:true}).count(),0);
+ assert.equal(await page.getByRole('button',{name:'Save manual rates',exact:true}).count(),0);
  assert.equal(saved,0);
  assert.equal(starts,0);assert.deepEqual(errors,[]);
- console.log('Motoro ownership notice, no local rate editor, responsive layout, no writes or model calls. HTTP mocked.');
+ console.log('Minimal pipeline settings, no local rate editor, responsive layout, no writes or model calls. HTTP mocked.');
 }finally{await browser.close();}

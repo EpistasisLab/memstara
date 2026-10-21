@@ -2,7 +2,6 @@ import ResearchInputs from '../components/ResearchInputs';
 import {floorExecutionState, type FloorActivity} from '../lib/floorActivity';
 import {createPortal} from "react-dom";
 import {WorkspaceHeaderContext} from "../components/WorkspaceHeaderContext";
-import PipelineRowActions from "../components/PipelineRowActions";
 import MasterStop from "../components/MasterStop";
 import CombinationDesign from '../components/CombinationDesign';
 import PipelineBrowser from "../components/PipelineBrowser";
@@ -31,6 +30,7 @@ import FloorDetailDialog from "../components/FloorDetailDialog";
 import PipelineSettings from "../components/PipelineSettings";
 import { setupStages, skillSignature, usePipelineSetup } from "../store/pipelineSetup";
 import "@xyflow/react/dist/style.css";
+import "./floor-theme.css";
 
 const stages = ['source','hypothesis','data','ml','interpreter','report'] as const;
 const labels = {source:'Knowledge source',hypothesis:'Hypothesis',data:'Data',ml:'Machine learning',interpreter:'Interpreter',report:'Explanation'};
@@ -166,6 +166,7 @@ export default function PipelineWorkspace(){
   const [detail,setDetail]=useState<"progress"|"agent"|"tools"|null>(null);
   const workspaceHeader=useContext(WorkspaceHeaderContext);
   const [combinationHeader,setCombinationHeader]=useState<HTMLDivElement|null>(null);
+  const [panelToggleHost,setPanelToggleHost]=useState<HTMLDivElement|null>(null);
   const [toolbarHost,setToolbarHost]=useState<HTMLDivElement|null>(null);
   const motion = true;
   const showTools = true;
@@ -264,10 +265,10 @@ export default function PipelineWorkspace(){
     {settings&&<PipelineSettings key={settings.id+settings.section} id={settings.id} section={settings.section} close={()=>setSettings(null)}/>}
     {workspaceHeader?createPortal(header,workspaceHeader):header}
     {error&&<p role="alert" className="m-3 rounded border border-red-300 p-2 text-sm text-red-700">{error}</p>}
+    <div className="floor-panel-toolbar"><div ref={setPanelToggleHost} className="floor-panel-switches" role="group" aria-label="Workspace panels"/></div>
     <div className="pipeline-explorer-layout">
-      <PipelineBrowser onSettings={id=>{select(id);setSettings({id,section:"runtime"});}} items={items} selected={selected} onSelect={id=>{if(comparison.length&&!comparison.includes(id))setComparison([]);usePipelines.getState().focus(id);}} compare={comparison} onCompare={ids=>{setComparison(ids);if(ids.length&&!ids.includes(selected??""))usePipelines.getState().focus(ids[0]);}}/>
+      <PipelineBrowser toggleHost={panelToggleHost} items={items} selected={selected} onSelect={id=>{if(comparison.length&&!comparison.includes(id))setComparison([]);usePipelines.getState().focus(id);}} compare={comparison} onCompare={ids=>{setComparison(ids);if(ids.length&&!ids.includes(selected??""))usePipelines.getState().focus(ids[0]);}}/>
       <div className={`pipeline-detail-workspace ${combinationPipeline||comparison.length?"has-combination-studio":""}`}>
-      {selectedPipeline&&<div className="floor-compact-actions" aria-label="Selected pipeline controls"><strong title={selectedPipeline.name}>{selectedPipeline.name}</strong><PipelineRowActions compact pipeline={selectedPipeline} onSettings={()=>setSettings({id:selectedPipeline.id,section:"runtime"})}/></div>}
     {comparison.length>0&&<div className="floor-comparison-heading" role="status"><strong>Comparing {visibleItems.length} pipelines</strong><span>Each pipeline keeps its own visualization, Loop and execution state. Pan and zoom each view independently.</span></div>}
     {comparison.length>0&&<div className="floor-comparison-grid">{visibleItems.map(p=>{
       const isCombination=Object.keys(p.configuration.combination_skills??{}).length>0;
@@ -319,7 +320,7 @@ export default function PipelineWorkspace(){
     {researchOpen&&<FloorDetailDialog title="Prepare research inputs" close={()=>setResearchOpen(false)}><ResearchInputs/></FloorDetailDialog>}
     {detail==='progress'&&<FloorDetailDialog title="Pipeline progress" close={()=>setDetail(null)}><PipelineStatus ids={visibleItems.map(p=>p.id)}/></FloorDetailDialog>}
       </div>
-      <ClinicalLogPanel pipelines={visibleItems} floorActivity={combinationPipeline && floorActivity?.pipelineId===combinationPipeline.id && floorActivity.runTag===(combinationPipeline.running??combinationPipeline.latest)?.run_tag ? floorActivity : null}/>
+      <ClinicalLogPanel toggleHost={panelToggleHost} pipelines={visibleItems} floorActivity={combinationPipeline && floorActivity?.pipelineId===combinationPipeline.id && floorActivity.runTag===(combinationPipeline.running??combinationPipeline.latest)?.run_tag ? floorActivity : null}/>
     </div>
   </div>;
 }

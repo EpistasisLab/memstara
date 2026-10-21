@@ -15,13 +15,15 @@ try{
   await p.locator('.floor-canvas').waitFor();
   const show=p.getByRole('button',{name:'Show pipeline list',exact:true});if(await show.isVisible())await show.click();const previous=p.getByRole('button',{name:'Previous',exact:true});if(await previous.isVisible()&&await previous.isEnabled())await previous.click();
   const inspect=p.getByRole('button',{name:'Inspect '+items[1].name,exact:true});await inspect.click();
-  const actions=p.locator('[aria-label="Selected pipeline controls"]:visible');
-  await actions.getByRole('button',{name:'Execution details for '+items[1].name,exact:true}).click();
-  const dialog=p.getByRole('dialog',{name:'Execution details · '+items[1].name,exact:true});await dialog.waitFor();assert(await dialog.getByText('Recorded connection interruption.',{exact:false}).isVisible());await p.keyboard.press('Escape');
-  const controls=await actions.boundingBox();const floor=await p.locator('#workspace-pipeline').boundingBox();assert(controls.y+controls.height<=floor.y+floor.height);
+  const reopenAfterSelect=p.getByRole('button',{name:'Show pipeline list',exact:true});if(await reopenAfterSelect.isVisible())await reopenAfterSelect.click();
+  const actions=p.getByRole('group',{name:'Actions for '+items[1].name,exact:true});
+  await actions.scrollIntoViewIfNeeded();
+  const controls=await actions.boundingBox();const floor=await p.locator('#workspace-pipeline').boundingBox();
+  assert(await actions.evaluate(e=>!!e.closest('.pipeline-browser-row')));
+  assert.equal(await p.locator('[aria-label="Selected pipeline controls"]').count(),0);
   assert(await actions.getByRole('button',{name:'Additional analysis '+items[1].name,exact:true}).isVisible());
   const canvas=await p.locator('.floor-canvas').boundingBox();assert(canvas.height>=260);assert(canvas.y+canvas.height<=floor.y+floor.height+1,JSON.stringify({width,canvas,floor,controls}));
-  if(width===1440){console.log(await p.locator('.pipeline-browser').evaluate(e=>[...e.querySelectorAll('#pipeline-browser-content,.pipeline-browser-list,.pipeline-selected-controls,.pipeline-browser-footer,.pipeline-browser-heading,.pipeline-browser-search-tools')].map(n=>({class:n.className,height:n.clientHeight,scroll:n.scrollHeight}))));await p.screenshot({path:'/tmp/pipeline-list-debug.png'});const list=p.locator('.pipeline-browser-list');assert(await list.evaluate(e=>e.clientHeight>=180));await list.evaluate(e=>e.scrollTop=e.scrollHeight);assert(await actions.getByRole('button',{name:'Additional analysis '+items[1].name,exact:true}).isVisible());}
+  if(width===1440){console.log(await p.locator('.pipeline-browser').evaluate(e=>[...e.querySelectorAll('#pipeline-browser-content,.pipeline-browser-list,.pipeline-selected-controls,.pipeline-browser-footer,.pipeline-browser-heading,.pipeline-browser-search-tools')].map(n=>({class:n.className,height:n.clientHeight,scroll:n.scrollHeight}))));await p.screenshot({path:'/tmp/pipeline-list-debug.png'});const list=p.locator('.pipeline-browser-list');assert(await list.evaluate(e=>e.clientHeight>=180));await list.evaluate(e=>e.scrollTop=e.scrollHeight);await actions.scrollIntoViewIfNeeded();assert(await actions.getByRole('button',{name:'Additional analysis '+items[1].name,exact:true}).isVisible());}
   const reopen=p.getByRole('button',{name:'Show pipeline list',exact:true});if(await reopen.isVisible())await reopen.click();
   await p.getByRole('button',{name:'Next',exact:true}).click();await p.getByRole('button',{name:'Inspect '+items[29].name,exact:true}).click();
   console.log(JSON.stringify({width,canvasHeight:canvas.height,controlsHeight:controls.height,longHistory:'passed'}));
