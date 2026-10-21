@@ -7,7 +7,7 @@ try {
  await page.route('**/control/**',r=>r.fulfill({json:new URL(r.request().url()).pathname==='/control/pipelines'?{pipelines:items}:{}}));
  await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Layout fixture: results unavailable'}}));
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
- await page.getByRole('button',{name:'View floor plan',exact:true}).click();
+ await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
  await page.locator('.floor-canvas .react-flow').waitFor();
  const resources=page.getByRole('button',{name:'Shared resources',exact:true});
  await resources.click();await page.locator('.react-flow__node[data-id="resources-zone"]').waitFor();
@@ -27,8 +27,9 @@ try {
   const show=page.getByRole('button',{name:'Show pipeline list',exact:true});if(await show.isVisible())await show.click();
   await page.getByRole('button',{name:'Inspect Research pipeline 2',exact:true}).click();await page.waitForTimeout(600);
   const before=await page.locator('.react-flow__viewport').getAttribute('style');
-  const restore=page.getByRole('button',{name:'Expand Results',exact:true});if(await restore.count())await restore.click();
-  const splitter=page.getByRole('button',{name:'Resize pipeline and analysis space',exact:true});await splitter.focus();await page.keyboard.press('ArrowDown');await page.waitForTimeout(400);
+  await page.getByRole('button',{name:'Open Results full screen',exact:true}).click();
+  await page.locator('#workspace-results').waitFor();
+  await page.keyboard.press('Escape');await page.waitForTimeout(400);
   const after=await page.locator('.react-flow__viewport').getAttribute('style');assert.equal(after,before,'Resize changed diagram viewport');
   const max=page.locator('#workspace-pipeline').getByRole('button',{name:/Maximize .* window/});await max.click();assert.equal(await page.locator('.floating-window:not([hidden])').count(),2);
   await page.locator('#workspace-pipeline').getByRole('button',{name:/Restore .* window/}).click();

@@ -509,7 +509,7 @@ Without an explicit `MEMSTARA_EXPLANATION_SOURCES_JSON` binding, current expert 
 uses provisional metadata-keyword scopes over the configured OKF corpus. Scopes may
 overlap, and the policy records that confirmation is still required. These are not
 separate approved clinical databases. Explicit SQLite/PostgreSQL bindings use
-the inline `.env` schema in [deployment settings](deployment/README.md#optional-inline-settings).
+the inline `.env` settings documented in [.env.example](.env.example).
 Do not invent corpus taxonomy filters for a clinical domain: query available filters.
 Missing scoped evidence fails explicitly instead of falling back to unrelated sources.
 

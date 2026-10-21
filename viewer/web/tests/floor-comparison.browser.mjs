@@ -9,10 +9,10 @@ try{
  await p.route('**/control/**',r=>r.fulfill({json:new URL(r.request().url()).pathname==='/control/pipelines'?{pipelines:items}:{}}));
  await p.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Layout fixture'}}));
  items[0].configuration.combination_skills={hypothesis:['h'],data:['d'],ml:['m'],interpreter:['i'],report:['r']};
- await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await p.getByRole('button',{name:'View floor plan',exact:true}).click();
+ await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await p.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
  for(const width of [1440,390]){
  await p.setViewportSize({width,height:1000});
- if(width<900)await expect(p.locator('.pipeline-browser-toggle')).toHaveAttribute('aria-expanded','false');
+ if(width<900)await expect(p.getByRole('button',{name:'Show pipeline list',exact:true})).toHaveAttribute('aria-expanded','false');
  const show=p.getByRole('button',{name:'Show pipeline list',exact:true});if(await show.isVisible())await show.click();
  // Comparison controls are intentionally hidden; inspect each pipeline independently.
  assert.equal(await p.getByRole('checkbox',{name:/^Compare /}).count(),0);

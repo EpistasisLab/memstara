@@ -23,8 +23,9 @@ try {
   });
   await page.goto('http://localhost/');
   await page.getByRole('button',{name:/Question universe/}).first().click();
-  await page.getByRole('button',{name:'Question list',exact:true}).click();
+  await page.getByRole('button',{name:'View options',exact:true}).click();await page.getByRole('button',{name:'List',exact:true}).click();await page.getByRole('button',{name:'View options',exact:true}).click();
   await page.locator('.universe-list button').first().click();
+  await page.getByText('Source and run details',{exact:true}).click();
   const evidence=page.locator('[data-testid="knowledge-provenance"]');
   await evidence.locator(':scope > summary').click();
   await page.getByText('Mixed relations declared',{exact:true}).waitFor();
@@ -33,7 +34,7 @@ try {
   assert.match(await evidence.innerText(),/19 path rows identified/);
   assert.equal(await evidence.evaluate(el=>el.scrollWidth>el.clientWidth+2),false);
   assert.deepEqual(errors,[]);
-  await page.getByRole('button',{name:'Novelty ranking',exact:true}).click();
+  await page.keyboard.press('Escape');await page.getByRole('button',{name:'Explore questions',exact:true}).click();await page.getByRole('button',{name:'Novelty proxy ranking',exact:true}).click();
   const ranking=page.getByRole('region',{name:'KG novelty ranking'});
   await ranking.getByText('Synthetic ranked hypothesis').waitFor();
   assert.match(await ranking.innerText(),/50% predicted-path share/);

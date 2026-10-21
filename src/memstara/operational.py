@@ -142,7 +142,8 @@ def agent_profile(role, values=None):
         required.append('api_base')
     for key in required:
         if not profile[key]:
-            raise ValueError(f'{prefix}{key.upper()} is required (set this agent override or the matching MEMSTARA_LLM_ default)')
+            raise ValueError(f'{prefix}{key.upper()} is required '
+                             '(set this agent override or the matching MEMSTARA_LLM_ default)')
     for key, cast in (('temperature', float), ('max_tokens', int)):
         raw = setting(key)
         if raw:

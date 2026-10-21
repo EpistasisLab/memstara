@@ -17,7 +17,7 @@ try {
   const questions=Array.from({length:120},(_,i)=>({question_id:i+1,text:`Synthetic question ${i+1}`,okf_tags:['Fixture'],rationale:'Fixture',origin_run:'fixture',origin_wave:0,writer:'fixture',times_used:1,status:'done'}));
   await page.route('**/*',async route=>{
    const path=new URL(route.request().url()).pathname;
-   if(path==='/api/discovery/questions')return route.fulfill({json:{questions,next_before:null}});
+   if(path==='/api/discovery/questions'){const query=new URL(route.request().url()).searchParams.get('query')||'';const matched=questions.filter(q=>q.text.toLowerCase().includes(query.toLowerCase()));return route.fulfill({json:{questions:matched,total:matched.length,next_before:null}});}
    if(/^\/api\/discovery\/questions\/\d+$/.test(path))return route.fulfill({json:{question:questions.find(q=>q.question_id===Number(path.split('/').at(-1))),tasks:[],results:[],record_limit:100}});
    if(path.startsWith('/control/'))return route.fulfill({json:path==='/control/pipelines'?{pipelines:[]}:{}});
    if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unrelated fixture endpoint unavailable'}});
@@ -64,9 +64,9 @@ try {
   await idle('Returning from evidence must settle');
   const lost=await page.evaluate(()=>{const canvas=document.querySelector('.space-gpu');const gl=canvas.getContext('webgl');const ext=gl?.getExtension('WEBGL_lose_context');if(!ext)return false;window.restoreUniverse=()=>ext.restoreContext();ext.loseContext();return true;});
   if(lost){await page.waitForTimeout(300);await idle('Canvas fallback must settle');await page.evaluate(()=>window.restoreUniverse());await page.waitForTimeout(300);await idle('Restored WebGL must settle');}
-  await page.getByRole('textbox',{name:'Search loaded questions'}).fill('no match');
+  await page.getByRole('textbox',{name:'Search questions'}).fill('no match');
   await page.locator('.space-empty').waitFor();
-  assert.match(await page.locator('.space-empty').innerText(),/^No loaded questions match this search\./);
+  assert.match(await page.locator('.space-empty').innerText(),/^No questions match this search in this source\./);
   assert.equal(await page.locator('.space-label').count(),0);
   assert.equal(await page.getByText(/could not be displayed/).count(),0);
   assert.deepEqual(errors,[]);

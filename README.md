@@ -64,18 +64,43 @@ Open **http://127.0.0.1:5173/**, or the URL printed by the script if you changed
 `MEMSTARA_WEB_PORT` in `.env`. The first build may take several minutes.
 After the ready message, you can close the terminal.
 
-## Run a pipeline
+## Configure and run a pipeline
 
-Open **Floor plan → Add pipeline → All Combinations**. Select
-**Heart failure complete-case software demonstration**, choose one skill per stage
-and one Loop, create the pipeline, then press **Play**.
-Choose research inputs and the prediction target in the UI, not in `.env`.
-Inspect execution in **Floor plan** and results in **Final report** or **Question universe**.
+| Configure in | Settings |
+|---|---|
+| `.env` | LLM provider, credentials, common model, optional per-agent model overrides and web port |
+| **Prepare research inputs** | Your CSV, OKF corpus, prediction target and label mapping |
+| **Add pipeline → All Combinations** | Research input, agent skills, ML evaluation options, Loop limit and pipeline name |
 
-Starting the app does not start an experiment. Pressing Play makes model requests
+For the included example:
+
+1. Open **Floor plan → Add pipeline → All Combinations**.
+2. In **Research inputs**, select **Heart failure complete-case software demonstration** and review its target.
+3. In **Agent skills**, choose one skill for each stage. Set optional ML evaluation/advanced model settings in the Machine learning step.
+4. In **Review & create**, set a name and a maximum of **1 Loop** for a first run, review the plan and confirm it. **Random Start** is off by default: execution starts at combination 1 and continues in order.
+5. Select **Create pipeline**, then **Run** on that pipeline's card. Creating a pipeline does not start it.
+
+Complete skill and evaluation settings in the creation wizard. Pipeline cards have
+execution controls and a delete button; there is no post-creation **Settings** or
+**Details** menu. To change a saved combination design, create a new pipeline.
+Running or interrupted pipelines show the applicable Pause/Resume controls.
+
+Starting the app does not start an experiment. Selecting Run makes model requests
 and may incur charges. Successful startup does not verify model credentials or
 complete a research run. The bundled study is a software demonstration, not a
 validated clinical prediction tool.
+
+## Read activity and results
+
+- **Floor plan:** follow execution. The **Pipelines** and **Live log** toolbar buttons show or hide the side panels. **Browse activity** shows agent, time, action and recorded status; expand an entry for its output or technical details. A recorded tool call does not confirm success.
+- **Results / Final report buttons above the floor:** open a full-screen reading view. Minimize, Restore or **Esc** hides it; no minimized panel remains below the visualization. Use the same toolbar button to reopen it.
+- **Clinician view:** explore individual findings, interpretations, model evidence and limitations.
+- **Final report navigation view:** read the selected execution's Explanation report and download it as Markdown.
+- **Question universe:** explore recorded research questions and their associated results.
+- **Telemetry:** inspect execution usage and Motoro-provided cost estimates. These are estimates, not actual billed charges; unavailable prices remain unknown.
+
+Results and reports appear as they are recorded. An empty view before an execution
+has produced output is expected.
 
 ## Stop, restart or troubleshoot
 
@@ -92,5 +117,9 @@ Saved records are retained. Use an unused web port for a second installation.
 ## Input and setup help
 
 - [Your own CSV, OKF and target](examples/research-inputs/README.md)
-- [Deployment settings and troubleshooting](deployment/README.md)
+- [Environment settings and examples](.env.example)
 - [HeartFailure data and preparation](examples/heart-failure/README.md)
+
+For developer verification including mandatory paid model calls, run
+`uv run --frozen --extra dev --extra runtime python -m scripts.verify_pipeline`.
+App startup and offline tests alone do not verify a real pipeline execution.

@@ -25,7 +25,7 @@ try {
  });
  await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Fixture'}}));
  await page.addInitScript(()=>localStorage.setItem('memstara.pipelineSelection','fixture'));
- await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await page.getByRole('button',{name:'View floor plan',exact:true}).click();
+ await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
  await page.getByRole('button',{name:'Select pipeline 1: Study switch fixture',exact:true}).click();
  await (combined?page.getByRole('button',{name:'Knowledge sources',exact:true}):page.getByRole('button',{name:/Knowledge sources: HIV study/})).click();
  let dialog=page.getByRole('dialog',{name:/Knowledge sources$/});
@@ -41,7 +41,7 @@ try {
  assert.equal(item.configuration.research_input_id,'heart');assert.equal(item.configuration.y_column,'chronic_heart_failure');
  assert.deepEqual(item.configuration.baseline_columns,[]);
  if(combined){assert.deepEqual(item.configuration.combination_skills.hypothesis,corpusSkillBindings.profiles.heart_failure.hypothesis);assert.deepEqual(item.configuration.combination_skills.report,corpusSkillBindings.profiles.heart_failure.report);assert.deepEqual(item.configuration.combination_skills.ml,['ml_logistic_regression']);assert.equal(item.configuration.combination_max_loops,2);}else assert.deepEqual(item.configuration.combination_skills,{});
- await page.reload();await page.getByRole('button',{name:'Expand Results',exact:true}).click();await page.getByRole('button',{name:'View floor plan',exact:true}).click();if(combined){await page.getByRole('button',{name:'Knowledge sources',exact:true}).click();await page.getByRole('dialog',{name:/Knowledge sources$/}).getByText(/Target: chronic_heart_failure/).waitFor();}else await page.getByRole('button',{name:/Knowledge sources: HeartFailure study/}).waitFor();
+ await page.reload();await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();if(combined){await page.getByRole('button',{name:'Knowledge sources',exact:true}).click();await page.getByRole('dialog',{name:/Knowledge sources$/}).getByText(/Target: chronic_heart_failure/).waitFor();}else await page.getByRole('button',{name:/Knowledge sources: HeartFailure study/}).waitFor();
  if(!combined)await page.getByRole('button',{name:/Knowledge sources: HeartFailure study/}).click();
  const savedInputs=page.getByRole('dialog',{name:/Knowledge sources$/});
  assert.equal(await savedInputs.getByRole('combobox',{name:'Research inputs',exact:true}).inputValue(),'heart');

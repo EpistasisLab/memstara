@@ -28,7 +28,7 @@ try {
    await page.getByLabel('Target column',{exact:true}).fill('event');
    await page.getByLabel('Positive-class value (exact CSV value)',{exact:true}).fill('yes');
    await page.getByLabel('Negative-class value (exact CSV value)',{exact:true}).fill('no');
-  } else await page.getByText('No dataset is attached.',{exact:false}).waitFor();
+  } else await page.getByText('Without a dataset, this creates an analysis plan, not measured results.',{exact:false}).waitFor();
   if(knowledge==='okf') await page.getByLabel('OKF bundle folder (contains index.md)',{exact:true}).fill('/synthetic/okf');
   await page.getByRole('button',{name:'Inspect inputs',exact:true}).click();
   await page.getByText('Input checks passed; select this saved version in a pipeline',{exact:true}).waitFor();

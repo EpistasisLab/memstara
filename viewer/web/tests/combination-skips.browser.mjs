@@ -12,7 +12,7 @@ try{
  await page.route('**/control/**',r=>r.fulfill({json:new URL(r.request().url()).pathname==='/control/pipelines'?{pipelines:items}:{}}));
  await page.route('**/api/**',r=>r.fulfill({json:{runs:[],results:[],questions:[],events:[],reports:{}}}));
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
- await page.getByRole('button',{name:'View floor plan',exact:true}).click();
+ await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
  const list=page.locator('.pipeline-browser-list');
  await list.getByText('Finished with skips',{exact:true}).waitFor();
  await list.getByText('No findings',{exact:true}).waitFor();

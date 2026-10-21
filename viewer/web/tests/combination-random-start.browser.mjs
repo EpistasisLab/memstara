@@ -29,8 +29,8 @@ try {
   });
   await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Fixture'}}));
   await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
-  await page.getByRole('button',{name:/Add pipeline/i}).click();await page.getByRole('button',{name:/All Combinations/}).click();
-  const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});await dialog.getByRole('button',{name:'Choose skills'}).click();
+  await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();await page.getByRole('button',{name:/Add pipeline/i}).click();await page.getByRole('button',{name:/All Combinations/}).click();
+  const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});await dialog.getByLabel('Deployment target column',{exact:true}).fill('fixture_target');await dialog.getByRole('button',{name:'Choose skills'}).click();
   const labels=['Hypothesis','Data','Machine learning','Interpretation','Explanation'];
   for(const [i,role] of roles.entries()){
    await dialog.getByRole('heading',{name:labels[i]+' skills',exact:true}).waitFor();
@@ -58,9 +58,9 @@ try {
   await maximum.fill('10');await consent.check();await dialog.getByRole('checkbox',{name:/Random Start/}).check();assert(await create.isDisabled());
   await consent.check();assert(!(await create.isDisabled()));assert.match(await dialog.innerText(),/only part of the combination set/);
   assert(await dialog.evaluate(e=>e.scrollWidth<=e.clientWidth+2));await dialog.screenshot({path:`/tmp/random-start-${width}-${theme}.png`});
-  await create.click();await dialog.waitFor({state:'hidden'});await page.getByRole('button',{name:'View floor plan',exact:true}).click();
+  await create.click();await dialog.waitFor({state:'hidden'});await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
   assert.equal(posted.configuration.combination_random_start,true);assert.equal(posted.configuration.combination_max_loops,10);assert.equal(posted.configuration.waves,10);assert.equal(posted.configuration.continuous,false);assert.equal(runPosts,0);
-  rows[0].latest={run_tag:'frozen',exit_code:0,configuration:{waves:10}};await page.reload();await page.getByRole('button',{name:'View floor plan',exact:true}).click();
+  rows[0].latest={run_tag:'frozen',exit_code:0,configuration:{waves:10}};await page.reload();await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
   const studio=page.getByRole('region',{name:'Combination design',exact:true});await studio.waitFor();await page.getByRole('button',{name:'Combination schedule and map guide',exact:true}).click();assert.equal(await page.getByRole('dialog').locator('dt').filter({hasText:'Maximum Loops'}).locator('xpath=following-sibling::dd[1]').innerText(),'10');await page.keyboard.press('Escape');
   await page.getByRole('button',{name:'Loop explorer',exact:true}).click();await studio.getByText('Combination 23 · cycle 1 · Random start: 23',{exact:true}).waitFor();
   await studio.getByRole('button',{name:'Next combination Loop',exact:true}).click();await studio.getByText('Combination 24 · cycle 1 · Random start: 23',{exact:true}).waitFor();

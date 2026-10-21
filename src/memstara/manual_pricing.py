@@ -5,6 +5,7 @@ import math
 import os
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
+from typing import Any
 
 from memstara.paths import output_dir
 
@@ -15,7 +16,7 @@ def path():
 
 def identities():
     from memstara.stage_models import deployment_profiles
-    result = {}
+    result: dict[str, dict[str, Any]] = {}
     for role, profile in deployment_profiles().items():
         identity = {key: profile.get(key) for key in ('provider', 'model', 'api_base')}
         key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
@@ -80,7 +81,7 @@ def save(body):
             rate = rates.get(kind)
             if kind == 'cache_read' and rate is None:
                 continue
-            if type(rate) not in (int, float) or not math.isfinite(rate) or rate < 0:
+            if isinstance(rate, bool) or not isinstance(rate, (int, float)) or not math.isfinite(rate) or rate < 0:
                 raise ValueError('Rates must be finite non-negative USD amounts per million tokens')
         source = entry.get('source', '')
         if (not isinstance(source, str) or len(source) > 2000

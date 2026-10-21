@@ -14,14 +14,14 @@ try {
   const nav=page.locator('[aria-label="View navigation"] nav');
   await nav.waitFor();
   const buttons=nav.getByRole('button');
-  assert.equal(await buttons.count(),9);
+  assert.equal(await buttons.count(),5);
   if(width<760) {
    const box=await nav.boundingBox();assert(box.height<=64,`Navigation must remain one row at ${width}px`);
    const top=await page.locator('#workspace-pipeline').boundingBox();
    const control=await page.locator('#workspace-control').boundingBox();
    assert(top.y>=control.y+control.height+8);
   }
-  for(let index=0;index<9;index++) {
+  for(let index=0;index<5;index++) {
    // The final tab must be reachable even when it starts outside the viewport.
    await buttons.nth(index).click();
    assert.equal(await buttons.nth(index).getAttribute('aria-current'),'page');

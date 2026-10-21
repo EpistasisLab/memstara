@@ -22,9 +22,10 @@ try {for(const width of [1440,390]){
   await expect(page.locator('#workspace-results, #workspace-report')).toHaveCount(0);
  }
  await nav.getByRole('button',{name:'Floor plan',exact:true}).click();
- await expect(page.locator('#workspace-results, #workspace-report')).toHaveCount(2);
- await page.getByRole('button',{name:'Expand Results',exact:true}).click();
- await page.getByRole('button',{name:'Maximize Results window',exact:true}).click();
+ await expect(page.locator('#workspace-results, #workspace-report')).toHaveCount(0);
+ await page.getByRole('button',{name:'Open Results full screen',exact:true}).click();
+ await expect(page.locator('#workspace-results')).toHaveClass(/is-evidence-fullscreen/);
+ await page.keyboard.press('Escape');
  await nav.getByRole('button',{name:'Question universe',exact:true}).click();
  await expect(page.locator('#workspace-pipeline')).toBeVisible();
  await expect(page.locator('#workspace-results, #workspace-report')).toHaveCount(0);

@@ -26,7 +26,7 @@ try {
    const file=path.startsWith('/assets/')?resolve(root,'dist/assets',basename(path)):resolve(root,'dist/index.html');return route.fulfill({body:await readFile(file),contentType:path.endsWith('.js')?'application/javascript':path.endsWith('.css')?'text/css':'text/html'});
   });
   await page.goto('http://localhost/');
-  await page.getByRole('button',{name:/Question universe/}).first().click();await page.getByRole('button',{name:'Question list',exact:true}).click();await page.locator('.universe-list button').first().click();await page.locator('.universe-stages').getByRole('button',{name:'ML',exact:true}).click();
+  await page.getByRole('button',{name:/Question universe/}).first().click();await page.getByRole('button',{name:'View options',exact:true}).click();await page.getByRole('button',{name:'List',exact:true}).click();await page.getByRole('button',{name:'View options',exact:true}).click();await page.locator('.universe-list button').first().click();await page.locator('.universe-stages').getByRole('button',{name:'ML',exact:true}).click();
   await page.locator('.universe-bar').first().waitFor();
   assert.deepEqual(await page.locator('.universe-bar > span').allTextContents(),['positive','zero','negativeSmall','negativeLarge']);
   const assertBars=async selector=>{
@@ -34,9 +34,9 @@ try {
    assert.equal(bars.length,4);for(const b of bars){if(b.v<0)assert(Math.abs(b.left+b.width-b.zero)<.01);if(b.v>0)assert(Math.abs(b.left-b.zero)<.01);if(b.v===0)assert.equal(b.width,0);}
   };
   await assertBars('.universe-evidence');
-  await page.getByRole('button',{name:/Clinician view/}).first().click();await page.getByText('Explore the supporting evidence',{exact:true}).click();await page.locator('.clinical-contribution').first().waitFor();
+  await page.keyboard.press('Escape');await page.getByRole('button',{name:/Clinician view/}).first().click();await page.getByText('Explore the supporting evidence',{exact:true}).click();await page.locator('.clinical-contribution').first().waitFor();
   assert.deepEqual(await page.locator('.clinical-contribution > div:first-child > span').allTextContents(),['positive','zero','negativeSmall','negativeLarge']);await assertBars('.clinical-contributions');
-  const expand=page.getByRole('button',{name:'Expand Results',exact:true});if(await expand.count())await expand.click();
+  await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();await page.getByRole('button',{name:'Open Results full screen',exact:true}).click();
   const tab=page.getByRole('tab',{name:'Results',exact:true});if(await tab.count())await tab.click();
   await page.getByRole('button',{name:'Latest executions across pipelines',exact:true}).click();
   await page.locator('.result-feature-row').first().waitFor();

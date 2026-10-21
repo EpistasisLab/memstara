@@ -235,3 +235,67 @@ def test_web_configuration_freezes_both_skill_requests(experiment, monkeypatch, 
     assert allocation.request(frozen, 0)['maximum_test_size'] == .3
     assert allocation.request(frozen, 1)['minimum_test_size'] == .5
     assert (run/'feature_reproduction/source/data_allocation.py').is_file()
+
+
+@pytest.mark.parametrize('same_seed', [False, True])
+def test_concurrent_first_allocations_publish_one_reserve(experiment, tmp_path, monkeypatch, same_seed):
+    """Force both writers past discovery before either publishes its reserve."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from memstara.pipeline import checkpoint
+
+    source, base = experiment
+    plan = {**base, 'validation_partition': None,
+            'validation_partition_policy': 'data_agent_seed_v1',
+            'data_allocation_policy': {'version': allocation.VERSION}}
+    config = tmp_path / 'config.json'
+    config.write_text(json.dumps(plan))
+    monkeypatch.setenv('MEMSTARA_RUN_CONFIG', str(config))
+    barrier = threading.Barrier(2)
+    original = checkpoint.atomic_json
+
+    def synchronized(path, value, **kwargs):
+        barrier.wait(timeout=10)
+        return original(path, value, **kwargs)
+
+    monkeypatch.setattr(checkpoint, 'atomic_json', synchronized)
+    plans = [{'test_size': .2, 'seed': 10 + i, 'stratify': True, 'replicates': 2,
+              'validation_size': .2, 'validation_seed': 100 if same_seed else 100 + i}
+             for i in range(2)]
+
+    def submit(value):
+        try:
+            return allocation.prepare(value, task(0), plan, source)
+        except ValueError as exc:
+            return exc
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(submit, plans))
+    accepted = [r for r in results if isinstance(r, dict)]
+    assert len(accepted) == (2 if same_seed else 1)
+    frozen = json.loads((tmp_path / 'validation_partition.json').read_text())
+    for record in accepted:
+        assert record['agent_plan']['validation_seed'] == frozen['seed']
+        assert record['validation_partition']['reserved_split_id'] == frozen['reserved_split_id']
+        for replicate in record['replicates']:
+            assert set(record['reserved_rows']).isdisjoint(replicate['train_rows'] + replicate['test_rows'])
+    if not same_seed:
+        assert 'frozen independent reserve' in str(next(r for r in results if isinstance(r, ValueError)))
+
+
+def test_stale_first_data_request_cannot_claim_a_different_existing_reserve(experiment, tmp_path, monkeypatch):
+    source, base = experiment
+    plan = {**base, 'validation_partition': None,
+            'validation_partition_policy': 'data_agent_seed_v1',
+            'data_allocation_policy': {'version': allocation.VERSION}}
+    config = tmp_path / 'config.json'
+    config.write_text(json.dumps(plan))
+    monkeypatch.setenv('MEMSTARA_RUN_CONFIG', str(config))
+    value = {'test_size': .2, 'seed': 7, 'stratify': True, 'replicates': 1,
+             'validation_seed': 11, 'validation_size': .2}
+    allocation.prepare(value, task(0), plan, source)
+    path = tmp_path / 'validation_partition.json'
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match='frozen independent reserve'):
+        allocation.prepare({**value, 'validation_seed': 12}, task(0), plan, source)
+    assert path.read_bytes() == before

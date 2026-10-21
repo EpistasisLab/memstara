@@ -96,8 +96,11 @@ def isolated_operational_environment(request):
 
 
 def pytest_addoption(parser):
+    parser.addoption("--run-docker", action="store_true", help="Run isolated container restart fault tests")
     parser.addoption("--run-integration", action="store_true", help="Run tests against an explicit test database")
     parser.addoption("--run-live", action="store_true", help="Run paid Haiku 5.5 pipeline acceptance tests")
+    parser.addoption("--live-pause-resume", action="store_true",
+                     help="Require cooperative pause/resume evidence during fresh paid execution")
     parser.addoption("--live-batch", default="",
                      help="Audit completed cases and run remaining cases in this live batch")
     parser.addoption("--live-retry-failed", action="store_true",
@@ -117,7 +120,8 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         excluded = (
             item.get_closest_marker("integration") and not config.getoption("--run-integration")
-        ) or (item.get_closest_marker("live") and not config.getoption("--run-live"))
+        ) or (item.get_closest_marker("live") and not config.getoption("--run-live")) or (
+            item.get_closest_marker("docker") and not config.getoption("--run-docker"))
         (deselected if excluded else selected).append(item)
     items[:] = selected
     config.hook.pytest_deselected(items=deselected)
@@ -125,6 +129,7 @@ def pytest_collection_modifyitems(config, items):
 
 def pytest_configure(config):
     """Offline tests cannot accidentally borrow deployment credentials/defaults."""
+    config.addinivalue_line('markers', 'docker: isolated Docker restart tests; require --run-docker')
     if config.getoption('--run-live'):
         return
     from memstara.operational import PREFIXES

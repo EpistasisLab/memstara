@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronDown, ChevronUp, Settings2, X, HelpCircle, Maximize2, Minimize2, RotateCcw } from "lucide-react";
 
+import {WorkspaceEvidenceContext} from "./WorkspaceEvidenceContext";
 import { workspaceGeometry } from "../lib/workspaceGeometry";
 import "./workspace-docking.css";
 import HeaderStatus from "./HeaderStatus";
@@ -49,6 +50,28 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
   const [front, setFront] = useState("");
   const [maximizedId, setMaximized] = useState("");
   const maximized = items.some(item=>item.id===maximizedId) ? maximizedId : "";
+  const fullscreenEvidence=secondary.includes(maximized);
+  const maximizeEvidence=(id:string)=>{setCollapsed(previous=>previous.filter(value=>value!==id));setActivePanel(id);setMaximized(id);};
+  const closeEvidence=()=>{setCollapsed(previous=>Array.from(new Set([...previous,maximized])));setMaximized('');};
+  useEffect(()=>{
+    if(!fullscreenEvidence)return;
+    const previous=document.activeElement as HTMLElement|null;
+    const panel=document.getElementById(`workspace-${maximized}`);
+    panel?.focus();
+    const keydown=(event:KeyboardEvent)=>{
+      if(document.querySelector('dialog[open]'))return;
+      if(event.key==='Escape'){event.preventDefault();closeEvidence();}
+      if(event.key==='Tab'&&panel){
+        const focusable=Array.from(panel.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]')).filter(el=>el.getClientRects().length);
+        const first=focusable[0],last=focusable.at(-1);
+        if(!first){event.preventDefault();panel.focus();}
+        else if(event.shiftKey&&(document.activeElement===first||document.activeElement===panel)){event.preventDefault();last?.focus();}
+        else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+      }
+    };
+    document.addEventListener('keydown',keydown);
+    return()=>{document.removeEventListener('keydown',keydown);if(previous?.isConnected)previous.focus();};
+  },[fullscreenEvidence,maximized]);
   const drag = useRef<{ id: string; edge: string; x: number; y: number; box: Box } | null>(null);
   useEffect(() => {
     const observer = new ResizeObserver(([entry]) => setBounds({ w: entry.contentRect.width, h: entry.contentRect.height }));
@@ -140,7 +163,7 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
           event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId);
           setFront(item.id); drag.current = { id: item.id, edge, x: event.clientX, y: event.clientY, box: normal };
         };
-        return <section key={item.id} id={`workspace-${item.id}`} tabIndex={-1} aria-label={`${item.title} window`} className="floating-window" hidden={(!!maximized && item.id!=="control" && maximized!==item.id)||(!maximized && layout.tabbed && secondary.includes(item.id) && active!==item.id)}
+        return <section key={item.id} id={`workspace-${item.id}`} tabIndex={-1} aria-label={`${item.title} window`} className={`floating-window ${fullscreenEvidence&&maximized===item.id?"is-evidence-fullscreen":""}`} hidden={(!!maximized && item.id!=="control" && maximized!==item.id)||(!maximized && layout.tabbed && secondary.includes(item.id) && active!==item.id)}
           style={{ "--dock-x": `${box.x}px`, "--dock-y": `${box.y}px`, "--dock-w": `${box.w}px`, "--dock-h": `${box.h}px`, left: box.x, top: box.y, width: box.w, height: box.h, zIndex: item.id === "control" ? 40 : maximized === item.id ? 30 : front === item.id ? 20 : 1 } as CSSProperties}
           onPointerDownCapture={() => setFront(item.id)}
           onPointerMove={event => {
@@ -166,12 +189,12 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
                 setBoxes(previous => { const next = { ...previous }; delete next[item.id]; return next; });
                 if (maximized === item.id) setMaximized("");
               }}><RotateCcw size={13} /></button>
-            {item.id !== "control" && <button data-help={maximized === item.id ? "Restore window" : "Maximize window"} data-help-description={maximized === item.id ? "Return this window to its previous workspace layout." : "Expand this window to use the available workspace. Click again to restore the layout."} aria-label={`${maximized === item.id ? "Restore" : "Maximize"} ${item.title} window`} onClick={() => setMaximized(maximized === item.id ? "" : item.id)}>
+            {item.id !== "control" && <button data-help={maximized === item.id ? "Restore window" : "Maximize window"} data-help-description={maximized === item.id ? "Return this window to its previous workspace layout." : "Expand this window to use the available workspace. Click again to restore the layout."} aria-label={`${maximized === item.id ? "Restore" : "Maximize"} ${item.title} window`} onClick={() => {if(fullscreenEvidence&&maximized===item.id)closeEvidence();else setMaximized(maximized===item.id?"":item.id);}}>
               {maximized === item.id ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
             </button>}
             </div>
           </div>
-          <div className="window-content"><ViewErrorBoundary key={item.id === "pipeline" ? item.title.split(" · ")[0] : item.id} name={item.title}><WorkspaceHeaderContext.Provider value={item.id==="pipeline"?pipelineHeader:null}>{item.content}</WorkspaceHeaderContext.Provider></ViewErrorBoundary></div>
+          <div className="window-content"><ViewErrorBoundary key={item.id === "pipeline" ? item.title.split(" · ")[0] : item.id} name={item.title}><WorkspaceEvidenceContext.Provider value={item.id==='pipeline'?<div className="workspace-evidence-launchers" role="group" aria-label="Analysis views">{items.filter(entry=>['results','report'].includes(entry.id)).map(entry=><button key={entry.id} type="button" aria-label={`Open ${entry.id==='results'?'Results':'Final report'} full screen`} onClick={()=>maximizeEvidence(entry.id)}><span>{entry.id==='results'?'Results':'Final report'}</span><Maximize2 size={13} aria-hidden="true"/></button>)}</div>:null}><WorkspaceHeaderContext.Provider value={item.id==="pipeline"?pipelineHeader:null}>{item.content}</WorkspaceHeaderContext.Provider></WorkspaceEvidenceContext.Provider></ViewErrorBoundary></div>
           {item.id !== "control" && !maximized && edges.map(edge => <div key={edge} role={edge === "se" ? "separator" : undefined} tabIndex={edge === "se" ? 0 : -1}
             aria-valuenow={edge === "se" ? Math.round(normal.w) : undefined}
             aria-valuemin={edge === "se" ? Math.min(200, bounds.w) : undefined}
@@ -190,14 +213,6 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
       })}
       </div>
     </div>
-    {items.some(item=>secondary.includes(item.id)&&collapsed.includes(item.id))&&<div className="workspace-minimized-panels" role="group" aria-label="Minimized analysis panels">
-      {items.filter(item=>secondary.includes(item.id)&&collapsed.includes(item.id)).map(item=><section key={item.id} id={`workspace-${item.id}`} className="workspace-minimized-window" aria-label={`${item.title} minimized window`}>
-        <button type="button" aria-label={`Expand ${item.title}`} aria-expanded={false}
-          data-help={`Expand ${item.title}`} data-help-description="Reopen this panel in the analysis area. Minimizing a panel does not stop the pipeline or delete its results."
-          onClick={()=>{toggle(item.id);setActivePanel(item.id);}}>
-          <strong>{item.title}</strong><span>Minimized</span><ChevronUp size={16} aria-hidden="true"/>
-        </button>
-      </section>)}
-    </div>}
+
   </div>;
 }

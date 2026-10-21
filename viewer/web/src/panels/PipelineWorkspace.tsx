@@ -1,3 +1,4 @@
+import {WorkspaceEvidenceContext} from "../components/WorkspaceEvidenceContext";
 import ResearchInputs from '../components/ResearchInputs';
 import {floorExecutionState, type FloorActivity} from '../lib/floorActivity';
 import {createPortal} from "react-dom";
@@ -165,6 +166,7 @@ export default function PipelineWorkspace(){
   const [showResources,setShowResources]=useState(false);
   const [detail,setDetail]=useState<"progress"|"agent"|"tools"|null>(null);
   const workspaceHeader=useContext(WorkspaceHeaderContext);
+  const evidenceLaunchers=useContext(WorkspaceEvidenceContext);
   const [combinationHeader,setCombinationHeader]=useState<HTMLDivElement|null>(null);
   const [panelToggleHost,setPanelToggleHost]=useState<HTMLDivElement|null>(null);
   const [toolbarHost,setToolbarHost]=useState<HTMLDivElement|null>(null);
@@ -265,7 +267,7 @@ export default function PipelineWorkspace(){
     {settings&&<PipelineSettings key={settings.id+settings.section} id={settings.id} section={settings.section} close={()=>setSettings(null)}/>}
     {workspaceHeader?createPortal(header,workspaceHeader):header}
     {error&&<p role="alert" className="m-3 rounded border border-red-300 p-2 text-sm text-red-700">{error}</p>}
-    <div className="floor-panel-toolbar"><div ref={setPanelToggleHost} className="floor-panel-switches" role="group" aria-label="Workspace panels"/></div>
+    <div className="floor-panel-toolbar">{evidenceLaunchers}<div ref={setPanelToggleHost} className="floor-panel-switches" role="group" aria-label="Workspace panels"/></div>
     <div className="pipeline-explorer-layout">
       <PipelineBrowser toggleHost={panelToggleHost} items={items} selected={selected} onSelect={id=>{if(comparison.length&&!comparison.includes(id))setComparison([]);usePipelines.getState().focus(id);}} compare={comparison} onCompare={ids=>{setComparison(ids);if(ids.length&&!ids.includes(selected??""))usePipelines.getState().focus(ids[0]);}}/>
       <div className={`pipeline-detail-workspace ${combinationPipeline||comparison.length?"has-combination-studio":""}`}>

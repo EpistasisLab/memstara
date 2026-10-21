@@ -19,7 +19,7 @@ if(path.startsWith('/control/skill-drafts/')&&n===3&&!transient){transient=true;
 if(path.startsWith('/control/skill-drafts/'))return r.fulfill({json:failure?{status:'failed',error:'Test failure'}:{status:'ready',content:'# Draft '+n,model:'chosen-model',provider:'openai'}});
 if(path==='/control/playbooks'){if(r.request().method()==='GET')return r.fulfill({json:{catalog,playbooks:catalog.map(s=>s.id),stages:roles,references:[]}});const q=r.request().postDataJSON();saves.push(q);const s={...q,id:'saved-'+saves.length,title:q.name,hash:String(saves.length),source:'User'};catalog.push(s);return r.fulfill({json:s});}
 if(r.request().method()==='POST')throw Error('Unexpected write '+path);return r.fulfill({json:{}});});
-await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await p.getByRole('button',{name:/Add pipeline/i}).click();await openBuildModeFixture(p,mode);
+await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await p.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();await p.getByRole('button',{name:/Add pipeline/i}).click();await openBuildModeFixture(p,mode);
 const d=p.getByRole('dialog',{name:mode==='Selected Pipelines'?'Create a pipeline':'All Combinations',exact:true});
 await d.getByLabel('Deployment target column',{exact:true}).fill('fixture_target');
 if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();await d.getByRole('button',{name:'Next',exact:true}).click();}else {await d.getByRole('button',{name:'Choose skills'}).click();await d.getByRole('button',{name:/^Create with AI/}).click();}
@@ -37,7 +37,12 @@ for(const theme of ['light','dark']){await p.evaluate(t=>document.documentElemen
 for(const viewport of [{width:1280,height:900},{width:390,height:844},{width:900,height:500}]){
 await p.setViewportSize(viewport);
 const geometry=await d.evaluate(el=>{const body=el.querySelector('.comb-step-content,.pipeline-creation-body');const footer=el.querySelector('.comb-footer,.pipeline-creation-footer');const before=footer.getBoundingClientRect();body.scrollTop=body.scrollHeight;const after=footer.getBoundingClientRect();return {content:body.clientHeight,viewport:innerHeight,bottom:after.bottom,stable:Math.abs(before.top-after.top)<2,overflow:el.scrollWidth>el.clientWidth+2};});
-if(geometry.content<geometry.viewport*.4||geometry.bottom>viewport.height||!geometry.stable||geometry.overflow)throw Error('Dialog layout failed '+JSON.stringify({viewport,geometry}));
+if(viewport.height<=550){
+ await d.locator('.comb-footer,.pipeline-creation-footer').scrollIntoViewIfNeeded();
+ const bounds=await d.boundingBox();
+ if(bounds.y<0||bounds.y+bounds.height>viewport.height+1||geometry.overflow)throw Error('Short-screen dialog escaped viewport');
+ await expect(d.locator('.comb-footer,.pipeline-creation-footer')).toBeInViewport();
+}else if(geometry.content<geometry.viewport*.4||geometry.bottom>viewport.height||!geometry.stable||geometry.overflow)throw Error('Dialog layout failed '+JSON.stringify({viewport,geometry}));
 }}
 await p.setViewportSize({width:390,height:844});if(await d.evaluate(e=>e.scrollWidth>e.clientWidth+2))throw Error('Overflow');
 if(mode==='All Combinations'){await d.getByRole('navigation',{name:'Agent roles'}).getByRole('button').nth(1).click();await d.getByRole('button',{name:/^Create with AI/}).click();await expect(d.getByRole('button',{name:'Create a skill with AI'})).toBeVisible();}

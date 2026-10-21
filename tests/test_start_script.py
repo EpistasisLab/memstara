@@ -11,6 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def launcher(tmp_path, *, env=True):
     shutil.copy(ROOT / 'start.sh', tmp_path / 'start.sh')
+    (tmp_path / 'deployment').mkdir()
+    for name in ('build-service.sh', 'mount_directories.py'):
+        shutil.copy(ROOT / 'deployment' / name, tmp_path / 'deployment' / name)
     (tmp_path / '.env.example').write_text('OPENAI_API_KEY=REPLACE_ME\n')
     if env:
         (tmp_path / '.env').write_text('OPENAI_API_KEY=PRIVATE_TEST_SENTINEL\n')
@@ -57,7 +60,9 @@ def test_start_preserves_env_and_checks_proxy_before_reporting_url(tmp_path):
     assert result.returncode == 0
     assert (tmp_path / '.env').read_bytes() == before
     calls = (tmp_path / 'calls').read_text()
-    assert 'compose up -d --build --force-recreate' in calls
+    assert 'compose up -d --no-build --force-recreate' in calls
+    for service in ('control', 'initialize', 'api', 'web'):
+        assert calls.index('compose build ' + service) < calls.index('compose up')
     assert '/api/discovery/questions' in calls and '/control/health' in calls
     assert 'http://127.0.0.1:15999/' in result.stdout
     assert 'PRIVATE_TEST_SENTINEL' not in result.stdout + result.stderr + calls

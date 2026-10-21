@@ -45,7 +45,8 @@ try {
    return route.fulfill({body:await readFile(file),contentType:path.endsWith('.js')?'application/javascript':path.endsWith('.css')?'text/css':'text/html'});
   });
   await page.goto('http://fixture.local/');
-  const expand=page.getByRole('button',{name:'Expand Results',exact:true});if(await expand.count())await expand.click();
+  await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
+  await page.getByRole('button',{name:'Open Results full screen',exact:true}).click();
   const tab=page.getByRole('tab',{name:'Results',exact:true});if(await tab.count())await tab.click();
   await page.getByRole('button',{name:'Latest executions across pipelines',exact:true}).click();
   const evidence=page.getByRole('article',{name:'Selected analysis evidence'});
@@ -75,7 +76,8 @@ try {
   result.evaluation.model_results.xgboost.specialist_xai.items[1]={method:'lime',model:'xgboost',replicate:1,
     status:'failed',error_type:'RuntimeError',seed:7};
   await page.reload();
-  const reopen=page.getByRole('button',{name:'Expand Results',exact:true});if(await reopen.count())await reopen.click();
+  await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
+  await page.getByRole('button',{name:'Open Results full screen',exact:true}).click();
   const reselect=page.getByRole('tab',{name:'Results',exact:true});if(await reselect.count())await reselect.click();
   await page.getByRole('button',{name:'Latest executions across pipelines',exact:true}).click();
   await page.getByText('Explanation unavailable (RuntimeError). Do not infer feature effects.',{exact:true}).waitFor();

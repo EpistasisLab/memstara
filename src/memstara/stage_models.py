@@ -118,7 +118,8 @@ def validate_endpoint(endpoint: str, *, allow_http: bool = False) -> None:
         port = url.port
     except ValueError:
         raise ValueError(message) from None
-    if (url.scheme not in (("https", "http") if allow_http else ("https",)) or not url.hostname or url.username or url.password
+    if (url.scheme not in (("https", "http") if allow_http else ("https",))
+            or not url.hostname or url.username or url.password
             or url.query or url.fragment or port == 0):
         raise ValueError(message)
 

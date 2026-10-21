@@ -13,6 +13,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  container-recovery:
+    name: Isolated container recovery
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --extra runtime
+      - run: docker pull python:3.12-slim
+      - run: docker pull pgvector/pgvector:pg16
+      - name: Required container kill and restart test
+        run: uv run --frozen --extra dev --extra runtime pytest tests/docker --run-docker -q --junitxml=test-results/container-recovery.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: container-recovery-report
+          path: test-results/container-recovery.xml
+
   backend:
     name: Python tests (${{ matrix.python }})
     runs-on: ubuntu-latest

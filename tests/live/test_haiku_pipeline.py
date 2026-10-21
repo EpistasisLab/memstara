@@ -158,6 +158,7 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
     query["search_path"] = schema
     database = urlunsplit(parts._replace(query=urlencode(query)))
     if run.exists():
+        assert not pytestconfig.getoption("--live-pause-resume"), "Pause acceptance requires a fresh run"
         assert read(run / "pipeline_status.json", {}).get("status") == "completed", (
             "Failed live cases require investigation")
         frozen = read(run / "config.json")
@@ -222,6 +223,7 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
             argv.extend(["--combination-plan", json.dumps(combination)])
         started = time.monotonic()
         previous = None
+        pause_evidence = {}
         print(f"\nSTART {case}: all model calls use {MODEL}; original files preserved", flush=True)
         with (area / "driver.log").open("w") as log:
             process = subprocess.Popen(argv, env=env, cwd=live_batch["repo"], stdout=log, stderr=log)
@@ -232,6 +234,27 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
                     if current != previous:
                         print(f"{case}: stage={current}; elapsed={time.monotonic()-started:.1f}s", flush=True)
                         previous = current
+                    if pytestconfig.getoption('--live-pause-resume'):
+                        calls_now = read(run / 'execution.json', {}).get('calls', [])
+                        if not pause_evidence and any(c.get('status') == 'completed' for c in calls_now):
+                            (run / 'pause.request').touch()
+                            pause_evidence = {'requested_at_seconds': time.monotonic() - started}
+                            print(f'{case}: pause requested after a real completed agent call', flush=True)
+                        control = read(run / 'execution_control.json', {})
+                        if pause_evidence and 'resumed_at_seconds' not in pause_evidence:
+                            if control.get('state') == 'paused' and control.get('active_calls') == 0:
+                                ledger_path = run / 'cost_ledger.jsonl'
+                                before = ledger_path.read_bytes() if ledger_path.exists() else b''
+                                time.sleep(3)
+                                assert process.poll() is None, 'Worker exited while paused'
+                                assert read(run / 'execution_control.json', {}).get('state') == 'paused'
+                                assert (ledger_path.read_bytes() if ledger_path.exists() else b'') == before
+                                pause_evidence.update(paused_without_new_receipts=True,
+                                                      worker_pid=process.pid, observed_seconds=3)
+                                (run / 'pause.request').unlink()
+                                pause_evidence['resumed_at_seconds'] = time.monotonic() - started
+                                (area / 'pause_resume.json').write_text(json.dumps(pause_evidence, indent=2))
+                                print(f'{case}: resumed same worker after verified pause', flush=True)
                     if time.monotonic() - started > 2400:
                         pytest.fail(f"{case} exceeded 40 minutes; inspect {area / 'driver.log'}")
                     time.sleep(1)
@@ -245,6 +268,8 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
                         process.wait(timeout=10)
         elapsed = time.monotonic() - started
         exit_code = process.returncode
+        if pytestconfig.getoption('--live-pause-resume'):
+            assert pause_evidence.get('paused_without_new_receipts'), 'No verified pause/resume occurred'
     status = read(run / "pipeline_status.json", {})
     calls = read(run / "execution.json", {}).get("calls", [])
     ledger = [json.loads(line) for line in (run / "cost_ledger.jsonl").read_text().splitlines()] \

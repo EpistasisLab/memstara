@@ -28,8 +28,8 @@ try {
   });
   await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Fixture'}}));
   await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
-  await page.getByRole('button',{name:/Add pipeline/i}).click();await page.getByRole('button',{name:/All Combinations/}).click();
-  const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});await dialog.getByRole('button',{name:'Choose skills'}).click();
+  await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();await page.getByRole('button',{name:/Add pipeline/i}).click();await page.getByRole('button',{name:/All Combinations/}).click();
+  const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});await dialog.getByLabel('Deployment target column',{exact:true}).fill('fixture_target');await dialog.getByRole('button',{name:'Choose skills'}).click();
   const labels=['Hypothesis','Data','Machine learning','Interpretation','Explanation'];
   for(const [i,role] of roles.entries()){
    await dialog.getByRole('heading',{name:labels[i]+' skills',exact:true}).waitFor();
@@ -66,7 +66,7 @@ try {
    }
   }
   await dialog.getByRole('button',{name:'Review plan'}).click();
-  await dialog.getByRole('heading',{name:'Review before creating'}).waitFor();
+  await dialog.getByRole('heading',{name:'Review your design'}).waitFor();
   assert(await dialog.evaluate(e=>e.scrollWidth<=e.clientWidth+2));
   assert.deepEqual(errors,[]);assert.equal(runPosts,0);
   console.log(JSON.stringify({width,theme,stepNavigation:'pass',selectionRetained:'pass',noRun:'pass'}));await page.close();

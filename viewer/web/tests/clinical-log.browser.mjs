@@ -36,10 +36,10 @@ try {
    try {await r.fulfill({json:{events:[...Array.from({length:12},(_,i)=>event(i)),{...event(99),run_tag:'other-run',detail:'UNRELATED OUTPUT'},...(added?[{...event(20),stage:'report'}]:[])],results:[],questions:[],reports:{},record_limit:200,generated_at:new Date().toISOString()}});} finally{inFlight--;}
   });
   await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
- await page.getByRole('button',{name:'View floor plan',exact:true}).click();
+ await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
   await page.evaluate(d=>document.documentElement.dataset.theme=d,combination?'dark':'light');
   const panel=page.getByRole('complementary',{name:'Clinical activity log'});
-  if(width===390)await panel.getByRole('button',{name:'Expand live log'}).click();
+  if(width===390)await page.getByRole('button',{name:'Expand live log'}).click();
   await panel.getByText(combination?'The task board is at model evaluation.':'Training and evaluating the prediction model.').waitFor();
   await panel.locator('.clinical-log-events li').first().waitFor({state:'attached'});
   if(combination){
@@ -105,17 +105,19 @@ try {
   assert.equal(await panel.getByRole('tab',{name:/Saved outputs/}).getAttribute('aria-selected'),'true');
   await panel.getByRole('tab',{name:/Saved outputs/}).click();
   await panel.getByRole('button',{name:'View details',exact:true}).first().click();
+  await panel.locator('.compact-activity-row').filter({hasText:'Output recorded'}).first().locator('summary').click();
   await panel.getByText('MATCHED HYPOTHESIS OUTPUT',{exact:true}).first().waitFor();
   assert(!((await panel.innerText()).includes('OTHER STAGE OUTPUT')));
   assert.equal(await panel.locator('.clinical-log-detail-view').evaluate(e=>e.scrollWidth>e.clientWidth+1),false);
   assert.equal(await panel.getByLabel('Filter activity by agent').count(),0);
   assert.equal(await panel.getByLabel('Filter activity by type').count(),0);
   assert.equal(await panel.getByLabel('Search activity').count(),0);
-  assert.equal(await panel.locator('[data-activity-kind=text]').count(),1);
+  assert.equal(await panel.locator('.compact-activity-row').filter({hasText:'Output recorded'}).count(),1);
   assert.equal(await panel.getByText('No matching activity.',{exact:false}).count(),0);
   await panel.getByRole('button',{name:'Back to live updates'}).click();
   await panel.getByRole('tab',{name:'Agent activity',exact:true}).click();
   await panel.getByRole('button',{name:'Browse activity'}).click();
+  await panel.locator('.compact-activity-row').filter({hasText:'Output recorded'}).nth(1).locator('summary').click();
   await panel.getByText('OTHER STAGE OUTPUT',{exact:true}).first().waitFor();
   await panel.getByRole('button',{name:'Back to live updates'}).click();
   await panel.getByRole('tab',{name:/Saved outputs/}).click();
@@ -128,10 +130,12 @@ try {
   slow=true;await page.waitForTimeout(2200);assert.equal(maxInFlight,1,'Slow reads must not overlap');
   unavailable=true;await panel.getByText('Updates interrupted',{exact:true}).waitFor();
   assert.equal(await panel.locator('.clinical-log-events li').count(),13);
-  await panel.getByRole('button',{name:'Collapse live log'}).click();
-  await panel.getByRole('button',{name:'Expand live log'}).click();
+  await page.getByRole('button',{name:'Collapse live log'}).click();
+  await page.getByRole('button',{name:'Expand live log'}).click();
+  await panel.getByRole('tab',{name:/Saved outputs/}).click();
   assert.equal(await panel.locator('.clinical-log-events li').count(),13);
   await page.screenshot({path:`/tmp/clinical-log-${width}-${combination?'combinations':'selected'}.png`});
+  await panel.getByRole('tab',{name:'Agent activity',exact:true}).click();
   pipeline.running=null;pipeline.latest={...run,exit_code:1};
   pipeline.failure={code:'model_message_format',message:'The model rejected the system-message format.'};
   await panel.getByText(pipeline.failure.message,{exact:true}).waitFor();

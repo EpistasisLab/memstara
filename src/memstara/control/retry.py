@@ -2,6 +2,7 @@
 import copy
 import json
 from pathlib import Path
+from typing import Any
 
 
 def configuration_for_retry(record, configuration, pipeline_id):
@@ -44,8 +45,9 @@ def configuration_for_retry(record, configuration, pipeline_id):
         if key in saved:
             result[key] = copy.deepcopy(saved[key])
     # CLI snapshots encode structured flags as JSON strings; restore HTTP types.
-    for key, default in [('evaluation', {}), ('ml_overrides', {}),
-                         ('controlled_comparison', {}), ('baseline_columns', [])]:
+    defaults: dict[str, Any] = {'evaluation': {}, 'ml_overrides': {},
+                                'controlled_comparison': {}, 'baseline_columns': []}
+    for key, default in defaults.items():
         value = result.get(key, default)
         if isinstance(value, str):
             try:

@@ -163,10 +163,16 @@ def prepare(value, task, snapshot, subset):
             if config:
                 from memstara.pipeline.checkpoint import atomic_json
                 partition_path = Path(config).parent / 'validation_partition.json'
-                if partition_path.exists():
+                try:
+                    # Publish once across workers; an exists/replace sequence can
+                    # approve different reserves for simultaneous first tasks.
+                    atomic_json(partition_path, partition, overwrite=False)
+                except FileExistsError:
                     partition = json.loads(partition_path.read_text())
-                else:
-                    atomic_json(partition_path, partition)
+        if (partition['seed'] != value['validation_seed']
+                or partition['fraction'] != value['validation_size']):
+            raise ValueError('Data plan must match the frozen independent reserve; '
+                             'refresh the task allocation requirements before resubmitting')
         reserve_snapshot = {**snapshot, 'validation_partition': partition}
     return {'version': specification['version'], 'request': specification, 'agent_plan': value,
             'effective_evaluation': effective, 'trial': task['trial'], 'task_id': task['task_id'],

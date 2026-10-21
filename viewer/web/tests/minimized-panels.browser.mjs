@@ -15,21 +15,19 @@ try{
  return r.fulfill({body:await readFile(file),contentType:path.endsWith('.js')?'application/javascript':path.endsWith('.css')?'text/css':'text/html'});
  });
  await page.goto('http://fixture.local/');await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
+ await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
  for(const name of ['Results','Final report']){
- const initialRestore=page.getByRole('button',{name:`Expand ${name==='Final report'?'Final Report':name}`,exact:true});if(await initialRestore.count())await initialRestore.click();
- if(await page.getByRole('tab',{name,exact:true}).count())await page.getByRole('tab',{name,exact:true}).click();await page.getByRole('button',{name:`Collapse ${name==='Final report'?'Final Report':name}`,exact:true}).click();
- const restore=page.getByRole('button',{name:`Expand ${name==='Final report'?'Final Report':name}`,exact:true});await restore.waitFor();
- const bounds=await restore.boundingBox();assert(bounds.y>=0&&bounds.y+bounds.height<=1000&&bounds.x+bounds.width<=width);
+ const launch=page.getByRole('button',{name:`Open ${name} full screen`,exact:true});
+ await launch.focus();await page.keyboard.press('Enter');
+ const dock=page.locator(name==='Results'?'#workspace-results':'#workspace-report');
+ await dock.waitFor();await dock.getByRole('button',{name:/^Collapse /}).click();
+ await dock.waitFor({state:'hidden'});
+ assert.equal(await page.locator('.workspace-minimized-window').count(),0);
+ const bounds=await launch.boundingBox();assert(bounds.y>=0&&bounds.y+bounds.height<=1000&&bounds.x+bounds.width<=width);
  }
- assert.equal(await page.locator('.workspace-minimized-window').count(),2);
- assert.equal(await page.locator('.workspace-evidence-bar').count(),0);
- const restore=page.getByRole('button',{name:'Expand Results',exact:true});await restore.focus();await page.keyboard.press('Enter');
- await page.locator('#workspace-results .window-content').waitFor();assert.equal(await page.getByRole('button',{name:'Expand Results',exact:true}).count(),0);
- assert(await page.getByRole('button',{name:'Expand Final Report',exact:true}).isVisible());
- await page.getByRole('button',{name:'Collapse Results',exact:true}).click();
  await page.locator('#workspace-pipeline').getByRole('button',{name:/Maximize .* window/}).click();
- assert(await page.getByRole('button',{name:'Expand Final Report',exact:true}).isVisible());
- await page.getByRole('button',{name:'Expand Final Report',exact:true}).click();await page.locator('#workspace-report .window-content').waitFor();
+ await page.getByRole('button',{name:'Open Final report full screen',exact:true}).click();
+ await page.locator('#workspace-report .window-content').waitFor();
  assert.deepEqual(errors,[]);console.log(JSON.stringify({width,theme,visibleHeaders:true,keyboardRestore:true,maximizedRestore:true}));await page.close();
  }
 }finally{await browser.close();}

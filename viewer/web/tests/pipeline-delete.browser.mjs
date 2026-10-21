@@ -22,7 +22,7 @@ try {
   });
   await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Isolated UI fixture'}}));
   await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
- await page.getByRole('button',{name:'View floor plan',exact:true}).click();
+ await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
   await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
   async function showList(){const b=page.getByRole('button',{name:'Show pipeline list',exact:true});if(await b.isVisible())await b.click();}
   await showList();await page.locator('.pipeline-card-delete').first().waitFor();assert.equal(await page.locator('.pipeline-card-delete').count(),3);
@@ -68,7 +68,7 @@ try {
   await page.screenshot({path:`/tmp/pipeline-delete-${width}-${theme}.png`});
   while(!release)await new Promise(r=>setTimeout(r,20));release();
   await dialog.waitFor({state:'hidden'});assert.equal(await page.locator('.pipeline-card-delete').count(),2);
-  await page.reload();await page.getByRole('button',{name:'View floor plan',exact:true}).click();
+  await page.reload();await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
   // Wait for loading/layout (including the compact ResizeObserver) before opening the list.
   await page.getByRole('button',{name:'Select pipeline 2: Running research',exact:true,includeHidden:true}).waitFor({state:'attached'});
   await page.locator('.pipeline-browser').evaluate(element=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(element.clientWidth)))));
