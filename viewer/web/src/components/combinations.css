@@ -48,7 +48,7 @@
 .comb-consent { display:flex; align-items:flex-start; gap:12px; }
 .comb-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; border-top:1px solid rgb(var(--line)); padding:16px 0 2px; }
 .comb-footer>span { color:rgb(var(--ink-soft)); font-size:12px; }
-.comb-footer>div { display:flex; gap:8px; }
+.comb-footer>.comb-footer-actions { display:flex; gap:8px; }
 .comb-footer button { display:flex; align-items:center; justify-content:center; gap:8px; padding:11px 16px; border:1px solid rgb(var(--line)); border-radius:10px; white-space:nowrap; font-weight:600; }
 .comb-builder .comb-primary { background:rgb(var(--accent)); color:rgb(var(--accent-contrast)); border-color:transparent; }
 .comb-builder button:disabled { opacity:.45; cursor:not-allowed; }
@@ -65,7 +65,7 @@
  .comb-skill-layout { grid-template-columns:minmax(0,1fr); gap:16px; }
  .comb-roles { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px; }.comb-roles button { padding:9px; font-size:12px; }.comb-roles button>svg:last-child { display:none; }
  .comb-fields { grid-template-columns:minmax(0,1fr); }
- .comb-footer { flex-direction:column; align-items:stretch; }.comb-footer>div { justify-content:flex-end; }.comb-footer button { flex:1; white-space:normal; }
+ .comb-footer { flex-direction:column; align-items:stretch; }.comb-footer>.comb-footer-actions { justify-content:flex-end; }.comb-footer button { flex:1; white-space:normal; }
 }
 /* Scope overrides to this wizard; shared dialogs retain their existing layout. */
 .workspace-dialog.combination-dialog { width:min(1080px,calc(100vw - 32px)); max-width:1080px; }
@@ -180,4 +180,21 @@
  .comb-review-layout { grid-template-columns:minmax(0,1fr); gap:12px; }
  .comb-review-card { padding:16px; }
  .comb-review-heading { align-items:start; }
+}
+
+/* One action cue per step; the footer explains the next required action. */
+.comb-guidance { margin:0 0 20px; padding:0 0 16px; border-bottom:1px solid rgb(var(--line)); }
+.comb-guidance .comb-eyebrow { color:rgb(var(--accent)); margin-bottom:6px; }
+.comb-guidance h3 { font-size:18px; }
+.comb-guidance p { margin:6px 0 0; max-width:72ch; overflow-wrap:anywhere; }
+.comb-footer .comb-next-help { display:flex; flex-direction:column; gap:3px; min-width:0; flex:1; }
+.comb-next-help strong { font-size:12px; color:rgb(var(--ink)); }
+.comb-next-help span { font-size:12px; color:rgb(var(--ink-soft)); overflow-wrap:anywhere; }
+.comb-footer-actions { flex-shrink:0; }
+.comb-steps button:focus-visible,.comb-footer button:focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:3px; }
+@media(max-width:640px) {
+ .comb-guidance { margin-bottom:14px; padding-bottom:12px; }
+ .comb-guidance h3 { font-size:16px; }
+ .comb-guidance p { font-size:13px; }
+ .comb-footer-actions { width:100%; }
 }

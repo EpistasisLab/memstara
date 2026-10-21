@@ -43,7 +43,7 @@ function ChooseBuildMode() {
   if(mode==='all')return <CombinationWizard/>;
   return <FloorDetailDialog title="Build pipelines" close={()=>usePipelines.getState().closeCreation()}>
     <div className="space-y-5 p-3">
-      <p className="text-sm leading-relaxed text-ink-muted">Choose your study inputs, then configure the agents that will analyze them. If your study is already registered, go straight to All Combinations.</p>
+      <p className="text-sm leading-relaxed text-ink-muted">Start with All Combinations if your study is already available. Choose Prepare research inputs only when you need to register or review your CSV, knowledge source and target.</p>
       <div className="grid gap-4" style={{gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,260px),1fr))'}}>
       <button aria-label="Prepare research inputs" type="button" className="group flex h-full w-full flex-col gap-3 rounded-xl border border-paper-line bg-paper-panel p-5 text-left transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-accent" onClick={()=>setMode('research')}>
         <span className="flex w-full items-center justify-between text-ink-muted"><Database size={24} aria-hidden="true"/><span className="text-xs font-semibold">1 · Study inputs</span></span>

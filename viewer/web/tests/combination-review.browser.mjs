@@ -12,11 +12,15 @@ try{for(const [width,height,theme] of [[1440,900,'light'],[390,700,'light'],[390
  const dialog=page.getByRole('dialog');await dialog.getByRole('button',{name:/Agent skills/}).click();
  const stages=['Hypothesis','Data','Machine learning','Interpretation','Explanation'];
  for(let i=0;i<5;i++){
-  await dialog.locator('.comb-skill-picker > summary').click();await dialog.locator('.comb-skill-card input').first().check();
+  await expect(dialog.locator('.comb-guidance')).toContainText(`Agent ${i+1} of 5`);
+  await expect(dialog.locator('#comb-next-help')).toContainText(`Select at least one ${stages[i]} skill.`);
+  await expect(dialog.getByRole('button',{name:i===4?'Review plan':'Next: '+stages[i+1],exact:true})).toBeDisabled();
+  await dialog.locator('.comb-skill-picker > summary').click();await dialog.locator('.comb-skill-card input').first().check();await expect(dialog.locator('#comb-next-help')).toContainText('Ready to continue');
   await dialog.getByRole('button',{name:i===4?'Review plan':'Next: '+stages[i+1],exact:true}).click();
  }
  await expect(dialog.getByRole('heading',{name:'Review your design'})).toBeVisible();
  await expect(dialog.locator('.comb-review-agents>li')).toHaveCount(5);
+ await expect(dialog.locator('#comb-next-help')).toContainText('Enter a name');
  await dialog.getByLabel('Name',{exact:true}).fill('Reviewed design');
  const limit=dialog.getByLabel('Maximum Loops per execution',{exact:true});await limit.fill('4');
  const consent=dialog.getByRole('checkbox',{name:/I reviewed/});const create=dialog.getByRole('button',{name:'Create combination design'});

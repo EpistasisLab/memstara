@@ -42,13 +42,24 @@ export default function CombinationWizard(){
   else if(step===1&&counts[activeIndex]>0&&!(activeRole==='ml'&&modelError)){if(lastRole){if(count)setStep(2);}else moveRole(activeIndex+1);}
  }
  function back(){if(step===1&&activeIndex>0)moveRole(activeIndex-1);else setStep(step-1);}
+ const missingAgents=PLAYBOOK_STAGES.filter((_,i)=>!counts[i]).map(stage=>flavorNames[stage]);
+ const nextLabel=step===0?'Choose skills':lastRole?'Review plan':`Next: ${flavorNames[PLAYBOOK_STAGES[activeIndex+1]]}`;
+ const blocker=uploading?'Wait for your skill to finish saving.':busy?'Saving your pipeline…':
+  step===0?sourceError:
+  step===1?(!counts[activeIndex]?`Select at least one ${flavorNames[activeRole]} skill.`:activeRole==='ml'&&modelError?modelError:lastRole&&!count?`Choose skills for: ${missingAgents.join(', ')}.`:''):
+  sourceError||(!count?`Choose skills for: ${missingAgents.join(', ')}.`:'')||modelError||(!name.trim()?'Enter a name for your pipeline.':name.length>80?'Use a name with 80 characters or fewer.':!Number.isInteger(total)||total<1||total>10000?'Enter a whole number of Loops from 1 to 10,000.':!reviewed?'Check the confirmation box after reviewing your settings.':'');
+ const instruction=step===0?'Choose your research inputs below, then select Choose skills.':step===1?
+  skillMode==='library'?`Open “Choose ${flavorNames[activeRole]} skills” and select one or more checkboxes. Then select ${nextLabel}.`:
+  skillMode==='custom'?'Upload or write a skill, then save and select it to continue.':'Create a skill with AI, then save and select it to continue.':
+  'Name your pipeline, review the Loop limit and settings, then check the confirmation box.';
  const RoleIcon=icons[activeRole];
  const visible=catalog.filter(s=>compatibleResearchSkill(s,draft)&&s.stage===activeRole&&`${s.title} ${s.description??''}`.toLowerCase().includes(search.toLowerCase()));
  return <FloorDetailDialog title="All Combinations" close={()=>{if(!busy&&!uploading)closeCreation();}} className="pipeline-management-dialog combination-dialog">
   <div className="comb-builder">
-   <nav className="comb-steps" aria-label="Combination setup steps">{['Research inputs','Agent skills','Review & create'].map((label,i)=><button key={label} aria-current={step===i?'step':undefined} disabled={busy||uploading||(i>0&&!!sourceError)||(i===2&&!count)} onClick={()=>setStep(i)}><span>{step>i?<Check size={14}/>:i+1}</span>{label}</button>)}</nav>
+   <nav className="comb-steps" aria-label="Combination setup steps">{['Research inputs','Agent skills','Review & create'].map((label,i)=><button key={label} aria-current={step===i?'step':undefined} disabled={busy||uploading||(i>0&&!!sourceError)||(i===2&&!count)} onClick={()=>setStep(i)}><span>{(i===0&&!sourceError&&step>0)||(i===1&&count>0&&!modelError)?<Check size={14}/>:i+1}</span>{label}</button>)}</nav>
    {step!==2&&<div className="comb-budget" role="status"><div><strong>{count.toLocaleString()}</strong><span>possible combinations</span></div><ArrowRight size={18} aria-hidden="true"/><div className="comb-total"><strong>{Number.isInteger(total)?total.toLocaleString():'—'}</strong><span>maximum Loops per execution</span></div><div><strong>{randomStart?'Random':'First'}</strong><span>starting combination</span></div></div>}
    <div className="comb-step-content">
+   <header className="comb-guidance"><span className="comb-eyebrow">Step {step+1} of 3{step===1?` · Agent ${activeIndex+1} of 5`:''}</span><h3>{step===0?'Set up your research':step===1?`Choose ${flavorNames[activeRole]} skills`:'Confirm your pipeline'}</h3><p>{instruction}</p></header>
    {step===0&&<section className="comb-inputs"><ResearchInputSelect onValidityChange={setSourceError} value={draft} onChange={patch=>{setDraft(d=>({...d,...patch}));setReviewed(false);}}/>{!draft.research_input_id&&draft.knowledge_mode!=='llm_only'&&<KnowledgeSelect value={draft.skill} onChange={skill=>{setDraft(d=>({...d,skill}));setReviewed(false);}}/>}</section>}
    {step===1&&<div className="comb-skill-layout">
     <nav className="comb-roles" aria-label="Agent roles">
@@ -106,7 +117,7 @@ export default function CombinationWizard(){
 
    </div>
    {total>10000&&<p role="alert">Choose a maximum of 10,000 Loops per execution.</p>}{error&&<p role="alert">{error}</p>}
-   <footer className="comb-footer"><span>{step===1?`${counts.filter(n=>n>0).length} of 5 agents configured · ${counts[activeIndex]?'Ready to continue':'Select at least one skill to continue'}`:''}</span><div>{step>0&&<button disabled={busy||uploading} onClick={back}><ArrowLeft size={16}/>Back</button>}{step<2?<button className="comb-primary" disabled={busy||uploading||(step===0&&!!sourceError)||(step===1&&(!counts[activeIndex]||(activeRole==='ml'&&!!modelError)||(lastRole&&!count)))} onClick={next}>{step===0?'Choose skills':lastRole?'Review plan':`Next: ${flavorNames[PLAYBOOK_STAGES[activeIndex+1]]}`}<ArrowRight size={16}/></button>:<button className="comb-primary" aria-label="Create combination design" disabled={!valid||busy||uploading} onClick={()=>void create(name.trim(),{...draft,waves:total})}>{busy?'Creating…':'Create design'}<Check size={16}/></button>}</div></footer>
+   <footer className="comb-footer"><div className="comb-next-help" id="comb-next-help" role="status" aria-live="polite"><strong>{busy?'Saving…':uploading?'Saving skill…':blocker?'To continue':'Ready to continue'}</strong><span>{blocker||(step===2?'Create pipeline saves your design. Select Run afterward to start.':`Select ${nextLabel} to continue.`)}</span></div><div className="comb-footer-actions">{step>0&&<button disabled={busy||uploading} onClick={back}><ArrowLeft size={16}/>Back</button>}{step<2?<button className="comb-primary" aria-describedby="comb-next-help" disabled={!!blocker} onClick={next}>{nextLabel}<ArrowRight size={16}/></button>:<button className="comb-primary" aria-label="Create combination design" aria-describedby="comb-next-help" disabled={!valid||busy||uploading} onClick={()=>void create(name.trim(),{...draft,waves:total})}>{busy?'Creating…':'Create pipeline'}<Check size={16}/></button>}</div></footer>
   </div>
  </FloorDetailDialog>;
 }
