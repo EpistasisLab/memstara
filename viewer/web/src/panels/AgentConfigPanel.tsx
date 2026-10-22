@@ -1,3 +1,4 @@
+import { displayText, skillLabel } from '../lib/displayText';
 import MLAdvancedSettings from '../components/MLAdvancedSettings';
 import {mlOverridesError,overridesForSkills,type MlOverrides} from '../lib/mlOverrides';
 import EvaluationSettings from '../components/EvaluationSettings';
@@ -132,7 +133,7 @@ function Editor({ close }: { close: () => void }) {
       }}>
         <option value="">Choose analysis instructions</option>
         {catalog.filter(x => x.stage === stage && compatibleResearchSkill(x, form)).map(x => <option key={x.id} value={x.id}
-          disabled={multiple && used.includes(x.hash)}>{x.title}{multiple && used.includes(x.hash) ? " · already used" : ""}</option>)}
+          disabled={multiple && used.includes(x.hash)}>{skillLabel(x.id,x.title)}{multiple && used.includes(x.hash) ? " · already used" : ""}</option>)}
       </select>
     {stage==='ml'&&<MLAdvancedSettings skills={[choice]} value={overrides} replicates={plan.replicates} proposal={form.data_mode==='proposal'} disabled={saving||!!running||busy} onChange={setOverrides}/>}
       {coach===1&&selected&&<button type="button" className="mt-3 rounded border border-paper-line px-3 py-2 text-xs font-semibold text-ink" onClick={()=>setCoach(2)}>Keep this skill · review next</button>}
@@ -152,7 +153,7 @@ function Editor({ close }: { close: () => void }) {
       </button>
       <div aria-live="polite" className="mt-2 text-xs leading-relaxed text-ink-soft">
         {uploadedName && <p className="flex items-start gap-2"><FileText size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 break-words">{uploadedName} · Uploaded and selected. Save settings to apply.</span></p>}
+          <span className="min-w-0 break-words">{displayText(uploadedName)} · Uploaded and selected. Save settings to apply.</span></p>}
         {(running || busy) && <p>Stop the pipeline before changing its agent skills.</p>}
       </div>
     </section>
@@ -162,12 +163,12 @@ function Editor({ close }: { close: () => void }) {
     <section ref={reviewTarget} aria-label="Review selected skill" className="mt-3 rounded-lg border border-paper-line bg-paper/40 p-3">
       <h3 className="mb-3 text-sm font-semibold"><span className="agent-config-step">2</span>Review what it does</h3>
     {selected ? <div aria-live="polite">
-      <h3 className="text-sm font-bold">{selected.title}</h3>
-      <p className="mt-2 text-sm leading-relaxed">{selected.description}</p>
+      <h3 className="text-sm font-bold">{skillLabel(selected.id,selected.title)}</h3>
+      <p className="mt-2 text-sm leading-relaxed">{displayText(selected.description)}</p>
       {coach===2&&<p className="agent-click-hint" role="status"><ArrowDown size={17} aria-hidden="true"/>Click here to read this skill's instructions.</p>}
       <details className="mt-2 text-xs"><summary className={`cursor-pointer rounded p-2 font-bold ${coach===2?'agent-click-target':''}`}>Read full instructions and source</summary>
-        <p className="mt-2 text-ink-faint">{selected.source} · version {selected.hash.slice(0, 12)}</p>
-        <pre className="mt-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-sans leading-relaxed">{selected.content}</pre>
+        <p className="mt-2 text-ink-faint">{displayText(selected.source)} · version {selected.hash.slice(0, 12)}</p>
+        <pre className="mt-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-sans leading-relaxed">{displayText(selected.content)}</pre>
       </details>
       {coach===2&&<button type="button" className="mt-3 rounded border border-paper-line px-3 py-2 text-xs font-semibold text-ink" onClick={()=>setCoach(3)}>Reviewed · show save button</button>}
     </div>:<p className="text-xs text-ink-soft">Choose a skill in step 1 to see its purpose and full instructions here.</p>}

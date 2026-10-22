@@ -1,3 +1,4 @@
+import { displayJson } from '../lib/displayText';
 import {useEffect, useMemo, useState} from 'react';
 import {ReactFlow, Background, Controls, MarkerType, Position} from '@xyflow/react';
 import {pipelineSteps, pipelineLinks} from './pipelineFlow';
@@ -12,7 +13,7 @@ async function read<T>(path:string, signal:AbortSignal):Promise<T>{
  return response.json();
 }
 function JsonRecord({value,label}:{value:unknown;label:string}){
- return <details className="trace-json"><summary>{label}</summary><pre>{JSON.stringify(value,null,2)}</pre></details>;
+ return <details className="trace-json"><summary>{label}</summary><pre>{displayJson(value)}</pre></details>;
 }
 function StoredStep({record}:{record:Record<string,unknown>}){
  const raw=record.tool_call;

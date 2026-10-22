@@ -1,3 +1,4 @@
+import { displayText } from '../lib/displayText';
 import ExpertExplanationEvidence from "../components/ExpertExplanationEvidence";
 import ContentOrigin from "../components/ContentOrigin";
 import { transparentReportMarkdown } from "../lib/reportTransparency";
@@ -34,7 +35,7 @@ export default function ReportPanel() {
   const configuration = snapshot?.run_configuration;
   const usage = useTelemetryTotals();
   const execution = usage.data?.executions.find(e=>e.run_tag===tag);
-  const lead = report?.text ? recommendationLead(report.text) : null;
+  const lead = report?.text ? recommendationLead(displayText(report.text)) : null;
 
   const download = () => {
     if (!report?.text) return;
@@ -93,7 +94,7 @@ export default function ReportPanel() {
               {snapshot.results.map(r => <ScientificProvenance key={r.result_id} result={r} />)}
             </details>}
           <ExpertExplanationEvidence evidence={report?.specialist_explanation}/>
-          {report?.error && <p role="status" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{report.error}</p>}
+          {report?.error && <p role="status" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{displayText(report.error)}</p>}
           {snapshot.results.filter(result => result.evaluation?.explanation?.review_status).map(result =>
             <details key={result.result_id} className="mb-3 rounded-lg border border-paper-line p-3">
               <summary className="cursor-pointer text-sm font-bold">{labelLoop(result)} · Model evaluation details</summary>

@@ -1,3 +1,4 @@
+import { displayText, skillLabel } from '../lib/displayText';
 import {createPortal} from 'react-dom';
 import {floorActivityRows, floorExecutionState, type FloorActivity} from '../lib/floorActivity';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
@@ -80,7 +81,7 @@ function ClinicalLogBody({pipelines, live, pipelineError, floorActivity}: {
             {floorActivity.error && <p role="status">Updates unavailable. Showing last recorded calls for this Loop.</p>}
             {!floorActivity.trace?<p>Waiting for this Loop’s agent records.</p>:<ol className="clinical-agent-list" aria-label="Floor plan agent activity">{floorActivityRows(floorActivity).map(row=><li className="clinical-agent-card" key={row.role} data-role={row.role} data-state={row.status.toLowerCase()}>
               <div className="clinical-agent-heading">{row.call?<button className="clinical-agent-link" aria-label={`View ${clinicalRoles[row.role]} activity`} onClick={()=>{setFollowing(false);setDetail({run_tag:floorActivity.runTag!,iteration:floorActivity.loop,stage:row.role,pipeline_name:owner?.name??'',detail:''});}}>{clinicalRoles[row.role]} <span aria-hidden="true">›</span></button>:<strong>{clinicalRoles[row.role]}</strong>}<span className="clinical-agent-status">{row.status==='Waiting · no call recorded'?'Not started':row.status}</span></div>
-              <p className="clinical-agent-skill">{row.skill?.title??row.skill?.id??'Skill not recorded'}</p>
+              <p className="clinical-agent-skill">{skillLabel(row.skill?.id,row.skill?.title)}</p>
               {row.status==='Call still open'&&<p>This agent call has not returned yet. It may be finishing after handing off its result; this does not confirm that its main task is still running.</p>}
               {row.status==='Running'&&<p>{({hypothesis:row.call?.stage.startsWith('question')?'Developing a research question.':'Developing a testable hypothesis.',data:'Preparing the selected measurements for analysis.',ml:'The task board is at model evaluation.',interpreter:'The task board is at interpretation of the analysis.',report:'Preparing an explanation of the findings and their limitations.'})[row.role]}</p>}
             </li>)}</ol>}
@@ -94,7 +95,7 @@ function ClinicalLogBody({pipelines, live, pipelineError, floorActivity}: {
         return <li key={`${event.id}:${event.revision}`}><small>{owner?.name ?? event.pipeline_name} · {event.iteration != null ? `Loop ${event.iteration}` : 'Loop not recorded'} · {clinicalRoles[event.stage] ?? 'Analysis'}</small><p>{clinicalEventText(event)}</p>
           <time dateTime={new Date(event.receivedAt).toISOString()}>Received {new Date(event.receivedAt).toLocaleTimeString()}</time>
           <button className="clinical-log-details-button" onClick={() => {setFollowing(false);setDetail(event);}}>View details</button>
-          {!!event.detail && <details><summary>Read recorded excerpt</summary><p>{event.detail}</p><small>Saved text excerpt; may be shortened. Agent-written content requires review.</small></details>}
+          {!!event.detail && <details><summary>Read recorded excerpt</summary><p>{displayText(event.detail)}</p><small>Saved text excerpt; may be shortened. Agent-written content requires review.</small></details>}
         </li>;
       })}</ol></section>
     </div>

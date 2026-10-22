@@ -4,12 +4,13 @@ import remarkGfm from 'remark-gfm';
 import { reportLoopText } from '../lib/reportLoopText';
 import { reportMarkdown } from '../lib/reportMarkdown';
 import { reportTableColumns } from '../lib/reportTableColumns';
+import { displayMarkdown } from '../lib/displayMarkdown';
 import ReportTransparency from './ReportTransparency';
 import ContentOrigin, { type ContentOriginKind } from './ContentOrigin';
 import './report-transparency.css';
 
 // Stable component types preserve the table DOM across polling and content updates.
-const markdownPlugins = [remarkGfm, reportTableColumns];
+const markdownPlugins = [remarkGfm, reportTableColumns, displayMarkdown];
 const markdownComponents: Components = {
       th: ({children, node, ...props}) => {
         const kind = String(node?.properties?.['data-assessment-kind'] ?? node?.properties?.dataAssessmentKind ?? '');

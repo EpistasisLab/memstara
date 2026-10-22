@@ -1,3 +1,4 @@
+import { displayJson } from '../../lib/displayText';
 import {useEffect, useRef, useState} from 'react';
 import {Search, ArrowUpRight, Network, LoaderCircle} from 'lucide-react';
 import type {SemanticData} from '../../lib/semanticLayout';
@@ -53,7 +54,7 @@ export default function SemanticExplorer({selected, onLayout, onChoose, source='
   <details className="related-settings"><summary><Network size={16}/>Map layout &amp; method</summary><div className="flex flex-col gap-3 pt-3">
    <p>Similarity compares question wording, not clinical relationships. Map distance is an approximate projection.</p>
    <div className="related-layout-actions grid grid-cols-1 gap-2 sm:grid-cols-2"><button disabled={busy} type="button" onClick={()=>void load()}>Refresh semantic layout</button><button type="button" onClick={()=>{request.current?.abort();setBusy(false);setData(null);onLayout(null);}}>Use decorative layout</button></div>
-   {data&&<><p>{data.limitations}</p><details><summary>Embedding provenance</summary><pre>{JSON.stringify({model:data.identity,index_hash:data.index_hash},null,2)}</pre></details></>}
+   {data&&<><p>{data.limitations}</p><details><summary>Embedding provenance</summary><pre>{displayJson({model:data.identity,index_hash:data.index_hash})}</pre></details></>}
   </div></details>
  </section>;
 }

@@ -1,6 +1,8 @@
-/** Presentation only: retain raw identifiers in tooltips and stored records. */
+import { displayText } from './displayText.ts';
+
+/** Presentation only: stored identifiers remain unchanged. */
 export function agentDisplayName(name: string): string {
-  return name.replace(/[-· ]*board_\d{8}T\d{6}(?:_\d+)?$/, '').trim();
+  return displayText(name.replace(/[-· ]*board_\d{8}T\d{6}(?:_\d+)?$/, '').trim());
 }
 export const TOOL_ACTIONS: Record<string, string> = {
   propose_questions: 'Propose research questions', read_question_catalog: 'Check existing questions',
@@ -14,6 +16,6 @@ export const TOOL_ACTIONS: Record<string, string> = {
 };
 export function cleanLog(text: string): string {
   // Strip terminal CSI / OSC formatting, never evaluate it as HTML.
-  return text.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
-    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
+  return displayText(text.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, ''));
 }

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Plus, Settings2, Trash2, Lightbulb, ChartNoAxesCombined, ScanText, FileText, LockKeyhole } from "lucide-react";
 import { asSlots, MAX_HYPOTHESIS_AGENTS, withoutSlot, withoutInterpreterSlot } from "../lib/planned";
 import { applyRunConfiguration, useControl, type RunRequest } from "../store/control";
+import { skillLabel } from '../lib/displayText';
 
 /** Shared editor and persisted draft keep the control panel and pipeline in sync. */
 export default function ControlAgentSettings({ form }: { form: RunRequest }) {
@@ -56,7 +57,7 @@ export default function ControlAgentSettings({ form }: { form: RunRequest }) {
                 onClick={() => { setRemoving(null); open(stage.id, slot); }}
                 className="group min-w-0 flex-1 p-2.5 text-left transition-colors hover:bg-paper-panel focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-[-2px] disabled:cursor-not-allowed">
                 <span className="flex items-center gap-2 text-xs font-semibold text-ink-soft">{name}</span>
-                <span className="mt-1 block break-words text-sm font-medium leading-snug text-ink">{skill?.title || book || "Default instructions"}</span>
+                <span className="mt-1 block break-words text-sm font-medium leading-snug text-ink">{skillLabel(book,skill?.title,"Default instructions")}</span>
                 <span className="mt-2 flex items-center gap-1 text-xs text-ink-faint group-hover:text-ink"><Settings2 size={12} aria-hidden="true" />{stage.id === "ml" ? "Skill & model settings" : "Choose or upload skill"}</span>
               </button>
               {stage.maximum > 1 && <button type="button" disabled={locked || stage.count <= 1}

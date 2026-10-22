@@ -4,6 +4,7 @@ import { useControl } from '../store/control';
 import { setupStages, skillSignature, usePipelineSetup } from '../store/pipelineSetup';
 import { STAGE_ICON } from '../lib/icons';
 import { STAGE_COLOR } from '../lib/stage';
+import { skillLabel } from '../lib/displayText';
 
 const names = { hypothesis: 'Hypothesis', ml: 'Machine learning', interpreter: 'Interpreter', report: 'Explanation' };
 const descriptions = {
@@ -40,7 +41,7 @@ export default function PipelineSetupGuide() {
       return <li key={s} aria-current={s===stage?'step':undefined} data-done={confirmed.includes(s)}>
         {confirmed.includes(s)?<Check size={15}/>:<StageIcon size={15}/>} {names[s]}</li>;
     })}</ol>
-    <div className="floor-setup-actions"><span>Selected skill: <strong>{skill?.title || pipeline.configuration[`playbook_${stage === "report" ? "explanation" : stage}`] || 'Not selected'}</strong></span>
+    <div className="floor-setup-actions"><span>Selected skill: <strong>{skillLabel(pipeline.configuration[`playbook_${stage === "report" ? "explanation" : stage}`],skill?.title,'Not selected')}</strong></span>
       <div className="floor-skill-entry" key={stage}>
         {!pipeline.running&&!busy&&<div id="floor-skill-entry-hint" className="floor-skill-entry-hint">
           <span>Review this skill here</span><ArrowDown size={14} aria-hidden="true"/>

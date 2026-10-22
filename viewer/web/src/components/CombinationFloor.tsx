@@ -1,3 +1,4 @@
+import { skillLabel } from '../lib/displayText';
 import {floorCallRole as callRole, floorCallStatus} from '../lib/floorActivity';
 import {useMemo, useCallback, useState, useEffect, type CSSProperties} from 'react';
 import {ReactFlow, Panel, useReactFlow, useStore, getViewportForBounds, Background, BackgroundVariant, Controls, Handle, Position, MarkerType, type NodeProps, type Node} from '@xyflow/react';
@@ -23,8 +24,8 @@ function Room({data}:NodeProps<Node<RoomData>>){
   {data.status==='Call still open'&&<p className="cf-room-purpose">Call not yet returned. Main-task activity is not confirmed.</p>}
   <div className="cf-desks">{data.skills.map((s,i)=><div className={`cf-desk ${data.selected===s.id?'is-selected':data.recorded?'cf-unused':''}`} key={s.id}>
    <Handle type="target" position={Position.Left} id={`in-${i}`} isConnectable={false}/>
-   <button className="cf-select nodrag" aria-label={`Preview ${s.title??s.id}`} aria-pressed={data.selected===s.id} disabled={data.recorded} onClick={()=>data.onSelect(s.id)}><span className="cf-orbit"><Icon size={17}/></span><span><small>{data.recorded?(data.selected===s.id?'Selected for this Loop':'Other variant'):`Variant ${i+1}`}</small><strong>{s.title??s.id}</strong></span></button>
-   <button className="cf-inspect nodrag" aria-label={`Inspect ${s.title??s.id} instructions`} onClick={()=>data.inspect(s)}><ExternalLink size={14}/></button>
+   <button className="cf-select nodrag" aria-label={`Preview ${skillLabel(s.id,s.title)}`} aria-pressed={data.selected===s.id} disabled={data.recorded} onClick={()=>data.onSelect(s.id)}><span className="cf-orbit"><Icon size={17}/></span><span><small>{data.recorded?(data.selected===s.id?'Selected for this Loop':'Other variant'):`Variant ${i+1}`}</small><strong>{skillLabel(s.id,s.title)}</strong></span></button>
+   <button className="cf-inspect nodrag" aria-label={`Inspect ${skillLabel(s.id,s.title)} instructions`} onClick={()=>data.inspect(s)}><ExternalLink size={14}/></button>
    <Handle type="source" position={Position.Right} id={`out-${i}`} isConnectable={false}/>
   </div>)}</div>
   {data.status==='Running'&&<div className="cf-running-track" aria-hidden="true"><span/><span/><span/></div>}

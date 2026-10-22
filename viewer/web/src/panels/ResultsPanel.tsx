@@ -1,3 +1,4 @@
+import { displayText, displayJson, skillLabel } from '../lib/displayText';
 import AucAssessment from '../components/AucAssessment';
 import SpecialistEvidence from "../components/SpecialistEvidence";
 import ExecutionStatusNotice from "../components/ExecutionStatusNotice";
@@ -137,7 +138,7 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
                 <header className="flex items-baseline justify-between gap-4">
                   <h3 className="font-bold">
                     {resultName(r)}
-                    <span className="ml-2 font-normal text-ink-soft">{r.perspective}</span>
+                    <span className="ml-2 font-normal text-ink-soft">{displayText(r.perspective)}</span>
                     {r.run_tag&&<span className="block break-all text-xs font-normal text-ink-faint">{r.run_tag}</span>}
                   </h3>
                   <span className="text-right">
@@ -150,7 +151,7 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
                   </span>
                 </header>
 
-                <ContentOrigin kind="proposal" compact/><p className="mt-2 text-sm leading-relaxed text-ink-soft">{r.hypothesis}</p>
+                <ContentOrigin kind="proposal" compact/><p className="mt-2 text-sm leading-relaxed text-ink-soft">{displayText(r.hypothesis)}</p>
 
                 <p className="mt-2 font-mono text-[12px] text-ink-faint">
                   {predictors.length} predictor
@@ -161,7 +162,7 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
                 </p>
 
                 {r.evaluation?.data_allocation && <section aria-label="Data allocation" className="mt-3 rounded border border-paper-line p-3 text-sm">
-                  <strong>Data allocation · {r.evaluation.data_allocation.request.skill}</strong>
+                  <strong>Data allocation · {skillLabel(r.evaluation.data_allocation.request.skill)}</strong>
                   <p>Requested training/evaluation: {Math.round((1-r.evaluation.data_allocation.agent_plan.test_size)*100)}% / {Math.round(r.evaluation.data_allocation.agent_plan.test_size*100)}% of {r.evaluation.data_allocation.exploration_count} exploration rows.</p>
                   <p>{r.evaluation.data_allocation.reserved_count} independent validation rows remain reserved{r.evaluation.data_allocation.validation_partition ? ` (${Math.round(r.evaluation.data_allocation.validation_partition.fraction*100)}%, seed ${r.evaluation.data_allocation.validation_partition.seed})` : ''}. Stratification preserves observed class proportions; no class resampling.</p>
                   {r.evaluation.data_allocation.replicates.map((split, index)=><p key={index}>
@@ -184,10 +185,10 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
                       </div>)}
                       <SpecialistEvidence evidence={model.specialist_xai} />
                       <p>Replay: {model.evaluation.reproducibility?.status ?? 'not recorded'}</p>
-                      <details><summary>Model parameters and replay location</summary><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify({configuration:model.ml_configuration,replay:model.evaluation.reproducibility},null,2)}</pre></details>
+                      <details><summary>Model parameters and replay location</summary><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all text-xs">{displayJson({configuration:model.ml_configuration,replay:model.evaluation.reproducibility})}</pre></details>
                     </div>)}
                   </div>
-                  <details><summary>Agent proposal and enforced limits</summary><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(r.evaluation.ml_configuration,null,2)}</pre></details>
+                  <details><summary>Agent proposal and enforced limits</summary><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all text-xs">{displayJson(r.evaluation.ml_configuration)}</pre></details>
                 </section>}
                 <ResultEvidenceVisuals key={resultKey(r)} result={r} />
                 <section className="mt-3 rounded-lg border border-[#c9d9e8] bg-stage-data/5 p-3" aria-label="Clinical interpretation summary">
@@ -208,11 +209,11 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
                     {predictors.map(column => <span key={column} className="rounded border border-[#c9d9e8] bg-white px-1.5 py-0.5 font-mono text-[12px] text-ink-soft">{column}</span>)}
                     {(r.columns_used ?? []).length === 0 && <span className="text-xs text-ink-faint">No features were recorded.</span>}
                   </div>
-                  {r.evaluation?.interpreter && <p className="mt-2 text-xs text-ink-faint">Interpreter: {r.evaluation.interpreter.worker} · Skill: {r.evaluation.interpreter.skill || "Default instructions"}</p>}
+                  {r.evaluation?.interpreter && <p className="mt-2 text-xs text-ink-faint">Interpreter: {displayText(r.evaluation.interpreter.worker)} · Skill: {skillLabel(r.evaluation.interpreter.skill,null,"Default instructions")}</p>}
                   {r.evaluation?.interpretations && <div className="mt-3 space-y-2">
                     <p className="text-xs font-bold">Interpreter perspectives: {r.evaluation.interpretations.filter(i => i.status === "done").length}/{r.evaluation.interpretations.length} complete</p>
                     {r.evaluation.interpretations.map(i => <details key={i.slot} className="rounded border border-paper-line p-2">
-                      <summary className="cursor-pointer text-xs">{i.worker} · {i.skill || "Default instructions"} · {i.status}</summary>
+                      <summary className="cursor-pointer text-xs">{displayText(i.worker)} · {skillLabel(i.skill,null,"Default instructions")} · {i.status}</summary>
                       <Suspense fallback={<p>Loading formatted explanation…</p>}><ReportBody origin={i.status === "done" ? "llm" : undefined} text={i.status === "done" ? i.text : "This perspective is not yet available."} /></Suspense>
                     </details>)}
                   </div>}
@@ -251,7 +252,7 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
                   <summary className="cursor-pointer font-bold">Evaluation and explainability</summary>
                   <p className="mt-2"><Help topic="Evaluation and explainability" /> How to read evaluation evidence</p>
                   <p className="mt-2">{r.hypothesis_id} · seed {r.evaluation.seed ?? "not recorded"} · hold-out {r.evaluation.test_size ?? "not recorded"}</p>
-                  <pre className="mt-2 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(r.evaluation.evaluation?.plan, null, 2)}</pre>
+                  <pre className="mt-2 overflow-auto whitespace-pre-wrap text-xs">{displayJson(r.evaluation.evaluation?.plan)}</pre>
                   <Suspense fallback={null}><ReportBody origin="rule" text={r.evaluation.explanation?.scope || ""} /></Suspense>
                   {r.evaluation.explanation?.shap?.mean_absolute && <div className="mt-2">
                     <p className="font-bold">TreeSHAP · mean absolute contribution ({r.evaluation.explanation.shap.units})</p>

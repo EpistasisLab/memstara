@@ -1,3 +1,4 @@
+import { displayText, skillLabel } from '../lib/displayText';
 import MLAdvancedSettings from './MLAdvancedSettings';
 import {mlOverridesError,overridesForSkills,overrideCount} from '../lib/mlOverrides';
 import {compatibleResearchSkill} from '../lib/researchSkills';
@@ -53,7 +54,7 @@ export default function CombinationWizard(){
   skillMode==='custom'?'Upload or write a skill, then save and select it to continue.':'Create a skill with AI, then save and select it to continue.':
   'Name your pipeline, review the Loop limit and settings, then check the confirmation box.';
  const RoleIcon=icons[activeRole];
- const visible=catalog.filter(s=>compatibleResearchSkill(s,draft)&&s.stage===activeRole&&`${s.title} ${s.description??''}`.toLowerCase().includes(search.toLowerCase()));
+ const visible=catalog.filter(s=>compatibleResearchSkill(s,draft)&&s.stage===activeRole&&displayText(`${skillLabel(s.id,s.title)} ${s.description??''}`).toLowerCase().includes(search.toLowerCase()));
  return <FloorDetailDialog title="All Combinations" close={()=>{if(!busy&&!uploading)closeCreation();}} className="pipeline-management-dialog combination-dialog">
   <div className="comb-builder">
    <nav className="comb-steps" aria-label="Combination setup steps">{['Research inputs','Agent skills','Review & create'].map((label,i)=><button key={label} aria-current={step===i?'step':undefined} disabled={busy||uploading||(i>0&&!!sourceError)||(i===2&&!count)} onClick={()=>setStep(i)}><span>{(i===0&&!sourceError&&step>0)||(i===1&&count>0&&!modelError)?<Check size={14}/>:i+1}</span>{label}</button>)}</nav>
@@ -69,7 +70,7 @@ export default function CombinationWizard(){
     </nav>
     <section className="comb-library">
      <header><span className="comb-symbol"><RoleIcon size={22}/></span><div><h3 ref={roleHeading} tabIndex={-1}>{flavorNames[activeRole]} skills</h3><p>{descriptions[activeRole]}</p></div></header>
-     {(selected[activeRole]??[]).length>0&&<div className="comb-selected-skills" aria-label="Selected skills">{(selected[activeRole]??[]).map(id=><span key={id}>{catalog.find(s=>s.id===id)?.title??id}<button type="button" disabled={busy||uploading} aria-label={`Remove ${catalog.find(s=>s.id===id)?.title??id}`} onClick={()=>toggle(activeRole,id,false)}>×</button></span>)}</div>}
+     {(selected[activeRole]??[]).length>0&&<div className="comb-selected-skills" aria-label="Selected skills">{(selected[activeRole]??[]).map(id=><span key={id}>{skillLabel(id,catalog.find(s=>s.id===id)?.title)}<button type="button" disabled={busy||uploading} aria-label={`Remove ${skillLabel(id,catalog.find(s=>s.id===id)?.title)}`} onClick={()=>toggle(activeRole,id,false)}>×</button></span>)}</div>}
      <div className="comb-skill-methods" role="group" aria-label="How to add skills">
       <button aria-pressed={skillMode==='library'} disabled={busy||uploading} onClick={()=>setSkillMode('library')}>Skill library</button>
       <button aria-pressed={skillMode==='custom'} disabled={busy||uploading} onClick={()=>setSkillMode('custom')}>Upload or write</button>
@@ -79,7 +80,7 @@ export default function CombinationWizard(){
       <details className="comb-skill-picker" key={`picker-${activeRole}`}><summary><span>Choose {flavorNames[activeRole]} skills</span><strong>{(selected[activeRole]??[]).length} selected</strong></summary>
        <div className="comb-picker-content"><label className="comb-search"><Search size={16}/><input aria-label="Search skills" placeholder="Search by name or description" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button aria-label="Clear skill search" onClick={()=>setSearch('')}>×</button>}</label>
         <div className="comb-skill-cards" role="group" aria-label={`${flavorNames[activeRole]} skill options`}>{visible.map(s=><div className={`comb-skill-card ${(selected[activeRole]??[]).includes(s.id)?'is-selected':''}`} key={s.id}>
-         <label><input type="checkbox" disabled={busy||uploading} checked={(selected[activeRole]??[]).includes(s.id)} onChange={e=>toggle(activeRole,s.id,e.target.checked)}/><span><strong>{s.title}</strong><small>{s.description||'Agent instructions from your skill library.'}</small></span></label><details><summary>Read instructions</summary><pre>{s.content}</pre></details></div>)}
+         <label><input type="checkbox" disabled={busy||uploading} checked={(selected[activeRole]??[]).includes(s.id)} onChange={e=>toggle(activeRole,s.id,e.target.checked)}/><span><strong>{skillLabel(s.id,s.title)}</strong><small>{displayText(s.description)||'Agent instructions from your skill library.'}</small></span></label><details><summary>Read instructions</summary><pre>{displayText(s.content)}</pre></details></div>)}
          {!visible.length&&<p className="comb-empty">No matching skills. Clear your search or use Upload or write to add a skill.</p>}
         </div>
        </div>
@@ -109,7 +110,7 @@ export default function CombinationWizard(){
      </section>
      <section className="comb-review-card" aria-labelledby="comb-agents-heading"><h4 id="comb-agents-heading">Your agents</h4><ol className="comb-review-agents">{PLAYBOOK_STAGES.map((stage,i)=>{const Icon=icons[stage];return <li key={stage}>
       <div className="comb-review-agent-heading"><Icon size={18} aria-hidden="true"/><h5>{flavorNames[stage]}</h5><span>{counts[i]} {counts[i]===1?'skill':'skills'}</span><button type="button" aria-label={`Edit ${flavorNames[stage]} skills`} disabled={busy||uploading} onClick={()=>{moveRole(i);setStep(1);}}>Edit</button></div>
-      <ul>{(selected[stage]??[]).map(id=><li key={id}>{catalog.find(s=>s.id===id)?.title??id}</li>)}</ul>
+      <ul>{(selected[stage]??[]).map(id=><li key={id}>{skillLabel(id,catalog.find(s=>s.id===id)?.title)}</li>)}</ul>
      </li>;})}</ol></section>
     </div>
     <label className="comb-consent comb-review-confirm"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/><span><strong>I reviewed the total Loops and model settings.</strong><small>Creation saves the design. Usage and costs begin when you select Run.</small></span></label>

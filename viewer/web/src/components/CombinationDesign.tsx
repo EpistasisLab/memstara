@@ -1,3 +1,4 @@
+import { displayText, skillLabel } from '../lib/displayText';
 import {floorCallRole as callRole, type FloorTrace as Trace, type FloorActivity, floorExecutionState} from '../lib/floorActivity';
 import {createPortal} from "react-dom";
 import {memo,useEffect,useState,useRef,lazy,Suspense,type CSSProperties} from 'react';
@@ -84,7 +85,7 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
   {headerHost?createPortal(header,headerHost):header}
   {view==='floor'?<>
 
-   {following&&error&&<div className="cs-error" role="alert"><AlertCircle size={16}/><span>{error} {trace?'Last available records; activity may have changed.':'Waiting for this Loop’s records.'}</span><button onClick={()=>setRetry(n=>n+1)}>Retry</button></div>}
+   {following&&error&&<div className="cs-error" role="alert"><AlertCircle size={16}/><span>{displayText(error)} {trace?'Last available records; activity may have changed.':'Waiting for this Loop’s records.'}</span><button onClick={()=>setRetry(n=>n+1)}>Retry</button></div>}
    {following&&!trace?<p role="status" className="cs-empty">{error?'Execution records unavailable.':'Loading current Loop…'}</p>:<CombinationFloor
     skills={PLAYBOOK_STAGES.map((stage,i)=>{const configured=lists[i].map(id=>({stage,id,title:skillFor(id)?.title,hash:skillFor(id)?.hash}));const frozen=trace?.calls.filter(c=>callRole(c)===stage).at(-1)?.skill??trace?.planned?.agents.find(a=>a.stage===stage);return following&&frozen?[...configured.map(s=>s.id===frozen.id?frozen:s),...(!configured.some(s=>s.id===frozen.id)?[frozen]:[])]:configured;})}
     currentStage={currentStage} activeSkills={following?(trace?.planned?.agents??[]):undefined} recorded={following} calls={following?trace?.calls:undefined} live={following&&live&&!error} paused={following&&paused} stopping={following&&stopping} stale={following&&!!error} inspect={setDetail}/>}
@@ -95,22 +96,22 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
     <div className={`cs-board ${role!=='all'?'cs-single-role':''}`}>
     {visibleRoles.map(stage=>{
      const index=PLAYBOOK_STAGES.indexOf(stage),Icon=roles[stage].icon;
-     const ids=lists[index].filter(id=>`${skillFor(id)?.title??id} ${skillFor(id)?.description??''}`.toLowerCase().includes(search.toLowerCase()));
+     const ids=lists[index].filter(id=>displayText(`${skillLabel(id,skillFor(id)?.title)} ${skillFor(id)?.description??''}`).toLowerCase().includes(search.toLowerCase()));
      return <section className="cs-column" key={stage} style={{'--role-color':STAGE_COLOR[stage]} as CSSProperties} aria-label={roles[stage].name+' skills'}>
       <header><span className="cs-role-icon"><Icon size={21}/></span><span className="cs-step">Stage {index+1}</span><h4>{roles[stage].name}</h4><p>{roles[stage].description}</p><span className="cs-variant-count">{lists[index].length} skill {lists[index].length===1?'variant':'variants'}</span></header>
-      <div className="cs-skill-stack">{ids.map(id=>{const skill=skillFor(id);return <button key={id} className="cs-skill" aria-label={`Read ${skill?.title??id} skill`} onClick={()=>setDetail({stage,id,title:skill?.title,hash:skill?.hash})}>
+      <div className="cs-skill-stack">{ids.map(id=>{const skill=skillFor(id);return <button key={id} className="cs-skill" aria-label={`Read ${skillLabel(id,skill?.title)} skill`} onClick={()=>setDetail({stage,id,title:skill?.title,hash:skill?.hash})}>
        <span className="cs-skill-top"><span>Variant {lists[index].indexOf(id)+1}</span><ExternalLink size={14}/></span>
-       <strong>{skill?.title??id}</strong><p>{skill?.description||'Open this skill to review its instructions.'}</p><span className="cs-skill-open">Read instructions <ArrowRight size={13}/></span>
+       <strong>{skillLabel(id,skill?.title)}</strong><p>{displayText(skill?.description)||'Open this skill to review its instructions.'}</p><span className="cs-skill-open">Read instructions <ArrowRight size={13}/></span>
       </button>;})}{!ids.length&&<p className="cs-empty">{search?'No matching skills in this role.':'No skill configured.'}</p>}</div>
      </section>;
     })}
     </div>
    </div>
   </>}
-  {detail&&<FloorDetailDialog title={detail.title??detail.id} close={()=>setDetail(null)} className="cs-skill-dialog">
+  {detail&&<FloorDetailDialog title={skillLabel(detail.id,detail.title)} close={()=>setDetail(null)} className="cs-skill-dialog">
    <div className="cs-document-role"><span>{roles[detail.stage]?.name??detail.stage} agent</span><span>{sameVersion?'Skill instructions':'Recorded skill reference'}</span></div>
-   {sameVersion?<><p className="cs-document-description">{selectedContent.description}</p><div className="cs-markdown"><Suspense fallback={<p>Loading instructions…</p>}><SkillMarkdown content={selectedContent.content||'No instructions are available for this skill.'}/></Suspense></div></>:<p>The recorded version is not available in the current skill catalog. Its current content is not substituted for the recorded instructions.</p>}
-   <details className="cs-document-provenance"><summary>File and version details</summary><dl><dt>Skill ID</dt><dd>{detail.id}</dd><dt>Version hash</dt><dd>{detail.hash??'Not recorded'}</dd></dl></details>
+   {sameVersion?<><p className="cs-document-description">{displayText(selectedContent.description)}</p><div className="cs-markdown"><Suspense fallback={<p>Loading instructions…</p>}><SkillMarkdown content={selectedContent.content||'No instructions are available for this skill.'}/></Suspense></div></>:<p>The recorded version is not available in the current skill catalog. Its current content is not substituted for the recorded instructions.</p>}
+   <details className="cs-document-provenance"><summary>File and version details</summary><dl><dt>Skill</dt><dd>{skillLabel(detail.id,detail.title)}</dd><dt>Version hash</dt><dd>{detail.hash??'Not recorded'}</dd></dl></details>
   </FloorDetailDialog>}
  </section>;
 }

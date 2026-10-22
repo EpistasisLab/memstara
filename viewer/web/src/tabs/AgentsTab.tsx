@@ -1,3 +1,4 @@
+import { displayText } from '../lib/displayText';
 import DetailPreview from "../components/DetailPreview";
 import {costLabel} from '../lib/loopUsage';
 import { createColumnHelper } from "@tanstack/react-table";
@@ -20,7 +21,7 @@ const COLUMNS = [
               style={{ backgroundColor: STAGE_COLOR[c.row.original.id as StageId] ?? "#c9c7c1" }} />
         <div>
           <div className="font-bold">{agentDisplayName(c.getValue())}</div>
-          <details className="mt-1 text-xs text-ink-faint"><DetailPreview title="Agent identifier" text={c.row.original.name}><summary className="cursor-pointer">Full agent identifier</summary></DetailPreview><code className="break-all">{c.row.original.name}</code></details>
+          <details className="mt-1 text-xs text-ink-faint"><DetailPreview title="Agent identifier" text={c.row.original.name}><summary className="cursor-pointer">Full agent identifier</summary></DetailPreview><code className="break-all">{displayText(c.row.original.name)}</code></details>
         </div>
       </div>
     ),

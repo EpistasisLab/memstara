@@ -1,3 +1,4 @@
+import { displayText } from '../lib/displayText';
 import CompactActivityRow from '../components/CompactActivityRow';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { agentDisplayName, TOOL_ACTIONS } from '../lib/telemetry';
@@ -21,7 +22,7 @@ function TextRow({message}:{message:AgentMessage}){
       <span className="telemetry-event-dot" style={{backgroundColor:'rgb(var(--accent))'}}/>
       <span className="telemetry-event-content"><span className="telemetry-event-action">{message.kind_label||'Agent text'} · LLM output</span>
         <span className="telemetry-event-agent">{agent}</span>
-        <span className="mt-1 line-clamp-2 whitespace-pre-wrap break-words text-sm text-ink">{message.text}</span>
+        <span className="mt-1 line-clamp-2 whitespace-pre-wrap break-words text-sm text-ink">{displayText(message.text)}</span>
       </span>
       <span className="telemetry-event-meta"><time dateTime={message.at??undefined}>{message.at?new Date(message.at).toLocaleTimeString():'Time unavailable'}</time><span>Read output <ChevronDown size={14}/></span></span>
     </summary>
@@ -38,7 +39,7 @@ function Row({ event }: { event: FeedEvent }) {
   const agent = agentDisplayName(event.label ?? event.name ?? 'Unknown agent');
   const time = new Date(event.at).toLocaleString();
   const resource = STORE_LABEL[event.store] ?? event.store;
-  const explanation = `${agent}: ${action}. Resource: ${resource}. Tool: ${event.tool}. Server: ${event.server}. Recorded ${time} (local time). Full agent identifier: ${event.name ?? 'Not recorded'}.`;
+  const explanation = `${agent}: ${action}. Resource: ${resource}. Tool: ${event.tool}. Server: ${displayText(event.server)}. Recorded ${time} (local time). Full agent identifier: ${event.name ?? 'Not recorded'}.`;
   return <li className="telemetry-event">
     <details>
       <DetailPreview title="Recorded activity" text={explanation}>
@@ -54,9 +55,9 @@ function Row({ event }: { event: FeedEvent }) {
       </DetailPreview>
       <div className="telemetry-event-details">
         <p>This is a recorded tool call. It does not by itself confirm that an analysis or loop completed.</p>
-        <dl><dt>Action</dt><dd>{action}</dd><dt>Agent</dt><dd>{event.label ?? event.name ?? 'Unknown agent'}</dd>
-          <dt>Agent identifier</dt><dd><code>{event.name || 'Not recorded'}</code></dd>
-          <dt>Tool</dt><dd><code>{event.tool}</code></dd><dt>Service</dt><dd>{event.server}</dd>
+        <dl><dt>Action</dt><dd>{action}</dd><dt>Agent</dt><dd>{displayText(event.label ?? event.name ?? 'Unknown agent')}</dd>
+          <dt>Agent identifier</dt><dd><code>{displayText(event.name || 'Not recorded')}</code></dd>
+          <dt>Tool</dt><dd><code>{event.tool}</code></dd><dt>Service</dt><dd>{displayText(event.server)}</dd>
           <dt>Resource</dt><dd>{resource}</dd><dt>Recorded at</dt><dd>{time} · local time</dd>
           <dt>Execution method</dt><dd>{event.path === 'supervisor' ? 'Legacy supervisor' : 'Pipeline task coordination'}</dd></dl>
       </div>

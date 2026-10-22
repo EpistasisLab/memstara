@@ -1,3 +1,4 @@
+import { displayText } from '../lib/displayText';
 import { useEffect, useState } from 'react';
 import { SnapshotScope } from '../lib/SnapshotScope';
 import type { Snapshot } from '../types';
@@ -37,7 +38,7 @@ export default function ActivityDetails({event}: {event: ActivityScope}) {
   }, [event.run_tag, loop]);
   return <section aria-label="Activity details">
     <header className="activity-browser-heading"><h4>{event.pipeline_name}</h4><span>{loop === null ? 'All loops' : `Loop ${loop}`}{event.stage?` · ${clinicalRoles[event.stage]??event.stage}`:''}</span></header>
-    {event.detail && <details><summary>Saved output excerpt</summary><p>{event.detail}</p></details>}
+    {event.detail && <details><summary>Saved output excerpt</summary><p>{displayText(event.detail)}</p></details>}
     {error && <p role="status">{error}</p>}
     {!snapshot && !error && <p role="status">Loading detailed activity…</p>}
     <SnapshotScope.Provider value={snapshot}>

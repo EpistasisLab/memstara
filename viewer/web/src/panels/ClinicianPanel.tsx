@@ -1,3 +1,4 @@
+import { displayJson } from '../lib/displayText';
 import AucAssessment from '../components/AucAssessment';
 import { featureImportance, rankedContributions, contributionScale } from "../lib/featureImportance";
 import SignedContributionBar from "../components/SignedContributionBar";
@@ -62,7 +63,7 @@ function Evidence({ result }: { result: Result }) {
       <div className="clinical-disclosure-body"><ScientificProvenance result={result}/>
         <dl className="clinical-source-grid"><div><dt>Outcome studied</dt><dd>{result.y_column || 'Not recorded'}</dd></div><div><dt>Model</dt><dd>{result.model || 'Not recorded'}</dd></div><div><dt>Random seed</dt><dd>{result.evaluation?.seed ?? 'Not recorded'}</dd></div><div><dt>Data held back for testing</dt><dd>{result.evaluation?.test_size == null ? 'Not recorded' : `${(result.evaluation.test_size * 100).toFixed(0)}%`}</dd></div></dl>
         <p>Knowledge reference IDs: {result.okf_concept_ids?.join(', ') || 'Not recorded'}</p>
-        <details className="mt-4"><summary>Technical evaluation plan</summary><pre className="mt-2 overflow-auto rounded-lg bg-paper p-3 text-xs">{JSON.stringify(result.evaluation?.evaluation?.plan ?? {}, null, 2)}</pre></details>
+        <details className="mt-4"><summary>Technical evaluation plan</summary><pre className="mt-2 overflow-auto rounded-lg bg-paper p-3 text-xs">{displayJson(result.evaluation?.evaluation?.plan ?? {})}</pre></details>
       </div>
     </details>
   </article>;

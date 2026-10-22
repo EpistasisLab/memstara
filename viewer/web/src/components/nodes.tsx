@@ -1,3 +1,4 @@
+import { skillLabel } from '../lib/displayText';
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { STAGE_ICON, STORE_ICON } from "../lib/icons";
 import { STAGE_COLOR, STATE_LABEL } from "../lib/stage";
@@ -64,7 +65,7 @@ export function AgentNode({ data }: NodeProps) {
   const planned = agent.state === "planned";
   const Icon = STAGE_ICON[agent.stage];
   const labels = { curator: 'Knowledge curator', hypothesis: `Hypothesis ${agent.slot + 1}`, data: 'Data', ml: 'Machine learning', interpreter: 'Interpreter', report: 'Explanation' };
-  const summary = agent.playbook ? agent.playbook.replaceAll('-', ' ').replaceAll('_', ' ') : {
+  const summary = agent.playbook ? skillLabel(agent.playbook).replaceAll('-', ' ').replaceAll('_', ' ') : {
     curator: 'Review knowledge', hypothesis: 'Knowledge to hypothesis', data: 'Extract selected features', ml: 'Train & evaluate',
     interpreter: 'Explain the evidence', report: 'Synthesize findings',
   }[agent.stage];
@@ -81,7 +82,7 @@ export function AgentNode({ data }: NodeProps) {
         <Help topic={agent.stage}><button type="button" className="min-w-0 flex-1 text-left text-[14px] font-bold leading-tight text-slate-700"
           aria-label={`Inspect ${labels[agent.stage]}`} onClick={event => { event.stopPropagation(); (data.inspect as (() => void))?.(); }}>{labels[agent.stage]}</button></Help>
       </div>
-      <div className="mt-2 truncate text-[12px] text-slate-500" title={agent.playbook ? `Skill: ${agent.playbook}` : summary}>{data.roleSummary ? String(data.roleSummary) : summary}</div>
+      <div className="mt-2 truncate text-[12px] text-slate-500" title={agent.playbook ? `Skill: ${skillLabel(agent.playbook)}` : summary}>{data.roleSummary ? String(data.roleSummary) : summary}</div>
     </div>
     <div className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t border-slate-100 bg-slate-50/70 px-3 py-1.5 text-[12px]">
       <span className="flex items-center gap-1.5" style={{ color: busy ? color : 'rgb(var(--ink-soft))' }}>

@@ -1,3 +1,4 @@
+import { displayText, skillLabel } from '../../lib/displayText';
 import AucAssessment from '../AucAssessment';
 import { useState } from 'react';
 import { ArrowRight, ScanSearch } from 'lucide-react';
@@ -26,5 +27,5 @@ export function ModelLens({ auc, model, spread }: { auc: number | null; model: s
 export function InterpretationVoices({ voices }: { voices: NonNullable<NonNullable<Result['evaluation']>['interpretations']> }) {
   const [selected,setSelected]=useState<number | null>(null);
   const voice=voices.find(v=>v.slot===selected)??voices[0];
-  return <div className="interpretation-voices"><div className="voices-grid">{voices.map(v=><button key={v.slot} aria-pressed={v.slot===voice?.slot} onClick={()=>setSelected(v.slot)}><ScanSearch size={20}/><span>VOICE {v.slot}</span><h4>{v.worker||`Interpreter ${v.slot}`}</h4><p>{v.skill||'Skill not recorded'}</p><small>{v.status}</small></button>)}</div>{voice&&<article><header><ScanSearch size={18}/><strong>{voice.worker||`Interpreter ${voice.slot}`}</strong></header><ReportBody origin={voice.text ? "llm" : undefined} text={voice.text||voice.error||'No interpretation text recorded yet.'}/></article>}<p className="universe-note">Each voice is a recorded interpretation. Agreement or disagreement has not been inferred automatically.</p></div>;
+  return <div className="interpretation-voices"><div className="voices-grid">{voices.map(v=><button key={v.slot} aria-pressed={v.slot===voice?.slot} onClick={()=>setSelected(v.slot)}><ScanSearch size={20}/><span>VOICE {v.slot}</span><h4>{displayText(v.worker)||`Interpreter ${v.slot}`}</h4><p>{skillLabel(v.skill)}</p><small>{v.status}</small></button>)}</div>{voice&&<article><header><ScanSearch size={18}/><strong>{displayText(voice.worker)||`Interpreter ${voice.slot}`}</strong></header><ReportBody origin={voice.text ? "llm" : undefined} text={voice.text||voice.error||'No interpretation text recorded yet.'}/></article>}<p className="universe-note">Each voice is a recorded interpretation. Agreement or disagreement has not been inferred automatically.</p></div>;
 }

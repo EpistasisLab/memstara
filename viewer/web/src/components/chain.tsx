@@ -1,3 +1,4 @@
+import { displayText, skillLabel } from '../lib/displayText';
 import { agentStageLabel } from "../lib/stage";
 import KnowledgeNode from "./KnowledgeNode";
 import PipelineStage from "./PipelineStage";
@@ -98,7 +99,7 @@ export function ChainNode({ data }: NodeProps) {
 
   return (
     <div
-      role="group" tabIndex={0} aria-label={`${agent.label}: ${STATE_LABEL[agent.state]}`}
+      role="group" tabIndex={0} aria-label={`${displayText(agent.label)}: ${STATE_LABEL[agent.state]}`}
       onKeyDown={event => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onInspect?.(); } }}
       className={`relative w-[280px] rounded-xl border-2 border-t-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 bg-white px-4 py-3.5 shadow-xs transition
                   hover:shadow-md ${tone.ring}`}
@@ -154,8 +155,8 @@ export function ChainNode({ data }: NodeProps) {
               `title` is what keeps that from being silent. "Explanation" is the
               longest label there is and sits near that limit; whether it actually clips
               has not been measured. */}
-          <div className="break-words text-base font-bold leading-snug" title={agent.label}>
-            {agent.label}
+          <div className="break-words text-base font-bold leading-snug" title={displayText(agent.label)}>
+            {displayText(agent.label)}
           </div>
           {/* The worker's own name, and only when it has one. Every card of a stacked
               column carries the station's label, so without this line three hypothesis
@@ -164,8 +165,8 @@ export function ChainNode({ data }: NodeProps) {
               be matched against the task row that names its holder. */}
           {agent.worker && (
             <div className="truncate font-mono text-xs leading-tight" style={{ color }}
-                 title={agent.worker}>
-              {agent.worker}
+                 title={displayText(agent.worker)}>
+              {displayText(agent.worker)}
             </div>
           )}
         </div>
@@ -189,17 +190,17 @@ export function ChainNode({ data }: NodeProps) {
             <button type="button" onClick={e => { e.stopPropagation(); onConfigure(); }}
               className="nodrag nopan min-w-0 flex-1 break-words rounded border border-dashed border-paper-line px-2 py-1.5 text-left text-xs font-bold"
               style={{ color }} title="Read or change this agent's skill">
-              {choice || "Choose skill"}
+              {skillLabel(choice, null, "Choose skill")}
             </button>
           ) : (
             <span
               className={agent.playbook ? "truncate font-mono font-bold" : "truncate text-ink-faint"}
               style={agent.playbook ? { color } : undefined}
               title={agent.playbook
-                ? `Running under the ${agent.playbook} standard`
+                ? `Running under the ${skillLabel(agent.playbook)} standard`
                 : "No standard attached — the prompt as written"}
             >
-              {agent.playbook || "no standard"}
+              {skillLabel(agent.playbook, null, "no standard")}
             </span>
           )}
         </div>
@@ -215,8 +216,8 @@ export function ChainNode({ data }: NodeProps) {
           untouched screen does not grow a second line under every card. */}
       {editable && agent.playbook && agent.playbook !== choice && (
         <div className="truncate pl-4 font-mono text-xs leading-tight text-ink-faint"
-             title={`This agent's last run used the ${agent.playbook} standard`}>
-          ran as {agent.playbook}
+             title={`This agent's last run used the ${skillLabel(agent.playbook)} standard`}>
+          ran as {skillLabel(agent.playbook)}
         </div>
       )}
 

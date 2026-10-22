@@ -1,3 +1,4 @@
+import { displayText } from '../lib/displayText';
 import ExpertExplanationEvidence from "./ExpertExplanationEvidence";
 import { transparentReportMarkdown } from "../lib/reportTransparency";
 import LoopUsage from "./LoopUsage";
@@ -32,7 +33,7 @@ export default function FinalReport() {
       {report.text && <button aria-label="Download final report" onClick={download} className="rounded p-1.5 hover:bg-paper"><Download size={15} /></button>}
     </div>
     <p className="px-3 pb-2 text-[12px] text-ink-faint">{tag}</p>
-    {report.error && <p role="status" className="px-3 pb-3 text-sm text-amber-800">{report.error}</p>}
+    {report.error && <p role="status" className="px-3 pb-3 text-sm text-amber-800">{displayText(report.error)}</p>}
     <ExpertExplanationEvidence evidence={report.specialist_explanation}/>
     {expanded && <div className="border-t border-paper-line p-4">
       <LoopUsage execution={execution} updatedAt={usage.data?.updated_at} error={usage.error}/>

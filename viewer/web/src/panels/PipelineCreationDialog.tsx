@@ -1,3 +1,4 @@
+import { displayText, skillLabel } from '../lib/displayText';
 import MLAdvancedSettings from '../components/MLAdvancedSettings';
 import {mlOverridesError,overridesForSkills,overrideCount} from '../lib/mlOverrides';
 import {compatibleResearchSkill} from '../lib/researchSkills';
@@ -154,7 +155,7 @@ function CreationWizard() {
               {catalog.filter(s => compatibleResearchSkill(s,draft) && s.stage === 'hypothesis' && addictionSkills.has(s.id)).map(s => <button
                 key={s.id} type="button" disabled={loading || busy || uploading} aria-pressed={skill?.id === s.id}
                 className="rounded-md border border-paper-line px-3 py-2 text-left font-bold text-ink hover:bg-paper disabled:opacity-40 aria-pressed:border-accent aria-pressed:bg-accent/10"
-                onClick={() => setDraft(d => ({...d, playbook_hypothesis: s.id}))}>{s.title}</button>)}
+                onClick={() => setDraft(d => ({...d, playbook_hypothesis: s.id}))}>{skillLabel(s.id,s.title)}</button>)}
             </div>
             <p className="mt-2 text-xs text-ink-muted">Use compatible Addiction KB knowledge sources selected in step 1. A skill guides the agent; it does not select a knowledge source or guarantee better AUC.</p>
           </aside>}
@@ -165,7 +166,7 @@ function CreationWizard() {
                 ml_overrides:stage==='ml'?overridesForSkills(d.ml_overrides,[e.target.value]):d.ml_overrides,
                 evaluation: stage === 'ml' ? { ...d.evaluation, ...chosen?.evaluation } : d.evaluation }));
             }}><option value="" disabled>{loading ? 'Loading skills…' : 'Select a skill'}</option>
-              {catalog.filter(s => compatibleResearchSkill(s,draft) && s.stage === stage).map(s => <option key={s.id} value={s.id} className={addictionSkills.has(s.id) ? 'font-bold' : 'font-normal'}>{s.title}</option>)}
+              {catalog.filter(s => compatibleResearchSkill(s,draft) && s.stage === stage).map(s => <option key={s.id} value={s.id} className={addictionSkills.has(s.id) ? 'font-bold' : 'font-normal'}>{skillLabel(s.id,s.title)}</option>)}
             </select></label>
           {stage==='ml'&&<MLAdvancedSettings skills={[draft.playbook_ml]} value={draft.ml_overrides} replicates={draft.evaluation.replicates} proposal={draft.data_mode==='proposal'} disabled={busy||loading||uploading} onChange={ml_overrides=>setDraft(d=>({...d,ml_overrides}))}/>}
           {!loading && !catalog.some(s => s.stage === stage) && <div role="alert" className="text-sm">Skills are unavailable. <button type="button" onClick={() => void reload()} className="underline">Try again</button></div>}
@@ -173,8 +174,8 @@ function CreationWizard() {
             onBusy={setUploading} onSelect={chosen => setDraft(d => ({ ...d, [`playbook_${stage === "report" ? "explanation" : stage}`]: chosen.id,
               ml_overrides:stage==='ml'?overridesForSkills(d.ml_overrides,[chosen.id]):d.ml_overrides,
               evaluation: stage === 'ml' ? { ...d.evaluation, ...chosen.evaluation } : d.evaluation }))} />
-          {skill && <div className="rounded-lg border border-paper-line bg-paper-panel p-4 text-sm"><p className={addictionSkills.has(skill.id) ? 'font-bold' : 'font-medium'}>{skill.title}</p><p className="mt-2 text-ink-muted">{skill.description}</p>
-            <details className="mt-3"><summary className="cursor-pointer">Read skill instructions</summary><pre className="mt-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-sans text-xs">{skill.content}</pre></details></div>}
+          {skill && <div className="rounded-lg border border-paper-line bg-paper-panel p-4 text-sm"><p className={addictionSkills.has(skill.id) ? 'font-bold' : 'font-medium'}>{skillLabel(skill.id,skill.title)}</p><p className="mt-2 text-ink-muted">{displayText(skill.description)}</p>
+            <details className="mt-3"><summary className="cursor-pointer">Read skill instructions</summary><pre className="mt-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-sans text-xs">{displayText(skill.content)}</pre></details></div>}
           {stage === 'ml' && <><AgentReferenceKnowledge /><EvaluationSettings proposal={draft.data_mode==='proposal'} paired={paired} dataSkill={draft.playbook_data} value={draft.evaluation} disabled={busy || loading || uploading} onChange={evaluation=>setDraft(d=>({...d,evaluation}))}/>
             <p className="text-xs text-ink-muted">Selecting another ML skill may apply its evaluation defaults. Review these settings after changing or uploading a skill.</p>
             <BaselineSettings value={draft.baseline_columns ?? []} onChange={value=>setDraft(d=>({...d, baseline_columns:value}))}/></>}
@@ -191,7 +192,7 @@ function CreationWizard() {
             <div className="flex items-start justify-between gap-3 py-3"><div><p className="text-xs text-ink-muted">Knowledge sources</p><p className="text-sm">{sourceLabel}</p></div><button type="button" className="text-sm underline" onClick={() => setStep(0)}>Edit</button></div>
             <div className="py-3"><p className="text-xs text-ink-muted">Pipeline name</p><p className="font-medium">{name.trim()}</p></div>
             <p className="text-sm">Fixed clinical baseline: {draft.baseline_columns?.join(" · ") || "None — hypothesis-selected predictors only"}</p>
-            {setupStages.map((s, index) => <div key={s} className="flex items-start justify-between gap-3 py-3"><div className="min-w-0"><p className="text-xs text-ink-muted">{labels[index + 1]}</p><p className="text-sm">{catalog.find(c => compatibleResearchSkill(c,draft) && c.stage === s && c.id === draft[`playbook_${s === "report" ? "explanation" : s}`])?.title || 'Select a skill'}{s === 'ml' && (paired ? ' · selected model only' : ` · ${draft.evaluation.engine}`)}</p></div><button type="button" className="shrink-0 text-sm underline" onClick={() => setStep(index + 1)}>Edit</button></div>)}
+            {setupStages.map((s, index) => <div key={s} className="flex items-start justify-between gap-3 py-3"><div className="min-w-0"><p className="text-xs text-ink-muted">{labels[index + 1]}</p><p className="text-sm">{skillLabel(draft[`playbook_${s === "report" ? "explanation" : s}`],catalog.find(c => compatibleResearchSkill(c,draft) && c.stage === s && c.id === draft[`playbook_${s === "report" ? "explanation" : s}`])?.title,'Select a skill')}{s === 'ml' && (paired ? ' · selected model only' : ` · ${draft.evaluation.engine}`)}</p></div><button type="button" className="shrink-0 text-sm underline" onClick={() => setStep(index + 1)}>Edit</button></div>)}
           </div><p className="text-xs text-ink-muted">This pipeline uses the knowledge sources you confirmed above. Dataset settings are carried over from the current configuration. Data extraction uses the Data skill selected above. Each pipeline has one agent per stage.</p></>}
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       </div>

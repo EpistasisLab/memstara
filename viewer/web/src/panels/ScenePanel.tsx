@@ -1,3 +1,4 @@
+import { skillLabel } from '../lib/displayText';
 import { useRunForm } from "../lib/useRunForm";
 import { useMemo, useState } from "react";
 import {
@@ -284,7 +285,7 @@ export default function ScenePanel() {
             {selected ? <>
               <div className="floor-inspector-icon" style={{ color: STAGE_COLOR[selected.stage] }}><Sparkles size={18} /></div>
               <div className="floor-inspector-copy"><strong>{selected.label} <span>{STATE_LABEL[selected.state]}</span></strong>
-                <p>{selected.playbook ? `Skill: ${selected.playbook}` : "Default stage instructions"}
+                <p>{selected.playbook ? `Skill: ${skillLabel(selected.playbook)}` : "Default stage instructions"}
                   {selected.carrying !== null ? ` · Task #${selected.carrying}` : ""}
                   {selected.running > 1 ? ` · ${selected.running} concurrent workers` : ""}</p>
                 <p>{selected.last_tool || selectedFlash ? `Last observed tool: ${selected.last_tool?.tool ?? selectedFlash?.tool}` : "No tool activity recorded for this agent."}</p>

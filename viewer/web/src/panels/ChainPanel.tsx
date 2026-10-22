@@ -1,3 +1,4 @@
+import { skillLabel } from '../lib/displayText';
 import { useRunForm } from "../lib/useRunForm";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -373,7 +374,7 @@ export default function ChainPanel() {
                     <span className="font-normal text-ink-faint">{inspected.state}</span>
                   </div>
                   <div className="truncate text-ink-faint">
-                    {inspected.playbook ? `Skill: ${inspected.playbook}` : "Default stage instructions"}
+                    {inspected.playbook ? `Skill: ${skillLabel(inspected.playbook)}` : "Default stage instructions"}
                     {inspected.carrying !== null ? ` · Task #${inspected.carrying}` : ""}
                     {inspected.running > 1 ? ` · ${inspected.running} workers` : ""}
                     {inspected.last_tool ? ` · Last tool: ${inspected.last_tool.tool}` : ""}

@@ -1,3 +1,4 @@
+import { displayText, displayJson } from '../lib/displayText';
 import {useEffect,useState} from 'react';
 import {usageDuration} from '../lib/loopUsage';
 type Call={run_id:string|null;stage:string;loop:number|null;seq:number;record:Record<string,unknown>|null;availability:string};
@@ -19,7 +20,7 @@ function Timing({record}:{record:Record<string,unknown>}){
  </dl>;
 }
 function Fields({record}:{record:Record<string,unknown>}){
- return <div className="space-y-2">{Object.entries(record).map(([key,value])=><details className="rounded border border-paper-line p-2" key={key}><summary className="cursor-pointer break-words">{key.replaceAll('_',' ')}</summary><pre className="mt-2 whitespace-pre-wrap break-all text-xs">{JSON.stringify(value,null,2)}</pre></details>)}</div>;
+ return <div className="space-y-2">{Object.entries(record).map(([key,value])=><details className="rounded border border-paper-line p-2" key={key}><summary className="cursor-pointer break-words">{displayText(key.replaceAll('_',' '))}</summary><pre className="mt-2 whitespace-pre-wrap break-all text-xs">{displayJson(value)}</pre></details>)}</div>;
 }
 function Invocation({tag,id}:{tag:string;id:string}){
  const [run,setRun]=useState<Record<string,unknown>|null>(null),[page,setPage]=useState<Steps|null>(null);

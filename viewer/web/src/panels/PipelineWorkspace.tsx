@@ -1,3 +1,4 @@
+import { skillLabel } from '../lib/displayText';
 import {WorkspaceEvidenceContext} from "../components/WorkspaceEvidenceContext";
 import {floorExecutionState, type FloorActivity} from '../lib/floorActivity';
 import {createPortal} from "react-dom";
@@ -293,7 +294,7 @@ export default function PipelineWorkspace(){
       <div className="floor-inspector-icon"><Sparkles size={18}/></div>
       <div className="floor-inspector-copy">
         <strong>{focused&&inspected?`${focused.name} · ${labels[inspected.stage as keyof typeof labels]}`:'One view. Independent research paths.'}</strong>
-        <p>{focused&&inspected?(inspected.stage==='data'?'Extract the columns already selected for this hypothesis. Concept-to-column matching is a tool available to the hypothesis agent; it is not a separate input dataset.':`${inspected.stage==='hypothesis'?'Propose a testable hypothesis and map clinical concepts to available columns. ':inspected.stage==='ml'?'Train and evaluate models using the configured model tools. ':''}Skill: ${focused.configuration[`playbook_${inspected.stage === "report" ? "explanation" : inspected.stage}` as keyof typeof focused.configuration]??'Choose knowledge on the source card'}`):items.length?'Select an agent to inspect its skill and configure this pipeline.':'Your resources are ready. Add a pipeline to build your first research path.'}</p>
+        <p>{focused&&inspected?(inspected.stage==='data'?'Extract the columns already selected for this hypothesis. Concept-to-column matching is a tool available to the hypothesis agent; it is not a separate input dataset.':`${inspected.stage==='hypothesis'?'Propose a testable hypothesis and map clinical concepts to available columns. ':inspected.stage==='ml'?'Train and evaluate models using the configured model tools. ':''}Skill: ${skillLabel(String(focused.configuration[`playbook_${inspected.stage === "report" ? "explanation" : inspected.stage}` as keyof typeof focused.configuration]??''),null,'Choose knowledge on the source card')}`):items.length?'Select an agent to inspect its skill and configure this pipeline.':'Your resources are ready. Add a pipeline to build your first research path.'}</p>
         <p>Tool activity shows recent tool-call categories for the selected execution, not exact SQL reads or writes.</p>
       </div>
       {focused&&inspected&&['hypothesis','ml','interpreter','report'].includes(inspected.stage)&&

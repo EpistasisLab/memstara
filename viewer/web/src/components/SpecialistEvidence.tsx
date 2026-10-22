@@ -1,3 +1,4 @@
+import { displayJson } from '../lib/displayText';
 import type {SpecialistXai} from '../types';
 
 export default function SpecialistEvidence({evidence}:{evidence?:SpecialistXai}) {
@@ -18,7 +19,7 @@ export default function SpecialistEvidence({evidence}:{evidence?:SpecialistXai})
           </tr>)}</tbody>
         </table>
         <p className="mt-2 text-xs">{item.limitation}</p>
-        <details><summary>Saved explanation identity and local artifact</summary><pre className="max-h-48 whitespace-pre-wrap break-all text-xs">{JSON.stringify({id:item.explanation_id,path:item.artifact_path,sha256:item.artifact_sha256},null,2)}</pre></details>
+        <details><summary>Saved explanation identity and local artifact</summary><pre className="max-h-48 whitespace-pre-wrap break-all text-xs">{displayJson({id:item.explanation_id,path:item.artifact_path,sha256:item.artifact_sha256})}</pre></details>
       </>}
     </div>)}
   </section>;
