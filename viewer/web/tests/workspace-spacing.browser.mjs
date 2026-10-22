@@ -15,6 +15,9 @@ try {
   await nav.waitFor();
   const buttons=nav.getByRole('button');
   assert.equal(await buttons.count(),5);
+  assert.equal(await buttons.first().innerText(),'Floor plan');
+  assert.equal(await buttons.first().getAttribute('aria-current'),'page');
+  await page.getByRole('group',{name:'Pipeline workspace header',exact:true}).waitFor();
   if(width<760) {
    const box=await nav.boundingBox();assert(box.height<=64,`Navigation must remain one row at ${width}px`);
    const top=await page.locator('#workspace-pipeline').boundingBox();
@@ -27,7 +30,7 @@ try {
    assert.equal(await buttons.nth(index).getAttribute('aria-current'),'page');
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`Page overflow at ${width}px`);
   }
-  await buttons.first().click();
+  await nav.getByRole('button',{name:'Question universe',exact:true}).click();
   await page.locator('.universe-page').waitFor();
   assert.equal(await page.locator('#workspace-pipeline .panel-header').count(),0,'One workspace title, not nested title bars');
   const gutter=await page.locator('.universe-page').evaluate(e=>getComputedStyle(e).paddingLeft);

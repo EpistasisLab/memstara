@@ -45,4 +45,4 @@ export const VIEWS: Record<ViewId, ViewMeta> = {
 /** The five primary views shown in Control, in their display order.
  * Diagnostic views retain their metadata for existing internal navigation.
  */
-export const VIEW_ORDER: ViewId[] = ["discovery", "clinician", "report", "scene", "agents"];
+export const VIEW_ORDER: ViewId[] = ["scene", "discovery", "clinician", "report", "agents"];

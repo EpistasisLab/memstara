@@ -88,10 +88,7 @@ export const useViewer = create<ViewerState>((set, get) => ({
   runTag: initialSelection ?? null,
   knownRuns: [],
   newRunMode: initialSelection === null,
-  view: (() => {
-    try { return "discovery" as ViewId; }
-    catch { return "discovery" as ViewId; }
-  })(),
+  view: "scene",
   selectedTask: null,
   selectedAgent: null,
   ticks: 0,
