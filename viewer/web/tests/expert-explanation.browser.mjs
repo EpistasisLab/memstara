@@ -29,7 +29,7 @@ try {
   });
   await page.goto('http://fixture.local/');
   await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
-  await page.getByRole('button',{name:'Open Results full screen',exact:true}).click();
+  await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Results',exact:true}).click();
   const tab=page.getByRole('tab',{name:'Results',exact:true});if(await tab.count())await tab.click();
   await page.getByRole('button',{name:'This execution',exact:true}).click();
   await page.getByText('Open the report for this execution',{exact:true}).click();
@@ -43,7 +43,7 @@ try {
   snapshot.report.status='failed';snapshot.report.error='Knowledge database unavailable';
   snapshot.report.specialist_explanation={status:'failed',expert:'hiv',loop:3};
   await page.reload();await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
-  await page.getByRole('button',{name:'Open Results full screen',exact:true}).click();
+  await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Results',exact:true}).click();
   await page.getByRole('button',{name:'This execution',exact:true}).click();
   await page.getByText('Open the report for this execution',{exact:true}).click();
   await page.getByTestId('final-report').getByText('Knowledge database unavailable',{exact:true}).waitFor();

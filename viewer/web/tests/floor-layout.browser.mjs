@@ -26,13 +26,15 @@ try {
   await page.locator('#workspace-pipeline').scrollIntoViewIfNeeded();
   const show=page.getByRole('button',{name:'Show pipeline list',exact:true});if(await show.isVisible())await show.click();
   await page.getByRole('button',{name:'Inspect Research pipeline 2',exact:true}).click();await page.waitForTimeout(600);
-  const before=await page.locator('.react-flow__viewport').getAttribute('style');
-  await page.getByRole('button',{name:'Open Results full screen',exact:true}).click();
-  await page.locator('#workspace-results').waitFor();
-  await page.keyboard.press('Escape');await page.waitForTimeout(400);
-  const after=await page.locator('.react-flow__viewport').getAttribute('style');assert.equal(after,before,'Resize changed diagram viewport');
+  const nav=page.locator('[aria-label="View navigation"]');
+  await nav.getByRole('button',{name:'Results',exact:true}).click();
+  await page.locator('#results-panel').waitFor();
+  await nav.getByRole('button',{name:'Floor plan',exact:true}).click();await page.waitForTimeout(400);
+  await page.locator('.floor-canvas .react-flow').waitFor();
+  assert((await page.locator('.pipeline-context-title').innerText()).includes('Research pipeline 2'),'Changing views lost the inspected pipeline');
+  assert.equal(await page.locator('#workspace-results, #workspace-report').count(),0);
   assert.equal(await page.locator('#workspace-pipeline > .window-titlebar').getByRole('button',{name:/^(Reset|Maximize|Restore) .* window$|^Collapse /}).count(),0);
-  console.log(JSON.stringify({theme,width,canvas:g,windows:visible.length,resize:'preserved'}));
+  console.log(JSON.stringify({theme,width,canvas:g,windows:visible.length,selection:'preserved'}));
   if(width===1440||width===390){await page.locator('.docked-workspace').evaluate(e=>e.scrollTop=0);await page.screenshot({path:`/tmp/floor-layout-${theme}-${width}.png`});}
  }
  assert.deepEqual(errors,[]);

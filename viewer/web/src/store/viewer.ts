@@ -30,9 +30,8 @@ const initialSelection = restoredSelection();
 
 export const POLL_MS = 2000;
 
-/** What the main area shows. Results is not here on purpose: ResultsPanel is always on
- *  screen at bottom-right, so a nav entry for it would be a second door to one room. */
-export type ViewId = "discovery" | "clinician" | "chain" | "scene" | "log" | "report" | "board" | "task" | "agents" | "access";
+/** Views opened in the main workspace from Control or an internal link. */
+export type ViewId = "discovery" | "results" | "clinician" | "chain" | "scene" | "log" | "report" | "board" | "task" | "agents" | "access";
 
 interface ViewerState {
   snapshot: Snapshot | null;

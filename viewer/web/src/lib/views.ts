@@ -1,5 +1,6 @@
 import {
   Stethoscope,
+  BarChart3,
   Orbit,
   Boxes,
   Database,
@@ -31,6 +32,7 @@ export interface ViewMeta {
 
 export const VIEWS: Record<ViewId, ViewMeta> = {
   discovery: { description: 'Explore generated research questions and follow their hypotheses, evidence and results as pipelines run.', label: "Question universe", icon: Orbit },
+  results: { description: 'Review recorded model performance, feature contributions and interpretation for each analysis.', label: "Results", icon: BarChart3 },
   clinician: { description: 'Review research findings in clinical language, with supporting evidence and limitations.', label: "Clinician view", icon: Stethoscope },
   chain: { description: 'Track each pipeline’s current stage, loop and completion status.', label: "Status", icon: Workflow },
   scene: { description: 'See parallel pipelines, their agents and resources, and follow live activity.', label: "Floor plan", icon: Map },
@@ -42,7 +44,7 @@ export const VIEWS: Record<ViewId, ViewMeta> = {
   access: { description: 'See which agents have used each tool or data service.', label: "Access map", icon: Database },
 };
 
-/** The five primary views shown in Control, in their display order.
+/** The primary views shown in Control, in their display order.
  * Diagnostic views retain their metadata for existing internal navigation.
  */
-export const VIEW_ORDER: ViewId[] = ["scene", "discovery", "clinician", "report", "agents"];
+export const VIEW_ORDER: ViewId[] = ["scene", "discovery", "results", "clinician", "report", "agents"];

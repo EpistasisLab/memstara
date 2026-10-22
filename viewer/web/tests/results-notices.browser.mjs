@@ -17,12 +17,13 @@ try{
   });
   const goto=async()=>{await page.goto(root+'/tests/results-notices.fixture.html');await page.waitForFunction(()=>typeof window.deliverResults==='function');};
   const deliver=(rows,tag='alpha-run',requested=tag,error=null)=>page.evaluate(({value,requested,error})=>window.deliverResults(value,requested,error),{value:snapshot(rows,tag),requested,error});
-  const launch=page.getByRole('button',{name:'Open Results full screen',exact:true});
+  const nav=page.getByRole('complementary',{name:'View navigation'});
+  const launch=nav.getByRole('button',{name:'Results',exact:true});
   const badge=launch.locator('.results-new-badge');
-  const dock=page.locator('#workspace-results');
+  const dock=page.locator('#results-panel');
   const selected=dock.getByRole('article',{name:'Selected analysis evidence'});
   const seen=()=>page.evaluate(key=>JSON.parse(localStorage.getItem(key)||'{}'),receiptKey);
-  const close=()=>page.keyboard.press('Escape');
+  const close=()=>nav.getByRole('button',{name:'Floor plan',exact:true}).click();
   await goto();
   await deliver([]);await expect(badge).toHaveCount(0);
   await deliver([result(1,null)]);await expect(badge).toHaveCount(0);
@@ -34,9 +35,9 @@ try{
   await expect(badge.locator('i')).toHaveCSS('animation-iteration-count','2');
   for(const theme of ['light','dark'])for(const width of [1440,768,390,320]){
     await page.setViewportSize({width,height:900});await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
-    await expect(launch).toBeVisible();
-    const bounds=await page.getByRole('group',{name:'Analysis views'}).evaluate(e=>({width:e.clientWidth,scroll:e.scrollWidth}));
-    assert(bounds.scroll<=bounds.width+1,`${theme} ${width}: ${JSON.stringify(bounds)}`);
+    await launch.scrollIntoViewIfNeeded();await expect(launch).toBeInViewport();
+    const bounds=await launch.evaluate(e=>({left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right,viewport:innerWidth,width:e.clientWidth,scroll:e.scrollWidth}));
+    assert(bounds.left>=0&&bounds.right<=bounds.viewport&&bounds.scroll<=bounds.width+1,`${theme} ${width}: ${JSON.stringify(bounds)}`);
     if(process.env.MEMSTARA_SCREENSHOT_DIR&&[1440,390].includes(width))await page.screenshot({path:`${process.env.MEMSTARA_SCREENSHOT_DIR}/results-notice-${theme}-${width}.png`});
   }
   await page.emulateMedia({reducedMotion:'reduce'});await expect(badge.locator('i')).toHaveCSS('animation-name','none');

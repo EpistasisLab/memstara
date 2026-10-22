@@ -263,10 +263,8 @@ export default function ScenePanel() {
             onNodeClick={(_, node) => {
               if (node.id === "place-board") setView("board");
               else if (node.id === "place-results") {
-                // Results is not a view — its panel is already on screen at bottom-right.
-                // On a narrow screen the layout stacks, so bring it into sight instead of
-                // swapping this slot for a room that is already open.
-                document.getElementById("results-panel")?.scrollIntoView({ behavior: "smooth" });
+                // Open the same Results destination available in Control.
+                useViewer.getState().setView('results');
               } else if (node.type === "agent") {
                 const agent = node.data.agent as SceneAgent;
                 // Nothing to open for a figure that has not run — its agent row may not

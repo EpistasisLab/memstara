@@ -28,13 +28,12 @@ import { useResultsReadReceipt } from '../lib/useResultsReadReceipt';
 /**
  * Finished results — the results table, not the board.
  *
- * Available in the Floor plan analysis area; hidden in other workspace views. It carries `id="results-panel"` so the scene's results place can bring it
- * into view on a narrow screen (see ScenePanel's `onNodeClick`).
+ * Opened as a dedicated Control view, or embedded in Telemetry for an inspected run.
  *
  * Experimental records are read-only. Read receipts live only in this browser.
  */
 
-export default function ResultsPanel({ telemetry = false }: { telemetry?: boolean } = {}) {
+export default function ResultsPanel({ telemetry = false, embedded = false }: { telemetry?: boolean; embedded?: boolean } = {}) {
   const snapshot = useSnapshot();
   const [chosenResult, setChosenResult] = useState('');
   const executionContext = useExecutionContext();
@@ -95,7 +94,7 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
   };
 
   return (
-    <Panel id="results-panel" icon={BarChart3} title="Results">
+    <Panel id="results-panel" icon={BarChart3} title="Results" embedded={embedded}>
       {scope==="selected" && <ExecutionStatusNotice key={savedTag} pipeline={pipeline} stale={statusStale} execution={floorExecutionState(executionOwner?.running)} label={executionContext.label} runTag={savedTag} loading={executionContext.loading}/>}
       {scope==="selected" && dataUnavailable && <p role="status" className="m-4 text-sm text-amber-800">Connection interrupted. Showing the last available results; this is not an empty or completed run.</p>}
       {!telemetry && <div className="m-4 flex flex-wrap gap-2 text-sm"><button className="rounded border border-paper-line px-3 py-2" aria-pressed={scope==="all"} onClick={()=>setScope("all")}>Latest executions across pipelines</button><button className="rounded border border-paper-line px-3 py-2" aria-pressed={scope==="selected"} onClick={()=>setScope("selected")}>This execution</button></div>}

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronDown, ChevronUp, Settings2, X, HelpCircle, Maximize2, Minimize2, RotateCcw } from "lucide-react";
 
-import {WorkspaceEvidenceContext} from "./WorkspaceEvidenceContext";
 import { workspaceGeometry } from "../lib/workspaceGeometry";
 import "./workspace-docking.css";
 import HeaderStatus from "./HeaderStatus";
@@ -13,7 +12,6 @@ import ViewErrorBoundary from './ViewErrorBoundary';
 import ExplorationSummary from "./ExplorationSummary";
 import ThemeToggle from "./ThemeToggle";
 import ModelConnectionDialog from "./ModelConnectionDialog";
-import ResultsLaunchButton from "./ResultsLaunchButton";
 import WorkspaceCost from './WorkspaceCost';
 import { useWorkspaceCost } from '../lib/useWorkspaceCost';
 
@@ -55,7 +53,6 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
   const [maximizedId, setMaximized] = useState("");
   const maximized = items.some(item=>item.id===maximizedId) ? maximizedId : "";
   const fullscreenEvidence=secondary.includes(maximized);
-  const maximizeEvidence=(id:string)=>{setCollapsed(previous=>previous.filter(value=>value!==id));setActivePanel(id);setMaximized(id);};
   const closeEvidence=()=>{setCollapsed(previous=>Array.from(new Set([...previous,maximized])));setMaximized('');};
   useEffect(()=>{
     if(!fullscreenEvidence)return;
@@ -199,7 +196,7 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
             </button>}
             </div>}
           </div>
-          <div className="window-content"><ViewErrorBoundary key={item.id === "pipeline" ? item.title.split(" · ")[0] : item.id} name={item.title}><WorkspaceEvidenceContext.Provider value={item.id==='pipeline'?<div className="workspace-evidence-launchers" role="group" aria-label="Analysis views">{items.filter(entry=>['results','report'].includes(entry.id)).map(entry=>entry.id==='results'?<ResultsLaunchButton key={entry.id} open={()=>maximizeEvidence('results')}/>:<button key={entry.id} type="button" aria-label="Open Final report full screen" onClick={()=>maximizeEvidence(entry.id)}><span>Final report</span><Maximize2 size={13} aria-hidden="true"/></button>)}</div>:null}><WorkspaceHeaderContext.Provider value={item.id==="pipeline"?pipelineHeader:null}>{item.content}</WorkspaceHeaderContext.Provider></WorkspaceEvidenceContext.Provider></ViewErrorBoundary></div>
+          <div className="window-content"><ViewErrorBoundary key={item.id === "pipeline" ? item.title.split(" · ")[0] : item.id} name={item.title}><WorkspaceHeaderContext.Provider value={item.id==="pipeline"?pipelineHeader:null}>{item.content}</WorkspaceHeaderContext.Provider></ViewErrorBoundary></div>
           {item.id !== "control" && !maximized && edges.map(edge => <div key={edge} role={edge === "se" ? "separator" : undefined} tabIndex={edge === "se" ? 0 : -1}
             aria-valuenow={edge === "se" ? Math.round(normal.w) : undefined}
             aria-valuemin={edge === "se" ? Math.min(200, bounds.w) : undefined}

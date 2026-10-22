@@ -46,7 +46,7 @@ try {
   });
   await page.goto('http://fixture.local/');
   await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
-  await page.getByRole('button',{name:'Open Results full screen',exact:true}).click();
+  await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Results',exact:true}).click();
   const tab=page.getByRole('tab',{name:'Results',exact:true});if(await tab.count())await tab.click();
   await page.getByRole('button',{name:'Latest executions across pipelines',exact:true}).click();
   const evidence=page.getByRole('article',{name:'Selected analysis evidence'});
@@ -77,7 +77,7 @@ try {
     status:'failed',error_type:'RuntimeError',seed:7};
   await page.reload();
   await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
-  await page.getByRole('button',{name:'Open Results full screen',exact:true}).click();
+  await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Results',exact:true}).click();
   const reselect=page.getByRole('tab',{name:'Results',exact:true});if(await reselect.count())await reselect.click();
   await page.getByRole('button',{name:'Latest executions across pipelines',exact:true}).click();
   await page.getByText('Explanation unavailable (RuntimeError). Do not infer feature effects.',{exact:true}).waitFor();

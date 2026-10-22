@@ -114,10 +114,11 @@ The services bind to loopback. There is no production authentication layer.
 | Task life | One task's progress through its stages |
 | Telemetry | Agent calls, tool activity, usage, and database records |
 | Access map | Tool access to stores |
-| Results panel | Recorded model evaluations and interpretation |
+| Results | Recorded model evaluations and interpretation |
 
-The primary navigation exposes Floor plan, Clinician view, Telemetry, Final report,
-and Question universe. Logs, Board, and task/access detail are additional workspace
+Control exposes Floor plan, Question universe, Results, Clinician view, Final report,
+and Telemetry. Results and Final report open in the main workspace; Floor plan has
+no separate Results or Final report windows. Logs, Board, and task/access detail are additional workspace
 panels rather than all being top-level navigation entries. Pipeline status is shown
 within the workspace; the retained internal Status view is not a primary navigation tab.
 

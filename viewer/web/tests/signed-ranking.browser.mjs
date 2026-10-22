@@ -36,7 +36,7 @@ try {
   await assertBars('.universe-evidence');
   await page.keyboard.press('Escape');await page.getByRole('button',{name:/Clinician view/}).first().click();await page.getByText('Explore the supporting evidence',{exact:true}).click();await page.locator('.clinical-contribution').first().waitFor();
   assert.deepEqual(await page.locator('.clinical-contribution > div:first-child > span').allTextContents(),['positive','zero','negativeSmall','negativeLarge']);await assertBars('.clinical-contributions');
-  await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();await page.getByRole('button',{name:'Open Results full screen',exact:true}).click();
+  await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Results',exact:true}).click();
   const tab=page.getByRole('tab',{name:'Results',exact:true});if(await tab.count())await tab.click();
   await page.getByRole('button',{name:'Latest executions across pipelines',exact:true}).click();
   await page.locator('.result-feature-row').first().waitFor();

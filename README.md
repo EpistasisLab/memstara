@@ -93,14 +93,16 @@ validated clinical prediction tool.
 ## Read activity and results
 
 - **Floor plan:** follow execution. The **Pipelines** and **Live log** toolbar buttons show or hide the side panels. **Browse activity** shows agent, time, action and recorded status; expand an entry for its output or technical details. A recorded tool call does not confirm success.
-- **Results / Final report buttons above the floor:** open a full-screen reading view. Minimize, Restore or **Esc** hides it; no minimized panel remains below the visualization. Use the same toolbar button to reopen it.
+- **Control → Results:** review recorded model evaluations and interpretation. A **New** badge marks unread results for the selected execution.
 - **Clinician view:** explore individual findings, interpretations, model evidence and limitations.
-- **Final report navigation view:** read the selected execution's Explanation report and download it as Markdown.
+- **Control → Final report:** read the selected execution's Explanation report and download it as Markdown.
 - **Question universe:** explore recorded research questions and their associated results.
 - **Telemetry:** inspect execution usage and Motoro-provided cost estimates. These are estimates, not actual billed charges; unavailable prices remain unknown.
 
 Results and reports appear as they are recorded. An empty view before an execution
-has produced output is expected.
+has produced output is expected. Both open in the main workspace; choose **Floor plan**
+in Control to return to execution monitoring. The header's **Estimated total** stays
+visible across views; click it for the latest-execution cost breakdown by pipeline.
 
 ## Stop, restart or troubleshoot
 

@@ -17,15 +17,16 @@ try {for(const width of [1440,390]){
   return r.fulfill({body:await readFile(path.startsWith('/assets/')?resolve(root,'dist/assets',basename(path)):resolve(root,'dist/index.html')),contentType:path.endsWith('.js')?'application/javascript':path.endsWith('.css')?'text/css':'text/html'});
  });
  await page.goto('http://localhost/');const nav=page.locator('[aria-label="View navigation"]');
- for(const view of ['Question universe','Clinician view','Final report','Telemetry']){
+ for(const view of ['Question universe','Results','Clinician view','Final report','Telemetry']){
   await nav.getByRole('button',{name:view,exact:true}).click();
   await expect(page.locator('#workspace-results, #workspace-report')).toHaveCount(0);
  }
  await nav.getByRole('button',{name:'Floor plan',exact:true}).click();
  await expect(page.locator('#workspace-results, #workspace-report')).toHaveCount(0);
- await page.getByRole('button',{name:'Open Results full screen',exact:true}).click();
- await expect(page.locator('#workspace-results')).toHaveClass(/is-evidence-fullscreen/);
- await page.keyboard.press('Escape');
+ await expect(page.locator('.floor-observatory').getByRole('button',{name:/Results|Final report/})).toHaveCount(0);
+ await nav.getByRole('button',{name:'Results',exact:true}).click();
+ await expect(page.locator('#results-panel')).toBeVisible();
+ await expect(nav.getByRole('button',{name:'Results',exact:true})).toHaveAttribute('aria-current','page');
  await nav.getByRole('button',{name:'Question universe',exact:true}).click();
  await expect(page.locator('#workspace-pipeline')).toBeVisible();
  await expect(page.locator('#workspace-results, #workspace-report')).toHaveCount(0);
@@ -42,5 +43,5 @@ try {for(const width of [1440,390]){
  await page.keyboard.press('Escape');await expect(popup).toHaveCount(0);
  await page.getByRole('button',{name:'Explore questions',exact:true}).click();await expect(page.getByRole('button',{name:'Related questions',exact:true})).toBeVisible();
  await page.locator('.universe-search input').click();await expect(page.locator('.universe-popover[open]')).toHaveCount(0);
- assert.deepEqual(errors,[]);console.log(`${width}: Floor-plan-only analysis panels, maximized-view navigation, 44px controls, nonmodal popovers, Escape/outside dismissal, no overflow`);await page.close();
+ assert.deepEqual(errors,[]);console.log(`${width}: Analysis views in Control, no Floor plan duplicates, 44px controls, nonmodal popovers, Escape/outside dismissal, no overflow`);await page.close();
 }}finally{await browser.close();}

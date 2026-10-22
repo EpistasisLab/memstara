@@ -27,7 +27,7 @@ import { IDLE_REFRESH_MS, LIVE_REFRESH_MS, pollContinuously } from './lib/liveRe
 import { useControl } from "./store/control";
 
 
-const SECONDARY: Record<Exclude<ViewId, "chain" | "scene" | "log" | "clinician">, ComponentType> = {
+const SECONDARY: Record<Exclude<ViewId, "chain" | "scene" | "log" | "clinician" | "results">, ComponentType> = {
   discovery: DiscoveryPanel,
   report: ReportPanel,
   board: BoardTab,
@@ -40,6 +40,7 @@ function TopRegion() {
   const view = useViewer((s) => s.view);
 
   if (view === "clinician") return <ClinicianPanel />;
+  if (view === "results") return <ResultsPanel embedded />;
   if (view === "chain") return <div className="h-full overflow-auto"><PipelineStatus /></div>;
   if (view === "scene") return <PipelineWorkspace />;
   if (view === "log") return <LogPanel />;
@@ -86,8 +87,6 @@ export default function App() {
     <WindowWorkspace toolbar={<WorkspaceActions only="history"/>} items={[
       { id: "control", title: "Control", content: <ControlPanel /> },
       { id: "pipeline", title: `${VIEWS[view].label}${pipeline && view !== "discovery" ? ` · ${pipeline.name}${view === "agents" ? "" : ` · ${pipelineLoopLabel(pipeline)}`}` : ""}`, content: <TopRegion /> },
-      ...(view === "scene" ? [{ id: "results", title: "Results", content: <ResultsPanel /> },
-      { id: "report", title: `Final Report${pipeline ? ` · ${pipeline.name}` : ""}`, content: <ReportPanel /> }] : []),
     ]} />
   </Tooltip.Provider>;
 }
