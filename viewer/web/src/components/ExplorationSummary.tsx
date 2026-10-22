@@ -4,10 +4,10 @@ import { usePipelines } from '../store/pipelines';
 import { useLiveOutputs } from '../store/liveOutputs';
 import { useViewer } from '../store/viewer';
 import './exploration-summary.css';
-import { costLabel } from '../lib/loopUsage';
+import type { WorkspaceCostState } from '../lib/useWorkspaceCost';
 
 /** Workspace scope only: retained records are never presented as lifetime totals. */
-export default function ExplorationSummary() {
+export default function ExplorationSummary({costState}: {costState: WorkspaceCostState}) {
   const pipelines = usePipelines(s => s.items);
   const loaded = usePipelines(s => s.loaded);
   const controlError = usePipelines(s => s.error);
@@ -25,36 +25,6 @@ export default function ExplorationSummary() {
   const issues = pipelines.filter(p => (p.progress.counts?.failed ?? 0) > 0 || (p.latest?.exit_code != null && p.latest.exit_code !== 0));
   const age = live.updatedAt ? Math.max(0, Math.floor((now - Date.parse(live.updatedAt)) / 1000)) : null;
   const currentTags = [...tags].sort().join(',');
-  const [cost, setCost] = useState<{usd:number; status:string; run_tags:string[]; pending_runs:number; missing_costs:number} | null>(null);
-  const [costError, setCostError] = useState(false);
-  useEffect(() => {
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout>;
-    let request: AbortController | null = null;
-    setCost(null); setCostError(false);
-    const poll = async () => {
-      if (stopped) return;
-      if (!currentTags) { setCost({usd:0,status:'complete',run_tags:[],pending_runs:0,missing_costs:0}); return; }
-      if (!document.hidden) {
-        request = new AbortController();
-        const timeout = setTimeout(() => request?.abort(), 5500);
-        try {
-          const response = await fetch(`/api/workspace-cost?run_tags=${encodeURIComponent(currentTags)}`, {signal:request.signal});
-          if (!response.ok) throw new Error('Cost lookup failed');
-          const next = await response.json();
-          if (!stopped) { setCost(next); setCostError(false); }
-        } catch { if (!stopped) setCostError(true); }
-        finally { clearTimeout(timeout); }
-      }
-      if (!stopped) timer = setTimeout(poll, 10000);
-    };
-    void poll();
-    return () => { stopped = true; clearTimeout(timer); request?.abort(); };
-  }, [currentTags]);
-  const scopedCost = cost?.run_tags.join(',') === currentTags ? cost : null;
-  const costValue = scopedCost ? costLabel(scopedCost) : '—';
-  const costDescription = costError ? 'Update delayed · last available estimate' : !scopedCost ? 'Awaiting cost records'
-    : !tags.size ? 'No executions in this workspace' : scopedCost.missing_costs > 0 ? `Pricing unavailable for ${scopedCost.missing_costs} calls; total cannot be determined` : scopedCost.status === 'partial' ? 'Incomplete usage · recorded subtotal only' : 'Latest executions · estimated, not billed';
   const stale = !!controlError || !!live.error || (tags.size > 0 && (live.tags !== currentTags || age === null || age > 15));
   const starts = active.map(p => Date.parse(p.running!.started)).filter(Number.isFinite);
   const seconds = starts.length ? Math.max(0, Math.floor((now - Math.min(...starts)) / 1000)) : null;
@@ -63,7 +33,7 @@ export default function ExplorationSummary() {
   const ready = loaded && live.tags === currentTags && (!tags.size || live.updatedAt !== null);
   return <section className="exploration-summary" aria-label="Live exploration summary">
     <div className="exploration-summary-heading">
-      <div><h2>Exploration overview</h2><p>Current pipelines and their latest executions.</p></div>
+      <div><h2>Current pipelines</h2><p>Status and results from their latest executions.</p></div>
       <span data-help="Connection freshness" tabIndex={0} className={`summary-connection ${stale ? 'summary-warning' : ''}`} title={controlError || live.error || 'Latest output refresh; inactive browser tabs pause polling.'}>
         <i aria-hidden="true" />{!loaded ? 'Connecting' : stale ? 'Updates delayed' : tags.size ? 'Live updates' : 'Ready to start'}
         {age !== null && tags.size > 0 && ` · ${age}s since sync`}
@@ -95,10 +65,10 @@ export default function ExplorationSummary() {
         <strong>{stale ? '—' : elapsed}</strong>
         <span className="summary-card-description">{stale ? 'Active status unconfirmed' : !active.length ? 'No active execution' : seconds === null ? 'Start time not recorded' : 'Since the earliest active start; includes pauses'}</span>
       </button>
-      <button className={`summary-cost ${costError ? 'summary-warning' : ''}`} onClick={() => navigate('agents')}>
+      <button className={`summary-cost ${costState.delayed || costState.partial ? 'summary-warning' : ''}`} onClick={() => navigate('agents')}>
         <span className="summary-card-label"><DollarSign size={16}/><span>Estimated LLM cost</span><ArrowUpRight size={13}/></span>
-        <strong>{costValue}</strong>
-        <span className="summary-card-description">{costDescription}</span>
+        <strong>{costState.label}</strong>
+        <span className="summary-card-description">{costState.description}</span>
         <span className="cost-refresh-note">Updates every 10 seconds</span>
       </button>
     </div>

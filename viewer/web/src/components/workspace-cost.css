@@ -1,0 +1,38 @@
+.workspace-cost { grid-area:cost; min-width:0; }
+.workspace-cost-trigger { display:flex; flex-direction:column; align-items:stretch; gap:3px; width:100%; padding:6px 10px; border:1px solid transparent; border-radius:9px; text-align:left; color:rgb(var(--ink)); background:transparent; }
+.workspace-cost-trigger:hover { background:rgb(var(--accent) / .055); border-color:rgb(var(--line)); }
+.workspace-cost-heading { display:flex; align-items:baseline; gap:10px; min-width:0; }
+.workspace-cost-heading > span { font-size:12px; color:rgb(var(--ink-soft)); }
+.workspace-cost-heading strong { font-size:18px; font-weight:650; line-height:1.25; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.workspace-cost-heading svg { flex-shrink:0; align-self:center; color:rgb(var(--ink-soft)); }
+.workspace-cost-scope { display:flex; align-items:center; flex-wrap:wrap; gap:3px 8px; font-size:10px; line-height:1.4; color:rgb(var(--ink-soft)); }
+.workspace-cost-scope > span { font-weight:600; }
+.workspace-cost-scope .cost-notice { color:rgb(var(--ink)); text-decoration:underline; text-decoration-color:rgb(var(--stage-ml)); text-underline-offset:3px; }
+.workspace-cost-popover { position:fixed; inset:auto; margin:0; padding:16px; box-sizing:border-box; overflow:auto; overscroll-behavior:contain; border:1px solid rgb(var(--line)); border-radius:14px; color:rgb(var(--ink)); background:rgb(var(--panel)); box-shadow:0 12px 40px rgb(0 0 0 / .15); }
+.workspace-cost-popover::backdrop { background:transparent; }
+.workspace-cost-popover > header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.workspace-cost-popover h2 { font-size:15px; line-height:1.4; font-weight:650; }
+.workspace-cost-popover header button { display:grid; place-items:center; width:32px; height:32px; border-radius:7px; }
+.workspace-cost-popover > p, .workspace-cost-popover footer p { font-size:12px; color:rgb(var(--ink-soft)); line-height:1.5; margin:4px 0 12px; }
+.workspace-cost-popover .workspace-cost-notice { padding:8px 10px; border-radius:7px; background:rgb(var(--stage-ml) / .1); color:rgb(var(--ink)); }
+.workspace-cost-rows { max-height:280px; overflow:auto; }
+.workspace-cost-popover table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:12px; }
+.workspace-cost-popover th, .workspace-cost-popover td { padding:10px 0; text-align:left; vertical-align:top; overflow-wrap:anywhere; }
+.workspace-cost-popover th { font-weight:500; }
+.workspace-cost-popover thead th { font-size:11px; color:rgb(var(--ink-soft)); border-bottom:1px solid rgb(var(--line)); }
+.workspace-cost-popover th:first-child { width:58%; padding-right:16px; }
+.workspace-cost-popover td, .workspace-cost-popover th:last-child { text-align:right; font-variant-numeric:tabular-nums; }
+.workspace-cost-popover td small { display:block; margin-top:3px; font-size:10px; color:rgb(var(--ink-soft)); }
+.workspace-cost-popover tfoot { border-top:1px solid rgb(var(--line)); }
+.workspace-cost-popover tfoot th, .workspace-cost-popover tfoot td { font-weight:650; }
+.workspace-cost-popover footer { padding-top:8px; }
+.workspace-cost-popover footer p { margin-bottom:8px; }
+.workspace-cost-popover footer button { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; min-height:38px; font-size:12px; font-weight:600; color:rgb(var(--accent)); }
+.workspace-cost-popover button:hover { background:rgb(var(--accent) / .06); }
+.workspace-cost-popover button:focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:2px; }
+@media (max-width:600px) {
+ .workspace-cost { border-top:1px solid rgb(var(--line)); padding-top:4px; }
+ .workspace-cost-trigger { padding:6px; }
+ .workspace-cost-heading strong { margin-left:auto; }
+ .workspace-cost-scope { justify-content:space-between; }
+}

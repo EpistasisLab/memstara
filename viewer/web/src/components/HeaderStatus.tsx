@@ -17,7 +17,7 @@ export default function HeaderStatus({onOpen}: {onOpen: () => void}) {
   const results = live.results.filter(r => r.run_tag && tags.includes(r.run_tag)).length;
   const label = stale ? 'Updates delayed' : !loaded ? 'Connecting…' : running ? `${running} running` : 'No pipelines running';
   return <button className={`topbar-live-status ${stale ? 'is-delayed' : ''}`} onClick={onOpen}
-    aria-label={`${label}. Open exploration overview`} title="Current workspace status. Open the overview for details and data freshness.">
+    aria-label={`${label}. Open workspace summary`} title="Current workspace status. Open Workspace summary for details and data freshness.">
     <Activity size={16}/><span>{label}</span>
     {loaded && !stale && <span className="topbar-result-count">{results} results loaded</span>}
   </button>;

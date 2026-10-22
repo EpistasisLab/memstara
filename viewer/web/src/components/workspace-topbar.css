@@ -1,11 +1,11 @@
 /* One identity and navigation row; secondary content opens above the workspace. */
 .unified-topbar.memstara-header { display:block; padding:0; position:relative; z-index:50; margin:0 0 10px; }
-.unified-topbar .memstara-identity-row { display:flex; align-items:center; gap:24px; min-height:64px; padding:10px 16px; flex-wrap:nowrap; }
-.unified-topbar .memstara-brand { flex-shrink:0; }
-.topbar-actions { display:flex; align-items:center; gap:6px; margin-left:auto; flex-shrink:0; }
+.unified-topbar .memstara-identity-row { display:grid; grid-template-areas:"brand status cost actions"; grid-template-columns:auto minmax(0,1fr) auto auto; align-items:center; gap:16px; min-height:64px; padding:10px 16px; }
+.unified-topbar .memstara-brand { grid-area:brand; }
+.topbar-actions { grid-area:actions; display:flex; align-items:center; gap:6px; justify-self:end; min-width:0; }
 .topbar-actions > button, .topbar-actions > [data-context-help-managed] > button { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:40px; padding:8px 10px; border:1px solid transparent; border-radius:9px; font-size:13px; font-weight:600; white-space:nowrap; color:rgb(var(--ink)); background:transparent; }
 .topbar-actions > button:hover { background:rgb(var(--accent) / .07); border-color:rgb(var(--line)); }
-.topbar-live-status { display:flex; align-items:center; gap:8px; min-width:0; min-height:40px; padding:8px 12px; border-radius:9px; font-size:13px; color:rgb(var(--accent)); background:rgb(var(--accent) / .06); white-space:nowrap; }
+.topbar-live-status { grid-area:status; justify-self:start; display:flex; align-items:center; gap:8px; min-width:0; min-height:40px; padding:8px 12px; border-radius:9px; font-size:13px; color:rgb(var(--accent)); background:rgb(var(--accent) / .06); white-space:nowrap; }
 .topbar-live-status svg { flex-shrink:0; }
 .topbar-result-count { border-left:1px solid rgb(var(--line)); padding-left:10px; margin-left:2px; color:rgb(var(--ink-soft)); }
 .topbar-live-status.is-delayed { color:rgb(var(--ink)); background:rgb(var(--stage-ml) / .13); }
@@ -24,9 +24,13 @@
 .topbar-overview-dialog.workspace-dialog { width:min(1040px,calc(100vw - 24px)); }
 .topbar-overview-dialog .exploration-summary { padding:0; }
 .topbar-overview-dialog .exploration-summary-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
-@media(max-width:1150px) {
+@media(max-width:1400px) {
  .unified-topbar .memstara-identity-row { gap:12px; }
  .topbar-result-count { display:none; }
+}
+@media(max-width:1100px) {
+ .unified-topbar .memstara-identity-row { grid-template-areas:"brand actions" "status cost"; grid-template-columns:minmax(0,1fr) auto; gap:6px 12px; }
+ .unified-topbar .workspace-cost { justify-self:end; }
 }
 @media(max-width:850px) {
  .unified-topbar .memstara-brand span { display:none; }
@@ -35,13 +39,16 @@
  .topbar-live-status { font-size:12px; padding:8px; }
 }
 @media(max-width:600px) {
- .unified-topbar .memstara-identity-row { gap:6px; padding:8px; min-height:60px; }
+ .unified-topbar .memstara-identity-row { grid-template-areas:"brand actions" "cost cost"; gap:4px; padding:8px; min-height:60px; }
+ .unified-topbar .workspace-cost { justify-self:stretch; }
  .unified-topbar .memstara-brand strong { font-size:18px; }
  .unified-topbar .memstara-mark { width:28px; height:28px; }
  .unified-topbar .memstara-brand { gap:6px; }
  .topbar-live-status { display:none; }
  .topbar-actions { gap:2px; }
  .topbar-actions .topbar-overview { padding:8px 6px; font-size:12px; }
+ .topbar-summary-context { display:none; }
+ .topbar-overview > span { text-transform:capitalize; }
  .topbar-actions .topbar-overview svg { display:none; }
  .topbar-actions .workspace-theme-control { padding:0; margin:0; border:0; display:flex; }
  .topbar-actions .workspace-theme-control .theme-toggle { width:36px; min-width:36px; }

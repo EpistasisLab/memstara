@@ -38,6 +38,47 @@ def test_endpoint_deduplicates_shared_ids_across_archives(monkeypatch):
     assert result['run_tags']==['first','second']
     assert result['usd']==0.3 and result['agent_runs']==1
     assert len(conn.fetch.call_args.args[1])==1
+    assert result['shared_agent_runs']==1
+    assert [e['usd'] for e in result['executions']]==[0.3,0.3]
+
+
+def test_breakdown_and_total_use_one_motoro_snapshot(monkeypatch):
+    import asyncio
+    import costs
+    from unittest.mock import AsyncMock
+    run_a='11111111-1111-1111-1111-111111111111'
+    run_b='22222222-2222-2222-2222-222222222222'
+    archives={'first':{'calls':[{'run_id':run_a},{'run_id':run_a}]},
+              'second':{'calls':[{'run_id':run_b}]}}
+    monkeypatch.setattr(costs.run_artifacts,'lookup',archives.get)
+    conn=AsyncMock()
+    conn.fetch.return_value=[
+        {'id':run_a,'status':'completed','cost_estimate':Decimal('1.25'),'tokens':10},
+        {'id':run_b,'status':'completed','cost_estimate':Decimal('2.50'),'tokens':10}]
+    async def guarded(store,read,fallback):return await read(conn)
+    monkeypatch.setattr(costs.pools,'guarded',guarded)
+    result=asyncio.run(costs.workspace_cost(['second','first']))
+    assert result['usd']==sum(e['usd'] for e in result['executions'])==3.75
+    assert result['shared_agent_runs']==0
+    assert [e['run_tag'] for e in result['executions']]==['first','second']
+    assert all(e['updated_at']==result['updated_at'] for e in result['executions'])
+    conn.fetch.assert_awaited_once()
+
+
+def test_breakdown_preserves_unavailable_archives_and_pricing(monkeypatch):
+    import asyncio
+    import costs
+    from unittest.mock import AsyncMock
+    run_id='11111111-1111-1111-1111-111111111111'
+    monkeypatch.setattr(costs.run_artifacts,'lookup',lambda tag:
+                        {'calls':[{'run_id':run_id}]} if tag=='unpriced' else None)
+    monkeypatch.setattr(costs.pools,'guarded',AsyncMock(return_value=[
+        {'id':run_id,'status':'completed','cost_estimate':None,'tokens':10}]))
+    result=asyncio.run(costs.workspace_cost(['unpriced','missing']))
+    assert result['status']=='partial' and result['usd']==0
+    assert result['executions'][0]['missing_archives']==1
+    assert result['executions'][1]['missing_costs']==1
+    assert all(e['status']=='partial' for e in result['executions'])
 
 
 def test_database_failure_is_not_reported_as_zero(monkeypatch):
@@ -46,9 +87,11 @@ def test_database_failure_is_not_reported_as_zero(monkeypatch):
     import pytest
     from fastapi import HTTPException
     from unittest.mock import AsyncMock
-    monkeypatch.setattr(costs.run_artifacts,'lookup',lambda tag:{'calls':[{'run_id':'11111111-1111-1111-1111-111111111111'}]})
+    monkeypatch.setattr(costs.run_artifacts,'lookup',lambda tag:
+                        {'calls':[{'run_id':'11111111-1111-1111-1111-111111111111'}]})
     monkeypatch.setattr(costs.pools,'guarded',AsyncMock(return_value=None))
-    with pytest.raises(HTTPException) as err:asyncio.run(costs.workspace_cost(['first']))
+    with pytest.raises(HTTPException) as err:
+        asyncio.run(costs.workspace_cost(['first']))
     assert err.value.status_code==503
 
 

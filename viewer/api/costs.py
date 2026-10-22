@@ -8,7 +8,9 @@ import run_artifacts
 import math
 
 SQL = """
-SELECT r.id, r.status, r.cost_estimate, COALESCE(r.started_at, (SELECT MIN(s.started_at) FROM run_steps s WHERE s.run_id=r.id)) AS started_at, r.completed_at, r.last_heartbeat_at,
+SELECT r.id, r.status, r.cost_estimate,
+       COALESCE(r.started_at, (SELECT MIN(s.started_at) FROM run_steps s WHERE s.run_id=r.id)) AS started_at,
+       r.completed_at, r.last_heartbeat_at,
        (r.token_usage->>'prompt_tokens' IS NOT NULL
         AND r.token_usage->>'completion_tokens' IS NOT NULL) AS tokens_recorded,
        COALESCE((r.token_usage->>'prompt_tokens')::bigint, 0)
@@ -29,7 +31,9 @@ def summarize(ids, rows, missing_archives=0):
             continue
         cost = row['cost_estimate']
         # Motoro can record zero when pricing is unknown. Do not call it free.
-        if cost is None or not math.isfinite(float(cost)) or float(cost) < 0 or (float(cost) == 0 and not row.get('ledger_verified') and (row['tokens'] > 0 or not row.get('tokens_recorded', True))):
+        if (cost is None or not math.isfinite(float(cost)) or float(cost) < 0
+                or (float(cost) == 0 and not row.get('ledger_verified')
+                    and (row['tokens'] > 0 or not row.get('tokens_recorded', True)))):
             missing += 1
         else:
             total += float(cost)
@@ -88,13 +92,20 @@ async def workspace_cost(run_tags):
     try:
         async with asyncio.timeout(4):
             artifacts = await asyncio.to_thread(lambda: [run_artifacts.lookup(tag) for tag in tags])
-            ids = {uuid.UUID(call['run_id']) for a in artifacts if a
-                   for call in a.get('calls', []) if call.get('run_id')}
+            execution_ids = [{uuid.UUID(call['run_id']) for call in a.get('calls', [])
+                              if call.get('run_id')} if a else set() for a in artifacts]
+            ids = set().union(*execution_ids)
             rows = await pools.guarded('core', lambda conn: read(conn, ids), None) if ids else []
             if rows is None:
                 raise HTTPException(503, 'Cost records are temporarily unavailable')
             result = summarize(ids, rows, sum(a is None for a in artifacts))
-            return {**result, 'run_tags': tags, 'scope': 'latest_execution_per_pipeline'}
+            # The header and its breakdown share one Motoro query/snapshot.
+            executions = [{'run_tag': tag, **summarize(refs, rows, int(artifact is None)),
+                           'updated_at': result['updated_at']}
+                          for tag, refs, artifact in zip(tags, execution_ids, artifacts, strict=True)]
+            return {**result, 'run_tags': tags, 'scope': 'latest_execution_per_pipeline',
+                    'executions': executions,
+                    'shared_agent_runs': sum(map(len, execution_ids)) - len(ids)}
     except TimeoutError:
         raise HTTPException(503, 'Cost lookup timed out') from None
     except ValueError:

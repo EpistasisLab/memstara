@@ -15,7 +15,7 @@ export const INTERFACE_HELP:Record<string,string>={
   'All pipelines':'Show received outputs across the configured pipelines instead of filtering to one pipeline.',
   'Close':'Close this view or dialog. This does not stop an analysis.',
   'Tool activity':'Show or hide lines representing recently observed agent tool calls for the selected execution. These are observations, not continuous data transfers. Hiding the lines does not stop any work.',
-  'Exploration overview':'Open the pipeline navigator: names, numbers, current loop, and Active/Idle status. Selecting a row switches the execution you are reviewing.',
+  'Workspace summary':'Review current pipeline activity, received results, recorded issues and estimated costs for the latest executions.',
   'Control':'Show or hide the view navigation panel. Hiding it does not stop your pipelines.',
   'Reset window layout':'Restore the standard window sizes and positions, with Control and Floor plan visible and secondary windows closed. Analysis settings and results are preserved.',
   'Run history':'Browse saved executions and choose which analysis to review. Selecting an old execution does not restart it.',

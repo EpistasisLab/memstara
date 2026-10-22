@@ -14,6 +14,8 @@ import ExplorationSummary from "./ExplorationSummary";
 import ThemeToggle from "./ThemeToggle";
 import ModelConnectionDialog from "./ModelConnectionDialog";
 import ResultsLaunchButton from "./ResultsLaunchButton";
+import WorkspaceCost from './WorkspaceCost';
+import { useWorkspaceCost } from '../lib/useWorkspaceCost';
 
 type Box = { x: number; y: number; w: number; h: number };
 type Item = { id: string; title: string; content: ReactNode };
@@ -24,6 +26,7 @@ const collapsible = ["navigation", ...secondary];
 const initiallyClosed: string[] = ["results", "report"];
 const edges = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 export default function WindowWorkspace({ items, toolbar }: { items: Item[]; toolbar?:ReactNode }) {
+  const costState = useWorkspaceCost();
   const [pipelineHeader,setPipelineHeader]=useState<HTMLDivElement|null>(null);
   const root = useRef<HTMLDivElement>(null);
   const overviewDialog = useRef<HTMLDialogElement>(null);
@@ -104,8 +107,9 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
         <div><strong>Memstara</strong><span>Research workspace</span></div>
       </div>
       <HeaderStatus onOpen={openOverview} />
+      <WorkspaceCost state={costState}/>
       <nav className="topbar-actions" aria-label="Workspace tools">
-        <button className="topbar-overview" aria-label="Exploration overview" aria-haspopup="dialog" onClick={openOverview}>Overview<ChevronDown size={14}/></button>
+        <button className="topbar-overview" aria-label="Workspace summary" aria-haspopup="dialog" onClick={openOverview}><span><span className="topbar-summary-context">Workspace </span>summary</span><ChevronDown size={14}/></button>
         {toolbar}
         <button className="topbar-settings" aria-label="Workspace settings" title="Model connection, system status and window layout" aria-haspopup="dialog" onClick={()=>settingsDialog.current?.showModal()}><Settings2 size={18}/><span>Settings</span></button>
         <span className="workspace-theme-control"><ThemeToggle /></span>
@@ -113,8 +117,8 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
       </div>
     </header>
     <dialog ref={overviewDialog} className="workspace-dialog topbar-dialog topbar-overview-dialog" aria-labelledby="topbar-overview-title" onCancel={()=>setOverviewOpen(false)}>
-      <header><h2 id="topbar-overview-title">Exploration overview</h2><button aria-label="Close overview" onClick={closeOverview}><X size={18}/></button></header>
-      {overviewOpen && <div onClick={event=>{ if ((event.target as HTMLElement).closest(".exploration-summary-grid button")) closeOverview(); }}><ExplorationSummary /></div>}
+      <header><h2 id="topbar-overview-title">Workspace summary</h2><button aria-label="Close workspace summary" onClick={closeOverview}><X size={18}/></button></header>
+      {overviewOpen && <div onClick={event=>{ if ((event.target as HTMLElement).closest(".exploration-summary-grid button")) closeOverview(); }}><ExplorationSummary costState={costState}/></div>}
     </dialog>
     <dialog ref={settingsDialog} className="workspace-dialog topbar-dialog" aria-labelledby="topbar-settings-title">
       <header><h2 id="topbar-settings-title">Workspace settings</h2><button aria-label="Close settings" onClick={()=>settingsDialog.current?.close()}><X size={18}/></button></header>

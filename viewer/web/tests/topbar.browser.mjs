@@ -11,7 +11,8 @@ try {
   await page.setViewportSize({width,height:900});
   await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
   const size=await page.locator('.unified-topbar').evaluate(el=>({width:el.clientWidth,scroll:el.scrollWidth,height:el.getBoundingClientRect().height}));
-  assert(size.scroll<=size.width+2,JSON.stringify({theme,width,size}));assert(size.height<85);
+  assert(size.scroll<=size.width+2,JSON.stringify({theme,width,size}));assert(size.height<(width>1100?85:145));
+  assert(await page.getByRole('button',{name:'Estimated total. Show pipeline cost breakdown',exact:true}).isVisible());
   await page.getByRole('button',{name:'Workspace settings',exact:true}).click();
   const settings=page.getByRole('dialog',{name:'Workspace settings',exact:true});
   await settings.getByRole('button',{name:/System status|Status · attention/}).click();
@@ -20,8 +21,8 @@ try {
   assert(await settings.isVisible());
   await settings.getByRole('button',{name:'Reset window layout',exact:true}).click();
   await page.keyboard.press('Escape');assert(await page.getByRole('button',{name:'Workspace settings',exact:true}).evaluate(e=>e===document.activeElement));
-  await page.getByRole('button',{name:'Exploration overview',exact:true}).click();
-  const overview=page.getByRole('dialog',{name:'Exploration overview',exact:true});
+  await page.getByRole('button',{name:'Workspace summary',exact:true}).click();
+  const overview=page.getByRole('dialog',{name:'Workspace summary',exact:true});
   const fits=await overview.evaluate(e=>e.scrollWidth<=e.clientWidth+2&&e.getBoundingClientRect().bottom<=innerHeight);
   assert(fits);await page.keyboard.press('Escape');
   await page.getByRole('button',{name:'Saved analyses',exact:true}).click();
