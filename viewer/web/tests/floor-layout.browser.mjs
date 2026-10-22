@@ -31,8 +31,7 @@ try {
   await page.locator('#workspace-results').waitFor();
   await page.keyboard.press('Escape');await page.waitForTimeout(400);
   const after=await page.locator('.react-flow__viewport').getAttribute('style');assert.equal(after,before,'Resize changed diagram viewport');
-  const max=page.locator('#workspace-pipeline').getByRole('button',{name:/Maximize .* window/});await max.click();assert.equal(await page.locator('.floating-window:not([hidden])').count(),2);
-  await page.locator('#workspace-pipeline').getByRole('button',{name:/Restore .* window/}).click();
+  assert.equal(await page.locator('#workspace-pipeline > .window-titlebar').getByRole('button',{name:/^(Reset|Maximize|Restore) .* window$|^Collapse /}).count(),0);
   console.log(JSON.stringify({theme,width,canvas:g,windows:visible.length,resize:'preserved'}));
   if(width===1440||width===390){await page.locator('.docked-workspace').evaluate(e=>e.scrollTop=0);await page.screenshot({path:`/tmp/floor-layout-${theme}-${width}.png`});}
  }

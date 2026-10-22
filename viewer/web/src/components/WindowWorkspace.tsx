@@ -181,7 +181,7 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
           <div className="window-titlebar" onPointerDown={event => { if (!(event.target as HTMLElement).closest('button,input,select,summary,a,[data-workspace-header]')) begin(event, "move"); }}>
             <span title={item.title}>{item.title}</span>
             {item.id==="pipeline"&&<div data-workspace-header className="workspace-header-slot" ref={setPipelineHeader}/> }
-            <div className="flex items-center gap-1">
+            {item.id !== "pipeline" && <div className="flex items-center gap-1">
             {collapsible.includes(item.id) && <button className="window-collapse" aria-label={`Collapse ${item.title}`} title="Collapse this window"
               onClick={() => toggle(item.id)}><ChevronDown size={13} /></button>}
             <button data-help="Reset window layout" data-help-description="Restore this window to its default size and position. Pipeline settings and results are not changed." aria-label={`Reset ${item.title} window`} title="Reset this window to its default size and position"
@@ -192,7 +192,7 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
             {item.id !== "control" && <button data-help={maximized === item.id ? "Restore window" : "Maximize window"} data-help-description={maximized === item.id ? "Return this window to its previous workspace layout." : "Expand this window to use the available workspace. Click again to restore the layout."} aria-label={`${maximized === item.id ? "Restore" : "Maximize"} ${item.title} window`} onClick={() => {if(fullscreenEvidence&&maximized===item.id)closeEvidence();else setMaximized(maximized===item.id?"":item.id);}}>
               {maximized === item.id ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
             </button>}
-            </div>
+            </div>}
           </div>
           <div className="window-content"><ViewErrorBoundary key={item.id === "pipeline" ? item.title.split(" · ")[0] : item.id} name={item.title}><WorkspaceEvidenceContext.Provider value={item.id==='pipeline'?<div className="workspace-evidence-launchers" role="group" aria-label="Analysis views">{items.filter(entry=>['results','report'].includes(entry.id)).map(entry=><button key={entry.id} type="button" aria-label={`Open ${entry.id==='results'?'Results':'Final report'} full screen`} onClick={()=>maximizeEvidence(entry.id)}><span>{entry.id==='results'?'Results':'Final report'}</span><Maximize2 size={13} aria-hidden="true"/></button>)}</div>:null}><WorkspaceHeaderContext.Provider value={item.id==="pipeline"?pipelineHeader:null}>{item.content}</WorkspaceHeaderContext.Provider></WorkspaceEvidenceContext.Provider></ViewErrorBoundary></div>
           {item.id !== "control" && !maximized && edges.map(edge => <div key={edge} role={edge === "se" ? "separator" : undefined} tabIndex={edge === "se" ? 0 : -1}

@@ -27,6 +27,9 @@ try{
  await p.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
  const studio=p.getByRole('region',{name:'Combination design',exact:true});
  await p.getByRole('navigation',{name:'Combination views'}).getByRole('button',{name:'Floor plan',exact:true}).waitFor();
+ const header=p.getByRole('group',{name:'Pipeline workspace header',exact:true});
+ for(const name of ['Knowledge sources','Combination schedule and map guide','Prepare research inputs'])assert.equal(await header.getByRole('button',{name,exact:true}).count(),0);
+ assert.equal(await header.getByRole('button',{name:'Add pipeline',exact:true}).count(),1);
  for(const theme of ['light','dark'])for(const width of [1440,1024,390,320]){
   console.log('Starting',theme,width);
   await p.setViewportSize({width,height:1000});await p.evaluate(t=>document.documentElement.dataset.theme=t,theme);
@@ -42,12 +45,11 @@ try{
   await studio.getByRole('combobox',{name:'Focus floor plan agent',exact:true}).selectOption('all');
   console.log('Floor selection passed');
   await studio.screenshot({path:`/tmp/combination-floor-${theme}-${width}.png`,timeout:10000});
+  if(width===1440||width===390)await p.screenshot({path:`/tmp/combination-workspace-${theme}-${width}.png`});
   await p.getByRole('button',{name:'Skill architecture',exact:true}).click();
   await p.getByRole('combobox',{name:'Filter agent role',exact:true}).selectOption('all');
   await p.getByRole('searchbox',{name:'Find a combination skill',exact:true}).fill('');
   assert.equal(await studio.locator('.cs-column').count(),5);assert.equal(await studio.locator('.cs-skill').count(),10);
-  await p.getByRole('button',{name:'Combination schedule and map guide',exact:true}).click();
-  const guide=p.getByRole('dialog');assert.match(await guide.innerText(),/48/);await p.keyboard.press('Escape');
   await studio.getByRole('button',{name:'Read Substance use mechanisms skill',exact:true}).click();
   const d=p.getByRole('dialog',{name:'Substance use mechanisms',exact:true});await d.locator('table').waitFor();await p.keyboard.press('Escape');
   await p.getByRole('searchbox',{name:'Find a combination skill',exact:true}).fill('Social');assert.equal(await studio.locator('.cs-skill').count(),1);

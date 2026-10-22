@@ -3,7 +3,6 @@
 .workspace-header-slot { flex:1; min-width:0; cursor:default; touch-action:auto; user-select:text; container:combination-header / inline-size; }
 .docked-workspace .window-titlebar:has(.workspace-header-slot:not(:empty)) { height:auto; align-items:flex-start; gap:6px; padding:6px 10px; }
 .window-titlebar:has(.workspace-header-slot:not(:empty)) > span { display:none; }
-.window-titlebar > .workspace-header-slot + div { flex-shrink:0; }
 .workspace-header-slot .cs-unified-header { margin:0; padding:0; border:0; font-weight:400; color:rgb(var(--ink)); }
 .workspace-header-slot .cs-tabs button,.workspace-header-slot .cs-run { display:flex; }
 .workspace-header-slot :is(button,input,select):focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:2px; }
@@ -32,7 +31,7 @@
 .pipeline-global-actions .master-run-controls { display:flex; width:auto; align-items:center; flex-wrap:wrap; gap:6px; min-width:0; }
 .pipeline-global-actions .master-start-group { display:contents; }
 .pipeline-unified-header button { box-sizing:border-box; line-height:1.3; letter-spacing:normal; }
-.docked-workspace .pipeline-unified-header :is(.cs-info-button,.cs-preview-toggle,.cs-run) { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:36px; padding:7px 10px; border:1px solid rgb(var(--line)); border-radius:7px; background:rgb(var(--panel)); color:rgb(var(--ink)); font-size:12px; font-weight:500; margin:0; }
+.docked-workspace .pipeline-unified-header :is(.cs-preview-toggle,.cs-run) { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:36px; padding:7px 10px; border:1px solid rgb(var(--line)); border-radius:7px; background:rgb(var(--panel)); color:rgb(var(--ink)); font-size:12px; font-weight:500; margin:0; }
 .docked-workspace .pipeline-unified-header .cs-tabs { display:flex; flex-wrap:nowrap; gap:2px; padding:0; margin:0; width:fit-content; max-width:100%; overflow-x:auto; border:0; border-radius:7px; background:rgb(var(--paper)); }
 .docked-workspace .pipeline-unified-header .cs-tabs button { display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; gap:5px; min-height:36px; padding:6px 9px; border:0; border-radius:5px; font-size:12px; font-weight:500; white-space:nowrap; color:rgb(var(--ink-soft)); background:transparent; }
 .docked-workspace .pipeline-unified-header .cs-tabs button[aria-pressed=true] { color:rgb(var(--accent)); background:rgb(var(--accent)/.1); }
@@ -41,7 +40,6 @@
 .pipeline-global-actions .master-run-error,.pipeline-global-actions .batch-start-results { flex-basis:100%; max-height:64px; overflow:auto; }
 .docked-workspace .pipeline-unified-header button.pipeline-add-primary { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:36px; padding:7px 12px; border-radius:7px; border:1px solid rgb(var(--accent)); background:rgb(var(--accent)); color:rgb(var(--accent-contrast)); font-size:13px; font-weight:650; white-space:nowrap; box-shadow:0 2px 5px rgb(var(--accent)/.12); }
 .pipeline-add-primary small { font-size:10px; padding:2px 4px; border-radius:4px; background:rgb(var(--accent-contrast)/.16); }
-.pipeline-research-inputs { min-height:36px; padding:7px 10px; border:1px solid rgb(var(--paper-line)); border-radius:7px; font-size:12px; }
 .pipeline-unified-header button:disabled { cursor:not-allowed; }
 .pipeline-unified-header button.pipeline-add-primary:disabled { opacity:.55; box-shadow:none; }
 .pipeline-unified-header :is(button,input,select):focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:-2px; }
@@ -57,7 +55,6 @@
  .pipeline-global-actions { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px; }
  .pipeline-running-count { grid-column:1; grid-row:1; }
  .pipeline-global-actions .pipeline-add-primary { grid-column:2; grid-row:1; }
- .pipeline-global-actions .pipeline-research-inputs { grid-column:1/-1; grid-row:3; width:100%; }
  .pipeline-global-actions .master-run-controls { grid-column:1/-1; grid-row:2; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); width:100%; }
  .pipeline-global-actions .master-run-controls button { min-width:0; padding:7px 5px; font-size:11px; white-space:normal; }
  .pipeline-global-actions .master-run-error,.pipeline-global-actions .batch-start-results { grid-column:1/-1; }
@@ -85,8 +82,7 @@
 .workspace-header-slot .pipeline-context-header .cs-search input:focus-visible { outline:none; }
 .workspace-header-slot .pipeline-context-header .cs-role-filter { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:8px; min-width:0; margin:0; font-size:12px; font-weight:400; }
 .workspace-header-slot .pipeline-context-header .cs-role-filter select { box-sizing:border-box; width:100%; min-width:0; height:36px; min-height:36px; margin:0; padding:0 8px; font-size:13px; font-weight:400; border:1px solid rgb(var(--line)); border-radius:7px; background:rgb(var(--panel)); color:rgb(var(--ink)); }
-.workspace-header-slot .pipeline-context-header :is(.cs-info-button,.cs-preview-toggle,.cs-run) { height:36px; min-height:36px; padding:0 10px; white-space:nowrap; flex-shrink:0; }
-.workspace-header-slot .pipeline-context-header .cs-info-button { min-width:70px; }
+.workspace-header-slot .pipeline-context-header :is(.cs-preview-toggle,.cs-run) { height:36px; min-height:36px; padding:0 10px; white-space:nowrap; flex-shrink:0; }
 .workspace-header-slot .pipeline-context-header .cs-tabs { padding:0; }
 .workspace-header-slot .pipeline-context-header .cs-tabs button { min-height:36px; }
 @container combination-header (max-width:1050px) {
@@ -96,7 +92,7 @@
  .workspace-header-slot .pipeline-context-header .cs-filters { grid-row:5; grid-template-columns:minmax(0,1fr); gap:8px; }
  .workspace-header-slot .pipeline-context-header .cs-search,.workspace-header-slot .pipeline-context-header .cs-role-filter select { height:44px; min-height:44px; }
  .workspace-header-slot .pipeline-context-header .cs-search input { min-height:0; font-size:16px; }
- .workspace-header-slot .pipeline-context-header :is(.cs-info-button,.cs-preview-toggle,.cs-run),.workspace-header-slot .pipeline-context-header .cs-tabs button { min-height:44px; height:auto; }
+ .workspace-header-slot .pipeline-context-header :is(.cs-preview-toggle,.cs-run),.workspace-header-slot .pipeline-context-header .cs-tabs button { min-height:44px; height:auto; }
 }
 
 /* All controls share one rhythm; emphasis communicates action, not size. */

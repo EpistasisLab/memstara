@@ -25,9 +25,9 @@ try{
  assert.equal(await page.locator('.workspace-minimized-window').count(),0);
  const bounds=await launch.boundingBox();assert(bounds.y>=0&&bounds.y+bounds.height<=1000&&bounds.x+bounds.width<=width);
  }
- await page.locator('#workspace-pipeline').getByRole('button',{name:/Maximize .* window/}).click();
+ assert.equal(await page.locator('#workspace-pipeline > .window-titlebar').getByRole('button',{name:/^(Reset|Maximize|Restore) .* window$|^Collapse /}).count(),0);
  await page.getByRole('button',{name:'Open Final report full screen',exact:true}).click();
  await page.locator('#workspace-report .window-content').waitFor();
- assert.deepEqual(errors,[]);console.log(JSON.stringify({width,theme,visibleHeaders:true,keyboardRestore:true,maximizedRestore:true}));await page.close();
+ assert.deepEqual(errors,[]);console.log(JSON.stringify({width,theme,visibleHeaders:true,keyboardRestore:true,evidenceFullscreen:true}));await page.close();
  }
 }finally{await browser.close();}
