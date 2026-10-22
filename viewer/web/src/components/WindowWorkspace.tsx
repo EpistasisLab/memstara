@@ -13,6 +13,7 @@ import ViewErrorBoundary from './ViewErrorBoundary';
 import ExplorationSummary from "./ExplorationSummary";
 import ThemeToggle from "./ThemeToggle";
 import ModelConnectionDialog from "./ModelConnectionDialog";
+import ResultsLaunchButton from "./ResultsLaunchButton";
 
 type Box = { x: number; y: number; w: number; h: number };
 type Item = { id: string; title: string; content: ReactNode };
@@ -194,7 +195,7 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
             </button>}
             </div>}
           </div>
-          <div className="window-content"><ViewErrorBoundary key={item.id === "pipeline" ? item.title.split(" · ")[0] : item.id} name={item.title}><WorkspaceEvidenceContext.Provider value={item.id==='pipeline'?<div className="workspace-evidence-launchers" role="group" aria-label="Analysis views">{items.filter(entry=>['results','report'].includes(entry.id)).map(entry=><button key={entry.id} type="button" aria-label={`Open ${entry.id==='results'?'Results':'Final report'} full screen`} onClick={()=>maximizeEvidence(entry.id)}><span>{entry.id==='results'?'Results':'Final report'}</span><Maximize2 size={13} aria-hidden="true"/></button>)}</div>:null}><WorkspaceHeaderContext.Provider value={item.id==="pipeline"?pipelineHeader:null}>{item.content}</WorkspaceHeaderContext.Provider></WorkspaceEvidenceContext.Provider></ViewErrorBoundary></div>
+          <div className="window-content"><ViewErrorBoundary key={item.id === "pipeline" ? item.title.split(" · ")[0] : item.id} name={item.title}><WorkspaceEvidenceContext.Provider value={item.id==='pipeline'?<div className="workspace-evidence-launchers" role="group" aria-label="Analysis views">{items.filter(entry=>['results','report'].includes(entry.id)).map(entry=>entry.id==='results'?<ResultsLaunchButton key={entry.id} open={()=>maximizeEvidence('results')}/>:<button key={entry.id} type="button" aria-label="Open Final report full screen" onClick={()=>maximizeEvidence(entry.id)}><span>Final report</span><Maximize2 size={13} aria-hidden="true"/></button>)}</div>:null}><WorkspaceHeaderContext.Provider value={item.id==="pipeline"?pipelineHeader:null}>{item.content}</WorkspaceHeaderContext.Provider></WorkspaceEvidenceContext.Provider></ViewErrorBoundary></div>
           {item.id !== "control" && !maximized && edges.map(edge => <div key={edge} role={edge === "se" ? "separator" : undefined} tabIndex={edge === "se" ? 0 : -1}
             aria-valuenow={edge === "se" ? Math.round(normal.w) : undefined}
             aria-valuemin={edge === "se" ? Math.min(200, bounds.w) : undefined}

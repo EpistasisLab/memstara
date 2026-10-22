@@ -21,6 +21,8 @@ import EmptyState from "../components/EmptyState";
 import Panel from "../components/Panel";
 import WhyColumns from "../components/WhyColumns";
 import { useBoard, useResults, useViewer, useSnapshot } from "../store/viewer";
+import { newestResult, unreadResults, useResultNotices } from '../store/resultNotices';
+import { useResultsReadReceipt } from '../lib/useResultsReadReceipt';
 
 /**
  * Finished results — the results table, not the board.
@@ -28,7 +30,7 @@ import { useBoard, useResults, useViewer, useSnapshot } from "../store/viewer";
  * Available in the Floor plan analysis area; hidden in other workspace views. It carries `id="results-panel"` so the scene's results place can bring it
  * into view on a narrow screen (see ScenePanel's `onNodeClick`).
  *
- * Read-only, always. Nothing here writes to the store.
+ * Experimental records are read-only. Read receipts live only in this browser.
  */
 
 export default function ResultsPanel({ telemetry = false }: { telemetry?: boolean } = {}) {
@@ -79,8 +81,17 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
   const selectedFailed = (useBoard()?.tasks ?? []).filter(task => task.status === "failed");
   const failed = scope==="all" ? (tags && all?.tags===tags?all.failures:[]) : selectedFailed;
 
-  const activeResult = results?.find(r=>resultKey(r)===chosenResult) ?? results?.[0];
+  const read = useResultNotices(state => state.read);
+  const unread = unreadResults(results ?? [], read);
+  const receiptRef = useResultsReadReceipt(results, scope === 'selected' ? savedTag ?? '' : tags,
+    !telemetry && !dataUnavailable && !snapshot?.stale && !(scope === 'all' && fetchError));
+  const activeResult = results?.find(r=>resultKey(r)===chosenResult) ?? newestResult(results ?? []);
   useEffect(()=>{if(activeResult && chosenResult !== resultKey(activeResult))setChosenResult(resultKey(activeResult));},[activeResult,chosenResult]);
+  const chooseResult = (key: string) => {
+    setChosenResult(key);
+    const result = results?.find(item => resultKey(item) === key);
+    if (!telemetry && result) useResultNotices.getState().acknowledge([result]);
+  };
 
   return (
     <Panel id="results-panel" icon={BarChart3} title="Results">
@@ -100,8 +111,15 @@ export default function ResultsPanel({ telemetry = false }: { telemetry?: boolea
       ) : results.length === 0 ? (
         <div className="p-8 text-ink-faint">{savedConfig?.data_mode==='proposal'?'Research proposal mode: no dataset is attached. Training, model metrics and SHAP/LIME computations are not executed. View the proposal report below.':'No finished results yet.'}</div>
       ) : (
-        <div className="space-y-5 p-4">
-          <ResultExplorer results={results} selected={activeResult ? resultKey(activeResult) : ''} onSelect={setChosenResult} />
+        <div ref={receiptRef} className="space-y-5 p-4">
+          {!telemetry && unread.length > 0 && <div className="results-arrival-note" role="status">
+            <span>New results are ready.</span><button type="button" onClick={() => {
+              const latest = newestResult(unread);
+              if (latest) setChosenResult(resultKey(latest));
+              useResultNotices.getState().acknowledge(results);
+            }}>View latest results</button>
+          </div>}
+          <ResultExplorer results={results} selected={activeResult ? resultKey(activeResult) : ''} onSelect={chooseResult} />
           <h3 className="result-detail-heading">Selected analysis · evidence and interpretation</h3>
           {(activeResult ? [activeResult] : []).map((r) => {
             // The importances come off the result, not off the board. The board row is
