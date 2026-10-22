@@ -40,7 +40,7 @@ function ClinicalLogBody({pipelines, live, pipelineError, floorActivity}: {
   const [detail, setDetail] = useState<ActivityScope | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 3000); return () => clearInterval(timer); }, []);
-  const events = scopedClinicalEvents(live.events, pipelines).filter(e => !floorActivity || (floorActivity.mode !== 'preview' && e.run_tag === floorActivity.runTag && e.iteration === floorActivity.loop));
+  const events = scopedClinicalEvents(live.events, pipelines).filter(e => !floorActivity || (e.run_tag === floorActivity.runTag && e.iteration === floorActivity.loop));
   const owner = pipelines.find(p=>p.id===floorActivity?.pipelineId);
   const last = events.at(-1);
   const lastKey = last ? `${last.id}:${last.revision}` : '';
@@ -75,9 +75,8 @@ function ClinicalLogBody({pipelines, live, pipelineError, floorActivity}: {
         {floorActivity && <article className="clinical-log-execution" data-testid="floor-log-activity">
           <div className="clinical-log-identity"><strong>{pipelines.find(p=>p.id===floorActivity.pipelineId)?.name}</strong>
           {floorActivity.runTag&&<button className="clinical-log-details-button" onClick={()=>{setFollowing(false);setDetail({run_tag:floorActivity.runTag!,iteration:null,stage:'',pipeline_name:owner?.name??'',detail:''});}}>Browse activity</button>}</div>
-          <small>{floorActivity.mode==='preview'?'Configuration preview':`Loop ${floorActivity.loop} · ${floorActivity.mode==='history'?'Historical records':'Following floor plan'}`}</small>
-          {owner && floorActivity.mode==='live' && (pipelineError || owner.failure || !owner.running || owner.running.pause_requested || owner.running.execution_state==='paused' || owner.running.execution_state==='stopping' || owner.running.connection_health?.state==='verifying') && <p role="status">{pipelineError?'Current execution status is unavailable.':clinicalPipelineStatus(owner)}</p>}
-          {floorActivity.mode==='preview'?<p>This view shows possible skills, not executing agents. Follow execution to see current activity.</p>:<>
+          <small>{`Loop ${floorActivity.loop} · ${floorActivity.mode==='history'?'Historical records':'Following floor plan'}`}</small>
+          {owner && (pipelineError || owner.failure || !owner.running || owner.running.pause_requested || owner.running.execution_state==='paused' || owner.running.execution_state==='stopping' || owner.running.connection_health?.state==='verifying') && <p role="status">{pipelineError?'Current execution status is unavailable.':clinicalPipelineStatus(owner)}</p>}
             {floorActivity.error && <p role="status">Updates unavailable. Showing last recorded calls for this Loop.</p>}
             {!floorActivity.trace?<p>Waiting for this Loop’s agent records.</p>:<ol className="clinical-agent-list" aria-label="Floor plan agent activity">{floorActivityRows(floorActivity).map(row=><li className="clinical-agent-card" key={row.role} data-role={row.role} data-state={row.status.toLowerCase()}>
               <div className="clinical-agent-heading">{row.call?<button className="clinical-agent-link" aria-label={`View ${clinicalRoles[row.role]} activity`} onClick={()=>{setFollowing(false);setDetail({run_tag:floorActivity.runTag!,iteration:floorActivity.loop,stage:row.role,pipeline_name:owner?.name??'',detail:''});}}>{clinicalRoles[row.role]} <span aria-hidden="true">›</span></button>:<strong>{clinicalRoles[row.role]}</strong>}<span className="clinical-agent-status">{row.status==='Waiting · no call recorded'?'Not started':row.status}</span></div>
@@ -85,10 +84,9 @@ function ClinicalLogBody({pipelines, live, pipelineError, floorActivity}: {
               {row.status==='Call still open'&&<p>This agent call has not returned yet. It may be finishing after handing off its result; this does not confirm that its main task is still running.</p>}
               {row.status==='Running'&&<p>{({hypothesis:row.call?.stage.startsWith('question')?'Developing a research question.':'Developing a testable hypothesis.',data:'Preparing the selected measurements for analysis.',ml:'The task board is at model evaluation.',interpreter:'The task board is at interpretation of the analysis.',report:'Preparing an explanation of the findings and their limitations.'})[row.role]}</p>}
             </li>)}</ol>}
-          </>}
         </article>}
       </section>
-      <section id={`${tabId}-outputs`} role="tabpanel" aria-labelledby={`${tabId}-outputs-tab`} hidden={tab!=='outputs'} className="clinical-saved-outputs"><h4>Saved output updates{floorActivity&&floorActivity.mode!=='preview'?` · Loop ${floorActivity.loop}`:''}</h4>
+      <section id={`${tabId}-outputs`} role="tabpanel" aria-labelledby={`${tabId}-outputs-tab`} hidden={tab!=='outputs'} className="clinical-saved-outputs"><h4>Saved output updates{floorActivity?` · Loop ${floorActivity.loop}`:''}</h4>
       {!events.length && <p className="clinical-log-empty">No saved output updates for this execution yet. New records will appear here automatically.</p>}
       <ol className="clinical-log-events" aria-label="Saved output updates">{events.map(event => {
         const owner = pipelines.find(p => (p.running ?? p.latest)?.run_tag === event.run_tag);

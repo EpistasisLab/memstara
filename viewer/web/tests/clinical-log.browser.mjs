@@ -47,11 +47,10 @@ try {
    assert.equal(await row.locator('.clinical-agent-status').innerText(),'Running');
    assert.equal(await row.locator('.clinical-agent-link').count(),1);
    assert.match(await panel.locator('[data-role=data]').innerText(),/Not started/);
-   await page.getByRole('button',{name:'Preview combinations',exact:true}).click();
-   await panel.getByText('Configuration preview',{exact:true}).waitFor();
-   assert.equal(await panel.locator('[data-role=ml]').count(),0);
-   await page.getByRole('button',{name:'Follow execution',exact:true}).click();
-   await panel.locator('[data-role=ml]').waitFor();
+   for(const name of ['Preview combinations','Follow execution'])assert.equal(await page.getByRole('button',{name,exact:true}).count(),0);
+   await page.getByRole('button',{name:'Skill architecture',exact:true}).click();
+   await panel.locator('[data-role=ml]').getByText('Running',{exact:true}).waitFor();
+   await page.getByRole('navigation',{name:'Combination views'}).getByRole('button',{name:'Floor plan',exact:true}).click();
    assert.equal(await page.getByRole('button',{name:'Loop explorer',exact:true}).count(),0);
    await panel.locator('[data-role=ml]').getByText('Running',{exact:true}).waitFor();
    traceUnavailable=true;

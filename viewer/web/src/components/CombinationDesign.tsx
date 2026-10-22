@@ -25,14 +25,14 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
  const board=useRef<HTMLDivElement>(null);
  const [view,setView]=useState<'floor'|'design'>('floor'),[role,setRole]=useState<PlaybookStage|'all'>('all');
  const [search,setSearch]=useState(''),[detail,setDetail]=useState<Flavor|null>(null);
- const [preview,setPreview]=useState(false);
  const [retry,setRetry]=useState(0);
  const [response,setResponse]=useState<{key:string;data:Trace}|null>(null),[failure,setFailure]=useState<{key:string;message:string}|null>(null);
  useEffect(()=>{if(board.current)board.current.scrollLeft=0;},[role,search,view]);
  const choices=p.configuration.combination_skills??{};
  const lists=PLAYBOOK_STAGES.map(stage=>(choices[stage]??[]).filter((id,i,ids)=>ids.findIndex(other=>(catalog.find(s=>s.id===other)?.hash??other)===(catalog.find(s=>s.id===id)?.hash??id))===i));
  const count=lists.reduce((n,ids)=>n*ids.length,1),repetitions=p.configuration.combination_repetitions??1,total=p.configuration.combination_max_loops??count*repetitions;
- const following=view==='floor'&&!preview&&!!(p.running||p.latest);
+ const following=!!(p.running||p.latest);
+ const activityMode=p.running?'live':'history';
  const requestedLoop=following?Math.max(1,p.progress.iteration??1):1;
  const runTag=p.running?.run_tag??p.latest?.run_tag;
  const key=`${p.id}:${p.running?.run_tag??p.latest?.run_tag??'draft'}:${requestedLoop}`;
@@ -40,7 +40,7 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
  const historyTotal=trace?.total_loops??total;
  const currentStage=following?p.progress.stage:undefined;
  const {live,paused,stopping}=floorExecutionState(p.failure?null:p.running);
- useEffect(()=>{onActivity?.({pipelineId:p.id,runTag,loop:requestedLoop,currentStage,mode:following?'live':'preview',trace,error,live:following&&live&&!error,paused:following&&paused,stopping:following&&stopping});},[currentStage,onActivity,p.id,runTag,requestedLoop,following,trace,error,live,paused,stopping]);
+ useEffect(()=>{onActivity?.(following?{pipelineId:p.id,runTag,loop:requestedLoop,currentStage,mode:activityMode,trace,error,live:live&&!error,paused,stopping}:null);},[currentStage,onActivity,p.id,runTag,requestedLoop,following,activityMode,trace,error,live,paused,stopping]);
  useEffect(()=>()=>onActivity?.(null),[onActivity]);
  useEffect(()=>{setResponse(null);setFailure(null);setDetail(null);},[p.id,p.latest?.run_tag]);
  useEffect(()=>{
@@ -58,7 +58,7 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
    finally{clearTimeout(deadline);if(active)timer=setTimeout(()=>void read(),500);}
   };
   void read();return()=>{active=false;if(timer)clearTimeout(timer);controller?.abort();};
- },[view,key,retry,p.id,requestedLoop,following,runTag]);
+ },[key,retry,p.id,requestedLoop,following,runTag]);
  const visibleRoles=PLAYBOOK_STAGES.filter(s=>role==='all'||s===role);
  const skillFor=(id:string)=>catalog.find(s=>s.id===id);
  const selectedContent=detail?skillFor(detail.id):undefined;
@@ -68,14 +68,14 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
    <div className="cs-heading-row">
     <div className="cs-compact-identity"><h3 title={p.name}>{p.name}</h3><span>All Combinations</span></div>
     <div className="cs-heading-actions">
-     {view==='floor'&&(p.running||p.latest)&&<span className="cs-loop-status" data-live={following&&live&&!error} title="Updates every 0.5 seconds · recorded skills and call status">{following?`Loop ${requestedLoop} / ${historyTotal} · ${p.running?(error?'Updates unavailable':paused?'Paused':stopping?'Pausing':live?'Live':'Waiting'):'Latest execution'}`:'Combination preview'}</span>}
+     {view==='floor'&&following&&<span className="cs-loop-status" data-live={live&&!error} title="Updates every 0.5 seconds · recorded skills and call status">{`Loop ${requestedLoop} / ${historyTotal} · ${p.running?(error?'Updates unavailable':paused?'Paused':stopping?'Pausing':live?'Live':'Waiting'):'Latest execution'}`}</span>}
      {!p.latest&&!p.running&&<button className="cs-run" data-help="Run combinations" data-help-description="Start this pipeline using one skill from each agent role per Loop, up to its configured maximum Loops." disabled={busy||!count} onClick={()=>void usePipelines.getState().play(p.id)}><Play size={16}/>Run combinations</button>}
     </div>
    </div>
   <div className="cs-control-row"><nav className="cs-tabs" aria-label="Combination views">
-   <button data-help="Floor plan" data-help-description="See the selected skills and recorded stage status for the current Loop. Preview mode explores possible combinations without changing execution." aria-pressed={view==='floor'} onClick={()=>setView('floor')}><Layers3 size={16}/>Floor plan</button>
+   <button data-help="Floor plan" data-help-description="See the selected skills and recorded stage status for the current Loop." aria-pressed={view==='floor'} onClick={()=>setView('floor')}><Layers3 size={16}/>Floor plan</button>
    <button data-help="Skill architecture" data-help-description="Browse all configured skills by agent role. Search and read their instructions; this is the configuration, not the execution history." aria-pressed={view==='design'} onClick={()=>setView('design')}><Network size={16}/>Skill architecture</button>
-  </nav>{view==='floor'&&(p.running||p.latest)&&<button className="cs-preview-toggle" data-help={preview?"Follow execution":"Preview combinations"} data-help-description={preview?"Return to the latest recorded Loop and refresh its agent activity every 0.5 seconds. This does not start or resume the pipeline.":"Explore possible skill combinations without running agents or changing pipeline settings."} aria-pressed={preview} onClick={()=>setPreview(v=>!v)}>{preview?'Follow execution':'Preview combinations'}</button>}</div>{view==="design"&&<div className="cs-filters" role="search" aria-label="Filter configured skills">
+  </nav></div>{view==="design"&&<div className="cs-filters" role="search" aria-label="Filter configured skills">
     <label className="cs-search"><Search size={16} aria-hidden="true"/><input type="search" aria-label="Find a combination skill" data-help="Find a skill" data-help-description="Filter the configured skills by name or matching text. This only changes what is shown, not the pipeline configuration." value={search} onChange={e=>setSearch(e.target.value)} placeholder="Find a skill…"/></label>
     <label className="cs-role-filter">Role<select aria-label="Filter agent role" data-help="Filter agent role" data-help-description="Show skills for one agent role, or choose All five roles to see the complete skill architecture." value={role} onChange={e=>setRole(e.target.value as PlaybookStage|'all')}><option value="all">All five roles</option>{PLAYBOOK_STAGES.map(s=><option key={s} value={s}>{roles[s].name}</option>)}</select></label>
    </div>}

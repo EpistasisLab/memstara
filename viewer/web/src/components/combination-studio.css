@@ -152,14 +152,11 @@
 .cs-heading-actions { display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; min-width:0; }
 .cs-loop-status { font-size:12px; font-variant-numeric:tabular-nums; color:rgb(var(--ink-soft)); overflow-wrap:anywhere; }
 .cs-unified-header .cs-run { min-height:34px; padding:6px 10px; font-size:12px; }
-.cs-preview-toggle { min-height:34px; padding:6px 9px; font-size:12px; border:1px solid rgb(var(--line)); border-radius:7px; background:rgb(var(--panel)); }
 .cs-unified-header .cs-control-row { margin:6px 0 0; gap:6px; }
 .cs-unified-header .cs-tabs { width:auto; flex:0 1 auto; flex-wrap:wrap; padding:2px; gap:2px; border-radius:8px; }
 .cs-unified-header .cs-tabs button { min-height:34px; padding:6px 9px; gap:5px; font-size:12px; flex:0 1 auto; }
-.cs-preview-toggle { margin-left:auto; }
 @container combination-studio (max-width:400px) {
  .cs-heading-actions { width:100%; justify-content:space-between; }
  .cs-unified-header .cs-tabs { width:100%; }
  .cs-unified-header .cs-tabs button { flex:1 1 auto; }
- .cs-preview-toggle { margin-left:0; }
 }

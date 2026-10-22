@@ -8,7 +8,7 @@ try{
  const catalog=stages.flatMap((stage,i)=>Array.from({length:counts[i]},(_,n)=>({stage,id:stage+n,title:names[stage][n],hash:stage+n+'hash',description:'Clinical research instructions with explicit evidence boundaries and reproducible analysis.',content:'# Instructions\n\nReview the evidence before making a claim.\n\n| Rule | Purpose |\n| --- | --- |\n| Record uncertainty | Transparent reporting |',source:'fixture'})));
  const choices=Object.fromEntries(stages.map(s=>[s,catalog.filter(c=>c.stage===s).map(c=>c.id)]));
  let liveFixture=false;
- const pipeline={id:'combination-ui',number:1,name:'Addiction knowledge · comparative exploration',configuration:{combination_skills:choices,combination_repetitions:2,hypothesis_agents:1,interpreter_agents:1},running:null,latest:{run_tag:'fixture-run',exit_code:0},progress:{}};
+ const pipeline={id:'combination-ui',number:1,name:'Addiction knowledge · comparative exploration',configuration:{combination_skills:choices,combination_repetitions:2,hypothesis_agents:1,interpreter_agents:1},running:null,latest:null,progress:{}};
  await p.route('**/control/**',async r=>{
   assert.equal(r.request().method(),'GET','No real execution allowed');
   const u=new URL(r.request().url());
@@ -34,16 +34,19 @@ try{
   console.log('Starting',theme,width);
   await p.setViewportSize({width,height:1000});await p.evaluate(t=>document.documentElement.dataset.theme=t,theme);
   await p.getByRole('navigation',{name:'Combination views'}).getByRole('button',{name:'Floor plan',exact:true}).click();
-  if(await p.getByRole('button',{name:'Preview combinations',exact:true}).count())await p.getByRole('button',{name:'Preview combinations',exact:true}).click();
+  for(const name of ['Preview combinations','Follow execution'])assert.equal(await p.getByRole('button',{name,exact:true}).count(),0);
   await studio.locator('.cf-room').first().waitFor();
   assert.equal(await studio.locator('.cf-room').count(),5);
   assert.equal(await studio.locator('.cf-desk').count(),10);
   await studio.getByRole('combobox',{name:'Focus floor plan agent',exact:true}).selectOption('hypothesis');
-  await studio.getByRole('button',{name:'Preview Social determinants',exact:true}).click();
-  assert.equal(await studio.getByRole('button',{name:'Preview Social determinants',exact:true}).getAttribute('aria-pressed'),'true');
-  assert.equal(await studio.locator('.react-flow__edge').count(),4);
+  assert.equal(await studio.getByRole('button',{name:/^Preview /}).count(),0);
+  assert.equal(await studio.locator('.cf-desk.is-selected').count(),0,'Drafts must not suggest a selected execution path');
+  assert.equal(await studio.locator('.react-flow__edge').count(),0);
+  await studio.getByRole('button',{name:'Inspect Social determinants instructions',exact:true}).click();
+  await p.getByRole('dialog',{name:'Social determinants',exact:true}).locator('table').waitFor();
+  await p.keyboard.press('Escape');
   await studio.getByRole('combobox',{name:'Focus floor plan agent',exact:true}).selectOption('all');
-  console.log('Floor selection passed');
+  console.log('Configured skills and instruction inspection passed without combination preview');
   await studio.screenshot({path:`/tmp/combination-floor-${theme}-${width}.png`,timeout:10000});
   if(width===1440||width===390)await p.screenshot({path:`/tmp/combination-workspace-${theme}-${width}.png`});
   await p.getByRole('button',{name:'Skill architecture',exact:true}).click();
@@ -63,7 +66,7 @@ try{
   assert.equal(await studio.getByRole('spinbutton',{name:'Combination Loop',exact:true}).count(),0);
   console.log(JSON.stringify({theme,width,architecture:'passed',removedLoopExplorer:'passed'}));
  }
- pipeline.progress={iteration:2};await p.reload();
+ pipeline.latest={run_tag:'fixture-run',exit_code:0};pipeline.progress={iteration:2};await p.reload();
  await p.getByText('Loop 2 / 48 · Latest execution',{exact:true}).waitFor();
  await studio.getByRole('button',{name:'Inspect Substance use mechanisms instructions',exact:true}).click();
  await p.getByRole('dialog',{name:'Substance use mechanisms',exact:true}).getByText('The recorded version is not available',{exact:false}).waitFor();await p.keyboard.press('Escape');
@@ -75,13 +78,14 @@ try{
  liveFixture=true;pipeline.running={run_tag:'fixture-run',execution_state:'running'};pipeline.progress={iteration:1,stage:'ml'};
  await p.reload();await p.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();await p.getByText('Loop 1 / 48 · Live',{exact:true}).waitFor();
  await p.waitForFunction(()=>document.querySelector('.cf-active-room h4')?.textContent==='Machine learning');
+ for(const name of ['Preview combinations','Follow execution'])assert.equal(await p.getByRole('button',{name,exact:true}).count(),0);
  assert.equal(await studio.locator('.cf-active-room h4').innerText(),'Machine learning');
  assert.equal(await studio.locator('.cf-desk.is-selected').count(),5);
  assert.equal(await studio.locator('.cf-desk.cf-unused').count(),5);
  pipeline.progress.iteration=2;pipeline.progress.stage='interpreter';
  await p.getByText('Loop 2 / 48 · Live',{exact:true}).waitFor();
  await p.waitForFunction(()=>document.querySelector('.cf-active-room h4')?.textContent==='Interpretation');
- assert.equal(await studio.getByRole('button',{name:'Preview Social determinants',exact:true}).getAttribute('aria-pressed'),'true');
+ assert.equal(await studio.locator('.cf-desk.is-selected').filter({hasText:'Social determinants'}).count(),1);
  pipeline.running.execution_state='paused';
  await p.getByText('Loop 2 / 48 · Paused',{exact:true}).waitFor();
  assert.equal(await studio.locator('.cf-active-room').count(),0);
