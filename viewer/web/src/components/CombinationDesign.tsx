@@ -1,7 +1,7 @@
-import {floorCallRole as callRole, type FloorTrace as Trace, type FloorActivity, floorCallStatus, floorExecutionState} from '../lib/floorActivity';
+import {floorCallRole as callRole, type FloorTrace as Trace, type FloorActivity, floorExecutionState} from '../lib/floorActivity';
 import {createPortal} from "react-dom";
 import {memo,useEffect,useState,useRef,lazy,Suspense,type CSSProperties} from 'react';
-import {Sparkles,Database,BrainCircuit,ScanEye,FileText,ArrowRight,ChevronLeft,ChevronRight,Layers3,Network,History,Play,Check,Clock3,AlertCircle,Search,ExternalLink} from 'lucide-react';
+import {Sparkles,Database,BrainCircuit,ScanEye,FileText,ArrowRight,Layers3,Network,Play,AlertCircle,Search,ExternalLink} from 'lucide-react';
 const SkillMarkdown=lazy(()=>import('./SkillMarkdown'));
 import {useControl,PLAYBOOK_STAGES,type PlaybookStage} from '../store/control';
 import {usePipelines,type PipelineDefinition} from '../store/pipelines';
@@ -22,28 +22,28 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
  const catalog=useControl(s=>s.catalog),busy=usePipelines(s=>s.busy);
  const controlError=usePipelines(s=>s.error);
  const board=useRef<HTMLDivElement>(null);
- const [view,setView]=useState<'floor'|'design'|'loop'>('floor'),[role,setRole]=useState<PlaybookStage|'all'>('all');
+ const [view,setView]=useState<'floor'|'design'>('floor'),[role,setRole]=useState<PlaybookStage|'all'>('all');
  const [search,setSearch]=useState(''),[detail,setDetail]=useState<Flavor|null>(null);
  const [preview,setPreview]=useState(false);
- const [loop,setLoop]=useState(1),[retry,setRetry]=useState(0);
+ const [retry,setRetry]=useState(0);
  const [response,setResponse]=useState<{key:string;data:Trace}|null>(null),[failure,setFailure]=useState<{key:string;message:string}|null>(null);
  useEffect(()=>{if(board.current)board.current.scrollLeft=0;},[role,search,view]);
  const choices=p.configuration.combination_skills??{};
  const lists=PLAYBOOK_STAGES.map(stage=>(choices[stage]??[]).filter((id,i,ids)=>ids.findIndex(other=>(catalog.find(s=>s.id===other)?.hash??other)===(catalog.find(s=>s.id===id)?.hash??id))===i));
  const count=lists.reduce((n,ids)=>n*ids.length,1),repetitions=p.configuration.combination_repetitions??1,total=p.configuration.combination_max_loops??count*repetitions;
  const following=view==='floor'&&!preview&&!!(p.running||p.latest);
- const requestedLoop=following?Math.max(1,p.progress.iteration??1):loop;
+ const requestedLoop=following?Math.max(1,p.progress.iteration??1):1;
  const runTag=p.running?.run_tag??p.latest?.run_tag;
  const key=`${p.id}:${p.running?.run_tag??p.latest?.run_tag??'draft'}:${requestedLoop}`;
  const trace=response?.key===key?response.data:null,error=controlError||(failure?.key===key?failure.message:'');
  const historyTotal=trace?.total_loops??total;
  const currentStage=following?p.progress.stage:undefined;
  const {live,paused,stopping}=floorExecutionState(p.failure?null:p.running);
- useEffect(()=>{onActivity?.({pipelineId:p.id,runTag,loop:requestedLoop,currentStage,mode:following?'live':view==='loop'?'history':'preview',trace,error,live:following&&live&&!error,paused:following&&paused,stopping:following&&stopping});},[currentStage,onActivity,p.id,runTag,requestedLoop,following,view,trace,error,live,paused,stopping]);
+ useEffect(()=>{onActivity?.({pipelineId:p.id,runTag,loop:requestedLoop,currentStage,mode:following?'live':'preview',trace,error,live:following&&live&&!error,paused:following&&paused,stopping:following&&stopping});},[currentStage,onActivity,p.id,runTag,requestedLoop,following,trace,error,live,paused,stopping]);
  useEffect(()=>()=>onActivity?.(null),[onActivity]);
- useEffect(()=>{setLoop(1);setResponse(null);setFailure(null);setDetail(null);},[p.id,p.latest?.run_tag]);
+ useEffect(()=>{setResponse(null);setFailure(null);setDetail(null);},[p.id,p.latest?.run_tag]);
  useEffect(()=>{
-  if(view!=='loop'&&!following)return;
+  if(!following)return;
   let active=true,timer:ReturnType<typeof setTimeout>|undefined,controller:AbortController|undefined;
   const read=async()=>{
    if(document.hidden){timer=setTimeout(()=>void read(),3000);return;}
@@ -74,7 +74,6 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
   <div className="cs-control-row"><nav className="cs-tabs" aria-label="Combination views">
    <button data-help="Floor plan" data-help-description="See the selected skills and recorded stage status for the current Loop. Preview mode explores possible combinations without changing execution." aria-pressed={view==='floor'} onClick={()=>setView('floor')}><Layers3 size={16}/>Floor plan</button>
    <button data-help="Skill architecture" data-help-description="Browse all configured skills by agent role. Search and read their instructions; this is the configuration, not the execution history." aria-pressed={view==='design'} onClick={()=>setView('design')}><Network size={16}/>Skill architecture</button>
-   <button data-help="Loop explorer" data-help-description="Select a Loop to compare its planned skills with the actual recorded agent calls, sequence and status." aria-pressed={view==='loop'} onClick={()=>setView('loop')}><History size={16}/>Loop explorer</button>
   </nav>{view==='floor'&&(p.running||p.latest)&&<button className="cs-preview-toggle" data-help={preview?"Follow execution":"Preview combinations"} data-help-description={preview?"Return to the latest recorded Loop and refresh its agent activity every 0.5 seconds. This does not start or resume the pipeline.":"Explore possible skill combinations without running agents or changing pipeline settings."} aria-pressed={preview} onClick={()=>setPreview(v=>!v)}>{preview?'Follow execution':'Preview combinations'}</button>}</div>{view==="design"&&<div className="cs-filters" role="search" aria-label="Filter configured skills">
     <label className="cs-search"><Search size={16} aria-hidden="true"/><input type="search" aria-label="Find a combination skill" data-help="Find a skill" data-help-description="Filter the configured skills by name or matching text. This only changes what is shown, not the pipeline configuration." value={search} onChange={e=>setSearch(e.target.value)} placeholder="Find a skill…"/></label>
     <label className="cs-role-filter">Role<select aria-label="Filter agent role" data-help="Filter agent role" data-help-description="Show skills for one agent role, or choose All five roles to see the complete skill architecture." value={role} onChange={e=>setRole(e.target.value as PlaybookStage|'all')}><option value="all">All five roles</option>{PLAYBOOK_STAGES.map(s=><option key={s} value={s}>{roles[s].name}</option>)}</select></label>
@@ -89,7 +88,7 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
    {following&&!trace?<p role="status" className="cs-empty">{error?'Execution records unavailable.':'Loading current Loop…'}</p>:<CombinationFloor
     skills={PLAYBOOK_STAGES.map((stage,i)=>{const configured=lists[i].map(id=>({stage,id,title:skillFor(id)?.title,hash:skillFor(id)?.hash}));const frozen=trace?.calls.filter(c=>callRole(c)===stage).at(-1)?.skill??trace?.planned?.agents.find(a=>a.stage===stage);return following&&frozen?[...configured.map(s=>s.id===frozen.id?frozen:s),...(!configured.some(s=>s.id===frozen.id)?[frozen]:[])]:configured;})}
     currentStage={currentStage} activeSkills={following?(trace?.planned?.agents??[]):undefined} recorded={following} calls={following?trace?.calls:undefined} live={following&&live&&!error} paused={following&&paused} stopping={following&&stopping} stale={following&&!!error} inspect={setDetail}/>}
-  </>:view==='design'?<>
+  </>:<>
    <p className="cs-architecture-caption">One skill from each column forms a Loop. Rows are not predefined pipelines. Scroll across, or filter by role.</p>
 
    <div ref={board} className="cs-board-scroll" tabIndex={0} role="region" aria-label="Agent skill architecture. Scroll horizontally to see all roles.">
@@ -107,29 +106,6 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
     })}
     </div>
    </div>
-   <p className="cs-note">Configured skills are shown here. Open Loop explorer to see the planned selection and actual recorded calls for a specific Loop.</p>
-  </>:<>
-   <div className="cs-loop-toolbar"><div><h4>Follow one execution path</h4><p>{trace?.run_tag?'Recorded execution · frozen skill versions':'Select a Loop to inspect its execution records'}</p></div>
-    <div className="cs-loop-picker"><button aria-label="Previous combination Loop" disabled={loop<=1} onClick={()=>setLoop(n=>n-1)}><ChevronLeft size={18}/></button><label>Loop<input aria-label="Combination Loop" type="number" min={1} max={Math.max(1,historyTotal)} value={loop} onChange={e=>{const n=e.target.valueAsNumber;if(Number.isInteger(n)&&n>=1&&n<=historyTotal)setLoop(n);}}/></label><span>of {historyTotal.toLocaleString()}</span><button aria-label="Next combination Loop" disabled={loop>=historyTotal} onClick={()=>setLoop(n=>n+1)}><ChevronRight size={18}/></button></div>
-   </div>
-   {error&&<div className="cs-error" role="alert"><AlertCircle size={17}/><span>{error} {trace?'Showing the last records for this Loop.':'This does not mean the Loop is empty.'}</span><button onClick={()=>setRetry(n=>n+1)}>Retry</button></div>}
-   {!trace&&!error?<p className="cs-empty" role="status">Loading this Loop’s execution path…</p>:trace&&<>
-    {trace.failure&&<p role="status" className="cs-note">{trace.failure.message}</p>}
-    <div className="cs-path-caption"><span>{trace.planned?`Combination ${trace.planned.combination} · cycle ${trace.planned.repetition}${trace.planned.start_combination ? ` · ${trace.planned.selection_policy==='random_start_then_cycle_v1'?'Random':'Ordered'} start: ${trace.planned.start_combination}` : ''}`:trace.preparing?'Preparing execution…':'No execution plan recorded'}</span><span>{trace.calls.length} recorded calls · refreshes every 0.5 seconds</span></div>
-    <CombinationFloor recorded skills={PLAYBOOK_STAGES.map(stage=>{const flavor=trace.calls.filter(c=>callRole(c)===stage).at(-1)?.skill??trace.planned?.agents.find(a=>a.stage===stage);return flavor?[flavor]:[];})} calls={trace.calls} inspect={setDetail}/>
-    <details className="cs-stage-details"><summary>Stage details and skill versions</summary><div className="cs-path">{PLAYBOOK_STAGES.map((stage,i)=>{
-     const planned=trace.planned?.agents.find(a=>a.stage===stage),calls=trace.calls.filter(c=>callRole(c)===stage),last=calls.at(-1),actual=last?.skill,Icon=roles[stage].icon;
-     const flavor=actual??planned,status=floorCallStatus(last,{});
-     return <article key={stage} className={`cs-path-stage ${last?'has-call':''} ${last?.status==='failed'?'is-failed':''}`} style={{'--role-color':STAGE_COLOR[stage]} as CSSProperties}>
-      <span className="cs-role-icon"><Icon size={20}/></span><span className="cs-step">Stage {i+1}</span><h4>{roles[stage].name}</h4>
-      <span className="cs-path-source">{actual?'Recorded skill':planned?'Planned skill':'Skill unavailable'}</span><strong>{flavor?.title??flavor?.id??'Not recorded'}</strong>
-      <span className="cs-call-status">{last?.status==='completed'?<Check size={14}/>:<Clock3 size={14}/>} {status}</span>
-      {flavor&&<button onClick={()=>setDetail(flavor)}>Inspect skill <ArrowRight size={13}/></button>}
-     </article>;
-    })}</div></details>
-    <div className="cs-section-heading"><div><h4>Recorded call sequence</h4><p>Actual calls, in recorded order. A role may be called more than once.</p></div></div>
-    {trace.calls.length?<ol className="cs-call-list">{trace.calls.map((c,i)=>{const s=callRole(c),Icon=s?roles[s].icon:Layers3;return <li key={c.run_id??i}><span className="cs-call-number">{i+1}</span><Icon size={18}/><div><strong>{s?roles[s].name:c.stage}</strong><span>{c.skill?.title??'Skill not recorded'}</span></div><span className="cs-call-status">{floorCallStatus(c,{})}</span><details><summary>Provenance</summary><dl><dt>Call stage</dt><dd>{c.stage}</dd><dt>Skill ID</dt><dd>{c.skill?.id??'Not recorded'}</dd><dt>Version hash</dt><dd>{c.skill?.hash??'Not recorded'}</dd><dt>Invocation</dt><dd>{c.run_id??'Not recorded'}</dd></dl></details></li>;})}</ol>:<p className="cs-empty">No actual calls recorded for this Loop yet. A planned selection is not evidence that an agent ran.</p>}
-   </>}
   </>}
   {detail&&<FloorDetailDialog title={detail.title??detail.id} close={()=>setDetail(null)} className="cs-skill-dialog">
    <div className="cs-document-role"><span>{roles[detail.stage]?.name??detail.stage} agent</span><span>{sameVersion?'Skill instructions':'Recorded skill reference'}</span></div>

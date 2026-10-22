@@ -61,10 +61,14 @@ try {
   await create.click();await dialog.waitFor({state:'hidden'});await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
   assert.equal(posted.configuration.combination_random_start,true);assert.equal(posted.configuration.combination_max_loops,10);assert.equal(posted.configuration.waves,10);assert.equal(posted.configuration.continuous,false);assert.equal(runPosts,0);
   rows[0].latest={run_tag:'frozen',exit_code:0,configuration:{waves:10}};await page.reload();await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
-  const studio=page.getByRole('region',{name:'Combination design',exact:true});await studio.waitFor();await page.getByRole('button',{name:'Combination schedule and map guide',exact:true}).click();assert.equal(await page.getByRole('dialog').locator('dt').filter({hasText:'Maximum Loops'}).locator('xpath=following-sibling::dd[1]').innerText(),'10');await page.keyboard.press('Escape');
-  await page.getByRole('button',{name:'Loop explorer',exact:true}).click();await studio.getByText('Combination 23 · cycle 1 · Random start: 23',{exact:true}).waitFor();
-  await studio.getByRole('button',{name:'Next combination Loop',exact:true}).click();await studio.getByText('Combination 24 · cycle 1 · Random start: 23',{exact:true}).waitFor();
-  assert.equal(await studio.getByRole('spinbutton',{name:'Combination Loop',exact:true}).getAttribute('max'),'10');assert.deepEqual(errors,[]);assert.equal(runPosts,0);
-  console.log(JSON.stringify({width,theme,limits:'pass',savedRandomStart:'pass',frozenHistory:'pass',noRunOnCreate:'pass'}));await page.close();
+  const studio=page.getByRole('region',{name:'Combination design',exact:true});await studio.waitFor();
+  await page.getByText('Loop 1 / 10 · Latest execution',{exact:true}).waitFor();
+  await studio.getByRole('button',{name:'Preview interpreter flavor 1',exact:true}).waitFor();
+  assert.equal(await studio.getByRole('button',{name:'Preview interpreter flavor 1',exact:true}).getAttribute('aria-pressed'),'true');
+  rows[0].progress={iteration:2};await page.getByText('Loop 2 / 10 · Latest execution',{exact:true}).waitFor();
+  await page.waitForFunction(()=>document.querySelector('button[aria-label="Preview interpreter flavor 2"]')?.getAttribute('aria-pressed')==='true');
+  assert.equal(await page.getByRole('button',{name:'Loop explorer',exact:true}).count(),0);
+  assert.equal(await studio.getByRole('spinbutton',{name:'Combination Loop',exact:true}).count(),0);assert.deepEqual(errors,[]);assert.equal(runPosts,0);
+  console.log(JSON.stringify({width,theme,limits:'pass',savedRandomStart:'pass',frozenCurrentLoop:'pass',noRunOnCreate:'pass'}));await page.close();
  }
 } finally {await browser.close();}

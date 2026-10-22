@@ -52,11 +52,7 @@ try {
    assert.equal(await panel.locator('[data-role=ml]').count(),0);
    await page.getByRole('button',{name:'Follow execution',exact:true}).click();
    await panel.locator('[data-role=ml]').waitFor();
-   await page.getByRole('button',{name:'Loop explorer',exact:true}).click();
-   await panel.getByText('Loop 1 · Historical records',{exact:true}).waitFor();
-   await panel.locator('[data-role=ml]').getByText('Last recorded: call open',{exact:true}).waitFor();
-   assert.equal(await panel.locator('.clinical-log-events li').count(),0);
-   await page.getByRole('navigation',{name:'Combination views'}).getByRole('button',{name:'Floor plan',exact:true}).click();
+   assert.equal(await page.getByRole('button',{name:'Loop explorer',exact:true}).count(),0);
    await panel.locator('[data-role=ml]').getByText('Running',{exact:true}).waitFor();
    traceUnavailable=true;
    await panel.locator('[data-role=ml]').getByText('Last recorded: call open',{exact:true}).waitFor();

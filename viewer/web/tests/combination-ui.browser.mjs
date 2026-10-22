@@ -50,6 +50,10 @@ try{
  if(runPosts)throw Error('Creating unexpectedly started an execution');
  if(posted.configuration.combination_max_loops!==48)throw Error('Loop limit not saved');
  await page.getByRole('button',{name:'Run combinations'}).waitFor();
- await page.getByRole('button',{name:'Loop explorer',exact:true}).click();await grid.getByRole('spinbutton',{name:'Combination Loop',exact:true}).fill('48'); await grid.getByText('Combination 24 · cycle 2',{exact:true}).waitFor(); await grid.getByText(/Actual skill 48/).first().waitFor(); await grid.getByRole('spinbutton',{name:'Combination Loop',exact:true}).fill('1'); await grid.getByText(/Actual skill 1/).first().waitFor(); if(await grid.getByText(/Actual skill 48/).count())throw Error('Stale Loop content');
- console.log('Frozen 48-Loop history selection verified; Selected workflow opens; 24 combinations/48 Loops/5 roles; narrow layout valid; create does not run; all writes mocked.');
+ if(await page.getByRole('button',{name:'Loop explorer',exact:true}).count())throw Error('Removed Loop explorer is visible');
+ rows[0].latest={run_tag:'frozen-execution',exit_code:0};rows[0].progress={iteration:48};await page.reload();
+ await page.getByText('Loop 48 / 48 · Latest execution',{exact:true}).waitFor();await grid.getByText('Actual skill 48',{exact:true}).first().waitFor();
+ rows[0].progress={iteration:1};await page.getByText('Loop 1 / 48 · Latest execution',{exact:true}).waitFor();await grid.getByText('Actual skill 1',{exact:true}).first().waitFor();
+ if(await grid.getByText('Actual skill 48',{exact:true}).count())throw Error('Stale Loop content');
+ console.log('Current-loop frozen skills verified; Selected workflow opens; 24 combinations/48 Loops/5 roles; narrow layout valid; create does not run; all writes mocked.');
 }finally{await browser.close();}
