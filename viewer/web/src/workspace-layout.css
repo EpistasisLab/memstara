@@ -92,29 +92,6 @@
 .pipeline-browser-row[data-state=running] .pipeline-state-badge,
 .pipeline-browser-row[data-state=completed] .pipeline-state-badge {color:rgb(var(--ink));}
 
-/* Telemetry owns one vertical scroll region. Controls, notices and tab content
-   participate in its flow; tables may scroll horizontally within that flow. */
-.telemetry-workspace { overflow:auto; container-type:inline-size; overscroll-behavior:contain; scrollbar-gutter:stable; }
-.telemetry-scope-region { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); flex:none; min-height:0; max-height:none; overflow:visible; }
-.telemetry-tab-body { flex:none; min-height:0; overflow:visible; min-width:0; }
-.telemetry-workspace > nav, .telemetry-workspace > p { flex:none; }
-.telemetry-workspace > p { overflow-wrap:anywhere; }
-.telemetry-workspace > nav { flex-wrap:wrap; }
-.telemetry-workspace > nav button { min-height:40px; }
-.telemetry-loop-controls { gap:8px; padding:10px 12px; }
-.telemetry-loop-controls > p { flex-basis:100%; font-size:12px; }
-.telemetry-loop-controls select { min-width:0; width:100%; }
-.telemetry-scope-region .execution-context-row > div { display:none; }
-.telemetry-scope-region .execution-context-row > label { flex:1; min-width:0; }
-.telemetry-scope-region .execution-context { padding:10px 12px; min-width:0; }
-.telemetry-scope-region .telemetry-loop-controls { align-content:start; align-items:center; border-bottom:0; min-width:0; }
-@container (max-width:600px) {
- .telemetry-scope-region { grid-template-columns:minmax(0,1fr); }
- .telemetry-scope-region .execution-context-row { flex-direction:column; align-items:stretch; }
- .telemetry-scope-region .execution-context-row > * { min-width:0; max-width:100%; }
- .telemetry-loop-controls label { flex:1 1 180px; }
-}
-
 [data-theme="dark"] .text-amber-800[role="status"],
 [data-theme="dark"] .text-amber-800[role="alert"] {color:#f6cb88;}
 [data-theme="dark"] a[target="_blank"] {color:rgb(var(--accent));}
@@ -130,31 +107,6 @@ button[aria-label^="Help:"] {min-width:24px;min-height:24px;}
 /* Keep the diagram provider attribution readable in both themes. */
 .react-flow__attribution {background:rgb(var(--panel)) !important;}
 .react-flow__attribution a {color:rgb(var(--ink)) !important;}
-
-/* Telemetry keeps the selected execution first; technical evidence stays expandable. */
-.telemetry-workspace .execution-context > details {display:none;}
-.telemetry-simple-nav {display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid rgb(var(--line));flex-wrap:wrap;}
-.telemetry-simple-nav button,.telemetry-simple-nav select {padding:7px 10px;font-size:13px;border-radius:7px;background:rgb(var(--panel));border:1px solid rgb(var(--line));color:rgb(var(--ink));}
-.telemetry-simple-nav button[aria-pressed="true"] {background:rgb(var(--accent));color:rgb(var(--accent-contrast));border-color:transparent;}
-.telemetry-detail-picker {margin-left:auto;min-width:0;max-width:100%;}
-.telemetry-detail-picker select {max-width:100%;}
-.telemetry-overview {padding:16px;display:grid;gap:12px;min-width:0;overflow-wrap:anywhere;}
-.telemetry-overview header h3 {font-size:15px;font-weight:650;}
-.telemetry-overview header p,.telemetry-usage-note,.telemetry-updated {font-size:12px;color:rgb(var(--ink-soft));line-height:1.5;}
-.telemetry-key-metrics {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
-.telemetry-key-metrics > div {padding:12px;border:1px solid rgb(var(--line));border-radius:10px;min-width:0;}
-.telemetry-key-metrics dt {font-size:12px;color:rgb(var(--ink-soft));}
-.telemetry-key-metrics dd {font-size:clamp(16px,2vw,24px);font-weight:650;margin-top:6px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;}
-.telemetry-disclosure {border-top:1px solid rgb(var(--line));padding-top:10px;min-width:0;}
-.telemetry-disclosure summary {cursor:pointer;font-size:13px;font-weight:550;padding:4px 0;}
-.telemetry-disclosure summary span {font-size:12px;font-weight:400;color:rgb(var(--ink-soft));margin-left:8px;}
-.telemetry-disclosure > div {padding-top:12px;display:grid;gap:12px;min-width:0;}
-@container (max-width:420px) {
- .telemetry-key-metrics {grid-template-columns:1fr;gap:0;}
- .telemetry-key-metrics > div {display:flex;align-items:center;justify-content:space-between;gap:12px;border:0;border-bottom:1px solid rgb(var(--line));border-radius:0;padding:10px 0;}
- .telemetry-key-metrics dd {margin:0;font-size:18px;}
- .telemetry-overview {padding:12px;}
-}
 
 /* On short screens the dialog itself scrolls. This keeps every control reachable
    instead of squeezing the step between tall, fixed headers and footers. */

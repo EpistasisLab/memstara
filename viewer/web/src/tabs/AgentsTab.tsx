@@ -78,7 +78,7 @@ export default function AgentsTab() {
   return (
     <div className="space-y-4 p-4">
       <details className="text-sm text-ink-soft"><summary className="cursor-pointer">How to read these numbers</summary><p className="mt-2">Agent executions are individual agent invocations. Reasoning steps are internal to a call; neither counts complete pipeline loops. Usage and estimated cost cover only the selected scope identified above. The workspace header combines multiple pipelines.</p></details>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="tm-agent-cards grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { icon: Repeat, label: "Agent executions", value: runs.toLocaleString() },
           { icon: Coins, label: "Recorded estimate subtotal", value: costLabel({usd:cost,status:runs?'partial':'complete'}) },
@@ -107,7 +107,7 @@ export default function AgentsTab() {
           definition (<span className="font-mono">available_tools</span>).
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+        <div className="tm-agent-tools grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
           {scene?.agents.filter((a) => a.slot === 0).map((a) => (
             <div key={a.id} className="rounded-lg border border-paper-line bg-white p-3">
               <div className="flex items-center gap-2">

@@ -82,7 +82,7 @@ export default function TaskTab({ taskId: scopedTaskId }: { taskId?: number | nu
   const importance = rankedContributions(contributions.values, task.y_column);
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 p-4">
+    <div className="tm-task-details grid grid-cols-1 xl:grid-cols-2 gap-6 p-4">
       <div className="xl:col-span-2 text-sm text-ink-soft">{error ? <span role="alert">{error} Showing the last available task details.</span> : <>Updates every 3 seconds · Last updated {updatedAt ? new Date(updatedAt).toLocaleTimeString() : "—"} (local time)</>}</div>
       <section>
         <h2 className="text-sm font-bold">Task #{task.task_id} — {labelLoop(task)}</h2>

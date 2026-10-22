@@ -64,7 +64,7 @@ function Row({ event }: { event: FeedEvent }) {
   </li>;
 }
 
-export default function FeedPanel({stage, compact = false}: {stage?: string; compact?: boolean} = {}) {
+export default function FeedPanel({stage, compact = false, embedded = false}: {stage?: string; compact?: boolean; embedded?: boolean} = {}) {
   const feed = useFeed();
   const snapshot=useSnapshot();
   const loop=(snapshot as (typeof snapshot & {telemetry?:{loop:number|null}}))?.telemetry?.loop??null;
@@ -91,10 +91,10 @@ export default function FeedPanel({stage, compact = false}: {stage?: string; com
     {!matching.length?<p className="compact-activity-notice">No activity recorded yet.</p>:<ul className="compact-activity-list" aria-label="Recorded activities">{matching.map(e=>e.kind==='tool'?<CompactActivityRow key={e.key} event={e.event}/>:<CompactActivityRow key={e.key} message={e.message}/>)}</ul>}
     {conversation.data?.limited&&<p className="compact-activity-notice">Showing recent saved output only.</p>}
   </div>;
-  return <Panel icon={Radio} title="Activity" bodyClassName="p-0">
+  return <Panel icon={Radio} title="Activity" bodyClassName="p-0" embedded={embedded}>
     <div className="telemetry-activity-controls">
       {!compact&&stage==='question'&&<p className="text-sm">Question-generation tool calls share the Hypothesis agent identity. Related Hypothesis tool calls in this loop are included; agent text is restricted to question generation.</p>}
-      {!compact&&<><p className="text-sm"><strong>{context.name}</strong> · {context.startedLabel} · {loop===null?'All loops':`Loop ${loop}`}</p>
+      {!compact&&<>{!embedded&&<p className="text-sm"><strong>{context.name}</strong> · {context.startedLabel} · {loop===null?'All loops':`Loop ${loop}`}</p>}
       <p className="text-sm text-ink-soft">Tool actions and actual agent text, newest first. Expand an entry to read its full output. Text appears when recorded, rather than token by token.</p>
       <div className="telemetry-filter-row">
         <label><span><Search size={15}/>Search activity</span><input aria-label="Search activity" placeholder="Agent text, action, agent or resource" value={query} onChange={e=>setQuery(e.target.value)}/></label>

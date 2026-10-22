@@ -58,7 +58,7 @@ export default function AccessTab() {
 
   return (
     <div className="space-y-8 p-6">
-      <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <section className="tm-access-overview grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2">
           <h2 className="mb-3 text-sm font-bold">Task coordination tools — who uses them</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
