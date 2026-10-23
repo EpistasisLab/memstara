@@ -57,7 +57,7 @@ try{
  await page.getByRole('button',{name:/Add pipeline/i}).click();
  dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});await dialog.getByRole('button',{name:'Choose skills',exact:true}).click();
  for(const role of ['Hypothesis','Data','Machine learning','Interpretation','Explanation']){
-  await dialog.locator('.comb-roles button').filter({hasText:role}).click();await dialog.locator('.comb-skill-picker > summary').click();
+  await dialog.locator('.comb-roles button').filter({hasText:role}).click();await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'});
   const choices=dialog.getByRole('group',{name:role+' skill options',exact:true});
   await choices.getByRole('checkbox').first().check();if(role==='Machine learning')await choices.getByRole('checkbox').nth(1).check();
  }

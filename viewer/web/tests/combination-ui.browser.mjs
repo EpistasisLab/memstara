@@ -29,7 +29,7 @@ try{
 
  const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});
  await dialog.getByLabel('Deployment target column',{exact:true}).fill('fixture_target');await dialog.getByRole('button',{name:'Choose skills'}).click();
- for(const role of roles){ await dialog.getByRole('navigation',{name:'Agent roles'}).getByRole('button').nth(roles.indexOf(role)).click(); await dialog.locator('.comb-skill-picker > summary').click(); for(const s of skills.filter(s=>s.stage===role))await dialog.getByRole('checkbox',{name:new RegExp(s.title)}).check(); }
+ for(const role of roles){ await dialog.getByRole('navigation',{name:'Agent roles'}).getByRole('button').nth(roles.indexOf(role)).click(); await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'}); for(const s of skills.filter(s=>s.stage===role))await dialog.getByRole('checkbox',{name:new RegExp(s.title)}).check(); }
  await dialog.locator('.floor-detail-dialog-body').evaluate(e=>e.scrollTop=0); await page.screenshot({path:'/tmp/combinations-light.png'});
  await page.evaluate(()=>document.documentElement.dataset.theme='dark');
  await page.waitForTimeout(400); await page.screenshot({path:'/tmp/combinations-dark.png'});

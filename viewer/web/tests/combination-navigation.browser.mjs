@@ -36,7 +36,8 @@ try {
    const forward=dialog.getByRole('button',{name:i===4?'Review plan':'Next: '+labels[i+1],exact:true});
    assert(await forward.isDisabled(),'Empty role must not advance');
    const choices=skills.filter(s=>s.stage===role);
-   await dialog.locator('.comb-skill-picker > summary').click();
+   await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'});
+   assert(await dialog.locator('.comb-skill-picker').evaluate(e=>e.open),'Every agent skill picker opens by default');
    // Hypothesis selection must not open automatic hover or focus help.
    if(i===0){
     const targets=[dialog.getByRole('heading',{name:'Choose Hypothesis skills',exact:true}),
@@ -59,7 +60,7 @@ try {
    if(i<4){
     await forward.click();await dialog.getByRole('heading',{name:labels[i+1]+' skills',exact:true}).waitFor();
     await dialog.getByRole('button',{name:'Back',exact:true}).click();
-    await dialog.locator('.comb-skill-picker > summary').click();
+    await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'});
     for(const skill of choices)assert(await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).isChecked());
     await forward.click();
    }

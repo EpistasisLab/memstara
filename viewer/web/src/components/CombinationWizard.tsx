@@ -77,7 +77,7 @@ export default function CombinationWizard(){
       {<button aria-pressed={skillMode==='ai'} disabled={busy||uploading} onClick={()=>setSkillMode('ai')}>Create with AI</button>}
      </div>
      <div hidden={skillMode!=='library'}>
-      <details className="comb-skill-picker" key={`picker-${activeRole}`}><summary><span>Choose {flavorNames[activeRole]} skills</span><strong>{(selected[activeRole]??[]).length} selected</strong></summary>
+      <details className="comb-skill-picker" key={`picker-${activeRole}`} open><summary><span>Choose {flavorNames[activeRole]} skills</span><strong>{(selected[activeRole]??[]).length} selected</strong></summary>
        <div className="comb-picker-content"><label className="comb-search"><Search size={16}/><input aria-label="Search skills" placeholder="Search by name or description" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button aria-label="Clear skill search" onClick={()=>setSearch('')}>×</button>}</label>
         <div className="comb-skill-cards" role="group" aria-label={`${flavorNames[activeRole]} skill options`}>{visible.map(s=><div className={`comb-skill-card ${(selected[activeRole]??[]).includes(s.id)?'is-selected':''}`} key={s.id}>
          <label><input type="checkbox" disabled={busy||uploading} checked={(selected[activeRole]??[]).includes(s.id)} onChange={e=>toggle(activeRole,s.id,e.target.checked)}/><span><strong>{skillLabel(s.id,s.title)}</strong><small>{displayText(s.description)||'Agent instructions from your skill library.'}</small></span></label><details><summary>Read instructions</summary><pre>{displayText(s.content)}</pre></details></div>)}

@@ -9,7 +9,7 @@ if(!engine)throw Error('Touch emulation is supported by this harness in Chromium
  const context=await browser.newContext({viewport:{width:390,height:700},hasTouch:true,isMobile:true});const page=await context.newPage();
  await page.route('**/control/**',r=>r.fulfill({json:{inputs:[],models:[],skills:[]}}));
  await page.goto(root+'/tests/responsive-scroll.fixture.html');
- await page.getByRole('button',{name:/Agent skills/}).tap();await page.locator('.comb-skill-picker > summary').tap();
+ await page.getByRole('button',{name:/Agent skills/}).tap();await page.locator('.comb-skill-card input').first().waitFor({state:'visible'});
  await page.locator('.comb-skill-card input').first().tap();await expect(page.locator('.comb-skill-card input').first()).toBeChecked();
  await page.locator('.comb-skill-card details > summary').first().tap();
  const scroll=page.locator('.comb-step-content');

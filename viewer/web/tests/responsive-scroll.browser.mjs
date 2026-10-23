@@ -11,7 +11,7 @@ try{
   await page.goto(root+'/tests/responsive-scroll.fixture.html');
   const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});
   await dialog.getByRole('button',{name:/Agent skills/}).click();
-  await dialog.locator('.comb-skill-picker > summary').click();
+  await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'});
   await expect(dialog.locator('.comb-skill-card')).toHaveCount(16);
   for(let i=0;i<8;i++)await dialog.locator('.comb-skill-card input').nth(i).check();
   await dialog.locator('.comb-skill-card details > summary').first().click();
