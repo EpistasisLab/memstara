@@ -1,3 +1,4 @@
+import {identityLabel,scheduledLabel} from '../lib/replicateIdentity';
 import { displayText, skillLabel } from '../lib/displayText';
 import {floorCallRole as callRole, type FloorTrace as Trace, type FloorActivity, floorExecutionState} from '../lib/floorActivity';
 import {createPortal} from "react-dom";
@@ -30,14 +31,14 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
  useEffect(()=>{if(board.current)board.current.scrollLeft=0;},[role,search,view]);
  const choices=p.configuration.combination_skills??{};
  const lists=PLAYBOOK_STAGES.map(stage=>(choices[stage]??[]).filter((id,i,ids)=>ids.findIndex(other=>(catalog.find(s=>s.id===other)?.hash??other)===(catalog.find(s=>s.id===id)?.hash??id))===i));
- const count=lists.reduce((n,ids)=>n*ids.length,1),repetitions=p.configuration.combination_repetitions??1,total=p.configuration.combination_max_loops??count*repetitions;
+ const count=lists.reduce((n,ids)=>n*ids.length,1);
  const following=!!(p.running||p.latest);
  const activityMode=p.running?'live':'history';
  const requestedLoop=following?Math.max(1,p.progress.iteration??1):1;
  const runTag=p.running?.run_tag??p.latest?.run_tag;
  const key=`${p.id}:${p.running?.run_tag??p.latest?.run_tag??'draft'}:${requestedLoop}`;
  const trace=response?.key===key?response.data:null,error=controlError||(failure?.key===key?failure.message:'');
- const historyTotal=trace?.total_loops??total;
+
  const currentStage=following?p.progress.stage:undefined;
  const {live,paused,stopping}=floorExecutionState(p.failure?null:p.running);
  useEffect(()=>{onActivity?.(following?{pipelineId:p.id,runTag,loop:requestedLoop,currentStage,mode:activityMode,trace,error,live:live&&!error,paused,stopping}:null);},[currentStage,onActivity,p.id,runTag,requestedLoop,following,activityMode,trace,error,live,paused,stopping]);
@@ -51,7 +52,7 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
    controller=new AbortController();const deadline=setTimeout(()=>controller?.abort(),8000);
    try{
     const r=await fetch(`/control/pipelines/${encodeURIComponent(p.id)}/combinations?loop=${requestedLoop}`,{signal:controller.signal});
-    const data=await r.json();if(!r.ok)throw Error(data.error||'Could not read this Loop');
+    const data=await r.json();if(!r.ok)throw Error(data.error||'Could not read this Replicate');
     if(data.run_tag&&runTag&&data.run_tag!==runTag)throw Error('Execution changed; waiting for matching records.');
     if(active){setResponse(previous=>previous?.key===key&&JSON.stringify(previous.data)===JSON.stringify(data)?previous:{key,data});setFailure(null);}
    }catch(e){if(active)setFailure(previous=>{const message=e instanceof Error&&e.name==='AbortError'?'The execution history did not respond in time.':String(e);return previous?.key===key&&previous.message===message?previous:{key,message};});}
@@ -66,14 +67,14 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
  const header=(
   <header className="cs-unified-header" aria-label="Combination workspace controls">
    <div className="cs-heading-row">
-    <div className="cs-compact-identity"><h3 title={p.name}>{p.name}</h3><span>All Combinations</span></div>
+    <div className="cs-compact-identity"><h3 title={p.name}>{p.name}</h3><span>Pipeline design</span></div>
     <div className="cs-heading-actions">
-     {view==='floor'&&following&&<span className="cs-loop-status" data-live={live&&!error} title="Updates every 0.5 seconds · recorded skills and call status">{`Loop ${requestedLoop} / ${historyTotal} · ${p.running?(error?'Updates unavailable':paused?'Paused':stopping?'Pausing':live?'Live':'Waiting'):'Latest execution'}`}</span>}
-     {!p.latest&&!p.running&&<button className="cs-run" data-help="Run combinations" data-help-description="Start this pipeline using one skill from each agent role per Loop, up to its configured maximum Loops." disabled={busy||!count} onClick={()=>void usePipelines.getState().play(p.id)}><Play size={16}/>Run combinations</button>}
+     {view==='floor'&&following&&<span className="cs-loop-status" data-live={live&&!error} title="Updates every 0.5 seconds · recorded skills and call status">{`${trace?.combination_plan?scheduledLabel(requestedLoop,trace.combination_plan,true):trace?.planned?identityLabel({pipeline_number:trace.planned.combination,replicate_number:trace.planned.repetition}):'Pipeline — · Replicate —'} · ${p.running?(error?'Updates unavailable':paused?'Paused':stopping?'Pausing':live?'Live':'Waiting'):'Latest execution'}`}</span>}
+     {!p.latest&&!p.running&&<button className="cs-run" data-help="Run combinations" data-help-description="Start this pipeline using one skill from each agent role per Replicate, up to its configured maximum Replicates." disabled={busy||!count} onClick={()=>void usePipelines.getState().play(p.id)}><Play size={16}/>Run combinations</button>}
     </div>
    </div>
   <div className="cs-control-row"><nav className="cs-tabs" aria-label="Combination views">
-   <button data-help="Experiments" data-help-description="See the selected skills and recorded stage status for the current Loop." aria-pressed={view==='floor'} onClick={()=>setView('floor')}><Layers3 size={16}/>Experiments</button>
+   <button data-help="Experiments" data-help-description="See the selected skills and recorded stage status for the current Replicate." aria-pressed={view==='floor'} onClick={()=>setView('floor')}><Layers3 size={16}/>Experiments</button>
    <button data-help="Skill architecture" data-help-description="Browse all configured skills by agent role. Search and read their instructions; this is the configuration, not the execution history." aria-pressed={view==='design'} onClick={()=>setView('design')}><Network size={16}/>Skill architecture</button>
   </nav></div>{view==="design"&&<div className="cs-filters" role="search" aria-label="Filter configured skills">
     <label className="cs-search"><Search size={16} aria-hidden="true"/><input type="search" aria-label="Find a combination skill" data-help="Find a skill" data-help-description="Filter the configured skills by name or matching text. This only changes what is shown, not the pipeline configuration." value={search} onChange={e=>setSearch(e.target.value)} placeholder="Find a skill…"/></label>
@@ -85,12 +86,12 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
   {headerHost?createPortal(header,headerHost):header}
   {view==='floor'?<>
 
-   {following&&error&&<div className="cs-error" role="alert"><AlertCircle size={16}/><span>{displayText(error)} {trace?'Last available records; activity may have changed.':'Waiting for this Loop’s records.'}</span><button onClick={()=>setRetry(n=>n+1)}>Retry</button></div>}
-   {following&&!trace?<p role="status" className="cs-empty">{error?'Execution records unavailable.':'Loading current Loop…'}</p>:<CombinationFloor
+   {following&&error&&<div className="cs-error" role="alert"><AlertCircle size={16}/><span>{displayText(error)} {trace?'Last available records; activity may have changed.':'Waiting for this Replicate’s records.'}</span><button onClick={()=>setRetry(n=>n+1)}>Retry</button></div>}
+   {following&&!trace?<p role="status" className="cs-empty">{error?'Execution records unavailable.':'Loading current Replicate…'}</p>:<CombinationFloor
     skills={PLAYBOOK_STAGES.map((stage,i)=>{const configured=lists[i].map(id=>({stage,id,title:skillFor(id)?.title,hash:skillFor(id)?.hash}));const frozen=trace?.calls.filter(c=>callRole(c)===stage).at(-1)?.skill??trace?.planned?.agents.find(a=>a.stage===stage);return following&&frozen?[...configured.map(s=>s.id===frozen.id?frozen:s),...(!configured.some(s=>s.id===frozen.id)?[frozen]:[])]:configured;})}
     currentStage={currentStage} activeSkills={following?(trace?.planned?.agents??[]):undefined} recorded={following} calls={following?trace?.calls:undefined} live={following&&live&&!error} paused={following&&paused} stopping={following&&stopping} stale={following&&!!error} inspect={setDetail}/>}
   </>:<>
-   <p className="cs-architecture-caption">One skill from each column forms a Loop. Rows are not predefined pipelines. Scroll across, or filter by role.</p>
+   <p className="cs-architecture-caption">One skill from each agent column defines a Pipeline. A Replicate repeats its complete research process. Scroll across, or filter by role.</p>
 
    <div ref={board} className="cs-board-scroll" tabIndex={0} role="region" aria-label="Agent skill architecture. Scroll horizontally to see all roles.">
     <div className={`cs-board ${role!=='all'?'cs-single-role':''}`}>

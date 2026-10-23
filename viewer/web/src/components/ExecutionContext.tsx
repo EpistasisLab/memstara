@@ -24,7 +24,7 @@ export default function ExecutionContext() {
   const error = useViewer(s => s.error);
   return <div className="execution-context">
     <div className="execution-context-row">
-      <label>Pipeline to inspect
+      <label>Experiment to inspect
         <select aria-label="Pipeline to inspect" value={context.owner?.id ?? ''} onChange={e => usePipelines.getState().select(e.target.value)}>
           <option value="" disabled>{context.tag ? context.name : 'Choose a pipeline'}</option>
           {items.map(p => <option key={p.id} value={p.id}>{p.name}{p.latest ? '' : ' · not started'}</option>)}
@@ -34,7 +34,7 @@ export default function ExecutionContext() {
         <p className="text-sm text-ink-soft">{context.tag ? `Execution started ${context.startedLabel} · local time` : 'Start a pipeline to record activity.'}</p></div>
     </div>
     <details className="mt-2 text-xs text-ink-soft"><summary className="cursor-pointer">What records am I viewing?</summary>
-      <p className="mt-2">An execution is one session started with Play. It can contain many loops. These tabs follow the execution shown above. Selecting another pipeline opens its latest execution; this does not start or stop it. Results can also compare pipelines using its own scope buttons.</p>
+      <p className="mt-2">An execution is one session started with Play. It contains the scheduled Pipelines and their Replicates. These tabs follow the execution shown above. Selecting another pipeline opens its latest execution; this does not start or stop it. Results can also compare pipelines using its own scope buttons.</p>
       <p className="mt-2">Execution ID: <code>{context.tag || 'None'}</code></p>
     </details>
     {context.loading && <p role="status" className="mt-2 text-sm">Loading the requested execution. Records still shown belong to {context.label}.</p>}

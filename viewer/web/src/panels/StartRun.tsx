@@ -138,7 +138,7 @@ export default function StartRun() {
           >
             <Play className="h-3.5 w-3.5" /> Play
           </button>
-          <p className="text-xs leading-relaxed text-ink-faint">Play starts an execution with a finite Loop limit. Stop pauses before the next agent call; Resume preserves progress. Calls already in flight may still incur cost.</p>
+          <p className="text-xs leading-relaxed text-ink-faint">Play starts an execution with a finite Replicate limit. Stop pauses before the next agent call; Resume preserves progress. Calls already in flight may still incur cost.</p>
         </>
       )}
 

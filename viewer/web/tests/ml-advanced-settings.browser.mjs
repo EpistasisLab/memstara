@@ -67,7 +67,7 @@ try{
  await dialog.getByLabel('XGBoost prediction threshold',{exact:true}).fill('.4');
  for(const width of [390,1440]){await page.setViewportSize({width,height:1000});assert.equal(await dialog.evaluate(el=>el.scrollWidth>el.clientWidth+2),false);}
  await dialog.locator('.comb-roles button').filter({hasText:'Explanation'}).click();await dialog.getByRole('button',{name:'Review plan',exact:true}).click();
- await dialog.getByLabel('Name',{exact:true}).fill('Advanced paired fixture');await dialog.getByRole('checkbox',{name:/I reviewed the total Loops/}).check();await dialog.getByRole('button',{name:'Create combination design',exact:true}).click();await dialog.waitFor({state:'hidden'});
+ await dialog.getByLabel('Name',{exact:true}).fill('Advanced paired fixture');await dialog.getByRole('checkbox',{name:/I reviewed the pipelines, replicates/}).check();await dialog.getByRole('button',{name:'Create combination design',exact:true}).click();await dialog.waitFor({state:'hidden'});
  const paired=items[1].configuration.ml_overrides;
  assert.equal(paired.models.logistic_regression.parameters.C,1.5);assert.equal(paired.models.xgboost.parameters.n_estimators,40);assert.equal(paired.models.xgboost.threshold,.4);
  assert.equal(await page.getByRole('button',{name:/^Settings and more for /}).count(),0);

@@ -28,6 +28,6 @@ export default function PathProgress() {
         })}</span>
       </button>;
     })}
-    <p className="mt-1 text-[12px] text-ink-faint">Each loop advances independently. One interpreter handles each hypothesis; the report combines completed analyses.</p>
+    <p className="mt-1 text-[12px] text-ink-faint">Each replicate advances independently. One interpreter handles each hypothesis; the report combines completed analyses.</p>
   </section>;
 }

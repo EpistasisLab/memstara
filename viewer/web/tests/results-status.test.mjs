@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {resultsStatus} from '../src/lib/resultsStatus.ts';
 test('failure identifies the saved stage and loop without implying all pipelines failed',()=>{
  const notice=resultsStatus({status:'failed',stage:'question0-1',loop:1,message:'Tool correction failed.'});
- assert.match(notice.text,/This execution failed at Question generation \(Loop 1\)/);
+ assert.match(notice.text,/This execution failed at Question generation \(Pipeline 1 · Replicate 1\)/);
  assert.match(notice.text,/Tool correction failed/);
  const legacy=resultsStatus({status:'failed',message:'Pipeline could not safely continue; inspect console.log and trace/.'});
  assert.match(legacy.text,/does not identify the cause/);
@@ -18,7 +18,7 @@ test('real failures and interruptions retain their diagnostic and incomplete-rep
  for(const status of ['failed','blocked','incomplete','interrupted']){
  const notice=resultsStatus({status,message:'Recorded diagnostic'});assert.equal(notice.warning,true);assert.match(notice.text,/Recorded diagnostic/);
  }
- assert.match(resultsStatus({status:'interrupted'}).text,/earlier completed loops/);
+ assert.match(resultsStatus({status:'interrupted'}).text,/earlier completed replicates/);
  assert.match(resultsStatus({status:'unrecognized'}).text,/not been confirmed/);
 });
 test('a stale running record is not presented as current execution',()=>{

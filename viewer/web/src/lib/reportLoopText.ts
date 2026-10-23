@@ -9,7 +9,7 @@ export function reportLoopText(text: string, analysesPerLoop?: number): string {
       if (/clinical trial|randomi[sz]ed trial|search trial|hyperparameter|optimizer|retry|retries|task claim/i.test(line)) return line;
       return line.replace(/\btrial\s+#?(\d+|zero|one|two|three|four|five|six|seven|eight|nine)\b/gi, (_, raw: string) => {
         const id = /^\d+$/.test(raw) ? Number(raw) : words.indexOf(raw.toLowerCase());
-        return known ? `Loop ${Math.floor(id / analysesPerLoop!) + 1} (analysis ID ${id})` : `Analysis ID ${id} (Loop not recorded)`;
-      }).replace(/\biteration\s+(\d+)\b/gi, (_, raw: string) => Number(raw) > 0 ? `Loop ${raw}` : 'Loop not recorded');
+        return known ? `Recorded analysis ${id} (schedule position ${Math.floor(id / analysesPerLoop!) + 1})` : `Analysis ID ${id} (replicate identity not recorded)`;
+      }).replace(/\biteration\s+(\d+)\b/gi, (_, raw: string) => Number(raw) > 0 ? `Recorded schedule position ${raw}` : 'replicate identity not recorded');
     }).join('\n')).join('');
 }

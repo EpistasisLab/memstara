@@ -78,7 +78,7 @@ export default function AgentsTab() {
 
   return (
     <div className="space-y-4 p-4">
-      <details className="text-sm text-ink-soft"><summary className="cursor-pointer">How to read these numbers</summary><p className="mt-2">Agent executions are individual agent invocations. Reasoning steps are internal to a call; neither counts complete pipeline loops. Usage and estimated cost cover only the selected scope identified above. The workspace header combines multiple pipelines.</p></details>
+      <details className="text-sm text-ink-soft"><summary className="cursor-pointer">How to read these numbers</summary><p className="mt-2">Agent executions are individual agent invocations. Reasoning steps are internal to a call; neither counts complete pipeline replicates. Usage and estimated cost cover only the selected scope identified above. The workspace header combines multiple pipelines.</p></details>
       <div className="tm-agent-cards grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { icon: Repeat, label: "Agent executions", value: runs.toLocaleString() },

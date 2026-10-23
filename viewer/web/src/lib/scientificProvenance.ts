@@ -11,7 +11,7 @@ export function scientificProvenance(evaluation?: {
       ['primary_knowledge_driven', 'evidence_informed_refinement'].includes(policy.kind ?? '')) return {
     label: policy.kind === 'evidence_informed_refinement' ? 'Evidence-informed follow-up' : 'Knowledge-driven starting hypothesis',
     detail: policy.kind === 'evidence_informed_refinement'
-      ? 'Developed from prior loops in this pipeline. Scores are exploratory; reserved validation data has not been evaluated.'
+      ? 'Developed from prior replicates in this experiment. Scores are exploratory; reserved validation data has not been evaluated.'
       : 'Starts from knowledge before prior experimental feedback is available. Reserved validation data has not been evaluated.',
   };
   if (policy?.version === 'knowledge_only_v1' && policy.kind === 'primary_knowledge_driven') return {

@@ -230,7 +230,7 @@ def build_argv(
                                       max_loops=body.get('combination_max_loops'))
         continuous = False
         if combination_plan['total_loops'] > 10000:
-            raise ValueError('Reduce combinations or repetitions to at most 10000 Loops')
+            raise ValueError('Choose at most 10000 total replicates')
     if body.get('_retry_combination_plan'):
         from memstara.combinations import validate_plan
         combination_plan = validate_plan(body['_retry_combination_plan'])
@@ -352,6 +352,6 @@ def build_argv(
     if body.get('_retry_from_loop'):
         start = body['_retry_from_loop']
         if type(start) is not int or not 1 <= start <= waves:
-            raise ValueError('Retry Loop is outside the saved schedule')
+            raise ValueError('The requested replicate is outside the saved schedule')
         argv += ['--start-loop', str(start), '--retry-source-run', body['_retry_source_run']]
     return argv

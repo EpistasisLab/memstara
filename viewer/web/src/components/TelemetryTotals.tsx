@@ -1,3 +1,5 @@
+import {useLoopLabel} from '../lib/useLoopLabel';
+import type {ReplicateIdentity} from '../lib/replicateIdentity';
 import {controlResponse} from '../lib/controlResponse';
 import LoopUsage from "./LoopUsage";
 import CostEvidence from './CostEvidence';
@@ -9,7 +11,7 @@ import { usePipelines } from '../store/pipelines';
 export type Metric = {calls:number;tokens:number;tokens_status?:string;cost:{usd:number;status:string;missing_costs:number};seconds?:number|null;duration_basis?:string;duration_status?:string;status?:string;attribution?:string};
 export type Distribution = {mean:number;median:number;min:number;max:number};
 export type LoopSummary = {sample_count:number;completed_count:number;excluded_completed:number;other_loops:number;seconds:Distribution|null;usd:Distribution|null;tokens:Distribution|null;basis:string};
-export type ExecutionUsage = Metric & {run_tag:string;pipeline_id:string;model?:string;provider?:string;loops:(Metric&{number:number})[];loop_summary:LoopSummary;unassigned:Metric};
+export type ExecutionUsage = Metric & {run_tag:string;pipeline_id:string;model?:string;provider?:string;loops:(Metric&ReplicateIdentity&{number:number})[];loop_summary:LoopSummary;unassigned:Metric};
 export type Totals = {scope:string;updated_at:string;total:Metric;pipelines:(Metric&{id:string;name:string;executions:number})[];executions:ExecutionUsage[];loop_summary:LoopSummary};
 export function useTelemetryTotals(){
   const [data,setData]=useState<Totals|null>(null);const [error,setError]=useState('');
@@ -37,19 +39,20 @@ export function UsageCards({metric}:{metric:Metric}){
   return <dl className="usage-metric-cards tm-summary-cards">{cards.map(({label,value,note})=><div key={label}><dt>{label}</dt><dd>{value}</dd>{note&&<p>{note}</p>}</div>)}</dl>;
 }
 export default function TelemetryTotals({data,error,runTag,loop,onRetry,refreshRevision=0}:{data:Totals|null;error:string;runTag:string|null;loop:number|null;onRetry?:()=>void;refreshRevision?:number}){
+ const labelReplicate=useLoopLabel();
   const [evidenceOpen,setEvidenceOpen]=useState(false);
   const current=usePipelines(s=>s.items.find(p=>p.running?.run_tag===runTag));
   const execution=data?.executions.find(e=>e.run_tag===runTag);
   const metric=loop===null?execution:execution?.loops.find(l=>l.number===loop);
   const cost=metric?costLabel(metric.cost):'';
   const subtotal=cost.endsWith(' · recorded subtotal');
-  const running=current?`${current.running?.pause_requested?'Pausing / paused':'Running'}${current.progress.iteration?` · Loop ${current.progress.iteration}`:''}${current.progress.stage?` · ${current.progress.stage}`:''}`:null;
+  const running=current?`${current.running?.pause_requested?'Pausing / paused':'Running'}${current.progress.iteration?` · ${labelReplicate({iteration:current.progress.iteration,run_tag:runTag})}`:''}${current.progress.stage?` · ${current.progress.stage}`:''}`:null;
   return <section className="telemetry-overview" aria-label="Usage totals">
-    <header className="tm-section-heading"><div><h3>{loop===null?'Execution overview':`Loop ${loop} overview`}</h3><p>{running??'Time and usage for the selected execution.'}</p></div><span className="tm-scope-badge">{loop===null?'All loops':`Loop ${loop}`}</span></header>
+    <header className="tm-section-heading"><div><h3>{loop===null?'Execution overview':`${labelReplicate({iteration:loop,run_tag:runTag})} overview`}</h3><p>{running??'Time and usage for the selected execution.'}</p></div><span className="tm-scope-badge">{loop===null?'All replicates':labelReplicate({iteration:loop,run_tag:runTag})}</span></header>
     {error&&<div className="tm-notice" role="status"><AlertCircle size={16} aria-hidden="true"/><p>Updates are delayed. {data?'Last available measurements are shown.':'Waiting for measurements; missing values are not zero.'}</p>{onRetry&&<button type="button" className="tm-button" onClick={onRetry}>Retry</button>}</div>}
     {!runTag?<TelemetryState title="Choose an execution">Select a pipeline with a recorded execution to view its time and usage.</TelemetryState>:!data?<TelemetryState loading={!error} title={error?'Measurements are temporarily unavailable':'Loading measurements'}>{error?'Retry above, or wait for the next automatic update.':'Retrieving recorded time and usage from this workspace.'}</TelemetryState>:!metric?<TelemetryState title="No measurements yet">No usage has been recorded for this selection. Measurements will appear as records become available.</TelemetryState>:<>
       <dl className="telemetry-key-metrics">
-        <div><dt><Clock3 size={16} aria-hidden="true"/>Elapsed time</dt><dd>{usageDuration(metric.seconds)}</dd><p>{loop===null?'Recorded agent span':'Recorded loop span'}{metric.duration_status==='partial'&&metric.seconds!=null?' · partial':''}</p></div>
+        <div><dt><Clock3 size={16} aria-hidden="true"/>Elapsed time</dt><dd>{usageDuration(metric.seconds)}</dd><p>{loop===null?'Recorded agent span':'Recorded replicate span'}{metric.duration_status==='partial'&&metric.seconds!=null?' · partial':''}</p></div>
         <div data-partial={subtotal}><dt><Coins size={16} aria-hidden="true"/>Estimated cost</dt><dd>{subtotal?cost.slice(0,-' · recorded subtotal'.length):cost}</dd><p>{subtotal?'Recorded subtotal · incomplete':cost==='Not available'?'No complete pricing available':'USD · Motoro estimate'}</p></div>
         <div><dt><Database size={16} aria-hidden="true"/>Tokens</dt><dd>{metric.tokens_status==='unavailable'?'Not available':metric.tokens.toLocaleString()}</dd><p>{metric.tokens_status==='partial'?'Partial usage recorded':metric.tokens_status==='unavailable'?'Usage not available':'Recorded input + output'}</p></div>
         <div><dt><Layers3 size={16} aria-hidden="true"/>Agent executions</dt><dd>{metric.calls.toLocaleString()}</dd><p>Distinct Motoro executions</p></div>
@@ -62,7 +65,7 @@ export default function TelemetryTotals({data,error,runTag,loop,onRetry,refreshR
         <p className="telemetry-usage-note">Overview sums distinct Motoro agent execution records for the selected scope. Request details use saved LLM requests in that same scope. Elapsed time is a span, not the sum of parallel durations.</p>
       </div></details>
     </>}
-    {execution&&<details className="telemetry-disclosure"><summary><span><GitCompareArrows size={17} aria-hidden="true"/>Compare loops</span><small>{execution.loops.length} recorded</small></summary><div><LoopUsage execution={execution} updatedAt={data?.updated_at}/></div></details>}
+    {execution&&<details className="telemetry-disclosure"><summary><span><GitCompareArrows size={17} aria-hidden="true"/>Compare replicates</span><small>{execution.loops.length} recorded</small></summary><div><LoopUsage execution={execution} updatedAt={data?.updated_at}/></div></details>}
     {data&&<details className="telemetry-disclosure"><summary><span><Layers3 size={17} aria-hidden="true"/>All pipelines</span><small>{data.pipelines.length} pipelines</small></summary><div>
       <p className="telemetry-usage-note">All saved executions · {data.scope}</p><UsageCards metric={data.total}/>
       <div className="tm-table-scroll" role="region" aria-label="All pipeline usage; scroll horizontally for more columns" tabIndex={0}><table className="tm-table"><caption className="sr-only">Usage across all saved pipeline executions</caption><thead><tr><th>Pipeline</th><th className="tm-number">Agent executions</th><th className="tm-number">Estimated cost</th></tr></thead><tbody>{data.pipelines.map(p=><tr key={p.id}><td><button className="tm-text-button" onClick={()=>usePipelines.getState().select(p.id)}>{p.name}</button><small>{p.executions} saved executions</small></td><td className="tm-number">{p.calls.toLocaleString()}</td><td className="tm-number">{costLabel(p.cost)}{p.cost.missing_costs>0&&<small>{p.cost.missing_costs} unpriced agent executions</small>}</td></tr>)}</tbody></table>{!data.pipelines.length&&<p className="telemetry-usage-note">No saved pipeline usage yet.</p>}</div>

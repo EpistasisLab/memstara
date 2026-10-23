@@ -47,8 +47,8 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
     list.scrollTo({top:Math.max(0,top),behavior:'instant'});
   },[selected,open,current,selectionRevision]);
   return <aside ref={browser} className={`pipeline-browser ${open?'':'is-closed'}`} aria-label="Pipeline browser">
-    {toggleHost&&createPortal(<button className="floor-panel-toggle" aria-label={open?"Hide pipeline list":"Show pipeline list"} aria-expanded={open} aria-pressed={open} aria-controls="pipeline-browser-content" onClick={()=>setOpen(!open)}>{open?<PanelLeftClose size={16}/>:<PanelLeftOpen size={16}/>}<span>Pipelines</span><span className="floor-panel-count">{items.length}</span></button>,toggleHost)}
-    <div className="pipeline-browser-heading"><h3>Pipelines</h3><span>{items.length}</span></div>
+    {toggleHost&&createPortal(<button className="floor-panel-toggle" aria-label={open?"Hide pipeline list":"Show pipeline list"} aria-expanded={open} aria-pressed={open} aria-controls="pipeline-browser-content" onClick={()=>setOpen(!open)}>{open?<PanelLeftClose size={16}/>:<PanelLeftOpen size={16}/>}<span>Experiments</span><span className="floor-panel-count">{items.length}</span></button>,toggleHost)}
+    <div className="pipeline-browser-heading"><h3>Experiments</h3><span>{items.length}</span></div>
     <div id="pipeline-browser-content" hidden={!open}>
       <div className="pipeline-browser-list" tabIndex={0} aria-label="Scrollable pipeline list">
         {ordered.slice(current*25,current*25+25).map(p=>{
@@ -59,12 +59,12 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
           const heading=findingHeading(firstFinding(findings, (p.running??p.latest)?.run_tag??'')?.hypothesis);
           return <div key={p.id} data-state={state.toLowerCase().replaceAll(' ','-')} className={`pipeline-browser-row ${selected===p.id?'is-selected':''}`}>
           <div className="pipeline-card-top pipeline-card-header">
-            <button type="button" className="pipeline-card-identity pipeline-card-heading-select" aria-label={`Select pipeline ${p.number}: ${p.name}`} aria-pressed={selected===p.id} onClick={()=>choose(p.id)}>Pipeline {p.number}</button>
+            <button type="button" className="pipeline-card-identity pipeline-card-heading-select" aria-label={`Select pipeline ${p.number}: ${p.name}`} aria-pressed={selected===p.id} onClick={()=>choose(p.id)}>Experiment {p.number}</button>
             <div className="pipeline-card-status-actions"><span className="pipeline-state-badge"><i aria-hidden="true"/>{state}</span>
             <button type="button" className="pipeline-card-delete" aria-label={`Delete ${p.name}`} title={`Delete ${p.name}`} aria-haspopup="dialog" onClick={()=>setDeleting(p)}><Trash2 size={16} aria-hidden="true"/></button>
             </div>
           </div>
-          <button className="pipeline-card-select" data-help="Inspect this pipeline" data-help-description="Select this card to focus its diagram. Use the buttons on this card to control this pipeline. The Loop counter refers to this pipeline’s latest execution." aria-label={`Inspect ${p.name}`} aria-pressed={selected===p.id} onClick={()=>choose(p.id)}>
+          <button className="pipeline-card-select" data-help="Inspect this pipeline" data-help-description="Select this card to focus its diagram. Use the buttons on this card to control this pipeline. The position identifies the Pipeline and Replicate in this experiment’s latest execution." aria-label={`Inspect ${p.name}`} aria-pressed={selected===p.id} onClick={()=>choose(p.id)}>
             <strong className="pipeline-card-name" title={p.name}>{p.name}</strong>
             {heading&&<span className="pipeline-finding-heading" title={`Saved AI hypothesis: ${heading}`}>{heading}</span>}
             <span className="pipeline-card-stage pipeline-card-context" title={`Corpus: ${corpus} · Target: ${target}`}>{corpus} · {target}</span>

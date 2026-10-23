@@ -1,3 +1,4 @@
+import {useLoopLabel} from '../lib/useLoopLabel';
 import { displayText } from '../lib/displayText';
 import { useEffect, useState } from 'react';
 import { SnapshotScope } from '../lib/SnapshotScope';
@@ -9,6 +10,7 @@ import { clinicalRoles } from '../lib/clinicalLog';
 /** Read an event's scope without changing the global pipeline selection. */
 export type ActivityScope = Pick<OutputEvent, 'run_tag' | 'iteration' | 'stage' | 'pipeline_name' | 'detail'>;
 export default function ActivityDetails({event}: {event: ActivityScope}) {
+ const labelReplicate=useLoopLabel();
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [error, setError] = useState('');
   const loop = event.iteration ?? null;
@@ -24,10 +26,10 @@ export default function ActivityDetails({event}: {event: ActivityScope}) {
         const body = await response.json();
         if (response.status === 202) return;
         if (!response.ok) throw Error('Detailed activity is unavailable. Retrying automatically.');
-        if (body.run_tag !== event.run_tag || body.telemetry?.loop !== loop) throw Error('The activity response did not match this execution and loop.');
+        if (body.run_tag !== event.run_tag || body.telemetry?.loop !== loop) throw Error('The activity response did not match this execution and replicate.');
         if (!disposed) {setSnapshot(body); setError(body.stale ? 'Showing previously recorded activity while updates recover.' : '');}
       } catch {
-        if (!disposed) setError('Detailed activity could not be loaded for this execution and loop. Retrying automatically.');
+        if (!disposed) setError('Detailed activity could not be loaded for this execution and replicate. Retrying automatically.');
       } finally {
         clearTimeout(deadline);
         if (!disposed) timer = setTimeout(poll, 4000);
@@ -37,7 +39,7 @@ export default function ActivityDetails({event}: {event: ActivityScope}) {
     return () => {disposed = true; clearTimeout(timer); request?.abort();};
   }, [event.run_tag, loop]);
   return <section aria-label="Activity details">
-    <header className="activity-browser-heading"><h4>{event.pipeline_name}</h4><span>{loop === null ? 'All loops' : `Loop ${loop}`}{event.stage?` · ${clinicalRoles[event.stage]??event.stage}`:''}</span></header>
+    <header className="activity-browser-heading"><h4>{event.pipeline_name}</h4><span>{loop === null ? 'All replicates' : labelReplicate({iteration:loop,run_tag:event.run_tag})}{event.stage?` · ${clinicalRoles[event.stage]??event.stage}`:''}</span></header>
     {event.detail && <details><summary>Saved output excerpt</summary><p>{displayText(event.detail)}</p></details>}
     {error && <p role="status">{error}</p>}
     {!snapshot && !error && <p role="status">Loading detailed activity…</p>}

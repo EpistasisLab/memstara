@@ -52,19 +52,19 @@ try {
    }
   }
   await dialog.getByRole('button',{name:'Review plan'}).click();await dialog.getByLabel('Name',{exact:true}).fill('Random capped exploration');
-  const maximum=dialog.getByLabel('Maximum Loops per execution',{exact:true});assert.equal(await maximum.inputValue(),'10');
+  const maximum=dialog.getByLabel('Replicates per pipeline',{exact:true});assert.equal(await maximum.inputValue(),'1');
   const consent=dialog.getByRole('checkbox',{name:/I reviewed/}),create=dialog.getByRole('button',{name:'Create combination design'});
   for(const invalid of ['0','10001','1.5','']){await maximum.fill(invalid);await consent.check();assert(await create.isDisabled());}
   await maximum.fill('10');await consent.check();await dialog.getByRole('checkbox',{name:/Random Start/}).check();assert(await create.isDisabled());
-  await consent.check();assert(!(await create.isDisabled()));assert.match(await dialog.innerText(),/only part of the combination set/);
+  await consent.check();assert(!(await create.isDisabled()));assert.match(await dialog.innerText(),/240 total replicates/);
   assert(await dialog.evaluate(e=>e.scrollWidth<=e.clientWidth+2));await dialog.screenshot({path:`/tmp/random-start-${width}-${theme}.png`});
   await create.click();await dialog.waitFor({state:'hidden'});await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
-  assert.equal(posted.configuration.combination_random_start,true);assert.equal(posted.configuration.combination_max_loops,10);assert.equal(posted.configuration.waves,10);assert.equal(posted.configuration.continuous,false);assert.equal(runPosts,0);
+  assert.equal(posted.configuration.combination_random_start,true);assert.equal(posted.configuration.combination_max_loops,null);assert.equal(posted.configuration.combination_repetitions,10);assert.equal(posted.configuration.waves,240);assert.equal(posted.configuration.continuous,false);assert.equal(runPosts,0);
   rows[0].latest={run_tag:'frozen',exit_code:0,configuration:{waves:10}};await page.reload();await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
   const studio=page.getByRole('region',{name:'Combination design',exact:true});await studio.waitFor();
-  await page.getByText('Loop 1 / 10 · Latest execution',{exact:true}).waitFor();
+  await page.getByText('Pipeline 23 · Replicate 1 · Latest execution',{exact:true}).waitFor();
   await expect(studio.locator('.cf-desk.is-selected').filter({hasText:'interpreter flavor 1'})).toHaveCount(1);
-  rows[0].progress={iteration:2};await page.getByText('Loop 2 / 10 · Latest execution',{exact:true}).waitFor();
+  rows[0].progress={iteration:2};await page.getByText('Pipeline 24 · Replicate 1 · Latest execution',{exact:true}).waitFor();
   await expect(studio.locator('.cf-desk.is-selected').filter({hasText:'interpreter flavor 2'})).toHaveCount(1);
   assert.equal(await page.getByRole('button',{name:'Loop explorer',exact:true}).count(),0);
   assert.equal(await studio.getByRole('spinbutton',{name:'Combination Loop',exact:true}).count(),0);assert.deepEqual(errors,[]);assert.equal(runPosts,0);

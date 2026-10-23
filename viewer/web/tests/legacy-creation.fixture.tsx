@@ -10,6 +10,7 @@ import '../src/workspace-layout.css';
 usePipelines.setState({creationOpen:true});
 function Fixture(){
  const [legacy,setLegacy]=useState(true);
+ useEffect(()=>{if(!legacy)return;const timer=setInterval(()=>void usePipelines.getState().poll(),1000);return()=>clearInterval(timer);},[legacy]);
  useEffect(()=>usePipelines.subscribe(s=>{if(!s.creationOpen){history.replaceState(null,'','/');setLegacy(false);}}),[]);
  return legacy?<Tooltip.Provider><CreationWizard/></Tooltip.Provider>:<App/>;
 }

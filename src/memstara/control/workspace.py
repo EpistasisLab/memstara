@@ -87,13 +87,17 @@ class PipelineWorkspace:
                         progress = json.loads((Path(latest["run_dir"]) / "progress.json").read_text())
                     except (OSError, ValueError):
                         pass
-                if latest and not current:
+                if latest:
                     # Historical progress must use that execution's frozen limit,
                     # even after the user changes the next execution's settings.
                     try:
                         frozen = json.loads((Path(latest["run_dir"]) / "config.json").read_text())
                         latest = {**latest, "configuration": {
-                            "waves": frozen.get("waves"), "continuous": frozen.get("continuous", False)}}
+                            "waves": frozen.get("waves"), "continuous": frozen.get("continuous", False),
+                            "combination_plan": frozen.get("combination_plan")}}
+                        if current:
+                            current = {**current, "configuration": {**current.get("configuration", {}),
+                                       **latest["configuration"]}}
                     except (OSError, ValueError):
                         pass
                 configuration, configuration_error = self.read_configuration(item["configuration"])
@@ -229,14 +233,14 @@ class PipelineWorkspace:
                               random_start=config['combination_random_start'],
                               max_loops=config['combination_max_loops'], start_index=0)
             if plan['total_loops'] > 10000:
-                raise ValueError('At most 10000 combination Loops are supported')
+                raise ValueError('At most 10000 total replicates are supported')
             config['waves'] = plan['total_loops']
             config['continuous'] = False
             for stage, entries in plan['skills'].items():
                 config[playbook_field(stage)] = entries[0]['id']
         maximum = 10000 if config.get('combination_skills') else _MAX_WAVES
         if type(config['waves']) is not int or not 1 <= config['waves'] <= maximum:
-            raise ValueError(f'Maximum loops must be between 1 and {_MAX_WAVES}')
+            raise ValueError(f'Total replicates must be between 1 and {maximum}')
         if type(config['continuous']) is not bool:
             raise ValueError('Continuous must be a boolean')
         # Older workspace definitions used continuous=True with a dummy waves=1.
@@ -273,7 +277,8 @@ class PipelineWorkspace:
             if mode not in ("initial", "additional", "fresh", "retry"):
                 raise ValueError("Invalid execution mode")
             if latest and mode == "initial":
-                raise ValueError("Choose additional analysis and a Loop count, or explicitly start a new execution")
+                raise ValueError("Choose additional analysis and a total replicate count, "
+                                 "or explicitly start a new execution")
             if mode in ("additional", "fresh", "retry"):
                 if not latest or expected_run_tag != latest.get("run_tag"):
                     raise ValueError("Execution history changed. Refresh and review before starting")
@@ -283,10 +288,10 @@ class PipelineWorkspace:
             if mode == "additional":
                 from memstara.control.request import _MAX_WAVES
                 if type(additional_loops) is not int or not 1 <= additional_loops <= _MAX_WAVES:
-                    raise ValueError(f"Additional Loops must be between 1 and {_MAX_WAVES}")
+                    raise ValueError(f"Additional total replicates must be between 1 and {_MAX_WAVES}")
                 configuration.update(waves=additional_loops, continuous=False)
             elif additional_loops is not None:
-                raise ValueError("Additional Loops require additional analysis mode")
+                raise ValueError("Additional replicates require additional analysis mode")
             if mode == "retry":
                 from memstara.control.retry import configuration_for_retry
                 configuration = configuration_for_retry(latest, configuration, key)

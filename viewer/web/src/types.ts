@@ -1,3 +1,4 @@
+import type {ReplicateIdentity} from './lib/replicateIdentity';
 /** Shapes returned by the API. Written by hand rather than generated: the surface is
  *  small, and a hand-written type is where a field's meaning can be recorded. */
 
@@ -178,7 +179,7 @@ export interface SpecialistXai {
     feature_summary?: Record<string, {mean_absolute: number; mean_signed: number}>;
     limitation?: string; artifact_path?: string; artifact_sha256?: string; explanation_id?: string}>;
 }
-export interface Result {
+export interface Result extends ReplicateIdentity {
   run_tag?: string; pipeline_id?: string; pipeline_name?: string; iteration?: number | null;
   hypothesis_id?: string;
   evaluation?: {
@@ -311,6 +312,7 @@ export interface Health {
 }
 
 export interface RunConfiguration {
+  combination_plan?: import("./lib/replicateIdentity").Schedule | null;
   ml_overrides?: import("./lib/mlOverrides").MlOverrides;
   knowledge_mode?: 'okf'|'llm_only';
   data_mode?: 'dataset'|'proposal';
@@ -330,7 +332,7 @@ export interface RunConfiguration {
 export interface Snapshot {
   run_configuration?: RunConfiguration | null;
   scene_scope?: string;
-  report?: { status: string; text: string; explanation_outputs?: {loop: number; result_id: number | null; text: string; status: string}[]; error?: string | null; specialist_explanation?: ExplanationEvidence | null } | null;
+  report?: { status: string; text: string; explanation_outputs?: (import("./lib/replicateIdentity").ReplicateIdentity & {loop: number; result_id: number | null; text: string; status: string})[]; error?: string | null; specialist_explanation?: ExplanationEvidence | null } | null;
   pipeline?: { status: string; report_completed?: boolean; message?: string; reason?: string; code?: string; stage?: string; loop?: number | null } | null;
   run_tag: string;
   runs: RunSummary[];

@@ -19,7 +19,7 @@ try{for(const [width,height] of [[360,500],[390,700],[768,500],[1024,700],[1440,
  await page.getByText('Usage & cost details',{exact:true}).click();
  await page.getByText('Estimated cost · Motoro LLM requests',{exact:true}).click();
  await page.getByText('Execution LLM request subtotal:',{exact:false}).waitFor();
- await page.locator('summary').filter({hasText:/^Compare loops/}).click();
+ await page.locator('summary').filter({hasText:/^Compare replicates/}).click();
  const pane=page.locator('.telemetry-workspace');
  const owners=await pane.evaluate(d=>[d,...d.querySelectorAll('*')].filter(e=>/auto|scroll/.test(getComputedStyle(e).overflowY)&&e.scrollHeight>e.clientHeight+2).map(e=>e.className));
  assert.equal(owners.length,1,JSON.stringify({width,height,owners}));
@@ -27,9 +27,9 @@ try{for(const [width,height] of [[360,500],[390,700],[768,500],[1024,700],[1440,
  assert(overflow.scroll<=overflow.width+2,JSON.stringify(overflow));
  await pane.evaluate(e=>e.scrollTop=0);const box=await pane.boundingBox();await page.mouse.move(box.x+box.width*.6,box.y+box.height*.7);await page.mouse.wheel(0,400);
  await expect.poll(()=>pane.evaluate(e=>e.scrollTop)).toBeGreaterThan(0);
- await page.getByRole('combobox',{name:'Loop to inspect'}).focus();await expect(page.getByRole('combobox',{name:'Loop to inspect'})).toBeInViewport();
- await page.getByRole('combobox',{name:'Loop to inspect'}).selectOption('2');
- await page.setViewportSize({width:390,height:500});await expect(page.getByRole('combobox',{name:'Loop to inspect'})).toHaveValue('2');
+ await page.getByRole('combobox',{name:'Replicate to inspect'}).focus();await expect(page.getByRole('combobox',{name:'Replicate to inspect'})).toBeInViewport();
+ await page.getByRole('combobox',{name:'Replicate to inspect'}).selectOption('2');
+ await page.setViewportSize({width:390,height:500});await expect(page.getByRole('combobox',{name:'Replicate to inspect'})).toHaveValue('2');
  await page.setViewportSize({width,height});
  await page.goto(root+'/tests/responsive-reading.fixture.html?report=1');
  await page.getByRole('region',{name:'Report table — scroll horizontally to see all columns'}).waitFor();

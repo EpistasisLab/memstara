@@ -25,14 +25,14 @@ try{
   if(tab==='Logs'){try{await p.locator('.agent-reader-document').waitFor();}catch(e){console.log(JSON.stringify({alerts:await p.locator('.telemetry-workspace [role=alert]').allTextContents(),statuses:await p.locator('.telemetry-workspace [role=status]').allTextContents(),reader:await p.locator('.agent-reader').count(),recorded:records.slice(-5)}));throw e;}}console.log('Loaded '+tab);
  }
  await p.locator('[aria-label="Usage tabs"]').getByRole('button',{name:'Agents',exact:true}).click();
- await p.locator('.telemetry-workspace').getByRole('combobox',{name:'Loop to inspect',exact:true}).selectOption('1');
+ await p.locator('.telemetry-workspace').getByRole('combobox',{name:'Replicate to inspect',exact:true}).selectOption('1');
  await expect.poll(()=>records.some(r=>r.view==='Agents'&&r.loop===1&&r.core),{timeout:30000}).toBeTruthy();
- await p.locator('.telemetry-workspace').getByRole('combobox',{name:'Loop to inspect',exact:true}).selectOption('all');
+ await p.locator('.telemetry-workspace').getByRole('combobox',{name:'Replicate to inspect',exact:true}).selectOption('all');
  await expect(p.locator('.telemetry-tab-body')).toContainText('Rows 1–50');
  await p.setViewportSize({width:390,height:844});
- await expect(p.locator('.telemetry-workspace').getByRole('combobox',{name:'Loop to inspect',exact:true})).toBeVisible();
+ await expect(p.locator('.telemetry-workspace').getByRole('combobox',{name:'Replicate to inspect',exact:true})).toBeVisible();
  if(errors.length)throw Error(errors.join('\n'));
  writeFileSync('/tmp/memstara-telemetry-browser.json',JSON.stringify({records,errors},null,2));
- console.log('Passed: test-3 All loops, seven tabs, pagination, keyboard sorting, Loop 1 → All loops, mobile controls; no browser errors.');
+ console.log('Passed: test-3 All replicates, seven tabs, pagination, keyboard sorting, Loop 1 → All replicates, mobile controls; no browser errors.');
  await p.unrouteAll({behavior:'ignoreErrors'});
 }finally{await b.close();}

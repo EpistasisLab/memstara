@@ -1,3 +1,4 @@
+import {useLoopLabel} from '../lib/useLoopLabel';
 import { useEffect, useState } from 'react';
 import { Activity, AlertCircle, ChevronLeft, ChevronRight, Layers3, LayoutDashboard, RefreshCw } from 'lucide-react';
 import MotoroRecords from '../components/MotoroRecords';
@@ -18,7 +19,7 @@ import ResultsPanel from './ResultsPanel';
 import './telemetry.css';
 
 type Tab = 'Experiments' | 'Totals' | 'Agents' | 'Activity' | 'Logs' | 'Access' | 'Tasks' | 'Results';
-type Loop = { number: number; status: string; tasks: number; results: number };
+type Loop = import("../lib/replicateIdentity").ReplicateIdentity & { number: number; status: string; tasks: number; results: number };
 type LoopSnapshot = Snapshot & {
   telemetry: {loop: number | null; loops: Loop[]; legacy_attribution: boolean; unassigned_calls: number};
   loop_log: {lines: string[]; note: string; truncated: boolean};
@@ -45,6 +46,7 @@ const descriptions: Record<Tab, string> = {
 };
 
 export default function TelemetryPanel() {
+  const labelReplicate=useLoopLabel();
   const totals = useTelemetryTotals();
   const runTag = useViewer(s => s.runTag);
   const pipelines = usePipelines(s => s.items);
@@ -105,7 +107,7 @@ export default function TelemetryPanel() {
     return () => {disposed = true; clearTimeout(timer); request?.abort(); setRefreshing(false);};
   }, [runTag, loop, key, tab, revision]);
 
-  const scope = globalScope ? 'All saved executions' : loop === null ? 'All loops' : `Loop ${loop}`;
+  const scope = globalScope ? 'All saved executions' : loop === null ? 'All replicates' : labelReplicate({iteration:loop,run_tag:runTag});
   const index = choices.findIndex(c => c.number === loop);
   const taskId = data?.board.tasks.some(t => t.task_id === chosenTask) ? chosenTask : null;
   const delayed = !!(totals.error || error || data?.stale || pipelineError);
@@ -121,7 +123,7 @@ export default function TelemetryPanel() {
           <button type="button" className="tm-button tm-refresh" disabled={totals.refreshing || refreshing} onClick={refresh} aria-label="Refresh telemetry" title="Refresh recorded measurements and the selected view"><RefreshCw size={15} aria-hidden="true"/><span>Refresh</span></button>
         </div>
       </div>
-      <section className="tm-scope" aria-label="Pipeline and loop selection">
+      <section className="tm-scope" aria-label="Pipeline and replicate selection">
         <label className="tm-field tm-pipeline-field"><span>Pipeline</span>
           <select aria-label="Pipeline to inspect" title={pipeline?.name} value={pipeline?.id ?? ''} disabled={globalScope} onChange={e => usePipelines.getState().select(e.target.value)}>
             <option value="" disabled>{runTag ? 'Saved execution' : 'Choose a pipeline'}</option>
@@ -129,14 +131,14 @@ export default function TelemetryPanel() {
           </select>
         </label>
         <div className="tm-loop-field">
-          <label className="tm-field"><span>Loop</span>
-            <select aria-label="Loop to inspect" disabled={globalScope || !runTag || !choices.length} value={loop ?? 'all'} onChange={e => selectLoop(e.target.value === 'all' ? null : Number(e.target.value))}>
-              <option value="all">All loops</option>{choices.map(c => <option key={c.number} value={c.number}>Loop {c.number} · {c.status.replaceAll('_', ' ')}</option>)}
+          <label className="tm-field"><span>Replicate</span>
+            <select aria-label="Replicate to inspect" disabled={globalScope || !runTag || !choices.length} value={loop ?? 'all'} onChange={e => selectLoop(e.target.value === 'all' ? null : Number(e.target.value))}>
+              <option value="all">All replicates</option>{choices.map(c => <option key={c.number} value={c.number}>{labelReplicate({...c,iteration:c.number,run_tag:runTag})} · {c.status.replaceAll('_', ' ')}</option>)}
             </select>
           </label>
-          <div className="tm-stepper" role="group" aria-label="Browse loops">
-            <button type="button" aria-label="Previous loop" title="Previous loop" disabled={globalScope || index <= 0} onClick={() => selectLoop(choices[index - 1].number)}><ChevronLeft size={17}/></button>
-            <button type="button" aria-label="Next loop" title="Next loop" disabled={globalScope || !choices.length || index >= choices.length - 1} onClick={() => selectLoop(choices[index + 1].number)}><ChevronRight size={17}/></button>
+          <div className="tm-stepper" role="group" aria-label="Browse replicates">
+            <button type="button" aria-label="Previous replicate" title="Previous replicate" disabled={globalScope || index <= 0} onClick={() => selectLoop(choices[index - 1].number)}><ChevronLeft size={17}/></button>
+            <button type="button" aria-label="Next replicate" title="Next replicate" disabled={globalScope || !choices.length || index >= choices.length - 1} onClick={() => selectLoop(choices[index + 1].number)}><ChevronRight size={17}/></button>
           </div>
         </div>
         <div className="tm-scope-caption">{globalScope && <span>The registry covers all saved executions.</span>}
@@ -154,10 +156,10 @@ export default function TelemetryPanel() {
       </nav>
       {tab !== 'Totals' && <div className="tm-section-heading"><div><h3>{labels[tab]}</h3><p>{descriptions[tab]}</p></div><span className="tm-scope-badge">{scope}</span></div>}
       {error && <div role="alert" className="tm-notice"><AlertCircle size={16}/><p>{error}{data ? ' Showing the last available records for this same selection.' : ''}</p><button className="tm-button" onClick={refresh}>Retry</button></div>}
-      {data?.stale && <div role="status" className="tm-notice"><AlertCircle size={16}/><p>{data.health.core.up && data.health.memstara.up ? 'Refreshing this selection. Previously loaded records remain visible.' : 'Updates are delayed. This does not confirm an empty or completed loop.'}</p></div>}
+      {data?.stale && <div role="status" className="tm-notice"><AlertCircle size={16}/><p>{data.health.core.up && data.health.memstara.up ? 'Refreshing this selection. Previously loaded records remain visible.' : 'Updates are delayed. This does not confirm an empty or completed replicate.'}</p></div>}
       {(data?.telemetry.legacy_attribution || !!data?.telemetry.unassigned_calls) && <details className="tm-attribution"><summary>Record attribution</summary>
-        {data?.telemetry.legacy_attribution && <p>Legacy agent calls are grouped by recorded loop start times. New executions record the loop directly.</p>}
-        {!!data?.telemetry.unassigned_calls && <p>{data.telemetry.unassigned_calls} execution-wide or unassigned calls appear only in All loops.</p>}
+        {data?.telemetry.legacy_attribution && <p>Legacy agent calls are grouped by recorded replicate start times. New executions record the replicate directly.</p>}
+        {!!data?.telemetry.unassigned_calls && <p>{data.telemetry.unassigned_calls} execution-wide or unassigned calls appear only in All replicates.</p>}
       </details>}
       <div id="telemetry-content" key={globalScope ? 'experiments' : key} tabIndex={0} role="region" aria-label="Usage details" className="telemetry-tab-body">
         {tab === 'Experiments' ? <div className="tm-records"><ExperimentRegistry refreshRevision={revision}/></div>
@@ -168,8 +170,8 @@ export default function TelemetryPanel() {
           </TelemetryState> : <div className="tm-records">
             {tab === 'Agents' && <><AgentsTab/><MotoroRecords key={`${runTag}:${loop}`} tag={runTag} loop={loop}/></>}
             {tab === 'Activity' && <div className="tm-embedded-activity"><FeedPanel embedded/></div>}{tab === 'Access' && <AccessTab/>}{tab === 'Results' && <ResultsPanel telemetry/>}
-            {tab === 'Tasks' && <><label className="tm-field tm-task-picker"><span>Task</span><select aria-label="Task in selected loop" value={taskId ?? ''} onChange={e => setTaskSelection({scope: taskScope, id: e.target.value ? Number(e.target.value) : null})}>
-              <option value="">Select a task</option>{data.board.tasks.map(t => <option key={t.task_id} value={t.task_id}>#{t.task_id} · {loopLabel(t, data.run_configuration?.trials)} · {t.task_type} · {t.status}</option>)}
+            {tab === 'Tasks' && <><label className="tm-field tm-task-picker"><span>Task</span><select aria-label="Task in selected replicate" value={taskId ?? ''} onChange={e => setTaskSelection({scope: taskScope, id: e.target.value ? Number(e.target.value) : null})}>
+              <option value="">Select a task</option>{data.board.tasks.map(t => <option key={t.task_id} value={t.task_id}>#{t.task_id} · {loopLabel(t, data.run_configuration?.trials, data.run_configuration?.combination_plan)} · {t.task_type} · {t.status}</option>)}
             </select></label><TaskTab taskId={taskId}/></>}
             {tab === 'Logs' && <ExecutionLogs runTag={runTag} loop={loop} lines={data.loop_log.lines} note={data.loop_log.note}/>}
           </div>}

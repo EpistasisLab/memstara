@@ -24,7 +24,7 @@ function Room({data}:NodeProps<Node<RoomData>>){
   {data.status==='Call still open'&&<p className="cf-room-purpose">Call not yet returned. Main-task activity is not confirmed.</p>}
   <div className="cf-desks">{data.skills.map((s,i)=><div className={`cf-desk ${data.selected===s.id?'is-selected':data.recorded?'cf-unused':''}`} key={s.id}>
    <Handle type="target" position={Position.Left} id={`in-${i}`} isConnectable={false}/>
-   <div className="cf-skill-label"><span className="cf-orbit"><Icon size={17}/></span><span><small>{data.recorded?(data.selected===s.id?'Selected for this Loop':'Other variant'):`Variant ${i+1}`}</small><strong>{skillLabel(s.id,s.title)}</strong></span></div>
+   <div className="cf-skill-label"><span className="cf-orbit"><Icon size={17}/></span><span><small>{data.recorded?(data.selected===s.id?'Selected for this Replicate':'Other variant'):`Variant ${i+1}`}</small><strong>{skillLabel(s.id,s.title)}</strong></span></div>
    <button className="cf-inspect nodrag" aria-label={`Inspect ${skillLabel(s.id,s.title)} instructions`} onClick={()=>data.inspect(s)}><ExternalLink size={14}/></button>
    <Handle type="source" position={Position.Right} id={`out-${i}`} isConnectable={false}/>
   </div>)}</div>

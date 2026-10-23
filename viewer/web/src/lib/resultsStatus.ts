@@ -1,7 +1,8 @@
+import {scheduledLabel,type Schedule} from './replicateIdentity.ts';
 interface PipelineStatus {status: string; message?: string; stage?: string; loop?: number | null; code?: string}
 
 /** A running snapshot is progress, not a warning. Stale data must not imply liveness. */
-export function resultsStatus(pipeline?: PipelineStatus | null, stale = false, execution?: {paused:boolean; stopping:boolean}) {
+export function resultsStatus(pipeline?: PipelineStatus | null, stale = false, execution?: {paused:boolean; stopping:boolean},plan?:Schedule|null) {
   if (!pipeline || pipeline.status === 'completed') return null;
   if (stale) return {warning:true, text:`Last recorded pipeline status: ${pipeline.status}. Live updates are unavailable; saved results remain visible.`};
   if (!['failed','blocked','incomplete','interrupted'].includes(pipeline.status)) {
@@ -10,7 +11,7 @@ export function resultsStatus(pipeline?: PipelineStatus | null, stale = false, e
   }
   switch (pipeline.status) {
     case 'completed_with_skips':
-      return {warning:false, text:'Execution finished with skipped Loops. Completed findings are saved; skipped Loops produced no analysis and are not counted as completed.'};
+      return {warning:false, text:'Execution finished with skipped replicates. Completed findings are saved; skipped replicates produced no analysis and are not counted as completed.'};
     case 'no_findings':
       return {warning:false, text:'Execution ended without findings. No executable question was saved for the attempted combinations; no analysis or report was produced.'};
     case 'running':
@@ -24,7 +25,7 @@ export function resultsStatus(pipeline?: PipelineStatus | null, stale = false, e
     case 'stopped':
       return {warning:false, text:'Execution stopped. Saved results remain available; the final report may be incomplete.'};
     case 'interrupted':
-      return {warning:true, text:`Execution interrupted. ${pipeline.message || 'Saved results are retained; review the execution before resuming.'} A saved report may cover earlier completed loops only.`};
+      return {warning:true, text:`Execution interrupted. ${pipeline.message || 'Saved results are retained; review the execution before resuming.'} A saved report may cover earlier completed replicates only.`};
     case 'failed':
     case 'blocked':
     case 'incomplete':
@@ -33,7 +34,7 @@ export function resultsStatus(pipeline?: PipelineStatus | null, stale = false, e
           data:'Data preparation',ml:'Model training',interpret:'Interpretation',interpreter:'Interpretation',report:'Explanation report',preflight:'Startup checks'};
         const role=pipeline.stage?.match(/^(question|hypothesis|data|ml|interpreter|interpret|report|preflight)(?:[#\d-].*)?$/)?.[1];
         const location=role ? ` at ${stages[role]}` : '';
-        const loop=typeof pipeline.loop==='number' && pipeline.loop>0 ? ` (Loop ${pipeline.loop})` : '';
+        const loop=typeof pipeline.loop==='number' && pipeline.loop>0 ? ` (${scheduledLabel(pipeline.loop,plan)})` : '';
         const generic=pipeline.message?.includes('Pipeline could not safely continue; inspect console.log and trace/');
         const reason=generic || !pipeline.message ? 'The saved diagnostic does not identify the cause. Saved results remain available.' : pipeline.message;
         return {warning:true, text:`This execution ${pipeline.status==='failed'?'failed':pipeline.status==='blocked'?'was blocked':'is incomplete'}${location}${loop}. ${reason}`};

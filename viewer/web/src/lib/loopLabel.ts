@@ -1,16 +1,14 @@
-/** Display iterations consistently without mistaking a task claim or HP candidate for a loop. */
-export function loopLabel(record: { iteration?: number | null; trial?: number | null }, analysesPerLoop?: number | null): string {
-  if (Number.isInteger(record.iteration) && record.iteration! > 0) return `Loop ${record.iteration}`;
-  if (Number.isInteger(record.trial) && record.trial! >= 0 && Number.isInteger(analysesPerLoop) && analysesPerLoop! > 0)
-    return `Loop ${Math.floor(record.trial! / analysesPerLoop!) + 1}`;
-  return 'Loop —';
+import {identityLabel,scheduleIdentity,type Schedule,type ReplicateIdentity} from './replicateIdentity.ts';
+/** Prefer recorded identity; a global scheduler position is not a per-pipeline repeat. */
+export function loopLabel(record: ReplicateIdentity & {iteration?:number|null;trial?:number|null},analysesPerLoop?:number|null,plan?:Schedule|null):string {
+ if(record.replicate_number)return identityLabel(record);
+ const position=Number.isInteger(record.iteration)&&record.iteration!>0?record.iteration:
+  Number.isInteger(record.trial)&&record.trial!>=0&&Number.isInteger(analysesPerLoop)&&analysesPerLoop!>0?Math.floor(record.trial!/analysesPerLoop!)+1:undefined;
+ return identityLabel(scheduleIdentity(position,plan));
 }
-
-/** The denominator is a configured ceiling, not a promise that every Loop succeeds. */
-export function executionLoopLabel(iteration: number | undefined, limit: number | null | undefined,
-  started: boolean, continuous = false): string {
-  const current = !started ? '0' : Number.isInteger(iteration) && iteration! > 0 ? String(iteration) : '—';
-  if (continuous) return `Loop ${current} · Continuous`;
-  const total = Number.isInteger(limit) && limit! > 0 ? String(limit) : '—';
-  return `Loop ${current} / ${total}`;
+export function executionLoopLabel(iteration:number|undefined,limit:number|null|undefined,started:boolean,continuous=false,plan?:Schedule|null):string {
+ if(!started)return plan?`${plan.combinations} pipelines · ${plan.total_loops} total replicates`:`1 pipeline · ${limit??'—'} replicates`;
+ const identity=scheduleIdentity(iteration,plan);
+ if(!plan)identity.replicate_count=continuous?null:limit;
+ return identityLabel(identity,true)+(continuous?' · Continuous':'');
 }

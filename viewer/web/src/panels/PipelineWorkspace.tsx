@@ -109,7 +109,7 @@ export function PipelineStatus({ids}: {ids?: string[]} = {}){
   return <section aria-label="Pipeline status" className="pipeline-status-section">
     <header className="pipeline-status-heading">
       <div><h2>Pipeline progress</h2><p>Each research path advances independently.</p></div>
-      <span title="Five equally weighted stages per loop. This is not a time estimate.">Stage-based progress</span>
+      <span title="Five equally weighted stages per replicate. This is not a time estimate.">Stage-based progress</span>
     </header>
     {!pipelines.length?<p className="text-sm text-ink-faint">Add a pipeline to see its progress here.</p>:
     <div className="pipeline-progress-list">{pipelines.filter(p=>!ids||ids.includes(p.id)).map(p=>{
@@ -124,14 +124,14 @@ export function PipelineStatus({ids}: {ids?: string[]} = {}){
         <header className="pipeline-progress-header">
           <button className="pipeline-progress-identity" onClick={()=>usePipelines.getState().select(p.id)}>
             <span className="pipeline-number">P{p.number}</span>
-            <span><strong>{p.name}</strong><span className="pipeline-cycle" data-help="Loop" tabIndex={0}>{pipelineLoopLabel(p)}</span></span>
+            <span><strong>{p.name}</strong><span className="pipeline-cycle" data-help="Replicate" tabIndex={0}>{pipelineLoopLabel(p)}</span></span>
           </button>
-          <div className="pipeline-progress-value" data-help="Stage-based progress" tabIndex={0} title="Stage-based progress in this loop, not elapsed time">
-            <strong>{percent??'—'}{percent!=null&&<small>%</small>}</strong><span>of this loop</span>
+          <div className="pipeline-progress-value" data-help="Stage-based progress" tabIndex={0} title="Stage-based progress in this replicate, not elapsed time">
+            <strong>{percent??'—'}{percent!=null&&<small>%</small>}</strong><span>of this replicate</span>
           </div>
         </header>
         {p.progress.exploration && <p className="text-xs text-ink-soft" role="status">
-          {p.progress.exploration.attempted} loops · {p.progress.exploration.completed} completed · {p.progress.exploration.blocked} blocked
+          {p.progress.exploration.attempted} replicates · {p.progress.exploration.completed} completed · {p.progress.exploration.blocked} blocked
         </p>}
         <div className="pipeline-progress-context">
           <span className="pipeline-current-stage">{current}</span>
@@ -139,14 +139,14 @@ export function PipelineStatus({ids}: {ids?: string[]} = {}){
         </div>
         <div className="pipeline-stage-track" role="progressbar" aria-label={`${p.name} stage-based progress`}
           aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent??undefined}
-          aria-valuetext={`${current}, loop ${p.progress.iteration??'not started'}. ${status}. Not a time estimate.`}>
+          aria-valuetext={`${current}, replicate ${p.progress.iteration??'not started'}. ${status}. Not a time estimate.`}>
           {shortLabels.map((label,i)=><div key={label} className={`pipeline-track-stage ${i===index?'is-current':''} ${i<index||percent===100?'is-past':''}`}>
             <span className="pipeline-track-line">{i===index&&percent!==100&&<i/>}</span><span className="pipeline-track-label">{label}</span>
           </div>)}
         </div>
         <LoopUsage execution={usage.data?.executions.find(e=>e.run_tag===p.latest?.run_tag)} updatedAt={usage.data?.updated_at} error={usage.error}/>
         <footer className="pipeline-progress-footer">
-          <span>{(p.running?.pause_requested?'Progress is preserved. Resume continues this execution.':'') || p.progress.exploration?.reason || (failed?'An analysis step failed; review Results.':waiting?'Waiting before the next loop.':p.running?'Following the latest observed stage.':'Progress is retained when execution stops.')}</span>
+          <span>{(p.running?.pause_requested?'Progress is preserved. Resume continues this execution.':'') || p.progress.exploration?.reason || (failed?'An analysis step failed; review Results.':waiting?'Waiting before the next replicate.':p.running?'Following the latest observed stage.':'Progress is retained when execution stops.')}</span>
           <time>{p.progress.updated_at?new Date(p.progress.updated_at).toLocaleTimeString():'No activity yet'}</time>
         </footer>
       </article>;
@@ -216,7 +216,7 @@ export default function PipelineWorkspace(){
         }),
         ...visibleItems.flatMap((p,row)=>[
           {id:`zone-${p.id}`,type:'zone',position:{x:0,y:208+row*252},zIndex:-2,selectable:false,
-            data:{title:`PIPELINE ${p.number} · ${p.name}`,caption:`${pipelineLoopLabel(p)} · ${p.progress.exploration?`${p.progress.exploration.completed} completed · ${p.progress.exploration.blocked} blocked`:p.running?'Running':'Ready'}`,width:1370,height:196,execution:true,selected:p.id===selected,onSelect:()=>select(p.id),number:p.number,iteration:p.progress.iteration,loopLabel:pipelineLoopLabel(p),stageIndex:stages.indexOf(p.progress.stage as typeof stages[number])-1,percent:pipelinePercent(p),stageLabel:labels[p.progress.stage as keyof typeof labels]??"Not started",failed:(p.progress.counts?.failed??0)>0||p.progress.exploration?.outcome==='blocked'}},
+            data:{title:`EXPERIMENT ${p.number} · ${p.name}`,caption:`${pipelineLoopLabel(p)} · ${p.progress.exploration?`${p.progress.exploration.completed} completed · ${p.progress.exploration.blocked} blocked`:p.running?'Running':'Ready'}`,width:1370,height:196,execution:true,selected:p.id===selected,onSelect:()=>select(p.id),number:p.number,iteration:p.progress.iteration,loopLabel:pipelineLoopLabel(p),stageIndex:stages.indexOf(p.progress.stage as typeof stages[number])-1,percent:pipelinePercent(p),stageLabel:labels[p.progress.stage as keyof typeof labels]??"Not started",failed:(p.progress.counts?.failed??0)>0||p.progress.exploration?.outcome==='blocked'}},
           ...stages.map((stage,col)=>({id:`${p.id}-${stage}`,type:'station',position:{x:24+col*224,y:260+row*252},
             data:{pipeline:p,stage,selected:selected===p.id&&inspected?.id===p.id&&inspected?.stage===stage,
               inspect:()=>configureStation(p.id,stage)}})),
@@ -254,7 +254,7 @@ export default function PipelineWorkspace(){
     <div ref={setCombinationHeader} className="pipeline-context-header"/>
     {!combinationPipeline&&<div className="pipeline-context-title"><strong>{comparison.length?'Compare pipelines':selectedPipeline?.name??'Research pipelines'}</strong><span>{comparison.length?`${comparison.length} selected`:'Experiments'}</span></div>}
     <div className="pipeline-global-actions" role="group" aria-label="Controls for all pipelines">
-      <span className="pipeline-running-count" data-help="Running pipelines" data-help-description="Number of pipelines currently executing. Paused pipelines are excluded; this is not the number of Loops or combinations." tabIndex={0} title="Pipelines currently executing; paused pipelines are excluded"><Activity size={13}/>{items.filter(p=>floorExecutionState(p.running).live).length} running</span>
+      <span className="pipeline-running-count" data-help="Running pipelines" data-help-description="Number of pipelines currently executing. Paused pipelines are excluded; this is not the number of Replicates or combinations." tabIndex={0} title="Pipelines currently executing; paused pipelines are excluded"><Activity size={13}/>{items.filter(p=>floorExecutionState(p.running).live).length} running</span>
       <MasterStop/>
       <button className="pipeline-add-primary" data-help="Add pipeline" data-help-description="Open the setup wizard to choose knowledge sources, agent skills, execution limits and a pipeline name. Creating a pipeline does not start it." disabled={!loaded||busy} title="Create a pipeline and choose its sources, agents and skills" onClick={()=>void add()}><Plus size={17}/><span>Add pipeline</span></button>
     </div>
@@ -267,13 +267,13 @@ export default function PipelineWorkspace(){
     <div className="pipeline-explorer-layout">
       <PipelineBrowser toggleHost={panelToggleHost} items={items} selected={selected} onSelect={id=>{if(comparison.length&&!comparison.includes(id))setComparison([]);usePipelines.getState().focus(id);}} compare={comparison} onCompare={ids=>{setComparison(ids);if(ids.length&&!ids.includes(selected??""))usePipelines.getState().focus(ids[0]);}}/>
       <div className={`pipeline-detail-workspace ${combinationPipeline||comparison.length?"has-combination-studio":""}`}>
-    {comparison.length>0&&<div className="floor-comparison-heading" role="status"><strong>Comparing {visibleItems.length} pipelines</strong><span>Each pipeline keeps its own visualization, Loop and execution state. Pan and zoom each view independently.</span></div>}
+    {comparison.length>0&&<div className="floor-comparison-heading" role="status"><strong>Comparing {visibleItems.length} pipelines</strong><span>Each pipeline keeps its own visualization, Replicate and execution state. Pan and zoom each view independently.</span></div>}
     {comparison.length>0&&<div className="floor-comparison-grid">{visibleItems.map(p=>{
       const isCombination=Object.keys(p.configuration.combination_skills??{}).length>0;
       const ownNodes=nodes.filter(n=>n.id.startsWith(p.id+"-"));
       const ids=new Set(ownNodes.map(n=>n.id));const ownEdges=edges.filter(e=>ids.has(e.source)&&ids.has(e.target));
       return <section className="floor-comparison-pane" key={p.id} aria-label={`Comparison · ${p.name}`}>
-       <header className="floor-comparison-pane-heading"><strong>{p.name}</strong><span>{isCombination?'All Combinations':'Selected pipeline'} · Loop {p.progress.iteration??'—'} · {p.running?(p.running.execution_state==='paused'?'Paused':floorExecutionState(p.running).stopping?'Pausing':labels[p.progress.stage as keyof typeof labels]??'Running'):'Not running'}</span></header>
+       <header className="floor-comparison-pane-heading"><strong>{p.name}</strong><span>{isCombination?'All Combinations':'Selected pipeline'} · {pipelineLoopLabel(p)} · {p.running?(p.running.execution_state==='paused'?'Paused':floorExecutionState(p.running).stopping?'Pausing':labels[p.progress.stage as keyof typeof labels]??'Running'):'Not running'}</span></header>
        {isCombination?<CombinationDesign pipeline={p}/>:<div className="floor-comparison-standard"><ReactFlow nodes={ownNodes} edges={ownEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView fitViewOptions={{padding:.12}} minZoom={.15} maxZoom={1.6} nodesDraggable={false} nodesConnectable={false} panOnScroll zoomOnScroll={false} onNodeClick={(_,node)=>{if(node.type==='station')configureStation(p.id,String(node.data.stage));}}><Background variant={BackgroundVariant.Lines} gap={32} color="rgb(var(--ink) / .05)"/><Controls showInteractive={false}/></ReactFlow></div>}
       </section>;
     })}</div>}

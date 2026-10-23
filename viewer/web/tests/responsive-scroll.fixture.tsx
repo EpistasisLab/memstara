@@ -2,7 +2,7 @@ import {Provider} from '@radix-ui/react-tooltip';
 import {createRoot} from 'react-dom/client';
 import CombinationWizard from '../src/components/CombinationWizard';
 import AgentConfigPanel from '../src/panels/AgentConfigPanel';
-import PipelineCreationDialog from '../src/panels/PipelineCreationDialog';
+import {CreationWizard} from '../src/panels/PipelineCreationDialog';
 import {useControl,PLAYBOOK_STAGES} from '../src/store/control';
 import {usePipelines} from '../src/store/pipelines';
 import '../src/index.css';
@@ -19,4 +19,4 @@ usePipelines.setState({creationOpen:true,creationMode:null,create:async(name,con
 const single=new URLSearchParams(location.search).has('single');
 const editor=new URLSearchParams(location.search).has('editor');
 if(editor)useControl.setState({editor:{stage:'hypothesis',slot:0,add:false}});
-createRoot(document.getElementById('root')!).render(<Provider>{editor?<AgentConfigPanel/>:single?<PipelineCreationDialog/>:<CombinationWizard/>}</Provider>);
+createRoot(document.getElementById('root')!).render(<Provider>{editor?<AgentConfigPanel/>:single?<CreationWizard/>:<CombinationWizard/>}</Provider>);

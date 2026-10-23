@@ -144,7 +144,7 @@ export default function NavigatorPanel() {
     const byTrial = new Map<string, Task[]>();
     for (const task of [...tasks].sort((a,b) => a.trial-b.trial)) {
       const label = labelLoop(task);
-      const key = label === 'Loop —' ? `Loop unknown · analysis ID ${task.trial}` : label;
+      const key = label === 'Replicate —' ? `Replicate unknown · analysis ID ${task.trial}` : label;
       const list = byTrial.get(key);
       if (list) list.push(task);
       else byTrial.set(key, [task]);

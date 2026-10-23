@@ -72,6 +72,7 @@ export type RunRequest = {
   data_mode?: 'dataset'|'proposal';
   research_objective?: string;
   stage_models?: import("../lib/stageModels").StageProfiles;
+  combination_plan?: import("../lib/replicateIdentity").Schedule | null;
   combination_skills?: Partial<Record<PlaybookStage,string[]>>;
   combination_repetitions?: number;
   combination_random_start?: boolean;

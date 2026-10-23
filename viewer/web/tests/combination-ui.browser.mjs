@@ -4,7 +4,7 @@ import {chromium} from '@playwright/test';
 const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
 try{
  const page=await browser.newPage({viewport:{width:1440,height:1000}});
- const roles=['hypothesis','data','ml','interpreter','report'],counts=[2,3,2,2,1];
+ const roles=['hypothesis','data','ml','interpreter','report'],counts=[3,2,2,2,2];
  const skills=roles.flatMap((stage,i)=>Array.from({length:counts[i]},(_,j)=>({id:`${stage}_${j}`,stage,title:`${stage} flavor ${j+1}`,hash:`hash-${stage}-${j}`,content:'# Test instructions',description:'Test only',source:'Test fixture'})));
  let rows=[],posted=null,runPosts=0;
  await page.route('**/control/**',async r=>{
@@ -13,7 +13,7 @@ try{
   if(path==='/control/pipelines'){
    if(r.request().method()==='GET')return r.fulfill({json:{pipelines:rows}});
    posted=r.request().postDataJSON();
-   const config={...posted.configuration,waves:48};for(const role of roles)config[`playbook_${role}`]=config.combination_skills[role][0];
+   const config={...posted.configuration};for(const role of roles)config[`playbook_${role}`]=config.combination_skills[role][0];
    const item={id:'combination-ui-test',number:1,name:posted.name,configuration:config};rows=[{...item,running:null,latest:null,progress:{}}];return r.fulfill({json:item});
   }
   if(path.endsWith('/combinations')) {const n=Number(new URL(r.request().url()).searchParams.get('loop')); return r.fulfill({json:{total_loops:48,run_tag:'frozen-execution',planned:{combination:(n-1)%24+1,repetition:Math.floor((n-1)/24)+1,agents:roles.map(stage=>skills.find(s=>s.stage===stage))},calls:[{run_id:'record-'+n,stage:'hypothesis'+n,status:'completed',skill:{stage:'hypothesis',id:'actual-'+n,title:'Actual skill '+n,hash:'abc123'}}]}});}
@@ -36,24 +36,24 @@ try{
  await dialog.getByRole('button',{name:'Review plan'}).click();
  await dialog.getByRole('heading',{name:'Review your design',exact:true}).waitFor();
  await dialog.getByText('One selected model',{exact:true}).waitFor();
- await dialog.getByLabel('Maximum Loops per execution').fill('48');
+ await dialog.getByLabel('Replicates per pipeline').fill('10');
  await dialog.getByLabel('Name',{exact:true}).fill('Combination test');
  await dialog.getByRole('checkbox',{name:/I reviewed/}).check();
- await dialog.getByText('How execution works',{exact:true}).click();await dialog.getByText(/^Stops after at most 48 Loops\./).waitFor();
+ await dialog.getByText('How execution works',{exact:true}).click();await dialog.getByText(/The schedule contains 480 total replicates/).waitFor();
  await page.setViewportSize({width:390,height:844});
  if(await dialog.evaluate(e=>e.scrollWidth>e.clientWidth+2))throw Error('Wizard overflow');
  await dialog.getByRole('button',{name:'Create combination design'}).click();
  await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
  const grid=page.getByRole('region',{name:'Combination design'});
  const hide=page.getByRole('button',{name:'Hide pipeline list',exact:true});if(await hide.isVisible())await hide.click();await grid.waitFor();
- await grid.locator('.cf-room').first().waitFor();if(await grid.locator('.cf-room').count()!==5)throw Error('Missing agent role');if(await grid.locator('.cf-desk').count()!==10)throw Error('Missing skill variants');
+ await grid.locator('.cf-room').first().waitFor();if(await grid.locator('.cf-room').count()!==5)throw Error('Missing agent role');if(await grid.locator('.cf-desk').count()!==11)throw Error('Missing skill variants');
  if(runPosts)throw Error('Creating unexpectedly started an execution');
- if(posted.configuration.combination_max_loops!==48)throw Error('Loop limit not saved');
+ if(posted.configuration.combination_repetitions!==10||posted.configuration.combination_max_loops!==null||posted.configuration.waves!==480)throw Error('Replicate schedule not saved');
  await page.getByRole('button',{name:'Run combinations'}).waitFor();
  if(await page.getByRole('button',{name:'Loop explorer',exact:true}).count())throw Error('Removed Loop explorer is visible');
  rows[0].latest={run_tag:'frozen-execution',exit_code:0};rows[0].progress={iteration:48};await page.reload();
- await page.getByText('Loop 48 / 48 · Latest execution',{exact:true}).waitFor();await grid.getByText('Actual skill 48',{exact:true}).first().waitFor();
- rows[0].progress={iteration:1};await page.getByText('Loop 1 / 48 · Latest execution',{exact:true}).waitFor();await grid.getByText('Actual skill 1',{exact:true}).first().waitFor();
+ await page.getByText('Pipeline 24 · Replicate 2 · Latest execution',{exact:true}).waitFor();await grid.getByText('Actual skill 48',{exact:true}).first().waitFor();
+ rows[0].progress={iteration:1};await page.getByText('Pipeline 1 · Replicate 1 · Latest execution',{exact:true}).waitFor();await grid.getByText('Actual skill 1',{exact:true}).first().waitFor();
  if(await grid.getByText('Actual skill 48',{exact:true}).count())throw Error('Stale Loop content');
- console.log('Current-loop frozen skills verified; Selected workflow opens; 24 combinations/48 Loops/5 roles; narrow layout valid; create does not run; all writes mocked.');
+ console.log('Current-loop frozen skills verified; Selected workflow opens; 48 pipelines/10 replicates per pipeline/480 total replicates; legacy archived 24-pipeline schedule/5 roles; narrow layout valid; create does not run; all writes mocked.');
 }finally{await browser.close();}

@@ -21,7 +21,7 @@ import { asSlots, fromSlots, withPlaybookAt, withoutSlot, withoutInterpreterSlot
 const descriptions: Record<string, string> = {
   data: "Extract the selected predictors and choose training-heavy or balanced stratified allocation. CSV and target definitions are configured in Knowledge sources / Data & target.",
   hypothesis: "Generate a knowledge-grounded hypothesis and choose features for the fixed target. Each hypothesis uses a different skill.",
-  ml: "Choose LR or XGBoost. Only the selected model is trained in each Loop; the Data skill determines that Loop's allocation.",
+  ml: "Choose LR or XGBoost. Only the selected model is trained in each Replicate; the Data skill determines that Replicate's allocation.",
   interpreter: "Describe measured performance and SHAP or LIME attributions for the selected ML model. Clinical interpretation belongs in Explanation.",
   report: "Use the Interpretation output and selected knowledge sources to explain meaning, follow-up questions and limitations. Distinguish measured findings from unverified clinical claims.",
 };

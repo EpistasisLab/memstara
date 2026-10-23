@@ -1140,7 +1140,7 @@ async def _snapshot_uncached(run_tag: str | None, loop: int | None = None, *, te
     loop_log = None
     if telemetry:
         from loop_history import call_loops, record_loop, read_log
-        from run_artifacts import directory_for, read_json
+        from run_artifacts import directory_for, read_json, identity
         from fastapi import HTTPException
         config = artifacts["config"] if artifacts else {}
         calls = call_loops(calls)
@@ -1149,7 +1149,7 @@ async def _snapshot_uncached(run_tag: str | None, loop: int | None = None, *, te
         numbers = {c['loop'] for c in calls if c['loop'] is not None}
         numbers.update(n for r in [*board, *results] if (n := record_loop(r, config)) is not None)
         numbers.update(int(n) for n in outcomes if str(n).isdigit() and int(n) > 0)
-        choices = [{"number": n, "status": outcomes.get(str(n), {}).get('outcome', 'recorded'),
+        choices = [{"number": n, **identity(config, n), "status": outcomes.get(str(n), {}).get('outcome', 'recorded'),
                     "tasks": sum(record_loop(t, config) == n for t in board),
                     "results": sum(record_loop(r, config) == n for r in results)} for n in sorted(numbers)]
         if loop is not None and loop not in numbers:

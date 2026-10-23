@@ -34,7 +34,7 @@ export const VIEWS: Record<ViewId, ViewMeta> = {
   discovery: { description: 'Explore generated research questions and follow their hypotheses, evidence and results as pipelines run.', label: "Question universe", icon: Orbit },
   results: { description: 'Review recorded model performance, feature contributions and interpretation for each analysis.', label: "Results", icon: BarChart3 },
   clinician: { description: 'Review research findings in clinical language, with supporting evidence and limitations.', label: "Clinician view", icon: Stethoscope },
-  chain: { description: 'Track each pipeline’s current stage, loop and completion status.', label: "Status", icon: Workflow },
+  chain: { description: 'Track each pipeline’s current stage, replicate and completion status.', label: "Status", icon: Workflow },
   scene: { description: 'See parallel pipelines, their agents and resources, and follow live activity.', label: "Experiments", icon: Map },
   log: { description: 'Read detailed execution messages to investigate errors or stalled work.', label: "Run log", icon: Terminal },
   report: { description: 'Read and download the saved Explanation agent output for each pipeline.', label: "Conclusions", icon: FileText },

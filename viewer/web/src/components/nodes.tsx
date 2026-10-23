@@ -28,14 +28,14 @@ function ZoneNode({ data }: NodeProps) {
     {Boolean(data.execution)&&"percent" in data&&<div className={`floor-progress-rail ${data.failed?"needs-attention":""}`}
       aria-label={`${String(data.title)} progress`} role="progressbar"
       aria-valuemin={0} aria-valuemax={100} aria-valuenow={typeof data.percent==="number"?data.percent:undefined}
-      aria-valuetext={`${String(data.stageLabel)} · ${String(data.loopLabel ?? `Loop ${data.iteration??"—"}`)}. Stage-based progress, not a time estimate.`}>
+      aria-valuetext={`${String(data.stageLabel)} · ${String(data.loopLabel ?? "Pipeline — · Replicate —")}. Stage-based progress, not a time estimate.`}>
       <div className="floor-progress-track"/>
       {[0,1,2,3,4].map(index=><i key={index} className="floor-progress-stop" style={{left:`${index*25}%`}}/>)}
       {typeof data.stageIndex==="number"&&data.stageIndex>=0&&<div className={`floor-progress-cursor ${data.stageIndex>=4?"is-last-stage":""}`}
         style={{left:`${Math.min(4,data.stageIndex)*25}%`}}
         title="Current stage of this pipeline. Percentage uses five equal stages, not elapsed time.">
         <span className="floor-progress-orb">P{String(data.number)}</span>
-        <span className="floor-progress-caption"><strong>{typeof data.percent==="number"?`${data.percent}%`:"—"}</strong><span>{String(data.loopLabel ?? `Loop ${data.iteration??"—"}`)}</span></span>
+        <span className="floor-progress-caption"><strong>{typeof data.percent==="number"?`${data.percent}%`:"—"}</strong><span>{String(data.loopLabel ?? "Pipeline — · Replicate —")}</span></span>
       </div>}
     </div>}
   </div>;

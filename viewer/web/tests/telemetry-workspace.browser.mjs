@@ -73,14 +73,14 @@ try{
   await page.evaluate(()=>document.documentElement.dataset.theme='dark');
   if(process.env.MEMSTARA_SCREENSHOT_DIR)await page.screenshot({path:`${process.env.MEMSTARA_SCREENSHOT_DIR}/telemetry-dark.png`});
   await page.evaluate(()=>document.documentElement.dataset.theme='light');
-  await page.getByRole('button',{name:'Next loop',exact:true}).click();
-  await expect(page.getByRole('combobox',{name:'Loop to inspect'})).toHaveValue('1');
-  await page.getByRole('button',{name:'Next loop',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Next loop',exact:true})).toBeDisabled();
+  await page.getByRole('button',{name:'Next replicate',exact:true}).click();
+  await expect(page.getByRole('combobox',{name:'Replicate to inspect'})).toHaveValue('1');
+  await page.getByRole('button',{name:'Next replicate',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Next replicate',exact:true})).toBeDisabled();
   await expect(cards.locator(':scope > div').last()).toContainText('7');
-  await page.getByRole('button',{name:'Previous loop'}).click();
+  await page.getByRole('button',{name:'Previous replicate'}).click();
   await expect(cards.locator(':scope > div').last()).toContainText('5');
-  await page.getByRole('combobox',{name:'Loop to inspect'}).selectOption('all');
+  await page.getByRole('combobox',{name:'Replicate to inspect'}).selectOption('all');
   await page.getByText('Usage & cost details',{exact:true}).click();
   await expect.poll(()=>costReads).toBeGreaterThan(0);
   await page.getByText('Not provided by Motoro.',{exact:true}).waitFor();
@@ -93,7 +93,7 @@ try{
   await page.getByRole('combobox',{name:'Detailed records'}).selectOption('Access');
   await page.getByRole('heading',{name:'Pipeline agent calls'}).waitFor();
   await page.getByRole('combobox',{name:'Detailed records'}).selectOption('Tasks');
-  await page.getByRole('combobox',{name:'Task in selected loop'}).waitFor();
+  await page.getByRole('combobox',{name:'Task in selected replicate'}).waitFor();
   await page.getByRole('combobox',{name:'Detailed records'}).selectOption('Results');
   await page.getByRole('heading',{name:'Results',exact:true}).first().waitFor();
   await page.getByRole('combobox',{name:'Detailed records'}).selectOption('Logs');
@@ -102,7 +102,7 @@ try{
   // A loading response must not be presented as an empty/completed history.
   pending=true;
   await page.getByRole('button',{name:'Agents',exact:true}).click();
-  await page.getByRole('heading',{name:'Loading all loops',exact:true}).waitFor();
+  await page.getByRole('heading',{name:'Loading all replicates',exact:true}).waitFor();
   pending=false;scopeFail=true;
   await page.getByRole('button',{name:'Refresh telemetry'}).click();
   await page.getByRole('alert').filter({hasText:'Server temporarily unavailable'}).waitFor();
@@ -121,7 +121,7 @@ try{
   await expect(cards).toContainText('Not recorded');
   await expect(cards.getByText('Not available',{exact:true})).toHaveCount(2);
   await expect(cards).not.toContainText('$0.0000');
-  await expect(page.getByRole('combobox',{name:'Loop to inspect'})).toHaveValue('all');
+  await expect(page.getByRole('combobox',{name:'Replicate to inspect'})).toHaveValue('all');
   totalsFail=true;
   await page.getByRole('button',{name:'Refresh telemetry'}).click();
   await page.getByText('Updates delayed',{exact:true}).waitFor();
@@ -132,7 +132,7 @@ try{
   await page.getByRole('combobox',{name:'Detailed records'}).selectOption('Experiments');
   await page.getByRole('combobox',{name:'Experiment',exact:true}).waitFor();
   await expect(page.getByRole('combobox',{name:'Pipeline to inspect'})).toBeDisabled();
-  await expect(page.getByRole('combobox',{name:'Loop to inspect'})).toBeDisabled();
+  await expect(page.getByRole('combobox',{name:'Replicate to inspect'})).toBeDisabled();
   const before=registryReads;
   await page.getByRole('button',{name:'Refresh telemetry'}).click();
   await expect.poll(()=>registryReads).toBeGreaterThan(before);

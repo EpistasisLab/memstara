@@ -24,7 +24,7 @@ export default function ResultExplorer({results,selected,onSelect}:{results:Resu
   const ordered=[...matching].sort((a,b)=>sort==='auc'?(b.auc??-1)-(a.auc??-1):sort==='simple'?predictorNames(a).length-predictorNames(b).length:Date.parse(b.created_at)-Date.parse(a.created_at)||b.result_id-a.result_id);
   const points=measured.map(r=>({x:predictorNames(r).length,y:r.auc!,key:resultKey(r),title:resultTitle(r),question:r.perspective||r.hypothesis,group:r.pipeline_name||r.run_tag||'Analysis'}));
   return <section className="result-explorer" aria-label="Visual results explorer">
-    <header><p className="result-eyebrow">FROM QUESTIONS TO EVIDENCE</p><h3>Explore what the pipelines found</h3><p>Compare measured results, choose a loop, and inspect the features and evidence behind it.</p><ContentOrigin kind="proposal" compact/><p>Question and hypothesis text are research proposals. AUC, counts and sorting are calculated from recorded data.</p></header>
+    <header><p className="result-eyebrow">FROM QUESTIONS TO EVIDENCE</p><h3>Explore what the pipelines found</h3><p>Compare measured results, choose a replicate, and inspect the features and evidence behind it.</p><ContentOrigin kind="proposal" compact/><p>Question and hypothesis text are research proposals. AUC, counts and sorting are calculated from recorded data.</p></header>
     <div className="result-summary-grid">
       <div><span>Recorded analyses</span><strong>{results.length}</strong><small>{groups.length} pipeline{groups.length===1?'':'s'} in this view</small></div>
       <div><span>With AUC measured</span><strong>{measured.length}</strong><small>{results.length-measured.length} without a recorded AUC</small></div>

@@ -151,7 +151,7 @@ export function CreationWizard() {
             <p className="text-xs text-ink-muted">Selecting another ML skill may apply its evaluation defaults. Review these settings after changing or uploading a skill.</p>
             <BaselineSettings value={draft.baseline_columns ?? []} onChange={value=>setDraft(d=>({...d, baseline_columns:value}))}/></>}
         </>}
-        {step === 7 && <><p className="text-sm text-ink-muted">Review your pipeline. Each loop builds on earlier results and interpretations. The first loop starts from knowledge. After creation, press Play when you are ready.</p>
+        {step === 7 && <><p className="text-sm text-ink-muted">Review your pipeline. Each replicate builds on earlier results and interpretations. The first replicate starts from knowledge. After creation, press Play when you are ready.</p>
           <div className="rounded-lg border border-paper-line bg-paper-panel p-3 text-sm" aria-label="ML settings review">
             <p className="font-semibold">ML evaluation settings</p>
             {draft.data_mode==='proposal'?<p>Proposal only: no model training or measured evaluation.</p>:paired?<p className="mt-1 text-ink-muted">Selected model: {draft.playbook_ml==='ml_xgboost'?'XGBoost':'Logistic Regression'} · {overrideCount(draft.ml_overrides)} fixed advanced values; remaining settings selected by the ML Agent · Data-skill split policy · {draft.evaluation.replicates} split evaluations</p>:<p className="mt-1 text-ink-muted">Model: {draft.evaluation.engine} · seed: {draft.evaluation.seed} · hold-out: {Math.round(draft.evaluation.test_size*100)}% · {draft.evaluation.replicates} splits · {draft.evaluation.search_trials} candidates</p>}

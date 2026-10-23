@@ -632,7 +632,8 @@ class Handler(BaseHTTPRequestHandler):
                 manifest = json.loads(execution_path.read_text()) if execution_path.exists() else {}
                 calls = [c for c in manifest.get('calls', []) if c.get('loop') == loop]
                 self._send(200, {"run_tag": latest['run_tag'], "planned": planned, "executed": executed,
-                                 "total_loops": plan['total_loops'] if plan else 0, "calls": calls})
+                                 "total_loops": plan['total_loops'] if plan else 0,
+                                 "combination_plan": plan, "calls": calls})
             except (ValueError, OSError, TypeError, KeyError) as exc:
                 self._send(400, {"error": str(exc)})
             return

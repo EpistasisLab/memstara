@@ -47,15 +47,15 @@ export default function ReportPanel() {
   return <div data-testid="report-page" className="report-reading-pane h-full min-h-0 min-w-0 overflow-auto" tabIndex={0} aria-label="Conclusions contents">
     <div className="conclusions-reader">
       <header className="conclusions-toolbar">
-        <label className="analysis-select-label">Pipeline
+        <label className="analysis-select-label">Experiment
           <select aria-label="Pipeline conclusions" value={selected ?? ''} onChange={e => usePipelines.getState().select(e.target.value)}>
             <option value="" disabled>{tag ? context.name : 'Choose a pipeline'}</option>
-            {items.map(p => <option key={p.id} value={p.id}>Pipeline {p.number} · {p.name}{p.latest ? '' : ' · not started'}</option>)}
+            {items.map(p => <option key={p.id} value={p.id}>Experiment {p.number} · {p.name}{p.latest ? '' : ' · not started'}</option>)}
           </select>
         </label>
         {outputs.length > 0 && <label className="analysis-select-label">Explanation
           <select aria-label="Saved Explanation" value={`${tag}:${output.loop}:${output.result_id}`} onChange={e => setOutputKey(e.target.value)}>
-            {outputs.map(o => <option key={`${o.loop}:${o.result_id}`} value={`${tag}:${o.loop}:${o.result_id}`}>Loop {o.loop}{o.result_id == null ? '' : ` · Result ${o.result_id}`} · {o.status}</option>)}
+            {outputs.map(o => <option key={`${o.loop}:${o.result_id}`} value={`${tag}:${o.loop}:${o.result_id}`}>{labelLoop({...o,iteration:o.loop,run_tag:tag})}{o.result_id == null ? '' : ` · Result ${o.result_id}`} · {o.status}</option>)}
           </select>
         </label>}
         <button type="button" onClick={download} disabled={!output?.text || loading} className="conclusions-download">

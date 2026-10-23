@@ -72,7 +72,7 @@ function EvidencePanel({ question, data, error, stage, setStage, resultId, setRe
   return <aside className="universe-evidence" aria-label="Selected question evidence">
     <div className="universe-evidence-heading"><span className="universe-eyebrow">QUESTION {question.question_id}</span><span className="universe-badge">{question.status}</span></div>
     <h2>{question.text}</h2>
-    <details className="universe-record-details"><summary>Source and run details</summary><ScientificProvenance result={result} contract={data?.question.question_contract ?? question.question_contract} /><p className="universe-meta">{question.writer || 'Writer not recorded'} · Loop {question.origin_wave + 1}<br />{question.origin_run || 'Origin run not recorded'}</p></details>
+    <details className="universe-record-details"><summary>Source and run details</summary><ScientificProvenance result={result} contract={data?.question.question_contract ?? question.question_contract} /><p className="universe-meta">{question.writer || 'Writer not recorded'} · {labelLoop({iteration:question.origin_wave + 1,run_tag:question.origin_run})}<br />{question.origin_run || 'Origin run not recorded'}</p></details>
     <nav className="universe-stages" aria-label="Evidence stages">{['Question', 'Hypothesis', 'Data', 'ML', 'Interpretation', 'Explanation'].map(name => <button key={name} aria-pressed={stage === name} onClick={() => setStage(name)}>{name}</button>)}</nav>
     {error && <p role="alert">{error} {data ? 'Showing the last available evidence.' : ''}</p>}
     {!data && !error && <p role="status">Reading recorded evidence…</p>}

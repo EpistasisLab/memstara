@@ -1,3 +1,4 @@
+import {useLoopLabel} from '../lib/useLoopLabel';
 import PipelineSettings from './PipelineSettings';
 import PipelineMLSettings from './PipelineMLSettings';
 import { useState } from 'react';
@@ -11,6 +12,7 @@ import PipelineSetupGuide from './PipelineSetupGuide';
 import ManualPricingSettings from './ManualPricingSettings';
 
 export default function PipelineManagementDialog({pipeline:p,onSettings,close}:{pipeline:PipelineDefinition;onSettings:()=>void;close:()=>void}) {
+ const labelReplicate=useLoopLabel();
   const busy=usePipelines(s=>s.busy), error=usePipelines(s=>s.error);
   const [mlOpen,setMlOpen]=useState(false);
   const [dataOpen,setDataOpen]=useState(false);
@@ -41,9 +43,9 @@ export default function PipelineManagementDialog({pipeline:p,onSettings,close}:{
         </div>}
       </section>
       {!p.running&&p.latest&&p.failure?.loop&&<section>
-        <h3>Retry from Loop {p.failure.loop}</h3>
-        <p>Keep completed results and retain the failed attempt in history. A new execution starts at the failed Loop using the original order, with fresh model training and a new validation partition. Earlier completed Loops are not rerun.</p>
-        {!retry?<button disabled={busy} onClick={()=>setRetry(true)}>Retry remaining Loops…</button>:<div className="pipeline-management-buttons"><button disabled={busy} onClick={()=>setRetry(false)}>Cancel</button><button disabled={busy} onClick={async()=>{if(await usePipelines.getState().play(p.id,{mode:'retry',expectedRunTag:p.latest!.run_tag}))close();}}>Start from Loop {p.failure.loop}</button></div>}
+        <h3>Retry from {labelReplicate({iteration:p.failure.loop,run_tag:p.latest?.run_tag})}</h3>
+        <p>Keep completed results and retain the failed attempt in history. A new execution starts at the failed Replicate using the original order, with fresh model training and a new validation partition. Earlier completed Replicates are not rerun.</p>
+        {!retry?<button disabled={busy} onClick={()=>setRetry(true)}>Retry remaining Replicates…</button>:<div className="pipeline-management-buttons"><button disabled={busy} onClick={()=>setRetry(false)}>Cancel</button><button disabled={busy} onClick={async()=>{if(await usePipelines.getState().play(p.id,{mode:'retry',expectedRunTag:p.latest!.run_tag}))close();}}>Start from {labelReplicate({iteration:p.failure.loop,run_tag:p.latest?.run_tag})}</button></div>}
       </section>}
       {error&&<p role="alert">{error}</p>}
     </div>

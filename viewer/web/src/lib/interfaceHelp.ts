@@ -34,7 +34,7 @@ export const INTERFACE_HELP:Record<string,string>={
   'Cancel':'Close this editor without applying its pending changes. Previously uploaded skill files remain in the catalog.',
   'Save':'Apply the changes shown in this editor. Running executions keep their frozen configuration.',
   'Pipeline name':'A name you choose to recognize this research path in Experiments, results and reports.',
-  'Fixed clinical baseline columns':'Optional exact dataset column names, one per line. They are included in every loop’s comparison models. Do not include the target. Empty means a prevalence-only reference, not a clinical baseline.',
+  'Fixed clinical baseline columns':'Optional exact dataset column names, one per line. They are included in every replicate’s comparison models. Do not include the target. Empty means a prevalence-only reference, not a clinical baseline.',
   'ML model':'Choose the predictive model trained on selected dataset columns. This is different from the language model that runs the agents.',
   'Hold-out fraction':'Fraction of exploration rows used for testing. New iterative runs separately reserve 20% of the original dataset for future independent validation. This setting applies inside the remaining exploration data.',
   'Selected run':'The saved execution currently being inspected. Tasks, calls, logs and results refer to this execution, not necessarily every execution of the pipeline.',
@@ -47,16 +47,16 @@ export const INTERFACE_HELP:Record<string,string>={
   'Sensitivity':'Among actual positive outcomes in the evaluated data, the fraction detected at the recorded prediction cutoff.',
   'Specificity':'Among actual negative outcomes in the evaluated data, the fraction correctly classified as negative at the recorded cutoff.',
   'Precision':'Among positive predictions, the fraction that were actually positive. It may be undefined when the model makes no positive predictions.',
-  'Active pipelines':'Pipelines reported as running now, out of the configured pipelines. This is not the number of agents or completed loops.',
+  'Active pipelines':'Pipelines reported as running now, out of the configured pipelines. This is not the number of agents or completed replicates.',
   'New findings':'Completed result updates received since this page opened and not yet acknowledged here. They are not automatically recommended or validated discoveries.',
   'Recent results':'Results retained for current workspace executions. The question count refers to received records, not lifetime totals.',
   'Attention':'Pipelines with recorded failed tasks or nonzero exits. Review the affected pipeline; a historical failure may have been retried.',
   'Elapsed time':'Time since the earliest currently running pipeline started. The accompanying cost covers recorded agent calls for the latest workspace executions and refreshes every 10 seconds.',
-  'Loop to inspect':'Choose a recorded loop within this pipeline execution. All Usage tabs follow this selection. All loops includes execution-wide records; switching does not start or stop the pipeline.',
-  'Previous loop':'Inspect the preceding recorded loop in this execution. All Usage tabs switch together.',
-  'Next loop':'Inspect the next recorded loop in this execution. New loops are added automatically while the pipeline runs.',
-  'Loop':'One pipeline loop, from question generation through reporting. A blocked loop is counted separately from a completed loop. Task retries and hyperparameter candidates are separate counts; a dash means the loop number was not recorded or cannot be verified.',
-  'Stage-based progress':'Progress through analysis stages in the current loop. It is not a time estimate, a model-quality score or completion of the entire continuous exploration.',
+  'Replicate to inspect':'Choose a recorded replicate within this pipeline execution. All Usage tabs follow this selection. All replicates includes execution-wide records; switching does not start or stop the pipeline.',
+  'Previous replicate':'Inspect the preceding recorded replicate in this execution. All Usage tabs switch together.',
+  'Next replicate':'Inspect the next recorded replicate in this execution. New replicates are added automatically while the pipeline runs.',
+  'Replicate':'One complete repeat of a configured Pipeline, from question generation through reporting. A blocked replicate is counted separately from a completed replicate. Task retries and hyperparameter candidates are separate counts; a dash means the replicate number was not recorded or cannot be verified.',
+  'Stage-based progress':'Progress through analysis stages in the current replicate. It is not a time estimate, a model-quality score or completion of the entire continuous exploration.',
   'Question field':'Explore recorded questions in an interactive spatial view. Position, size, dust and orbit paths do not rank hypotheses or imply scientific relationships.',
   'Question list':'Switch to a readable list of the loaded questions. Selecting a question opens its linked evidence.',
   'Search loaded questions':'Filter currently loaded questions by question text, rationale or knowledge tags. This does not search the entire historical database.',
@@ -101,8 +101,8 @@ export function explainElement(element:HTMLElement):{label:string;text:string}|n
       [/^Inspect Machine learning/i,INTERFACE_HELP['ML model']+' You can also review its skill and evaluation settings.'],
       [/^Inspect Interpreter/i,INTERFACE_HELP.interpreter],
       [/^Inspect (Explanation|Report)/i,INTERFACE_HELP.report],
-      [/^P\d+.*Loop/i,'Select this named pipeline to review the execution, loop and outputs associated with it. This does not start work.'],
-      [/Not running.*Loop|Running.*Loop/i,'Filter the received outputs to this pipeline. The status and loop refer to its latest execution.'],
+      [/^P\d+.*Replicate/i,'Select this named pipeline to review the execution, replicate and outputs associated with it. This does not start work.'],
+      [/Not running.*Replicate|Running.*Replicate/i,'Filter the received outputs to this pipeline. The status and replicate refer to its latest execution.'],
       [/^Add Pipeline/i,INTERFACE_HELP['Add Pipeline']],
       [/^Center .+ in Experiments/i,'Select this pipeline and center its agents in Experiments. This changes which execution you are inspecting; it does not start a run.'],
       [/^(Start|Play) .*(pipeline|explor)/i,INTERFACE_HELP.Play],
@@ -122,11 +122,11 @@ export function explainElement(element:HTMLElement):{label:string;text:string}|n
       [/^Download|^Export/i,'Save the displayed report or evidence in the format shown on this control. This does not rerun the analysis.'],
       [/^Show |^View |^Read |^Review /i,'Open the named details for the current selection. This is a view change; it does not start an analysis.'],
       [/^Search /i,'Filter the records shown in this view using the text you enter. Check this view’s scope before treating the results as complete history.'],
-      [/^Loop\b/i,INTERFACE_HELP.Loop],
+      [/^Replicate\b/i,INTERFACE_HELP.Replicate],
     ];
     text ||= patterns.find(([pattern])=>pattern.test(label))?.[1];
   }
-  if(!text&&element.closest('.pipeline-selector'))text='Inspect or configure this pipeline. Its name identifies the research path; its loop and stage describe the latest execution.';
+  if(!text&&element.closest('.pipeline-selector'))text='Inspect or configure this pipeline. Its name identifies the research path; its replicate and stage describe the latest execution.';
   if(!text&&element instanceof HTMLSelectElement)text='Choose an option for this labeled setting. Review the current pipeline or execution scope before applying changes.';
   if(!text&&element instanceof HTMLInputElement&&element.type==='file')text=INTERFACE_HELP['Use your own skill (.md)'];
   if(!text&&element.tagName==='SUMMARY')text='Expand or collapse the complete details under this heading. No analysis is started by opening it.';

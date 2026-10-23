@@ -13,5 +13,8 @@ export function pipelinePercent(pipeline: PipelineDefinition): number | null {
 export function pipelineLoopLabel(pipeline: PipelineDefinition): string {
   const execution = pipeline.running ?? pipeline.latest;
   const config = execution ? execution.configuration : pipeline.configuration;
-  return executionLoopLabel(pipeline.progress.iteration, config?.waves, !!execution, !!config?.continuous);
+  const draft=pipeline.configuration;
+  const count=Object.values(draft.combination_skills??{}).reduce((n,ids)=>n*(ids?.length??0),1);
+  const plan=config?.combination_plan??(!execution&&draft.combination_skills?{combinations:count,total_loops:draft.combination_max_loops??count*(draft.combination_repetitions??1)}:undefined);
+  return executionLoopLabel(pipeline.progress.iteration,config?.waves,!!execution,!!config?.continuous,plan);
 }

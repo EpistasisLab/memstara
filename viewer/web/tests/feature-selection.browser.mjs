@@ -11,7 +11,7 @@ try {
   const page=await browser.newPage({viewport:{width,height:1000}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   const features=['age','bmi','marker','history'];
-  const result={result_id:1,task_id:1,trial:0,iteration:1,run_tag:'fixture',pipeline_name:'Fixture',
+  const result={result_id:1,task_id:1,trial:0,iteration:1,run_tag:'fixture',pipeline_name:'Fixture',pipeline_number:2,pipeline_count:4,replicate_number:1,replicate_count:1,
    hypothesis:'Synthetic random control',columns_used:[...features,'target'],columns_missing:[],y_column:'target',
    auc:.6,importance:{age:.1},created_at:'2026-10-06',evaluation:{feature_selection:{mode:'random',minimum:4,
     maximum:20,actual_count:4,features,seed:12345,pool_size:30,pool_sha256:'fixture',loop:1,combination:2},
@@ -54,7 +54,7 @@ try {
   await evidence.getByText(/Hypothesis selection: random/).waitFor();
   const text=await evidence.innerText();
   for(const value of ['4 predictors used','4 original predictors','allowed 4–20','eligible pool 30',
-                      'random seed 12345','Loop 1','combination 2'])assert(text.includes(value),value);
+                      'random seed 12345','Pipeline 2','Replicate 1'])assert(text.includes(value),value);
   const allocation=page.getByRole('region',{name:'Data allocation'});
   await allocation.waitFor();
   const allocationText=await allocation.innerText();

@@ -21,7 +21,7 @@ export default function EvaluationSettings({value, onChange, disabled = false, p
   </fieldset>;
   return <fieldset disabled={disabled} className="compact-evaluation min-w-0 space-y-3 rounded-lg border border-paper-line p-4" aria-label="ML evaluation settings">
     <legend className="px-1 text-sm font-semibold">Model and evaluation</legend>
-    <p className="text-sm text-ink-muted">These settings are saved with the pipeline and used for its ML evaluations. Split evaluations and model candidates are additional fits within a Loop, not additional pipeline Loops.</p>
+    <p className="text-sm text-ink-muted">These settings are saved with the pipeline and used for its ML evaluations. Split evaluations and model candidates are additional fits within a Replicate, not additional pipeline Replicates.</p>
     <div className="grid gap-4" style={{gridTemplateColumns:'repeat(auto-fit, minmax(min(100%, 240px), 1fr))'}}>
       <label className="min-w-0 text-sm font-medium">ML model
         <select aria-label="ML model" className={field} value={value.engine} onChange={e=>onChange({...value,engine:e.target.value})}>

@@ -1,3 +1,4 @@
+import {useSnapshot} from '../store/viewer';
 import {useState} from 'react';
 import {resultsStatus} from '../lib/resultsStatus';
 
@@ -6,9 +7,10 @@ type Props={pipeline:Parameters<typeof resultsStatus>[0];stale?:boolean;
 
 /** Scope an execution outcome to its saved record, never to the whole application. */
 export default function ExecutionStatusNotice({pipeline,stale=false,execution,label,runTag,loading=false}:Props){
+ const snapshot=useSnapshot();
  const [expanded,setExpanded]=useState(false);
  if(loading)return <div role="status" className="m-4 rounded-lg border border-paper-line p-3 text-sm">Loading the selected execution. Results still shown belong to {label}.</div>;
- const notice=resultsStatus(pipeline,stale,execution);
+ const notice=resultsStatus(pipeline,stale,execution,snapshot?.run_configuration?.combination_plan);
  if(!notice)return null;
  const terminal=['failed','blocked','incomplete','interrupted'].includes(pipeline?.status??'');
  const code=pipeline?.code;

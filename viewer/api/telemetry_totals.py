@@ -83,7 +83,7 @@ def completed_summary(loops):
             'seconds': distribution([row['seconds'] for row in eligible]),
             'usd': distribution([row['cost']['usd'] for row in eligible]),
             'tokens': distribution([row['tokens'] for row in eligible]),
-            'basis': 'Completed Loops with recorded boundaries, explicit Loop attribution and complete usage. '
+            'basis': 'Completed replicates with recorded boundaries, explicit replicate attribution and complete usage. '
                      'Wall-clock time includes waits and pauses. Failed, blocked, interrupted, running and '
                      'approximate or partial records are excluded.'}
 
@@ -103,7 +103,7 @@ def inventory():
         directory = archive.directory_for(tag)
         outcomes = archive.read_json(directory / 'iteration_outcomes.json') or {}
         executions.append({'tag': tag, 'pipeline_id': config['pipeline_id'],
-                           'model': config.get('model'), 'provider': config.get('provider'),
+                           'model': config.get('model'), 'provider': config.get('provider'), 'configuration': config,
                            'calls': call_loops(item['calls']), 'outcomes': outcomes})
     return configured, executions
 
@@ -133,7 +133,7 @@ async def totals():
                 for e in executions:
                     numbers = {c['loop'] for c in e['calls'] if c['loop'] is not None}
                     numbers.update(int(n) for n in e['outcomes'] if str(n).isdigit() and int(n) > 0)
-                    loops = [{'number': n, **loop_metrics(
+                    loops = [{'number': n, **archive.identity(e.get('configuration', {}), n), **loop_metrics(
                         [c for c in e['calls'] if c['loop'] == n], rows,
                         e['outcomes'].get(str(n), {}))} for n in sorted(numbers)]
                     details.append({'run_tag': e['tag'], 'pipeline_id': e['pipeline_id'],

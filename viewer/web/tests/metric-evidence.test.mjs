@@ -23,8 +23,8 @@ test('actual splits override requested replicate counts', () => {
   assert.match(splitEvidence({evaluation:{evaluation:{replicates:[{seed:42}]}}}).summary, /cannot be verified/);
 });
 test('legacy report references retain analysis identity and respect multiple analyses per loop', () => {
-  assert.equal(reportLoopText('Trial zero, trial 3; iteration 4', 2), 'Loop 1 (analysis ID 0), Loop 2 (analysis ID 3); Loop 4');
-  assert.equal(reportLoopText('Trial 3'), 'Analysis ID 3 (Loop not recorded)');
+  assert.equal(reportLoopText('Trial zero, trial 3; iteration 4', 2), 'Recorded analysis 0 (schedule position 1), Recorded analysis 3 (schedule position 2); Recorded schedule position 4');
+  assert.equal(reportLoopText('Trial 3'), 'Analysis ID 3 (replicate identity not recorded)');
   for (const text of ['Clinical trial 3', 'hyperparameter trial 3', 'retry attempt 3', '`trial 3`', '[trial 3](https://example.org/trial3)', '```md\ntrial 3\n```']) {
     assert.equal(reportLoopText(text, 1), text);
   }

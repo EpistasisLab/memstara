@@ -41,7 +41,6 @@ try{
   await page.route('**/control/**',r=>r.fulfill({json:{inputs:[],models:[],skills:[]}}));
   await page.goto(root+`/tests/responsive-scroll.fixture.html?${mode}=1`);
   if(mode==='single'){
-   await page.getByRole('dialog').locator('button[hidden]').filter({hasText:'Selected Pipelines'}).evaluate(e=>e.click());
    await page.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();
    await page.getByRole('button',{name:'Next',exact:true}).click();
    await page.getByText('Read skill instructions',{exact:true}).click();

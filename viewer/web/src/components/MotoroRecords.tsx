@@ -1,3 +1,4 @@
+import {useLoopLabel} from '../lib/useLoopLabel';
 import { displayText, displayJson } from '../lib/displayText';
 import {useEffect,useState} from 'react';
 import {usageDuration} from '../lib/loopUsage';
@@ -46,13 +47,14 @@ function Invocation({tag,id}:{tag:string;id:string}){
  {detail&&<Fields record={detail}/>}</div>;
 }
 export default function MotoroRecords({tag,loop}:{tag:string;loop:number|null}){
+ const labelReplicate=useLoopLabel();
  const [page,setPage]=useState<Page|null>(null),[error,setError]=useState(''),[selected,setSelected]=useState(''),[refresh,setRefresh]=useState(0);
  useEffect(()=>{const c=new AbortController();setPage(null);setSelected('');setError('');
   read<Page>(`/api/motoro/execution?run_tag=${encodeURIComponent(tag)}${loop===null?'':`&loop=${loop}`}`,c.signal).then(d=>{if(!c.signal.aborted)setPage(d);}).catch(e=>{if(!c.signal.aborted)setError(String(e));});return()=>c.abort();
  },[tag,loop,refresh]);
  return <section className="tm-motoro-records m-3 space-y-3 rounded-lg border border-paper-line p-3" aria-label="Motoro runtime records"><h3 className="font-semibold">Motoro runtime records</h3><p className="text-xs text-ink-soft">{page?.note??'Read model calls, tool execution, usage and saved state directly from Motoro.'}</p>
  <button onClick={()=>setRefresh(n=>n+1)}>Refresh agent records</button>{error&&<p role="alert">{error}</p>}
- <label className="block">Agent invocation<select aria-label="Motoro agent invocation" className="block w-full min-w-0 rounded border border-paper-line p-2" value={selected} onChange={e=>setSelected(e.target.value)}><option value="">Select a recorded invocation</option>{page?.calls.filter(c=>c.run_id).map((c,i)=><option key={`${c.run_id}-${i}`} value={c.run_id!}>{c.stage} · Loop {c.loop??'unassigned'} · {String(c.record?.status??'Record missing')} · {c.run_id}</option>)}</select></label>
+ <label className="block">Agent invocation<select aria-label="Motoro agent invocation" className="block w-full min-w-0 rounded border border-paper-line p-2" value={selected} onChange={e=>setSelected(e.target.value)}><option value="">Select a recorded invocation</option>{page?.calls.filter(c=>c.run_id).map((c,i)=><option key={`${c.run_id}-${i}`} value={c.run_id!}>{c.stage} · {c.loop==null?'Execution-wide':labelReplicate({iteration:c.loop,run_tag:tag})} · {String(c.record?.status??'Record missing')} · {c.run_id}</option>)}</select></label>
  {page&&!page.calls.length&&<p>No invocations in this scope.</p>}
  {selected&&<Invocation key={`${tag}:${loop}:${selected}`} tag={tag} id={selected}/>}</section>;
 }

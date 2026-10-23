@@ -10,7 +10,7 @@ try{
   await panel.getByText(/Saved execution outcome.*2026-10-01/).waitFor();
   assert(!(await panel.innerText()).includes('The model connection failed or timed out.'));
   await panel.getByRole('button',{name:'Show execution details'}).click();
-  await panel.getByText(/This execution failed at Hypothesis generation \(Loop 3\)/).waitFor();
+  await panel.getByText(/This execution failed at Hypothesis generation \(Pipeline 1 · Replicate 3\)/).waitFor();
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
   await page.getByRole('button',{name:'Select another execution'}).click();
   await page.getByText(/Loading the selected execution/).waitFor();

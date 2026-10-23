@@ -33,8 +33,8 @@ try {
   const tab=page.getByRole('tab',{name:'Results',exact:true});if(await tab.count())await tab.click();
   await page.getByText('Report records and supporting evidence',{exact:true}).click();
   const panel=page.getByTestId('report-page').getByRole('region',{name:'Explanation provenance'});await panel.waitFor();
-  await panel.getByText('Addiction Expert · Loop 1 · completed',{exact:true}).click();
-  await panel.getByText('HIV Expert · Loop 2 · completed',{exact:true}).click();
+  await panel.getByText('Addiction Expert · Pipeline 1 · Replicate 1 · completed',{exact:true}).click();
+  await panel.getByText('HIV Expert · Pipeline 1 · Replicate 2 · completed',{exact:true}).click();
   const text=await panel.innerText();
   for(const value of ['addiction-fixture','hiv-fixture','SHAP','LIME','selected model','12','13','[addiction-fixture:a]','[hiv-fixture:h]'])assert(text.includes(value),value);
   assert(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+2));

@@ -235,7 +235,7 @@ def test_loop_limit_is_persisted_and_validated():
     config = PipelineWorkspace.configuration({'waves': 7, 'continuous': False})
     assert config['waves'] == 7 and config['continuous'] is False
     for invalid in (0, 11, True, 2.5):
-        with pytest.raises(ValueError, match='Maximum loops'):
+        with pytest.raises(ValueError, match='Total replicates'):
             PipelineWorkspace.configuration({'waves': invalid})
     assert PipelineWorkspace.configuration({})['continuous'] is False
     assert PipelineWorkspace.configuration({})['waves'] == 10
@@ -302,3 +302,25 @@ def test_failure_details_follow_execution_and_do_not_mark_recovered_success_fail
     record['exit_code'] = 1
     workspace.manager(item['id']).live = {'run_tag': 'new', 'run_dir': str(tmp_path / 'new')}
     assert workspace.list()[0]['failure'] is None
+
+
+@pytest.mark.parametrize("running", [True, False])
+def test_schedule_identity_uses_frozen_plan_for_running_and_archived_execution(tmp_path, running):
+    plan = {"combinations": 48, "total_loops": 480, "start_index": 17}
+    record = {"run_tag": "saved", "run_dir": str(tmp_path),
+              "configuration": {"waves": 1, "combination_plan": None}}
+    class ScheduleManager(Manager):
+        def running(self):
+            return record if running else None
+        def finished(self):
+            return [] if running else [record]
+    (tmp_path / "config.json").write_text(json.dumps({"waves": 480, "combination_plan": plan}))
+    (tmp_path / "progress.json").write_text(json.dumps({"iteration": 49}))
+    workspace = PipelineWorkspace(tmp_path / "workspace.json", ScheduleManager)
+    workspace.mutate({"action": "add", "configuration": {"waves": 3}})
+    row = workspace.list()[0]
+    assert row["latest"]["configuration"]["combination_plan"] == plan
+    if running:
+        assert row["running"]["configuration"]["combination_plan"] == plan
+    assert row["configuration"]["waves"] == 3
+    assert row["progress"]["iteration"] == 49

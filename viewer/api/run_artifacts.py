@@ -5,8 +5,10 @@ import time
 import threading
 try:
     from .explanation_outputs import saved_outputs
+    from .schedule_identity import identity
 except ImportError:
     from explanation_outputs import saved_outputs
+    from schedule_identity import identity
 from pathlib import Path
 
 ROOT = Path(os.environ.get("MEMSTARA_RUNS_DIR", "/runs"))
@@ -123,11 +125,11 @@ def lookup(tag):
         for location in locations:
             if location.resolve().is_relative_to(ROOT.resolve()):
                 for output in saved_outputs(location, tag):
-                    explanations[(output['loop'], output['result_id'])] = output
+                    explanations[(output['loop'], output['result_id'])] = {**output, **identity(config, output['loop'])}
         result = {
             "config": {k: config.get(k) for k in (
                 "hypotheses", "interpreters", "interpretation_mode", "books", "evaluation", "comparison_policy",
-                "pipeline_id", "pipeline_name", "research_profile", "data_mode", "knowledge_mode",
+                "pipeline_id", "pipeline_name", "combination_plan", "research_profile", "data_mode", "knowledge_mode",
                 "empirical_evaluation", "research_objective",
                 "trials", "waves", "continuous", "skill", "question", "y_column", "provider", "model",
             )},
@@ -148,7 +150,8 @@ def result_identity(config, tag, trial):
     iteration = (trial // trials + 1 if config.get("pipeline_id")
                  and isinstance(trials, int) and trials > 0 and trial >= 0 else None)
     return {"run_tag": tag, "pipeline_id": config.get("pipeline_id"),
-            "pipeline_name": config.get("pipeline_name"), "iteration": iteration}
+            "pipeline_name": config.get("pipeline_name"), "iteration": iteration,
+            **identity(config, iteration)}
 
 
 def directory_for(tag):

@@ -72,7 +72,7 @@ export default function ResultsPanel({ telemetry = false, embedded = false }: { 
   },[tags]);
   const results=scope==="all" ? (tags ? (all?.tags===tags?all.results:null) : []) : labeledSelected;
   const resultName=(r:Pick<Result,"trial"|"pipeline_name"|"iteration"|"run_tag">)=>
-    `${r.pipeline_name || r.run_tag || 'Analysis'} · ${loopLabel(r, scope === 'selected' ? savedConfig?.trials : undefined)}`;
+    `${r.pipeline_name || r.run_tag || 'Analysis'} · ${loopLabel(r, scope === 'selected' ? savedConfig?.trials : undefined, scope === 'selected' ? savedConfig?.combination_plan : undefined)}`;
   const globalUnavailable = useViewer(s => !s.newRunMode && (s.snapshot?.health.memstara.up === false || !!s.error));
   const dataUnavailable = telemetry ? snapshot?.health.memstara.up === false : globalUnavailable;
   const pipeline = telemetry ? null : snapshot?.pipeline;
@@ -99,8 +99,8 @@ export default function ResultsPanel({ telemetry = false, embedded = false }: { 
       {scope==="selected" && <ExecutionStatusNotice key={savedTag} pipeline={pipeline} stale={statusStale} execution={floorExecutionState(executionOwner?.running)} label={executionContext.label} runTag={savedTag} loading={executionContext.loading}/>}
       {scope==="selected" && dataUnavailable && <p role="status" className="m-4 text-sm text-amber-800">Connection interrupted. Showing the last available results; this is not an empty or completed run.</p>}
       {!telemetry && <div className="m-4 flex flex-wrap gap-2 text-sm"><button className="rounded border border-paper-line px-3 py-2" aria-pressed={scope==="all"} onClick={()=>setScope("all")}>Latest executions across pipelines</button><button className="rounded border border-paper-line px-3 py-2" aria-pressed={scope==="selected"} onClick={()=>setScope("selected")}>This execution</button></div>}
-      {!telemetry && scope==="selected" && <p className="mx-4 text-sm text-ink-soft">Viewing: <strong>{executionContext.label}</strong>. Includes its recorded loops.</p>}
-      {tags&&<p className="mx-4 mt-3 text-xs text-ink-soft">All recorded loops from each pipeline's latest execution. Select an older run to inspect its archived results.</p>}
+      {!telemetry && scope==="selected" && <p className="mx-4 text-sm text-ink-soft">Viewing: <strong>{executionContext.label}</strong>. Includes its recorded replicates.</p>}
+      {tags&&<p className="mx-4 mt-3 text-xs text-ink-soft">All recorded replicates from each pipeline's latest execution. Select an older run to inspect its archived results.</p>}
       {scope==="all"&&fetchError&&<p role="alert" className="m-4 text-sm text-amber-800">{fetchError}. Last available results are retained.</p>}
       {failed.length > 0 && <div role="status" className="m-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
         <p className="font-bold">{failed.length} analysis task(s) could not be completed</p>
@@ -201,7 +201,7 @@ export default function ResultsPanel({ telemetry = false, embedded = false }: { 
                       {' '}· allowed {r.evaluation.feature_selection.minimum}–{r.evaluation.feature_selection.maximum}
                       {' '}· eligible pool {r.evaluation.feature_selection.pool_size}
                       {r.evaluation.feature_selection.seed != null && <> · random seed {r.evaluation.feature_selection.seed}</>}
-                      {' '}· Loop {r.evaluation.feature_selection.loop} · combination {r.evaluation.feature_selection.combination}.
+                      {' '}· {loopLabel(r, scope === 'selected' ? savedConfig?.trials : undefined, scope === 'selected' ? savedConfig?.combination_plan : undefined)}.
                       The list below contains the predictors recorded for this evaluated result.
                     </p>}
                     {predictors.map(column => <span key={column} className="rounded border border-[#c9d9e8] bg-white px-1.5 py-0.5 font-mono text-[12px] text-ink-soft">{column}</span>)}

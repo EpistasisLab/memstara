@@ -1,3 +1,4 @@
+import {useLoopLabel} from '../lib/useLoopLabel';
 import { displayText } from '../lib/displayText';
 import CompactActivityRow from '../components/CompactActivityRow';
 import { lazy, Suspense, useEffect, useState } from 'react';
@@ -16,6 +17,7 @@ import type { FeedEvent } from '../types';
 const ReportBody=lazy(()=>import('../components/ReportBody'));
 
 function TextRow({message}:{message:AgentMessage}){
+ const labelReplicate=useLoopLabel();
   const agent=agentDisplayName(message.label||message.name||message.stage);
   return <li className="telemetry-event" data-activity-kind="text"><details>
     <summary className="telemetry-event-summary">
@@ -26,7 +28,7 @@ function TextRow({message}:{message:AgentMessage}){
       </span>
       <span className="telemetry-event-meta"><time dateTime={message.at??undefined}>{message.at?new Date(message.at).toLocaleTimeString():'Time unavailable'}</time><span>Read output <ChevronDown size={14}/></span></span>
     </summary>
-    <div className="telemetry-event-details min-w-0"><p className="mb-3 text-xs text-ink-soft">Recorded agent text · {message.stage} · {message.loop===null?'Execution-wide':`Loop ${message.loop}`}. Agent statements do not by themselves confirm successful analysis.</p>
+    <div className="telemetry-event-details min-w-0"><p className="mb-3 text-xs text-ink-soft">Recorded agent text · {message.stage} · {message.loop===null?'Execution-wide':labelReplicate({iteration:message.loop})}. Agent statements do not by themselves confirm successful analysis.</p>
       <Suspense fallback={<p>Loading output…</p>}><ReportBody origin="mixed" text={message.text}/></Suspense>
       {message.truncated&&<p>Display limited to 50,000 characters.</p>}
     </div>
@@ -54,7 +56,7 @@ function Row({ event }: { event: FeedEvent }) {
         </summary>
       </DetailPreview>
       <div className="telemetry-event-details">
-        <p>This is a recorded tool call. It does not by itself confirm that an analysis or loop completed.</p>
+        <p>This is a recorded tool call. It does not by itself confirm that an analysis or replicate completed.</p>
         <dl><dt>Action</dt><dd>{action}</dd><dt>Agent</dt><dd>{displayText(event.label ?? event.name ?? 'Unknown agent')}</dd>
           <dt>Agent identifier</dt><dd><code>{displayText(event.name || 'Not recorded')}</code></dd>
           <dt>Tool</dt><dd><code>{event.tool}</code></dd><dt>Service</dt><dd>{displayText(event.server)}</dd>
@@ -66,6 +68,7 @@ function Row({ event }: { event: FeedEvent }) {
 }
 
 export default function FeedPanel({stage, compact = false, embedded = false}: {stage?: string; compact?: boolean; embedded?: boolean} = {}) {
+  const labelReplicate=useLoopLabel();
   const feed = useFeed();
   const snapshot=useSnapshot();
   const loop=(snapshot as (typeof snapshot & {telemetry?:{loop:number|null}}))?.telemetry?.loop??null;
@@ -94,8 +97,8 @@ export default function FeedPanel({stage, compact = false, embedded = false}: {s
   </div>;
   return <Panel icon={Radio} title="Activity" bodyClassName="p-0" embedded={embedded}>
     <div className="telemetry-activity-controls">
-      {!compact&&stage==='question'&&<p className="text-sm">Question-generation tool calls share the Hypothesis agent identity. Related Hypothesis tool calls in this loop are included; agent text is restricted to question generation.</p>}
-      {!compact&&<>{!embedded&&<p className="text-sm"><strong>{context.name}</strong> · {context.startedLabel} · {loop===null?'All loops':`Loop ${loop}`}</p>}
+      {!compact&&stage==='question'&&<p className="text-sm">Question-generation tool calls share the Hypothesis agent identity. Related Hypothesis tool calls in this replicate are included; agent text is restricted to question generation.</p>}
+      {!compact&&<>{!embedded&&<p className="text-sm"><strong>{context.name}</strong> · {context.startedLabel} · {loop===null?'All replicates':labelReplicate({iteration:loop})}</p>}
       <p className="text-sm text-ink-soft">Tool actions and actual agent text, newest first. Expand an entry to read its full output. Text appears when recorded, rather than token by token.</p>
       <div className="telemetry-filter-row">
         <label><span><Search size={15}/>Search activity</span><input aria-label="Search activity" placeholder="Agent text, action, agent or resource" value={query} onChange={e=>setQuery(e.target.value)}/></label>

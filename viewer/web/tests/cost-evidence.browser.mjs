@@ -22,7 +22,7 @@ data={...data,status:'unavailable',usd:0,recorded_calls:0,unpriced_calls:0,group
 await page.reload();await page.getByText('Estimated cost · Motoro LLM requests',{exact:true}).click();await page.getByText('Execution LLM request subtotal: Not available').waitFor();
 await page.goto((process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:5179')+'/tests/cost-evidence.fixture.html?loop=2');
 await page.getByText('Estimated cost · Motoro LLM requests',{exact:true}).click();
-await page.getByText('Loop 2 LLM request subtotal: Not available',{exact:true}).waitFor();
+await page.getByText('Pipeline 1 · Replicate 2 LLM request subtotal: Not available',{exact:true}).waitFor();
 assert(requestedLoops.includes('2'));
 assert.deepEqual(errors,[]);assert.deepEqual(billingRequests,[]);
 console.log('Cost UI: desktop/mobile, partial subtotal, unknown billing, expandable receipts, download and legacy missing ledger passed.');

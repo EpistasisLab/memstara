@@ -16,18 +16,18 @@ export default function AdditionalAnalysisDialog({pipeline:p,close,fresh=false}:
     if(await usePipelines.getState().play(p.id,{mode:fresh?'fresh':'additional',loops:fresh?undefined:count,expectedRunTag}))close();};
   return <FloorDetailDialog title={fresh?'Start a new execution':'Additional analysis'} close={()=>{if(!busy)close();}} className="pipeline-management-dialog">
     <div className="pipeline-management">
-      <div className="pipeline-management-identity"><span>Pipeline {p.number}</span><h3>{p.name}</h3></div>
-      {fresh?<section><h3>A new execution with your saved settings</h3><p>This starts up to {p.configuration.waves} Loops, beginning at Loop 1. Existing results remain saved. This does not clear the pipeline’s research history. {p.configuration.combination_random_start&&'Random Start draws a new starting combination for this execution; resuming an existing execution does not.'}</p></section>:<section>
-        <h3>How many more Loops?</h3><p>Run more analysis with this pipeline’s current settings. Each Loop generates and evaluates a research hypothesis.</p>
-        <label className="block mt-4 text-sm font-semibold" htmlFor="additional-loop-count">Additional Loops</label>
+      <div className="pipeline-management-identity"><span>Experiment {p.number}</span><h3>{p.name}</h3></div>
+      {fresh?<section><h3>A new execution with your saved settings</h3><p>This starts up to {p.configuration.waves} Replicates, beginning at Replicate 1. Existing results remain saved. This does not clear the pipeline’s research history. {p.configuration.combination_random_start&&'Random Start draws a new starting combination for this execution; resuming an existing execution does not.'}</p></section>:<section>
+        <h3>How many more Replicates?</h3><p>Run more analysis with this pipeline’s current settings. Each Replicate generates and evaluates a research hypothesis. This is a total across the scheduled Pipelines, not an extra count for each Pipeline.</p>
+        <label className="block mt-4 text-sm font-semibold" htmlFor="additional-loop-count">Additional total replicates</label>
         <input id="additional-loop-count" type="number" min={1} max={10} step={1} value={loops} onChange={e=>setLoops(e.target.value)} disabled={busy} aria-describedby="additional-loop-help" className="mt-2 w-full rounded-lg border border-paper-line bg-paper p-3 text-lg"/>
-        <p id="additional-loop-help">Choose 1–10. Only this many extra Loops may run; the pipeline stops at that limit.</p>
-        <div className="pipeline-management-confirm" role="status"><strong>{prior===undefined?'Previous total unavailable':`${prior} previous Loops`} + {valid?count:'—'} additional{prior!==undefined&&valid?` → up to ${prior+count} total`:''}</strong><p>Previous Loops include blocked attempts. Additional analysis is saved as a separate execution with its own Loop numbers; existing results stay available.</p></div>
+        <p id="additional-loop-help">Choose 1–10. Only this many extra Replicates may run; the pipeline stops at that limit.</p>
+        <div className="pipeline-management-confirm" role="status"><strong>{prior===undefined?'Previous total unavailable':`${prior} previous Replicates`} + {valid?count:'—'} additional{prior!==undefined&&valid?` → up to ${prior+count} total`:''}</strong><p>Previous Replicates include blocked attempts. Additional analysis is saved as a separate execution with its own Replicate numbers; existing results stay available.</p></div>
       </section>}
       <p className="text-sm text-ink-soft">New analysis uses model tokens and may incur additional cost. You can pause it from the pipeline list.</p>
       {changed&&<p role="alert">This pipeline’s execution changed. Close this window and review its current state.</p>}
       {error&&<p role="alert">{error}</p>}
-      <div className="pipeline-management-buttons"><button disabled={busy} onClick={close}>Cancel</button><button disabled={busy||changed||(!fresh&&!valid)} onClick={()=>void start()}>{fresh?<Play size={16}/>:<Plus size={16}/>} {busy?'Starting…':fresh?'Start new execution':`Run ${valid?count:'…'} additional Loops`}</button></div>
+      <div className="pipeline-management-buttons"><button disabled={busy} onClick={close}>Cancel</button><button disabled={busy||changed||(!fresh&&!valid)} onClick={()=>void start()}>{fresh?<Play size={16}/>:<Plus size={16}/>} {busy?'Starting…':fresh?'Start new execution':`Run ${valid?count:'…'} additional Replicates`}</button></div>
     </div>
   </FloorDetailDialog>;
 }

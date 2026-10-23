@@ -34,7 +34,7 @@ test('persisted failure explains needs-attention and clears for a fresh executio
 
 test('completed findings and skipped Loops remain distinct',()=>{
  const p={progress:{exploration:{outcome:'completed',completed:3,skipped:1,blocked:0}},latest:{exit_code:0}};
- assert.match(clinicalPipelineStatus(p),/3 Loops completed; 1 skipped/);
+ assert.match(clinicalPipelineStatus(p),/3 Replicates completed; 1 skipped/);
  assert.doesNotMatch(clinicalPipelineStatus(p),/Execution completed/);
  assert.match(clinicalPipelineStatus({...p,failure:{message:'Actual transport failure'}}),/Actual transport failure/);
 });

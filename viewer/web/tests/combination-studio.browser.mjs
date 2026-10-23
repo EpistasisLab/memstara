@@ -67,7 +67,7 @@ try{
   console.log(JSON.stringify({theme,width,architecture:'passed',removedLoopExplorer:'passed'}));
  }
  pipeline.latest={run_tag:'fixture-run',exit_code:0};pipeline.progress={iteration:2};await p.reload();
- await p.getByText('Loop 2 / 48 · Latest execution',{exact:true}).waitFor();
+ await p.getByText('Pipeline 2 · Replicate 1 · Latest execution',{exact:true}).waitFor();
  await studio.getByRole('button',{name:'Inspect Substance use mechanisms instructions',exact:true}).click();
  await p.getByRole('dialog',{name:'Substance use mechanisms',exact:true}).getByText('The recorded version is not available',{exact:false}).waitFor();await p.keyboard.press('Escape');
  pipeline.progress={iteration:3};
@@ -76,21 +76,21 @@ try{
  assert.equal(await studio.locator('.cf-room').count(),0,'Previous loop records must not leak');
  console.log('Current-loop version mismatch and unavailable records passed');
  liveFixture=true;pipeline.running={run_tag:'fixture-run',execution_state:'running'};pipeline.progress={iteration:1,stage:'ml'};
- await p.reload();await p.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await p.getByText('Loop 1 / 48 · Live',{exact:true}).waitFor();
+ await p.reload();await p.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await p.getByText('Pipeline 1 · Replicate 1 · Live',{exact:true}).waitFor();
  await p.waitForFunction(()=>document.querySelector('.cf-active-room h4')?.textContent==='Machine learning');
  for(const name of ['Preview combinations','Follow execution'])assert.equal(await p.getByRole('button',{name,exact:true}).count(),0);
  assert.equal(await studio.locator('.cf-active-room h4').innerText(),'Machine learning');
  assert.equal(await studio.locator('.cf-desk.is-selected').count(),5);
  assert.equal(await studio.locator('.cf-desk.cf-unused').count(),5);
  pipeline.progress.iteration=2;pipeline.progress.stage='interpreter';
- await p.getByText('Loop 2 / 48 · Live',{exact:true}).waitFor();
+ await p.getByText('Pipeline 2 · Replicate 1 · Live',{exact:true}).waitFor();
  await p.waitForFunction(()=>document.querySelector('.cf-active-room h4')?.textContent==='Interpretation');
  assert.equal(await studio.locator('.cf-desk.is-selected').filter({hasText:'Social determinants'}).count(),1);
  pipeline.running.execution_state='paused';
- await p.getByText('Loop 2 / 48 · Paused',{exact:true}).waitFor();
+ await p.getByText('Pipeline 2 · Replicate 1 · Paused',{exact:true}).waitFor();
  assert.equal(await studio.locator('.cf-active-room').count(),0);
  pipeline.running.execution_state='running';pipeline.progress.iteration=3;pipeline.progress.stage='report';
- await p.getByText('Loop 3 / 48 · Live',{exact:true}).waitFor();
+ await p.getByText('Pipeline 3 · Replicate 1 · Live',{exact:true}).waitFor();
  await studio.getByRole('status',{name:'Explanation stage is running',exact:true}).waitFor();
  const activeRoom=studio.locator('.cf-active-room');
  assert.equal(await activeRoom.locator('h4').innerText(),'Explanation');

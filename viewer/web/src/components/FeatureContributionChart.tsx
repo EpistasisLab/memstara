@@ -30,11 +30,11 @@ export default function FeatureContributionChart({result:r}:{result:Result}) {
    <button aria-pressed={useShap} disabled={!hasShap} onClick={()=>setMethod('shap')} data-help="SHAP magnitude" data-help-description="Average absolute contribution to predictions. This measures influence, not whether predictions rise or fall, and is not a measure of AUC improvement.">SHAP magnitude</button>
   </div>
   <p>{useShap?'Which inputs influenced predictions most on average? Magnitude does not show whether a feature raises or lowers the prediction.':permutation?'How much did AUC fall when each input was shuffled? Larger positive values indicate more reliance on that input in this evaluation.':'These recorded values are shown without assuming the calculation method from the model name.'}</p>
-  <p className="result-caveat"><strong>{unit}.</strong> Values are ordered highest to lowest. Each method has its own scale; do not compare bar lengths across tabs, models or Loops.</p>
+  <p className="result-caveat"><strong>{unit}.</strong> Values are ordered highest to lowest. Each method has its own scale; do not compare bar lengths across tabs, models or Replicates.</p>
   <div className="contribution-scope">
    <strong>Analysis scope</strong>
    <span>{e?.scope||'Evaluation scope was not recorded for this result.'}</span>
-   {e?.evaluated_replicate!=null&&<span>Split evaluation {e.evaluated_replicate} of {e.total_replicates??'unknown'} · seed {e.evaluated_seed??'not recorded'} · {e.evaluation_rows??'unknown'} held-out rows. This is not a separate pipeline Loop.</span>}
+   {e?.evaluated_replicate!=null&&<span>Split evaluation {e.evaluated_replicate} of {e.total_replicates??'unknown'} · seed {e.evaluated_seed??'not recorded'} · {e.evaluation_rows??'unknown'} held-out rows. This is not a separate pipeline Replicate.</span>}
   </div>
   {!useShap&&contributions.note&&<p className="result-caveat">{contributions.note}</p>}
   {!hasShap&&<p className="result-caveat">SHAP values were not recorded for this analysis.</p>}

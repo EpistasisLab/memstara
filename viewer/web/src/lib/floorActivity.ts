@@ -1,7 +1,7 @@
 import type { PlaybookStage } from '../store/control';
 export type FloorSkill = {stage: PlaybookStage; id: string; title?: string; hash?: string};
 export type FloorCall = {stage: string; status: string; run_id?: string; skill?: FloorSkill};
-export type FloorTrace = {calls: FloorCall[]; planned?: {combination: number; repetition: number; selection_policy?: string; start_combination?: number; agents: FloorSkill[]} | null; total_loops?: number; run_tag?: string; failure?: {message: string} | null; preparing?: boolean};
+export type FloorTrace = {combination_plan?:import("./replicateIdentity").Schedule|null;calls: FloorCall[]; planned?: {combination: number; repetition: number; selection_policy?: string; start_combination?: number; agents: FloorSkill[]} | null; total_loops?: number; run_tag?: string; failure?: {message: string} | null; preparing?: boolean};
 export type FloorActivity = {pipelineId: string; runTag?: string; loop: number; mode: 'live' | 'history'; trace: FloorTrace | null; error: string; live: boolean; paused: boolean; stopping?: boolean; currentStage?: string};
 export function floorExecutionState(run?: {pause_requested?: boolean; execution_state?: string; waiting_for_questions?: boolean; connection_health?: {state?: string}} | null) {
  const paused = run?.execution_state === 'paused';
