@@ -37,22 +37,21 @@ try {
    assert(await forward.isDisabled(),'Empty role must not advance');
    const choices=skills.filter(s=>s.stage===role);
    await dialog.locator('.comb-skill-picker > summary').click();
-   // Hold a passive help popover over the checkbox to reproduce the CI obstruction
-   // without depending on hover timers or automatic scrolling between controls.
+   // Hypothesis selection must not open automatic hover or focus help.
    if(i===0){
-    const first=dialog.getByRole('checkbox',{name:new RegExp(choices[0].title)});
-    await first.scrollIntoViewIfNeeded();
-    await first.evaluate(input=>{
-     const r=input.getBoundingClientRect(),tip=document.createElement('div');
-     tip.id='selection-help-fixture';tip.className='interface-context-help';
-     tip.setAttribute('role','tooltip');tip.setAttribute('popover','manual');
-     tip.textContent='Selection help remains visible while choosing a skill.';
-     Object.assign(tip.style,{left:`${r.left-4}px`,top:`${r.top-4}px`,width:'220px',height:'80px'});
-     input.closest('dialog').append(tip);tip.showPopover();
-    });
+    const targets=[dialog.getByRole('heading',{name:'Choose Hypothesis skills',exact:true}),
+     dialog.locator('.comb-skill-picker > summary'),
+     dialog.getByRole('checkbox',{name:new RegExp(choices[0].title)})];
+    for(const target of targets){
+     await target.hover();await page.waitForTimeout(550);
+     assert.equal(await page.locator('[role="tooltip"]').count(),0);
+    }
+    await targets[2].focus();await page.waitForTimeout(350);
+    assert.equal(await page.locator('[role="tooltip"]').count(),0);
+    await dialog.locator('.comb-skill-card details > summary').first().click();
+    assert(await dialog.locator('.comb-skill-card pre').first().isVisible());
    }
    for(const skill of choices)await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).check();
-   await page.locator('#selection-help-fixture').evaluateAll(elements=>elements.forEach(e=>e.remove()));
    assert(!(await forward.isDisabled()),'Selected role must advance');
    for(const skill of choices)await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).uncheck();
    assert(await forward.isDisabled(),'Removing all choices must disable Next');
