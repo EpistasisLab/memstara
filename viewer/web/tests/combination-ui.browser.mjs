@@ -1,6 +1,6 @@
 import {openBuildModeFixture} from './build-mode.fixture.mjs';
 // Browser regression: all writes are mocked; no pipeline or paid LLM call is started.
-import {chromium} from '@playwright/test';
+import {chromium,expect} from '@playwright/test';
 const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
 try{
  const page=await browser.newPage({viewport:{width:1440,height:1000}});
@@ -28,8 +28,10 @@ try{
  await page.getByRole('button',{name:/Add pipeline/i}).click();
 
  const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});
+ const budget=dialog.getByRole('status',{name:'Pipeline replicate summary'});await expect(budget).toBeVisible();
  await dialog.getByLabel('Deployment target column',{exact:true}).fill('fixture_target');await dialog.getByRole('button',{name:'Choose skills'}).click();
  for(const role of roles){ await dialog.getByRole('navigation',{name:'Agent roles'}).getByRole('button').nth(roles.indexOf(role)).click(); await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'}); for(const s of skills.filter(s=>s.stage===role))await dialog.getByRole('checkbox',{name:new RegExp(s.title)}).check(); }
+ await expect(budget).toBeVisible();
  await dialog.locator('.floor-detail-dialog-body').evaluate(e=>e.scrollTop=0); await page.screenshot({path:'/tmp/combinations-light.png'});
  await page.evaluate(()=>document.documentElement.dataset.theme='dark');
  await page.waitForTimeout(400); await page.screenshot({path:'/tmp/combinations-dark.png'});
@@ -37,6 +39,7 @@ try{
  await dialog.getByRole('heading',{name:'Review your design',exact:true}).waitFor();
  await dialog.getByText('One selected model',{exact:true}).waitFor();
  await dialog.getByLabel('Replicates per pipeline').fill('10');
+ await expect(budget).toBeVisible();await expect(budget).toContainText('48total pipelines×10replicates per pipeline=480total replicates');
  await dialog.getByLabel('Name',{exact:true}).fill('Combination test');
  await dialog.getByRole('checkbox',{name:/I reviewed/}).check();
  await dialog.getByText('How execution works',{exact:true}).click();await dialog.getByText(/The schedule contains 480 total replicates/).waitFor();
@@ -50,9 +53,10 @@ try{
  if(runPosts)throw Error('Creating unexpectedly started an execution');
  if(posted.configuration.combination_repetitions!==10||posted.configuration.combination_max_loops!==null||posted.configuration.waves!==480)throw Error('Replicate schedule not saved');
  await page.getByRole('button',{name:'Run combinations'}).waitFor();
+ await expect(page.getByRole('status',{name:'Saved pipeline replicate summary'})).toHaveText('48 total pipelines × 10 replicates per pipeline = 480 total replicates');
  if(await page.getByRole('button',{name:'Loop explorer',exact:true}).count())throw Error('Removed Loop explorer is visible');
- rows[0].latest={run_tag:'frozen-execution',exit_code:0};rows[0].progress={iteration:48};await page.reload();
- await page.getByText('Pipeline 24 · Replicate 2 · Latest execution',{exact:true}).waitFor();await grid.getByText('Actual skill 48',{exact:true}).first().waitFor();
+ rows[0].latest={run_tag:'frozen-execution',exit_code:0,configuration:{combination_plan:{combinations:24,total_loops:48}}};rows[0].progress={iteration:48};await page.reload();
+ await page.getByText('Pipeline 24 · Replicate 2 · Latest execution',{exact:true}).waitFor();await expect(page.getByRole('status',{name:'Saved pipeline replicate summary'})).toHaveText('24 total pipelines × 2 replicates per pipeline = 48 total replicates');await grid.getByText('Actual skill 48',{exact:true}).first().waitFor();
  rows[0].progress={iteration:1};await page.getByText('Pipeline 1 · Replicate 1 · Latest execution',{exact:true}).waitFor();await grid.getByText('Actual skill 1',{exact:true}).first().waitFor();
  if(await grid.getByText('Actual skill 48',{exact:true}).count())throw Error('Stale Loop content');
  console.log('Current-loop frozen skills verified; Selected workflow opens; 48 pipelines/10 replicates per pipeline/480 total replicates; legacy archived 24-pipeline schedule/5 roles; narrow layout valid; create does not run; all writes mocked.');

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {loopLabel,executionLoopLabel} from '../src/lib/loopLabel.ts';
-import {scheduleIdentity,identityLabel} from '../src/lib/replicateIdentity.ts';
+import {scheduleIdentity,identityLabel,scheduleSummary} from '../src/lib/replicateIdentity.ts';
 test('48 pipelines with 10 replicates map positions to separate identities',()=>{
  const plan={combinations:48,total_loops:480};
  assert.equal(loopLabel({iteration:49},1,plan),'Pipeline 1 · Replicate 2');
@@ -21,4 +21,11 @@ test('recorded identity wins; legacy analysis grouping remains supported',()=>{
  assert.equal(loopLabel({iteration:9,trial:0},3),'Pipeline 1 · Replicate 9');
  for(const trial of [undefined,null,-1,1.5,Infinity])assert.equal(loopLabel({trial},1),'Pipeline — · Replicate —');
  assert.equal(loopLabel({trial:8}),'Pipeline — · Replicate —');
+});
+
+test('schedule summary distinguishes complete products from partial historical schedules',()=>{
+ assert.equal(scheduleSummary({combinations:48,total_loops:480}),'48 total pipelines × 10 replicates per pipeline = 480 total replicates');
+ assert.equal(scheduleSummary({combinations:64,total_loops:10}),'64 total pipelines · 10 total replicates · Partial schedule');
+ assert.equal(scheduleSummary({combinations:4,total_loops:6}),'4 total pipelines · 6 total replicates · Partial schedule');
+ assert.equal(scheduleSummary({combinations:0,total_loops:0}),'Schedule totals unavailable');
 });

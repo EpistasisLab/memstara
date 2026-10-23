@@ -157,3 +157,8 @@ button[aria-label^="Help:"] {min-width:24px;min-height:24px;}
 .docked-workspace[data-compact="true"] #workspace-control .control-nav-label{display:none}
 .docked-workspace[data-compact="true"] #workspace-control .control-view-button{width:auto;flex-shrink:0}
 .docked-workspace[data-compact="true"] #workspace-control .control-view-button>span{white-space:nowrap}
+
+/* Keep the schedule equation visible on every setup step, including review. */
+.combination-dialog .comb-budget { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1.3fr) auto minmax(0,1fr); }
+.combination-dialog .comb-budget > div { flex-direction:column; align-items:flex-start; gap:2px; }
+.combination-dialog .comb-budget .comb-budget-operator { font-size:18px; color:rgb(var(--ink-soft)); }

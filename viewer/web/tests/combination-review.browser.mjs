@@ -22,14 +22,15 @@ try{for(const [width,height,theme] of [[1440,900,'light'],[390,700,'light'],[390
  await expect(dialog.locator('.comb-review-agents>li')).toHaveCount(5);
  await expect(dialog.locator('#comb-next-help')).toContainText('Enter a name');
  await dialog.getByLabel('Name',{exact:true}).fill('Reviewed design');
- const limit=dialog.getByLabel('Replicates per pipeline',{exact:true});await limit.fill('4');
+ const budget=dialog.getByRole('status',{name:'Pipeline replicate summary'});await expect(budget).toBeVisible();
+ const limit=dialog.getByLabel('Replicates per pipeline',{exact:true});await limit.fill('4');await expect(budget).toContainText('1total pipelines×4replicates per pipeline=4total replicates');
  const consent=dialog.getByRole('checkbox',{name:/I reviewed/});const create=dialog.getByRole('button',{name:'Create combination design'});
  await expect(create).toBeDisabled();await consent.check();await expect(create).toBeEnabled();
  await dialog.getByRole('checkbox',{name:/Random Start/}).check();await expect(consent).not.toBeChecked();
  await dialog.getByRole('button',{name:'Edit Data skills',exact:true}).click();
  await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'});await expect(dialog.locator('.comb-skill-card input').first()).toBeChecked();
  await dialog.locator('.comb-skill-card input').nth(1).check();
- await dialog.getByRole('button',{name:/Review & create/}).click();await expect(consent).not.toBeChecked();await expect(limit).toHaveValue('4');
+ await dialog.getByRole('button',{name:/Review & create/}).click();await expect(consent).not.toBeChecked();await expect(limit).toHaveValue('4');await expect(budget).toBeVisible();await expect(budget).toContainText('2total pipelines×4replicates per pipeline=8total replicates');
  await dialog.getByRole('button',{name:'Edit model settings'}).click();await expect(dialog.locator('.comb-ml-settings')).toBeVisible();
  await dialog.getByRole('button',{name:/Review & create/}).click();
  for(const invalid of ['0','1.5','10001','']){await limit.fill(invalid);await consent.check();await expect(create).toBeDisabled();}

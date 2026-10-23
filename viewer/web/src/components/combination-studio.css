@@ -160,3 +160,5 @@
  .cs-unified-header .cs-tabs { width:100%; }
  .cs-unified-header .cs-tabs button { flex:1 1 auto; }
 }
+
+.cs-unified-header .cs-schedule-summary { margin:6px 0 0; color:rgb(var(--ink-soft)); font-size:12px; line-height:1.5; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
