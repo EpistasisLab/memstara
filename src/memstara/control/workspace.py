@@ -134,6 +134,8 @@ class PipelineWorkspace:
                 configuration = copy.deepcopy(body.get("configuration", {}))
                 if not isinstance(configuration, dict):
                     raise ValueError("Invalid pipeline configuration fields")
+                from memstara.control.catalog import validate_new_design
+                validate_new_design(configuration)
                 configuration.update(provider="", model="", stage_models={})
                 item = {
                     "id": uuid.uuid4().hex,
@@ -174,6 +176,9 @@ class PipelineWorkspace:
                 if self.manager(item["id"]).running() and not name_only:
                     raise ValueError("Stop this pipeline before changing its configuration or removing it")
                 if action == "update":
+                    if isinstance(body.get('configuration'), dict):
+                        from memstara.control.catalog import validate_new_design
+                        validate_new_design(body['configuration'])
                     if "name" in body:
                         name = body["name"]
                         if not isinstance(name, str) or not name.strip() or len(name) > 80:

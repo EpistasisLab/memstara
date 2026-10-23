@@ -208,8 +208,19 @@ def ensure_hypothesis_enabled(names) -> None:
     for name in names:
         if canonical_name(name) in prompts.DISABLED_HYPOTHESIS_SKILLS:
             raise ValueError(f'{name}: this Hypothesis skill is disabled for execution. '
-                             'Select General research hypothesis, Random features, '
+                             'Select General research hypothesis '
                              'or an explicitly compatible specialty.')
+
+
+def validate_new_design(body: dict) -> None:
+    """Retired skills remain loadable only through existing saved executions."""
+    names = str(body.get('playbook_hypothesis', '')).split(',')
+    choices = body.get('combination_skills')
+    if isinstance(choices, dict) and isinstance(choices.get('hypothesis'), list):
+        names += choices['hypothesis']
+    if any(isinstance(name, str) and canonical_name(name.strip()) == 'random_features' for name in names):
+        raise ValueError('Random-feature hypothesis generation is unavailable for new MVP pipelines. '
+                         'Choose a compatible hypothesis skill. Random Start only changes execution order.')
 
 
 def validate_selection(body: dict) -> None:

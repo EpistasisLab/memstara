@@ -53,7 +53,7 @@ test('new drafts avoid disabled hypothesis choices and preserve saved selections
  const saved={playbook_hypothesis:'hypothesis_research'};
  assert.equal(newPipelineConfiguration(saved).playbook_hypothesis,'hypothesis_general');
  assert.equal(saved.playbook_hypothesis,'hypothesis_research');
- assert.equal(newPipelineConfiguration({playbook_hypothesis:'random_features'}).playbook_hypothesis,'random_features');
+ assert.equal(newPipelineConfiguration({playbook_hypothesis:'random_features'}).playbook_hypothesis,'hypothesis_general');
 });
 
 

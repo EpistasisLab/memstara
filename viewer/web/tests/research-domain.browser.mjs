@@ -31,7 +31,7 @@ try {
  await dialog.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
  const hivHyp=dialog.getByRole('combobox',{name:'Hypothesis skill',exact:true});
- assert.deepEqual((await hivHyp.locator('option').evaluateAll(options=>options.map(o=>o.value).filter(Boolean))).sort(),corpusSkillBindings.profiles.hiv.hypothesis.slice().sort());
+ assert.deepEqual((await hivHyp.locator('option').evaluateAll(options=>options.map(o=>o.value).filter(Boolean))).sort(),corpusSkillBindings.profiles.hiv.hypothesis.filter(id=>id!=='random_features').sort());
  await hivHyp.selectOption('addiction-psychiatric');
  await dialog.getByRole('button',{name:'Back',exact:true}).click();
  await research.selectOption('heart');
@@ -40,7 +40,7 @@ try {
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
  const hyp=dialog.getByRole('combobox',{name:'Hypothesis skill',exact:true});
  assert.equal(await hyp.inputValue(),'heart-failure-cardiovascular');
- assert.deepEqual((await hyp.locator('option').evaluateAll(options=>options.map(o=>o.value).filter(Boolean))).sort(),corpusSkillBindings.profiles.heart_failure.hypothesis.slice().sort());
+ assert.deepEqual((await hyp.locator('option').evaluateAll(options=>options.map(o=>o.value).filter(Boolean))).sort(),corpusSkillBindings.profiles.heart_failure.hypothesis.filter(id=>id!=='random_features').sort());
  assert.equal(await hyp.locator('option[value="addiction-psychiatric"]').count(),0);
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
@@ -53,5 +53,5 @@ try {
  assert.equal(await report.inputValue(),corpusSkillBindings.profiles.heart_failure.report[0]);
  assert.deepEqual((await report.locator('option').evaluateAll(options=>options.map(o=>o.value).filter(Boolean))).sort(),corpusSkillBindings.profiles.heart_failure.report.slice().sort());
  assert.equal(await report.locator('option[value="shared-anil-hiv"]').count(),0);
- console.log('HIV and HeartFailure each offer their three specialties and Random; switching updates target and skills; paired ML controls match execution. Mocked HTTP, no execution.');
+ console.log('HIV and HeartFailure hide Random even with an older server catalog; switching updates target and skills; source-bound skill menus remain compatible. Mocked HTTP, no execution.');
 } finally {await browser.close();}

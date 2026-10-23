@@ -238,7 +238,9 @@ def build_argv(
     hypothesis_agents = _whole_number(body, "hypothesis_agents", _MAX_HYPOTHESIS_AGENTS)
     interpret_agents = _whole_number(body, "interpret_agents", 4)
 
-    known = set(playbooks)
+    # Retired skills may still appear in trusted saved runs. New API designs
+    # are rejected by validate_new_design before reaching this execution adapter.
+    known = set(playbooks) | {'random_features'}
     if combination_plan:
         known.update(item['id'] for entries in combination_plan['skills'].values() for item in entries)
     markable = set(playbook_stages)

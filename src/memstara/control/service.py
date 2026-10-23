@@ -839,6 +839,12 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, RuntimeError) as e:
                 self._send(409, {"error": str(e)})
                 return
+        try:
+            from memstara.control.catalog import validate_new_design
+            validate_new_design(body)
+        except ValueError as exc:
+            self._send(400, {'error': str(exc)})
+            return
         return self._launch(body, RUNS)
 
     def _launch(self, body, manager, pipeline_name=""):

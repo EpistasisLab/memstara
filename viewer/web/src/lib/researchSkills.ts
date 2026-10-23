@@ -2,7 +2,7 @@ import type {RunRequest} from '../store/control';
 
 type Profile={label:string;hypothesis:string[];report:string[]};
 type Bindings={profiles:Record<string,Profile>;default:string;research:Record<string,string>};
-const general:Profile={label:'General research',hypothesis:['hypothesis_general','random_features'],report:['report_general']};
+const general:Profile={label:'General research',hypothesis:['hypothesis_general'],report:['report_general']};
 let bindings:Bindings={profiles:{general},default:'legacy',research:{}};
 
 /** The server binds actual corpus fingerprints; names/targets are never guessed. */
@@ -19,6 +19,7 @@ export function researchSkillProfile(form:Partial<RunRequest>):Profile {
 }
 export function compatibleResearchSkill(skill:{id:string;stage:string},form:Partial<RunRequest>):boolean {
   const id=skill.id??'';
+  if(id==='random_features')return false;
   if(skill.stage!=='hypothesis'&&skill.stage!=='report')return true;
   if(bindings.default==='legacy'&&!form.research_input_id&&form.knowledge_mode!=='llm_only'&&form.data_mode!=='proposal')return !id.startsWith('heart-failure-');
   const profile=researchSkillProfile(form);
@@ -36,10 +37,9 @@ export function resetResearchSkills(current?:Partial<RunRequest>,next?:Partial<R
     for(const stage of ['hypothesis','report'] as const){
       const choices=combinations[stage]??[];
       const retained=choices.filter(id=>compatibleResearchSkill({id,stage},target));
-      // A source switch keeps compatible choices (including Random); replace
-      // incompatible expertise with the destination corpus' specialist set.
-      combinations[stage]=retained.length===choices.length&&retained.length?retained:
-        [...new Set([...profile[stage].filter(id=>id!=='random_features'),...retained])];
+      // Retain explicit compatible choices; new sources start with one default.
+      // Never carry retired random-feature selections into a new draft.
+      combinations[stage]=retained.length?retained:profile[stage].filter(id=>id!=='random_features').slice(0,1);
     }
     reset.combination_skills=combinations;
   }

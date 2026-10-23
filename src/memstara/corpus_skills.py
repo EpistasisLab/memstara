@@ -59,7 +59,8 @@ def corpus_profile(profile=None, *, knowledge_mode='okf'):
 def menu_bindings():
     from memstara.research_inputs import list_inputs
 
-    return {'profiles': PROFILES, 'default': corpus_profile(),
+    return {'profiles': {key: {**profile, 'hypothesis': [skill for skill in profile['hypothesis']
+            if skill != 'random_features']} for key, profile in PROFILES.items()}, 'default': corpus_profile(),
             'research': {record['id']: corpus_profile(record) for record in list_inputs()}}
 
 

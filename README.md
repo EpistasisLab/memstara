@@ -80,6 +80,8 @@ For the included example:
 4. In **Review & create**, set a name and **1 replicate per pipeline** for a first experiment, review the plan and confirm it. **Random Start** is off by default: execution starts at Pipeline 1 and continues in order.
 5. Select **Create pipeline**, then **Run** on that pipeline's card. Creating a pipeline does not start it.
 
+Random-feature hypothesis generation is unavailable for new MVP designs. **Random Start** changes pipeline execution order only. Existing experiment records remain available.
+
 Review skill selections in the creation wizard. Pipeline cards have
 execution controls and a delete button; there is no post-creation **Settings** or
 **Details** menu. To change a saved combination design, create a new pipeline.
