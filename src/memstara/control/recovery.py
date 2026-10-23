@@ -1,5 +1,7 @@
 """Recover ownership after a control-service restart without trusting a recycled PID."""
 import json
+import copy
+from functools import lru_cache
 import os
 import subprocess
 from contextlib import contextmanager
@@ -22,19 +24,34 @@ def record_snapshot():
         _record_cache.reset(token)
 
 
+@lru_cache(maxsize=1024)
+def _record_version(path, modified, changed, size, inode):
+    return json.loads(Path(path).read_text())
+
+
 def records(root: Path):
     cache = _record_cache.get()
     key = root.resolve()
     if cache is not None and key in cache:
         return cache[key]
     found = []
-    for path in sorted(root.glob('**/control_record.json'), reverse=True):
+    # A valid ownership record defines a run boundary. Descendants are that
+    # run's artifacts, not additional executions. Archive wrapper directories
+    # are still traversed; malformed records do not hide nested valid records.
+    for directory, subdirectories, filenames in os.walk(root, followlinks=False):
+        if 'control_record.json' not in filenames:
+            continue
+        path = Path(directory) / 'control_record.json'
         try:
-            record = json.loads(path.read_text())
+            stat = path.stat()
+            record = copy.deepcopy(_record_version(
+                str(path), stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size, stat.st_ino))
             if isinstance(record, dict):
                 found.append((path, record))
+                subdirectories[:] = []
         except (OSError, ValueError):
             continue
+    found.sort(key=lambda item: item[0], reverse=True)
     if cache is not None:
         cache[key] = found
     return found

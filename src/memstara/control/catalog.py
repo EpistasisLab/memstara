@@ -1,6 +1,10 @@
 """Local, versioned skill catalog. No executable uploads and no caller-owned paths."""
 from __future__ import annotations
 
+import copy
+from contextlib import contextmanager
+from contextvars import ContextVar
+
 import hashlib
 import json
 import os
@@ -71,9 +75,14 @@ def canonical_name(name: str) -> str:
     """Resolve deployment-owned aliases without changing saved run records."""
     path = Path(os.environ.get('MEMSTARA_SKILL_ALIASES_PATH') or
                 (Path(os.environ.get('MEMSTARA_OUTPUT_DIR') or DEFAULT_OUTPUT_DIR) / 'skill_aliases.json'))
-    if not path.is_file():
-        return name
-    aliases = json.loads(path.read_text(encoding='utf-8'))
+    cache = _catalog_snapshot.get()
+    key = ('aliases', str(path))
+    if cache is not None and key in cache:
+        aliases = cache[key]
+    else:
+        aliases = json.loads(path.read_text(encoding='utf-8')) if path.is_file() else {}
+        if cache is not None:
+            cache[key] = aliases
     if not isinstance(aliases, dict) or any(
         not isinstance(key, str) or not key.strip() or
         not isinstance(value, str) or not value.strip()
@@ -91,7 +100,30 @@ def user_dir() -> Path:
                 (Path(os.environ.get('MEMSTARA_OUTPUT_DIR') or DEFAULT_OUTPUT_DIR) / 'skills'))
 
 
+_catalog_snapshot: ContextVar[dict | None] = ContextVar('skill_catalog_snapshot', default=None)
+
+
+@contextmanager
+def catalog_snapshot():
+    """Reuse skill reads within one workspace response; refresh on the next."""
+    token = _catalog_snapshot.set({})
+    try:
+        yield
+    finally:
+        _catalog_snapshot.reset(token)
+
+
 def catalog(*, include_hidden: bool = False) -> list[dict]:
+    cache = _catalog_snapshot.get()
+    if cache is not None and include_hidden in cache:
+        return copy.deepcopy(cache[include_hidden])
+    items = _read_catalog(include_hidden=include_hidden)
+    if cache is not None:
+        cache[include_hidden] = copy.deepcopy(items)
+    return items
+
+
+def _read_catalog(*, include_hidden: bool = False) -> list[dict]:
     items = anil_skills()
     path = document_path('MEMSTARA_RESULTS_SKILL_PATH', 'ml-results.md')
     if include_hidden and path is not None and path.is_file():

@@ -47,9 +47,11 @@ class PipelineWorkspace:
             data = json.loads(path.read_text())
             if not isinstance(data, list):
                 raise ValueError("Invalid pipeline workspace; preserve the file and repair it")
-            self.items = [{**item, "agent_labels": dict(AGENT_LABELS),
-                           "configuration": self.read_configuration(item.get("configuration", {}))[0]}
-                          for item in data]
+            from memstara.control.catalog import catalog_snapshot
+            with catalog_snapshot():
+                self.items = [{**item, "agent_labels": dict(AGENT_LABELS),
+                               "configuration": self.read_configuration(item.get("configuration", {}))[0]}
+                              for item in data]
             if self.items != data:
                 self._save()
         else:
@@ -67,7 +69,8 @@ class PipelineWorkspace:
         return self.managers[key]
 
     def list(self):
-        with self.lock:
+        from memstara.control.catalog import catalog_snapshot
+        with self.lock, catalog_snapshot():
             out = []
             removed = []
             for item in list(self.items):

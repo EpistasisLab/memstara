@@ -23,14 +23,14 @@ def test_workspace_http_scans_once_and_refreshes_next_request(tmp_path, monkeypa
     from memstara.control import service
     monkeypatch.setattr(service, 'RUNS_DIR', tmp_path)
     scans = []
-    original = Path.glob
+    original = recovery.os.walk
 
-    def counted(path, pattern):
-        if path == tmp_path and pattern == '**/control_record.json':
+    def counted(path, **kwargs):
+        if path == tmp_path:
             scans.append(1)
-        return original(path, pattern)
+        return original(path, **kwargs)
 
-    monkeypatch.setattr(Path, 'glob', counted)
+    monkeypatch.setattr(recovery.os, 'walk', counted)
     for i in range(15):
         write_record(tmp_path, f'run-{i}', str(i))
     managers = {}
@@ -85,3 +85,71 @@ def test_snapshot_is_thread_local_and_cleared_after_error(tmp_path):
         assert len(recovery.records(tmp_path)) == 1
         raise RuntimeError('response failed')
     assert len(recovery.records(tmp_path)) == 2
+
+
+def test_discovery_prunes_run_artifacts_but_finds_nested_archives(tmp_path, monkeypatch):
+    folder = write_record(tmp_path, 'owned')
+    artifact = folder / 'trace' / 'deep'
+    artifact.mkdir(parents=True)
+    wrapper = tmp_path / 'archive'
+    nested = write_record(wrapper, 'older')
+    visited = []
+    original = recovery.os.scandir
+    def tracked(path):
+        visited.append(Path(path))
+        return original(path)
+    monkeypatch.setattr(recovery.os, 'scandir', tracked)
+    assert {path.parent for path, _ in recovery.records(tmp_path)} == {folder, nested}
+    assert artifact not in visited
+    assert folder / 'trace' not in visited
+
+
+def test_corrupt_archive_record_does_not_hide_valid_nested_run(tmp_path):
+    (tmp_path / 'control_record.json').write_text('{broken')
+    folder = write_record(tmp_path, 'valid')
+    assert [path.parent for path, _ in recovery.records(tmp_path)] == [folder]
+
+
+def test_catalog_snapshot_refreshes_and_isolates_returned_records(monkeypatch):
+    from memstara.control import catalog as module
+    reads = []
+    def read(**kwargs):
+        reads.append(kwargs)
+        return [{'id': str(len(reads)), 'content': 'original'}]
+    monkeypatch.setattr(module, '_read_catalog', read)
+    with module.catalog_snapshot():
+        first = module.catalog(include_hidden=True)
+        first[0]['content'] = 'caller change'
+        assert module.catalog(include_hidden=True)[0]['content'] == 'original'
+        assert len(reads) == 1
+        module.catalog(include_hidden=False)
+        assert len(reads) == 2
+    with module.catalog_snapshot():
+        assert module.catalog(include_hidden=True)[0]['id'] == '3'
+    assert module.catalog(include_hidden=True)[0]['id'] == '4'
+
+
+def test_record_cache_observes_changes_deletions_and_defends_against_mutation(tmp_path):
+    folder = write_record(tmp_path, 'run')
+    first = recovery.records(tmp_path)
+    first[0][1]['exit_code'] = 99
+    assert recovery.records(tmp_path)[0][1]['exit_code'] == 0
+    path = folder / 'control_record.json'
+    data = json.loads(path.read_text())
+    data['exit_code'] = 1
+    path.write_text(json.dumps(data))
+    assert recovery.records(tmp_path)[0][1]['exit_code'] == 1
+    path.unlink()
+    assert recovery.records(tmp_path) == []
+
+
+def test_aliases_refresh_after_response(tmp_path, monkeypatch):
+    from memstara.control import catalog as module
+    path = tmp_path / 'aliases.json'
+    monkeypatch.setenv('MEMSTARA_SKILL_ALIASES_PATH', str(path))
+    path.write_text('{"old":"first"}')
+    with module.catalog_snapshot():
+        assert module.canonical_name('old') == 'first'
+        path.write_text('{"old":"second"}')
+        assert module.canonical_name('old') == 'first'
+    assert module.canonical_name('old') == 'second'
