@@ -52,3 +52,17 @@ def test_symlink_outside_execution_is_not_read(tmp_path):
     run.mkdir()
     (run / 'report_io').symlink_to(outside, target_is_directory=True)
     assert saved_outputs(run, 'a') == []
+
+
+def test_legacy_trace_final_output_is_exact_without_exposing_prompt(tmp_path):
+    text = '# Original narrative\nTrial 1 stays Trial 1.\n'
+    trace = tmp_path / 'trace/report.steps.json'
+    write(trace, {'run_id': 'r', 'stage': 'report', 'loop': 1,
+                  'input': 'private prompt', 'run': {'id': 'r', 'output': json.dumps({
+                      'kind': 'motoro.output.envelope/v1', 'result': text})}})
+    write(tmp_path / 'execution.json', {'calls': [{'stage': 'report', 'run_id': 'r',
+        'loop': 1, 'status': 'completed', 'step_evidence': {'path': 'trace/report.steps.json',
+        'sha256': hashlib.sha256(trace.read_bytes()).hexdigest()}}]})
+    assert saved_outputs(tmp_path, 'a') == [{'loop': 1, 'result_id': None, 'text': text, 'status': 'completed'}]
+    trace.write_text('{}')
+    assert saved_outputs(tmp_path, 'a') == []
