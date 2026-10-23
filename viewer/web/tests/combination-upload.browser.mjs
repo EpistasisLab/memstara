@@ -31,7 +31,7 @@ try {
    {name:'beta.md',mimeType:'text/markdown',buffer:Buffer.from('# Beta skill')},
   ]);
   await d.getByText(/beta.md · Uploaded/).waitFor();
-  if(!await d.locator('.comb-selected-skills').getByRole('button',{name:'Remove alpha',exact:true}).isVisible()||!await d.locator('.comb-selected-skills').getByRole('button',{name:'Remove beta',exact:true}).isVisible())throw Error('Successes not selected');
+  if(!await d.locator('.comb-skill-card').filter({hasText:'alpha'}).locator('input[type=checkbox]').isChecked()||!await d.locator('.comb-skill-card').filter({hasText:'beta'}).locator('input[type=checkbox]').isChecked())throw Error('Successes not selected');
   await d.getByRole('alert').filter({hasText:'Test upload rejected'}).waitFor();
  }
  if(uploads.length!==15||uploads.some(x=>x.name==='bad'))throw Error('Wrong upload validation');

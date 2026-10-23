@@ -62,11 +62,11 @@ if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for t
    if(calls.at(-1).stage!==roles[i]||saves.at(-1).stage!==roles[i]||calls.at(-1).model!=='selected-model'||saves.at(-1).content!=='# Edited '+roles[i])throw Error(JSON.stringify({role:roles[i],call:calls.at(-1),save:saves.at(-1)}));
    if(mode==='Selected Pipelines')await expect(d.getByRole('combobox',{name:labels[i]+' skill',exact:true})).toHaveValue('generated-'+saves.length);
    else {
-    await expect(d.locator('.comb-selected-skills')).toContainText('clinical-'+roles[i]);
+    await expect(d.locator('.comb-skill-card').filter({hasText:'clinical-'+roles[i]}).locator('input[type=checkbox]')).toBeChecked();await expect(d.locator('.comb-selected-skills')).toHaveCount(0);
     await assistant.getByRole('button',{name:new RegExp('^Create another')}).click();await assistant.getByRole('button',{name:'Generate skill draft',exact:true}).click();
     await expect(assistant.getByLabel('Generated Markdown skill')).toHaveValue('# Draft');await assistant.getByLabel('Generated skill name').fill('second-'+roles[i]);
     await assistant.getByRole('checkbox',{name:'I reviewed these instructions and want to use this skill.'}).check();await save.click();await expect(assistant.getByText('Saved and selected. Finish the pipeline review when ready.',{exact:true})).toBeVisible();await expect(save).toBeDisabled();
-    await expect(d.locator('.comb-selected-skills')).toContainText('second-'+roles[i]);
+    await expect(d.locator('.comb-skill-card').filter({hasText:'second-'+roles[i]}).locator('input[type=checkbox]')).toBeChecked();await expect(d.locator('.comb-selected-skills')).toHaveCount(0);
     if(saves.at(-1).stage!==roles[i])throw Error('Second skill role mismatch');
    }
    for(const theme of ['light','dark'])for(const width of [1440,390,320]){

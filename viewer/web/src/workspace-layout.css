@@ -129,7 +129,6 @@ button[aria-label^="Help:"] {min-width:24px;min-height:24px;}
 .combination-dialog .comb-footer > div { flex-wrap:wrap; min-width:0; }
 .combination-dialog .comb-footer button { min-width:0; white-space:normal; }
 .combination-dialog .comb-budget > div { min-width:0; overflow-wrap:anywhere; }
-.combination-dialog .comb-selected-skills > span { min-width:0; }
 
 /* Browser zoom can leave less than 200 CSS pixels for loop navigation. */
 .telemetry-loop-controls > div { display:flex; flex-wrap:wrap; min-width:0; gap:8px; }
@@ -158,7 +157,7 @@ button[aria-label^="Help:"] {min-width:24px;min-height:24px;}
 .docked-workspace[data-compact="true"] #workspace-control .control-view-button{width:auto;flex-shrink:0}
 .docked-workspace[data-compact="true"] #workspace-control .control-view-button>span{white-space:nowrap}
 
-/* Keep the schedule equation visible on every setup step, including review. */
+/* Present the schedule equation in final review. */
 .combination-dialog .comb-budget { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1.3fr) auto minmax(0,1fr); }
 .combination-dialog .comb-budget > div { flex-direction:column; align-items:flex-start; gap:2px; }
 .combination-dialog .comb-budget .comb-budget-operator { font-size:18px; color:rgb(var(--ink-soft)); }

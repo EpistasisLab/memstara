@@ -17,12 +17,3 @@ export function identityLabel(identity:ReplicateIdentity, totals=false):string {
 export function scheduledLabel(position:number|undefined|null,plan?:Schedule|null,totals=false):string {
  return identityLabel(scheduleIdentity(position,plan),totals);
 }
-
-/** Never present a capped historical schedule as a complete product. */
-export function scheduleSummary(plan:Schedule):string {
- const count=plan.combinations,total=plan.total_loops;
- if(!Number.isInteger(count)||count<1||!Number.isInteger(total)||total<1)return 'Schedule totals unavailable';
- const pipelines=`${count.toLocaleString()} total pipelines`,replicates=`${total.toLocaleString()} total replicates`;
- return total%count===0?`${pipelines} × ${(total/count).toLocaleString()} replicates per pipeline = ${replicates}`:
-  `${pipelines} · ${replicates} · Partial schedule`;
-}

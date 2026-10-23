@@ -1,4 +1,4 @@
-import {identityLabel,scheduledLabel,scheduleSummary} from '../lib/replicateIdentity';
+import {identityLabel,scheduledLabel} from '../lib/replicateIdentity';
 import { displayText, skillLabel } from '../lib/displayText';
 import {floorCallRole as callRole, type FloorTrace as Trace, type FloorActivity, floorExecutionState} from '../lib/floorActivity';
 import {createPortal} from "react-dom";
@@ -62,10 +62,6 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
  },[key,retry,p.id,requestedLoop,following,runTag]);
  const visibleRoles=PLAYBOOK_STAGES.filter(s=>role==='all'||s===role);
  const skillFor=(id:string)=>catalog.find(s=>s.id===id);
- const summaryPlan=trace?.combination_plan??(p.running??p.latest)?.configuration?.combination_plan;
- const scheduleText=summaryPlan?scheduleSummary(summaryPlan):following?
-  (trace?.total_loops?`${trace.total_loops.toLocaleString()} total replicates · Recorded schedule`:'Loading recorded schedule…'):
-  scheduleSummary({combinations:count,total_loops:p.configuration.combination_max_loops??count*(p.configuration.combination_repetitions??1)});
  const selectedContent=detail?skillFor(detail.id):undefined;
  const sameVersion=!!selectedContent&&(!!detail?.hash&&detail.hash===selectedContent.hash);
  const header=(
@@ -77,7 +73,6 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
      {!p.latest&&!p.running&&<button className="cs-run" data-help="Run combinations" data-help-description="Start this pipeline using one skill from each agent role per Replicate, up to its configured maximum Replicates." disabled={busy||!count} onClick={()=>void usePipelines.getState().play(p.id)}><Play size={16}/>Run combinations</button>}
     </div>
    </div>
-  <p className="cs-schedule-summary" role="status" aria-label="Saved pipeline replicate summary">{scheduleText}</p>
   <div className="cs-control-row"><nav className="cs-tabs" aria-label="Combination views">
    <button data-help="Experiments" data-help-description="See the selected skills and recorded stage status for the current Replicate." aria-pressed={view==='floor'} onClick={()=>setView('floor')}><Layers3 size={16}/>Experiments</button>
    <button data-help="Skill architecture" data-help-description="Browse all configured skills by agent role. Search and read their instructions; this is the configuration, not the execution history." aria-pressed={view==='design'} onClick={()=>setView('design')}><Network size={16}/>Skill architecture</button>
