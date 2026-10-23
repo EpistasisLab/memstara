@@ -146,3 +146,18 @@ def test_specialist_report_provenance_survives_api(tmp_path,monkeypatch):
               'interpretation_methods':['shap'],'task_ids':[12]}
     (directory/'report_status.json').write_text(json.dumps({'status':'completed','specialist_explanation':metadata}))
     assert run_artifacts.lookup('expert')['report']['specialist_explanation']==metadata
+
+
+def test_explanation_recovery_is_bound_to_selected_run(tmp_path, monkeypatch):
+    monkeypatch.setattr(run_artifacts, 'ROOT', tmp_path)
+    directory = tmp_path / 'run'
+    recovery = directory / 'report-recovery-1' / 'report_io'
+    recovery.mkdir(parents=True)
+    (directory / 'config.json').write_text(json.dumps({'run_tag': 'selected'}))
+    (recovery / 'loop-2-result-3-input.json').write_text(json.dumps({
+        'run_tag': 'selected', 'loop': 2, 'result_id': 3, 'sha256': 'bound'}))
+    (recovery / 'loop-2-result-3-output.json').write_text(json.dumps({
+        'input_sha256': 'bound', 'output': 'Recovered narrative', 'execution': {'status': 'completed'}}))
+    report = run_artifacts.lookup('selected')['report']
+    assert report['text'] == ''
+    assert report['explanation_outputs'][0]['text'] == 'Recovered narrative'

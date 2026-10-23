@@ -330,7 +330,7 @@ export interface RunConfiguration {
 export interface Snapshot {
   run_configuration?: RunConfiguration | null;
   scene_scope?: string;
-  report?: { status: string; text: string; error?: string | null; specialist_explanation?: ExplanationEvidence | null } | null;
+  report?: { status: string; text: string; explanation_outputs?: {loop: number; result_id: number | null; text: string; status: string}[]; error?: string | null; specialist_explanation?: ExplanationEvidence | null } | null;
   pipeline?: { status: string; report_completed?: boolean; message?: string; reason?: string; code?: string; stage?: string; loop?: number | null } | null;
   run_tag: string;
   runs: RunSummary[];

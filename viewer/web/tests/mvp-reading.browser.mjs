@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 const browser=await chromium.launch({headless:true});
 const root=process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:4177';
 const result={result_id:1,task_id:1,trial:0,auc:.65,model:'lr',perspective:'Recorded question',hypothesis:'Recorded hypothesis with a deliberately long unbroken identifier '+ 'feature'.repeat(35),interpretation:'## Clinical meaning\n\nRecorded interpretation, not a treatment recommendation.',columns_used:['age'],columns_missing:[],importance:{age:.1},y_column:'target',okf_concept_ids:[],created_at:'2026-10-23T12:00:00Z'};
-const snap=(status,tag='alpha-run')=>({run_tag:tag,pipeline:{status},run_configuration:{pipeline_name:tag==='alpha-run'?'Alpha research':'Beta research',trials:1},results:[{...result}],report:{status:'completed',text:`# Saved ${tag} explanation\n\nActual saved output for ${tag}.\n\n| Finding | Limitation |\n|---|---|\n| Observed association | Independent confirmation needed |`},stale:false,health:{memstara:{up:true},core:{up:true}},scene:{places:[],agents:[],flashes:[]},feed:[],agents:[],access:{rows:[],windows:[]},board:{tasks:[],lanes:{}},runs:[]});
+const snap=(status,tag='alpha-run')=>({run_tag:tag,pipeline:{status},run_configuration:{pipeline_name:tag==='alpha-run'?'Alpha research':'Beta research',trials:1},results:[{...result}],report:{status:'completed',explanation_outputs:[{loop:1,result_id:1,status:'completed',text:`# Saved ${tag} explanation\n\nActual saved output for ${tag}.`}],text:`# Saved ${tag} explanation\n\nActual saved output for ${tag}.\n\n| Finding | Limitation |\n|---|---|\n| Observed association | Independent confirmation needed |`},stale:false,health:{memstara:{up:true},core:{up:true}},scene:{places:[],agents:[],flashes:[]},feed:[],agents:[],access:{rows:[],windows:[]},board:{tasks:[],lanes:{}},runs:[]});
 const errors=[],writes=[];
 try{
  for(const width of [1440,768,390,320])for(const theme of ['light','dark']){
@@ -45,8 +45,10 @@ try{
   const report=page.getByTestId('report-page');await expect(report.locator('[data-report-content]')).toContainText('Actual saved output for alpha-run');
   await expect(report.getByRole('heading',{level:2})).toContainText('Recorded hypothesis');
   const downloadEvent=page.waitForEvent('download');await report.getByRole('button',{name:'Download Markdown'}).click();
-  const download=await downloadEvent;assert.equal(download.suggestedFilename(),'alpha-run_conclusions.md');
-  const stream=await download.createReadStream();let markdown='';for await(const data of stream)markdown+=data;assert(markdown.includes('Actual saved output for alpha-run'));
+  const download=await downloadEvent;assert.equal(download.suggestedFilename(),'alpha-run_loop-1_result-1_conclusions.md');
+  const stream=await download.createReadStream();let markdown='';for await(const data of stream)markdown+=data;assert.equal(markdown,snap('completed').report.explanation_outputs[0].text);
+  const comparisonOnly=snap('completed');comparisonOnly.report.explanation_outputs=[];await deliver(comparisonOnly);await expect(report.locator('[data-report-content]')).toHaveCount(0);await deliver(snap('completed'));
+  const multiple=snap('completed');multiple.report.explanation_outputs.push({loop:2,result_id:2,status:'completed',text:'Second loop exact narrative'});await deliver(multiple);await report.getByRole('combobox',{name:'Saved Explanation'}).selectOption('alpha-run:2:2');await expect(report.locator('[data-report-content]')).toHaveText('Second loop exact narrative');
   await report.getByRole('combobox',{name:'Pipeline conclusions'}).selectOption('beta');
   await deliver(snap('completed','beta-run'));await expect(report.locator('[data-report-content]')).toContainText('Actual saved output for beta-run');
   await expect(report.locator('[data-report-content]')).not.toContainText('Actual saved output for alpha-run');

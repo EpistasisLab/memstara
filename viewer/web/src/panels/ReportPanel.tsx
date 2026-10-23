@@ -1,8 +1,7 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Download } from 'lucide-react';
 import { displayText } from '../lib/displayText';
 import { findingHeading, firstFinding } from '../lib/findingHeading';
-import { transparentReportMarkdown } from '../lib/reportTransparency';
 import { useViewer } from '../store/viewer';
 import { usePipelines } from '../store/pipelines';
 import { useExecutionContext } from '../components/ExecutionContext';
@@ -12,7 +11,6 @@ import ExplanationEvidence from '../components/ExplanationEvidence';
 import { useLoopLabel } from '../lib/useLoopLabel';
 import LoopUsage from '../components/LoopUsage';
 import { useTelemetryTotals } from '../components/TelemetryTotals';
-import { loopUsageMarkdown } from '../lib/loopUsage';
 
 const ReportBody = lazy(() => import('../components/ReportBody'));
 
@@ -27,20 +25,22 @@ export default function ReportPanel() {
   const labelLoop = useLoopLabel();
   const tag = snapshot?.run_tag;
   const report = snapshot?.report;
+  const [outputKey, setOutputKey] = useState('');
+  const outputs = report?.explanation_outputs ?? [];
+  const output = outputs.find(o => `${tag}:${o.loop}:${o.result_id}` === outputKey) ?? outputs[0];
   const usage = useTelemetryTotals();
   const execution = usage.data?.executions.find(e => e.run_tag === tag);
   const heading = tag ? findingHeading(firstFinding(
     (snapshot?.results ?? []).map(r => ({...r, run_tag: tag})), tag)?.hypothesis) : '';
   const loading = !!requested && requested !== tag;
   const download = () => {
-    if (!report?.text || !tag || loading) return;
+    if (!output?.text || !tag || loading) return;
     const url = URL.createObjectURL(new Blob([
-      transparentReportMarkdown(report.text, snapshot?.run_configuration?.trials),
-      loopUsageMarkdown(execution, usage.data?.updated_at, usage.error),
+      output.text,
     ], {type: 'text/markdown;charset=utf-8'}));
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `${tag}_conclusions.md`;
+    anchor.download = `${tag}_loop-${output.loop}${output.result_id == null ? "" : `_result-${output.result_id}`}_conclusions.md`;
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
@@ -53,7 +53,12 @@ export default function ReportPanel() {
             {items.map(p => <option key={p.id} value={p.id}>Pipeline {p.number} · {p.name}{p.latest ? '' : ' · not started'}</option>)}
           </select>
         </label>
-        <button type="button" onClick={download} disabled={!report?.text || loading} className="conclusions-download">
+        {outputs.length > 0 && <label className="analysis-select-label">Explanation
+          <select aria-label="Saved Explanation" value={`${tag}:${output.loop}:${output.result_id}`} onChange={e => setOutputKey(e.target.value)}>
+            {outputs.map(o => <option key={`${o.loop}:${o.result_id}`} value={`${tag}:${o.loop}:${o.result_id}`}>Loop {o.loop}{o.result_id == null ? '' : ` · Result ${o.result_id}`} · {o.status}</option>)}
+          </select>
+        </label>}
+        <button type="button" onClick={download} disabled={!output?.text || loading} className="conclusions-download">
           <Download size={16} aria-hidden="true"/>Download Markdown
         </button>
       </header>
@@ -67,8 +72,8 @@ export default function ReportPanel() {
           {tag && <p className="mt-2 text-sm text-ink-soft">{report?.status === 'completed' ? 'Completed report' : `Report status: ${report?.status ?? 'not recorded'}`} · {context.startedLabel}</p>}
         </header>
         {report?.error && <p role="status" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{displayText(report.error)}</p>}
-        {report?.text ? <Suspense fallback={<p>Loading report…</p>}>
-          <div data-report-content><ReportBody report analysesPerLoop={snapshot?.run_configuration?.trials} text={report.text}/></div>
+        {output?.text ? <Suspense fallback={<p>Loading report…</p>}>
+          <div data-report-content><ReportBody verbatim text={output.text}/></div>
         </Suspense> : <p className="py-8 text-sm text-ink-soft">{tag ? 'No Explanation output has been saved for this execution yet.' : 'Choose a pipeline with saved output to read its conclusions.'}</p>}
         {tag && <details className="analysis-technical-details mt-6">
           <summary>Report records and supporting evidence</summary>

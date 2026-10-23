@@ -29,12 +29,12 @@ const markdownComponents: Components = {
 };
 
 /** Markdown is rendered as text elements; model-provided HTML is never evaluated. */
-function ReportBody({text, report = false, origin, analysesPerLoop, compactOrigin = false}:{text:string; report?: boolean; origin?: ContentOriginKind; analysesPerLoop?: number; compactOrigin?: boolean}) {
+function ReportBody({text, report = false, origin, analysesPerLoop, compactOrigin = false, verbatim = false}:{text:string; report?: boolean; origin?: ContentOriginKind; analysesPerLoop?: number; compactOrigin?: boolean; verbatim?: boolean}) {
   return <div className="report-markdown">
     {(origin || report) && <ContentOrigin kind={origin ?? 'mixed'} compact={compactOrigin}/>}
-    {(report || /^##\s+Ranked hypotheses\s*$/im.test(text)) && <ReportTransparency />}
-    <Markdown remarkPlugins={markdownPlugins} skipHtml components={markdownComponents}>
-      {report ? reportLoopText(reportMarkdown(text), analysesPerLoop) : reportMarkdown(text)}
+    {(!verbatim && (report || /^##\s+Ranked hypotheses\s*$/im.test(text))) && <ReportTransparency />}
+    <Markdown remarkPlugins={verbatim ? [remarkGfm] : markdownPlugins} skipHtml components={markdownComponents}>
+      {verbatim ? text : report ? reportLoopText(reportMarkdown(text), analysesPerLoop) : reportMarkdown(text)}
     </Markdown>
   </div>;
 }

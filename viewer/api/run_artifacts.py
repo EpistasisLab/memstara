@@ -3,6 +3,10 @@ import json
 import os
 import time
 import threading
+try:
+    from .explanation_outputs import saved_outputs
+except ImportError:
+    from explanation_outputs import saved_outputs
 from pathlib import Path
 
 ROOT = Path(os.environ.get("MEMSTARA_RUNS_DIR", "/runs"))
@@ -115,6 +119,11 @@ def lookup(tag):
             report_status = {"status": "generating"}
         elif latest.get("status") in ("failed", "cancelled"):
             report_status = {"status": latest["status"], "error": latest.get("error", "Report call failed")}
+        explanations = {}
+        for location in locations:
+            if location.resolve().is_relative_to(ROOT.resolve()):
+                for output in saved_outputs(location, tag):
+                    explanations[(output['loop'], output['result_id'])] = output
         result = {
             "config": {k: config.get(k) for k in (
                 "hypotheses", "interpreters", "interpretation_mode", "books", "evaluation", "comparison_policy",
@@ -125,7 +134,7 @@ def lookup(tag):
             "calls": calls,
             "report": {"status": (report_status or {}).get(
                            "status", "available" if report.strip() else "not_available"),
-                       "text": report, "error": (report_status or {}).get("error"),
+                       "text": report, "explanation_outputs": sorted(explanations.values(), key=lambda row: (row["loop"], row["result_id"] or 0)), "error": (report_status or {}).get("error"),
                        "specialist_explanation": (report_status or {}).get("specialist_explanation")},
             "pipeline": pipeline_state(directory),
         }
