@@ -21,7 +21,7 @@ def profile(scope):
 def test_corpus_profiles_have_three_distinct_specialties_and_random(scope):
     assert corpus_profile(profile(scope)) == scope
     selected = PROFILES[scope]['hypothesis']
-    assert len(selected) == 4 and selected[-1] == 'random_features'
+    assert len(selected) == (5 if scope == 'heart_failure' else 4) and selected[-1] == 'random_features'
     validate_skills({'hypothesis': selected, 'report': PROFILES[scope]['report']}, profile(scope))
     for name in selected[:3]:
         item = next(item for item in catalog() if item['id'] == name)
@@ -80,7 +80,7 @@ def test_two_explanations_reach_report_prompt_and_reject_wrong_corpus(scope, wro
     rows = {row['id']: row for row in catalog()}
     reports = PROFILES[scope]['report']
     assert len(reports) == 2
-    assert len(PROFILES[scope]['hypothesis']) * 2 * 2 * 2 * len(reports) == 64
+    assert len(PROFILES[scope]['hypothesis']) * 2 * 2 * 2 * len(reports) == (80 if scope == 'heart_failure' else 64)
     for name in reports:
         assert rows[name]['stage'] == 'report'
         assert rows[name]['content'].strip() in load_prompt('board/report', playbook=name)['system_prompt']

@@ -13,8 +13,8 @@ try{for(const [width,height,theme] of [[1440,900,'light'],[390,700,'light'],[390
  const stages=['Hypothesis','Data','Machine learning','Interpretation','Explanation'];
  for(let i=0;i<5;i++){
   await expect(dialog.locator('.comb-guidance')).toContainText(`Agent ${i+1} of 5`);
-  await expect(dialog.locator('#comb-next-help')).toContainText(`Select at least one ${stages[i]} skill.`);
-  await expect(dialog.getByRole('button',{name:i===4?'Review plan':'Next: '+stages[i+1],exact:true})).toBeDisabled();
+  await expect(dialog.locator('#comb-next-help')).toContainText('Ready to continue');
+  await expect(dialog.getByRole('button',{name:i===4?'Review plan':'Next: '+stages[i+1],exact:true})).toBeEnabled();
   await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'});await dialog.locator('.comb-skill-card input').first().check();await expect(dialog.locator('#comb-next-help')).toContainText('Ready to continue');
   await dialog.getByRole('button',{name:i===4?'Review plan':'Next: '+stages[i+1],exact:true}).click();
  }
@@ -31,7 +31,8 @@ try{for(const [width,height,theme] of [[1440,900,'light'],[390,700,'light'],[390
  await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'});await expect(dialog.locator('.comb-skill-card input').first()).toBeChecked();
  await dialog.locator('.comb-skill-card input').nth(1).check();
  await dialog.getByRole('button',{name:/Review & create/}).click();await expect(consent).not.toBeChecked();await expect(limit).toHaveValue('4');await expect(budget).toBeVisible();await expect(budget).toContainText('2total pipelines×4replicates per pipeline=8total replicates');
- await dialog.getByRole('button',{name:'Edit model settings'}).click();await expect(dialog.locator('.comb-ml-settings')).toBeVisible();
+ await expect(dialog.getByRole('button',{name:'Edit model settings'})).toHaveCount(0);
+ await expect(dialog.locator('.comb-ml-settings')).toHaveCount(0);
  await dialog.getByRole('button',{name:/Review & create/}).click();
  for(const invalid of ['0','1.5','10001','']){await limit.fill(invalid);await consent.check();await expect(create).toBeDisabled();}
  await limit.fill('4');await consent.check();await expect(create).toBeEnabled();

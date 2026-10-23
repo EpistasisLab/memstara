@@ -16,7 +16,7 @@ PROFILES = {
     },
     'heart_failure': {
         'label': 'HeartFailure knowledge corpus',
-        'hypothesis': ['heart-failure-cardiovascular', 'heart-failure-metabolic-renal',
+        'hypothesis': ['heart-failure-all', 'heart-failure-cardiovascular', 'heart-failure-metabolic-renal',
                        'heart-failure-lifestyle-social', 'random_features'],
         'report': ['report_heart_failure_cardiovascular', 'report_heart_failure_cardiorenal'],
     },

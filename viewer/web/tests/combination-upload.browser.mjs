@@ -23,6 +23,7 @@ try {
  await d.getByRole('button',{name:'Choose skills'}).click();
  for(let i=0;i<5;i++){
   await d.getByRole('navigation',{name:'Agent roles'}).getByRole('button').nth(i).click();
+  for(const box of await d.locator('.comb-skill-card input:checked').all())await box.uncheck();
   await d.getByRole('button',{name:/^Upload or write/}).click();
   await d.getByLabel('Custom skill Markdown file').setInputFiles([
    {name:'alpha.md',mimeType:'text/markdown',buffer:Buffer.from('# Alpha skill')},

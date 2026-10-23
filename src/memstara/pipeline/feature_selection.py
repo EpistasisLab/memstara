@@ -36,19 +36,21 @@ def context(plan, wave):
     from memstara.combinations import loop_flavors
     flavors = loop_flavors(plan['combination_plan'], wave + 1)
     skill = next(a['id'] for a in flavors['agents'] if a['stage'] == 'hypothesis')
-    mode = 'random' if skill == 'random_features' else 'guided'
+    mode = 'all' if skill == 'heart-failure-all' else 'random' if skill == 'random_features' else 'guided'
     # Seed derivation is independent of process hash randomization and retries.
     seed = int.from_bytes(hashlib.sha256(f"{policy['seed']}:{wave}".encode()).digest()[:4], 'big')
     pool = policy['eligible_features']
     rng = random.Random(seed)
     count = plan.get('controlled_comparison', {}).get('feature_count')
-    required = None
+    required = list(pool) if mode == 'all' else None
+    if mode == 'all':
+        count = len(pool)
     if mode == 'random':
         required = rng.sample(pool, count if count is not None else rng.randint(4, min(20, len(pool))))
     sampling = 'fixed_count_without_replacement' if count else 'uniform_count_then_without_replacement'
     return {'version': VERSION, 'mode': mode, 'minimum': count or 4, 'maximum': count or 20,
             'seed': seed if mode == 'random' else None, 'required_features': required,
-            'sampling': sampling if mode == 'random' else 'llm',
+            'sampling': sampling if mode == 'random' else 'all_eligible' if mode == 'all' else 'llm',
             'pool_sha256': policy['pool_sha256'], 'pool_size': len(pool),
             'pool_source': policy['pool_source'], 'dataset_sha256': policy['dataset_sha256'],
             'run_tag': plan['run_tag'], 'pipeline_id': plan.get('pipeline_id', ''),
@@ -69,13 +71,13 @@ def validate(columns, plan, trial):
     if selected is None:
         return None
     if (not isinstance(columns, list) or any(not isinstance(c, str) for c in columns)
-            or not 4 <= len(columns) <= 20 or len(set(columns)) != len(columns)):
+            or (selected['mode'] != 'all' and not 4 <= len(columns) <= 20) or len(set(columns)) != len(columns)):
         raise ValueError('Select 4–20 distinct original predictor columns')
     if plan['y_column'] in columns or set(columns) - set(plan['feature_selection_policy']['eligible_features']):
         raise ValueError('Predictors must belong to the frozen eligible pool and exclude the target')
     if not selected['minimum'] <= len(columns) <= selected['maximum']:
         raise ValueError('Use the exact feature count frozen for this controlled comparison')
-    if selected['mode'] == 'random' and columns != selected['required_features']:
+    if selected['mode'] in ('random', 'all') and columns != selected['required_features']:
         raise ValueError('Use exactly the server-sampled random predictors in their recorded order')
     return {**selected, 'actual_count': len(columns), 'features': list(columns)}
 
@@ -84,6 +86,8 @@ def instructions(plan, wave):
     selected = context(plan, wave)
     if selected is None:
         return ''
+    if selected['mode'] == 'all':
+        return '\nFEATURE SELECTION INPUT: ' + json.dumps(selected, ensure_ascii=False) + '\nUse exactly required_features in the recorded order; do not sample or select a subset.'
     message = ('\nFEATURE SELECTION INPUT: ' + json.dumps(selected, ensure_ascii=False)
                + '\nSelect 4–20 distinct original columns (before encoding), excluding the outcome. '
                  'create_task enforces the range and pool. Do not add baseline predictors. ')

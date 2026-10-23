@@ -9,7 +9,8 @@ from pathlib import Path
 
 VERSION = 'agent_selected_ml_v2'
 MODELS = ('logistic_regression', 'xgboost')
-MODEL_SKILLS = {'ml_logistic_regression': 'logistic_regression', 'ml_xgboost': 'xgboost'}
+DEFAULT_SKILL = 'ml_default_logistic_regression'
+MODEL_SKILLS = {DEFAULT_SKILL: 'logistic_regression', 'ml_logistic_regression': 'logistic_regression', 'ml_xgboost': 'xgboost'}
 
 
 def for_dataset(snapshot, path):
@@ -23,7 +24,20 @@ def for_dataset(snapshot, path):
     primary = next((MODEL_SKILLS[name] for name in names if name in MODEL_SKILLS), None)
     if primary and snapshot.get('combination_plan') and 'trial' not in record:
         raise ValueError('Selected ML skill requires the saved task trial identity')
-    return {**snapshot, '_selected_ml_primary': primary}
+    return {**snapshot, '_selected_ml_primary': primary, '_default_ml': names == [DEFAULT_SKILL]}
+
+
+def uses_default(snapshot):
+    snapshot = snapshot or {}
+    return snapshot.get('_default_ml', snapshot.get('books', {}).get('ml') == [DEFAULT_SKILL])
+
+
+def default_plan():
+    from sklearn.linear_model import LogisticRegression
+    return {'primary_model': 'logistic_regression', 'folds': 0,
+            'models': {'logistic_regression': {'parameters': LogisticRegression().get_params(),
+                                              'scale_numeric': False, 'threshold': .5}},
+            'rationale': 'No ML skill selected: installed scikit-learn LogisticRegression defaults.'}
 
 
 def selected_model(snapshot):
@@ -137,6 +151,15 @@ def enabled(snapshot):
 
 
 def context(snapshot, evaluation):
+    if uses_default(snapshot):
+        if snapshot.get('controlled_comparison') or snapshot.get('ml_overrides'):
+            raise ValueError('Default Logistic Regression does not accept model overrides')
+        return {'version': VERSION, 'required': True, 'plan_source': 'server_frozen',
+                'configuration_source': 'sklearn_default', 'proposal_template': default_plan(),
+                'editable_parameter_ranges': {}, 'editable_parameter_choices': {},
+                'editable_common_settings': {}, 'fixed': {'primary_model': 'logistic_regression',
+                    'data_seed': evaluation['seed'], 'test_size': evaluation['test_size']},
+                'instructions': 'Call train_and_score without ml_plan. The server applies installed-library defaults.'}
     controls = (snapshot or {}).get('controlled_comparison')
     if controls:
         base = context({k: v for k, v in snapshot.items() if k != 'controlled_comparison'}, evaluation)
@@ -213,22 +236,30 @@ def resolve(proposal, snapshot, evaluation):
     overrides = validate_overrides((snapshot or {}).get('ml_overrides', {}))
     if controls and overrides:
         raise ValueError('Controlled comparisons cannot also use advanced ML overrides')
-    chosen = controls['ml_plan'] if controls else proposal
+    fallback = uses_default(snapshot)
+    if fallback and (controls or overrides):
+        raise ValueError('Default Logistic Regression does not accept model overrides')
+    chosen = default_plan() if fallback else controls['ml_plan'] if controls else proposal
     if overrides:
         chosen = apply_overrides(chosen, overrides)
     effective = validate(chosen, snapshot, evaluation)
     return effective, {
-        'source': ('server_frozen' if controls else
+        'source': ('sklearn_default' if fallback else 'server_frozen' if controls else
                    'user_overrides_and_agent_proposal' if overrides else 'agent_proposal'),
         'agent_proposal_supplied': proposal is not None,
         'agent_proposal': copy.deepcopy(proposal),
-        'agent_proposal_ignored': bool(controls) and proposal is not None,
+        'agent_proposal_ignored': bool(controls or fallback) and proposal is not None,
         'effective_plan': copy.deepcopy(effective),
         **({'user_overrides': overrides} if overrides else {}),
     }
 
 
 def validate(proposal, snapshot, evaluation):
+    if uses_default(snapshot):
+        expected = context(snapshot, evaluation)['proposal_template']
+        if proposal != expected:
+            raise ValueError('Default Logistic Regression must preserve installed-library defaults')
+        return copy.deepcopy(expected)
     controls = (snapshot or {}).get('controlled_comparison')
     if controls:
         if proposal != controls['ml_plan']:
@@ -300,6 +331,14 @@ def identity(path: Path, snapshot, evaluation, proposal):
                 'agent' if key in RANGES[name] or key in CHOICES[name] else 'server'
                 for key in model['parameters']},
             **{key: 'user' if key in fixed else 'agent' for key in ('scale_numeric', 'threshold')}}
+    if uses_default(snapshot):
+        import sklearn
+        record['sklearn_version'] = sklearn.__version__
+        record['configuration_source'] = 'sklearn_default'
+        record['setting_sources'] = {'primary_model': 'sklearn_default', 'folds': 'server_default',
+            'models': {'logistic_regression': {'parameters': {key: 'sklearn_default'
+                for key in proposal['models']['logistic_regression']['parameters']},
+                'scale_numeric': 'server_default', 'threshold': 'server_default'}}}
     if overrides:
         record['user_overrides'] = copy.deepcopy(overrides)
     return record

@@ -70,17 +70,17 @@ After the ready message, you can close the terminal.
 |---|---|
 | `.env` | LLM provider, credentials, common model, optional per-agent model overrides and web port |
 | **Add pipeline → Register or revise research inputs** | Your CSV, OKF corpus, prediction target and label mapping |
-| **Add pipeline** | Research input, agent skills, ML evaluation options, replicates per pipeline and experiment name |
+| **Add pipeline** | Research input, agent skills, replicates per pipeline and experiment name |
 
 For the included example:
 
 1. Open **Experiments → Add pipeline**.
 2. In **Research inputs**, select **Heart failure complete-case software demonstration** and review its target.
-3. In **Agent skills**, choose one skill for each stage. Set optional ML evaluation/advanced model settings in the Machine learning step.
+3. In **Agent skills**, each stage starts with one compatible skill selected. Keep these defaults and select **Next**, or change the selections. The HeartFailure example defaults to all eligible predictors, Training-heavy data, Logistic Regression, SHAP Interpretation and cardiovascular Explanation. If you deselect all ML skills, the server runs scikit-learn default Logistic Regression without LLM parameter tuning.
 4. In **Review & create**, set a name and **1 replicate per pipeline** for a first experiment, review the plan and confirm it. **Random Start** is off by default: execution starts at Pipeline 1 and continues in order.
 5. Select **Create pipeline**, then **Run** on that pipeline's card. Creating a pipeline does not start it.
 
-Complete skill and evaluation settings in the creation wizard. Pipeline cards have
+Review skill selections in the creation wizard. Pipeline cards have
 execution controls and a delete button; there is no post-creation **Settings** or
 **Details** menu. To change a saved combination design, create a new pipeline.
 Running or interrupted pipelines show the applicable Pause/Resume controls.
@@ -135,4 +135,4 @@ A **Pipeline** is one combination of agent skills. A **Replicate** repeats that 
 
 For example, **48 pipelines × 10 replicates per pipeline = 480 total replicates**. The default is **1 replicate per pipeline**. All Pipelines complete their first scheduled replicate before the next cycle. Random Start changes the starting Pipeline; resuming preserves the recorded schedule.
 
-Progress identifies both units, for example **Pipeline 3 / 48 · Replicate 2 / 10**. Failed or skipped attempts remain recorded separately from completed work. **Split evaluations** in ML settings repeat model evaluation inside a Replicate; they do not multiply the number of Pipeline replicates. Existing capped schedules retain their recorded counts. Raw agent outputs and technical execution IDs are preserved as saved.
+Progress identifies both units, for example **Pipeline 3 / 48 · Replicate 2 / 10**. Failed or skipped attempts remain recorded separately from completed work. Historical **Split evaluations** repeat model evaluation inside a Replicate; they do not multiply the number of Pipeline replicates. New designs use one split evaluation and do not expose advanced ML controls. Existing capped schedules retain their recorded counts. Raw agent outputs and technical execution IDs are preserved as saved.

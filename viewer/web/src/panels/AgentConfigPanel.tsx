@@ -1,13 +1,9 @@
 import { displayText, skillLabel } from '../lib/displayText';
-import MLAdvancedSettings from '../components/MLAdvancedSettings';
 import {mlOverridesError,overridesForSkills,type MlOverrides} from '../lib/mlOverrides';
-import EvaluationSettings from '../components/EvaluationSettings';
 import {evaluationPlanError} from '../lib/evaluationPlan';
 import {compatibleResearchSkill} from '../lib/researchSkills';
 import CreateCustomSkill from '../components/CreateCustomSkill';
 import { agentStageLabel } from "../lib/stage";
-import AgentReferenceKnowledge from '../components/AgentReferenceKnowledge';
-import BaselineSettings from '../components/BaselineSettings';
 import { usePipelines } from "../store/pipelines";
 import { useRunForm } from "../lib/useRunForm";
 import Help from "../components/Help";
@@ -50,7 +46,7 @@ function Editor({ close }: { close: () => void }) {
       form[`playbook_${editor!.stage === "report" ? "explanation" : editor!.stage}`]);
   const [plan, setPlan] = useState<EvaluationPlan>({ ...form.evaluation });
   const [overrides,setOverrides]=useState<MlOverrides>(structuredClone(form.ml_overrides??{}));
-  const [baseline, setBaseline] = useState(form.baseline_columns ?? []);
+  const baseline = form.baseline_columns ?? [];
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   useEffect(() => { const d = dialog.current; d?.showModal(); return () => d?.close(); }, []);
@@ -135,7 +131,7 @@ function Editor({ close }: { close: () => void }) {
         {catalog.filter(x => x.stage === stage && compatibleResearchSkill(x, form)).map(x => <option key={x.id} value={x.id}
           disabled={multiple && used.includes(x.hash)}>{skillLabel(x.id,x.title)}{multiple && used.includes(x.hash) ? " · already used" : ""}</option>)}
       </select>
-    {stage==='ml'&&<MLAdvancedSettings skills={[choice]} value={overrides} replicates={plan.replicates} proposal={form.data_mode==='proposal'} disabled={saving||!!running||busy} onChange={setOverrides}/>}
+
       {coach===1&&selected&&<button type="button" className="mt-3 rounded border border-paper-line px-3 py-2 text-xs font-semibold text-ink" onClick={()=>setCoach(2)}>Keep this skill · review next</button>}
 
     <section className="mt-4 border-t border-paper-line pt-3" aria-label="Upload a custom skill" aria-busy={saving}>
@@ -173,15 +169,8 @@ function Editor({ close }: { close: () => void }) {
       {coach===2&&<button type="button" className="mt-3 rounded border border-paper-line px-3 py-2 text-xs font-semibold text-ink" onClick={()=>setCoach(3)}>Reviewed · show save button</button>}
     </div>:<p className="text-xs text-ink-soft">Choose a skill in step 1 to see its purpose and full instructions here.</p>}
     </section>
-    {stage === "ml" && <AgentReferenceKnowledge />}
     {choice && !selected && <p role="alert" className="mt-3 text-sm">This saved selection is not a skill for this agent. ML Results Presenter belongs to Explanation; ML Knowledge is reference material. Choose an appropriate skill and save.</p>}
-    {stage === "ml" && <div className="mt-4 space-y-3">
-      <BaselineSettings value={baseline} onChange={setBaseline}/>
-      <EvaluationSettings proposal={form.data_mode==='proposal'} value={plan} onChange={setPlan} disabled={saving||!!running||busy}
-        paired={!!form.combination_max_loops||['ml_logistic_regression','ml_xgboost'].includes(choice)}
-        dataSkill={form.combination_max_loops?'combinations':form.playbook_data}/>
-      <p className="text-xs text-ink-faint">The selected model is fitted using the recorded predictors. Missing labels and non-finite values are rejected before training.</p>
-    </div>}
+
     {(error || duplicate || invalidPlan) && <p role="alert" className="mt-3 text-sm text-red-700">{error || advancedError || (invalidPlan ? "Check evaluation ranges. CV folds must be 0 or 2–10." : "Choose a different skill for this agent.")}</p>}
     {!add && multiple && count === 1 && <p className="mt-3 text-xs text-ink-faint">At least one {agentStageLabel(stage)} agent is required.</p>}
     <div className="agent-settings-footer mt-5 flex flex-wrap justify-end gap-2">

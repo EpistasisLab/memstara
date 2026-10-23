@@ -239,6 +239,8 @@ def build_argv(
     interpret_agents = _whole_number(body, "interpret_agents", 4)
 
     known = set(playbooks)
+    if combination_plan:
+        known.update(item['id'] for entries in combination_plan['skills'].values() for item in entries)
     markable = set(playbook_stages)
     chosen: list[tuple[str, str]] = []
     for stage in PLAYBOOK_STAGES:

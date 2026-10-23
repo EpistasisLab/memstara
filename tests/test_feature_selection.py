@@ -212,3 +212,20 @@ def test_measured_result_cannot_claim_different_features():
     for features in (['x0', 'x1', 'x2'], ['x0', 'x1', 'x2', 'Y'], ['x0'] * 4, None):
         with pytest.raises(ValueError, match='Measured predictors'):
             fs.validate_measured(features, selected)
+
+
+def test_heart_failure_all_uses_complete_eligible_pool_without_random_sampling():
+    p = plan(size=30)
+    p['combination_plan']['skills']['hypothesis'] = [{'id': 'heart-failure-all'}]
+    expected = [f'x{i}' for i in range(30)]
+    contract = fs.context(p, 0)
+    assert contract['mode'] == 'all'
+    assert contract['required_features'] == expected
+    assert contract['sampling'] == 'all_eligible' and contract['seed'] is None
+    assert fs.validate(expected, p, 0)['actual_count'] == 30
+    with pytest.raises(ValueError):
+        fs.validate(expected[:10], p, 0)
+    with pytest.raises(ValueError):
+        fs.validate(expected[:-1]+['Y'], p, 0)
+    assert 'Use exactly required_features' in fs.instructions(p, 0)
+    assert fs.scoped(p, 0) == p  # Knowledge stays enabled, unlike random control.

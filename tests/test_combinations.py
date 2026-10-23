@@ -269,3 +269,22 @@ def test_capped_runner_and_resumed_provisioning_preserve_flavors(skills, tmp_pat
     assert [r['combination'] for r in initial] == [24, 1, 2]
     assert resumed == initial[1:]
     assert len(initial) == 3
+
+
+def test_empty_ml_selection_freezes_default_and_survives_launch(monkeypatch):
+    from memstara.control.workspace import PipelineWorkspace
+    from memstara.control.request import build_argv
+    from memstara.combinations import validate_plan
+    import json
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'test-model')
+    choices = {'hypothesis': ['hypothesis_general'], 'data': ['data_training_heavy'],
+               'ml': [], 'interpreter': ['shared-anil-shap'], 'report': ['report_general']}
+    plan = build_plan(choices, 2)
+    assert plan['combinations'] == 1 and plan['total_loops'] == 2
+    assert plan['skills']['ml'][0]['id'] == 'ml_default_logistic_regression'
+    assert validate_plan(plan) == plan
+    configuration = PipelineWorkspace.configuration({'combination_skills': choices, 'combination_repetitions': 2})
+    argv = build_argv(configuration, [], [x['id'] for x in catalog.catalog()], STAGES)
+    assert json.loads(argv[argv.index('--combination-plan') + 1]) == plan

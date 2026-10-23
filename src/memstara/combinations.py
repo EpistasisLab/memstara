@@ -19,6 +19,8 @@ def build_plan(choices, repetitions=1, *, random_start=False, max_loops=None, st
     resolved = {}
     for stage in STAGES:
         ids = choices[stage]
+        if stage == 'ml' and ids == []:
+            ids = ['ml_default_logistic_regression']
         if not isinstance(ids, list) or not ids or not all(isinstance(x, str) for x in ids):
             raise ValueError(f'{stage}: choose at least one skill')
         entries, seen = [], set()

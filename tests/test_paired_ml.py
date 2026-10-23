@@ -337,3 +337,38 @@ def test_unlimited_supervisor_records_usage_without_memory_rejection(monkeypatch
     assert result['memory_ceiling_bytes'] is None
     assert result['peak_rss_bytes'] >= 4 * 1024**3
     assert result['duration_seconds'] >= .3
+
+
+def test_default_lr_tool_trains_library_defaults_and_records_provenance(experiment):
+    from sklearn.linear_model import LogisticRegression
+    from memstara.mcp_servers.ml import train_and_score, get_ml_configuration
+    path, snapshot, effective, _ = experiment
+    snapshot['books']['ml'] = [config.DEFAULT_SKILL]
+    spec = json.loads(asyncio.run(get_ml_configuration(str(path), 'Y')))
+    assert spec['plan_source'] == 'server_frozen'
+    assert spec['proposal_template']['models']['logistic_regression']['parameters'] == LogisticRegression().get_params()
+    result = json.loads(train_and_score(str(path), 'Y', ml_plan={'unexpected': 'ignored'}))
+    assert not result.get('error'), result
+    assert result.get('status') != 'failed', result
+    assert set(result['model_results']) == {'logistic_regression'}
+    receipt = result['ml_configuration']
+    assert receipt['configuration_source'] == 'sklearn_default'
+    assert receipt['sklearn_version']
+    assert receipt['effective']['models']['logistic_regression']['parameters'] == LogisticRegression().get_params()
+    assert receipt['effective']['folds'] == 0
+    assert receipt['effective']['models']['logistic_regression']['scale_numeric'] is False
+    assert result['ml_plan_resolution']['agent_proposal_ignored'] is True
+    assert result['evaluation']['reproducibility']['status'] == 'verified'
+    assert json.loads(path.with_suffix('.ml-plan.json').read_text()) == receipt
+
+
+def test_default_lr_rejects_parameter_changes_and_user_overrides(experiment):
+    path, snapshot, effective, _ = experiment
+    snapshot['books']['ml'] = [config.DEFAULT_SKILL]
+    plan = config.default_plan()
+    plan['models']['logistic_regression']['parameters']['C'] = 2
+    with pytest.raises(ValueError, match='defaults'):
+        config.validate(plan, snapshot, effective)
+    snapshot['ml_overrides'] = {'version': 1, 'folds': 2}
+    with pytest.raises(ValueError, match='overrides'):
+        config.resolve(None, snapshot, effective)

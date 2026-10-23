@@ -34,7 +34,8 @@ try {
   for(const [i,role] of roles.entries()){
    await dialog.getByRole('heading',{name:labels[i]+' skills',exact:true}).waitFor();
    const forward=dialog.getByRole('button',{name:i===4?'Review plan':'Next: '+labels[i+1],exact:true});
-   assert(await forward.isDisabled(),'Empty role must not advance');
+   assert(!(await forward.isDisabled()),'Default role must advance');
+   assert.equal(await dialog.locator('.comb-skill-card input:checked').count(),1,'Exactly one default skill');
    const choices=skills.filter(s=>s.stage===role);
    await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'});
    assert(await dialog.locator('.comb-skill-picker').evaluate(e=>e.open),'Every agent skill picker opens by default');
@@ -55,7 +56,7 @@ try {
    for(const skill of choices)await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).check();
    assert(!(await forward.isDisabled()),'Selected role must advance');
    for(const skill of choices)await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).uncheck();
-   assert(await forward.isDisabled(),'Removing all choices must disable Next');
+   assert.equal(await forward.isDisabled(),role!=='ml','Only ML supports an empty selection via default LR');
    for(const skill of choices)await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).check();
    if(i<4){
     await forward.click();await dialog.getByRole('heading',{name:labels[i+1]+' skills',exact:true}).waitFor();
