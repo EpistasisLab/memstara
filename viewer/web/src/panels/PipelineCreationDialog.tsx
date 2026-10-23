@@ -2,7 +2,6 @@ import { displayText, skillLabel } from '../lib/displayText';
 import MLAdvancedSettings from '../components/MLAdvancedSettings';
 import {mlOverridesError,overridesForSkills,overrideCount} from '../lib/mlOverrides';
 import {compatibleResearchSkill} from '../lib/researchSkills';
-import ResearchInputs from '../components/ResearchInputs';
 import ResearchInputSelect from '../components/ResearchInputSelect';
 import CombinationWizard from '../components/CombinationWizard';
 import FloorDetailDialog from '../components/FloorDetailDialog';
@@ -12,7 +11,7 @@ import { evaluationPlanError } from '../lib/evaluationPlan';
 import LoopLimitSettings from "../components/LoopLimitSettings";
 import BaselineSettings from '../components/BaselineSettings';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, Database, Workflow, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Workflow, X } from 'lucide-react';
 import { useControl, type RunRequest } from '../store/control';
 import { usePipelines } from '../store/pipelines';
 import { newPipelineConfiguration } from '../lib/newPipelineConfiguration';
@@ -38,25 +37,17 @@ export default function PipelineCreationDialog() {
 }
 
 function ChooseBuildMode() {
-  const [mode,setMode]=useState<'selected'|'all'|'research'|null>(null);
-  if(mode==='research')return <FloorDetailDialog title="Prepare research inputs" close={()=>setMode(null)}><ResearchInputs/></FloorDetailDialog>;
+  const [mode,setMode]=useState<'selected'|'all'|null>(null);
   if(mode==='selected')return <CreationWizard/>;
   if(mode==='all')return <CombinationWizard/>;
   return <FloorDetailDialog title="Build pipelines" close={()=>usePipelines.getState().closeCreation()}>
     <div className="space-y-5 p-3">
-      <p className="text-sm leading-relaxed text-ink-muted">Start with All Combinations if your study is already available. Choose Prepare research inputs only when you need to register or review your CSV, knowledge source and target.</p>
       <div className="grid gap-4" style={{gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,260px),1fr))'}}>
-      <button aria-label="Prepare research inputs" type="button" className="group flex h-full w-full flex-col gap-3 rounded-xl border border-paper-line bg-paper-panel p-5 text-left transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-accent" onClick={()=>setMode('research')}>
-        <span className="flex w-full items-center justify-between text-ink-muted"><Database size={24} aria-hidden="true"/><span className="text-xs font-semibold">1 · Study inputs</span></span>
-        <strong className="text-lg">Prepare research inputs</strong>
-        <p className="text-sm leading-relaxed text-ink-muted">Register your CSV, OKF corpus and prediction target together, or review an existing study.</p>
-        <span className="mt-auto flex items-center gap-2 pt-2 text-sm font-semibold">Prepare a study <ArrowRight size={16} aria-hidden="true"/></span>
-      </button>
       <button hidden type="button" className="w-full rounded-xl border border-paper-line p-4 text-left" onClick={()=>setMode('selected')}><strong>Selected Pipelines</strong><p>Build one pipeline, then run it when ready. Add more separately.</p></button>
       <button aria-label="All Combinations" type="button" className="group flex h-full w-full flex-col gap-3 rounded-xl border border-accent/40 bg-accent/5 p-5 text-left transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-accent" onClick={()=>setMode('all')}>
-        <span className="flex w-full items-center justify-between text-ink-muted"><Workflow size={24} aria-hidden="true"/><span className="text-xs font-semibold">2 · Pipeline setup</span></span>
+        <span className="flex w-full items-center justify-between text-ink-muted"><Workflow size={24} aria-hidden="true"/><span className="text-xs font-semibold">Pipeline setup</span></span>
         <strong className="text-lg">All Combinations</strong>
-        <p className="text-sm leading-relaxed text-ink-muted">Choose your study and one or more skills for each agent. Review the combinations and set the maximum Loops.</p>
+        <p className="text-sm leading-relaxed text-ink-muted">Select or register your study, then choose one or more skills for each agent. Review the combinations and set the maximum Loops.</p>
         <span className="mt-auto flex items-center gap-2 pt-2 text-sm font-semibold">Configure a pipeline <ArrowRight size={16} aria-hidden="true"/></span>
       </button>
       </div>
