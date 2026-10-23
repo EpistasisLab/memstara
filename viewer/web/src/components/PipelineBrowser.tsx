@@ -10,7 +10,8 @@ import {useControl} from '../store/control';
 import {usePipelines} from '../store/pipelines';
 import {pipelineState} from '../lib/pipelineState';
 import {useLiveOutputs} from '../store/liveOutputs';
-import {findingHeading, firstFinding} from '../lib/findingHeading';
+import {findingHeading} from '../lib/findingHeading';
+import {experimentHypothesis} from '../lib/experimentHeading';
 export default function PipelineBrowser({items, selected, onSelect, compare, onCompare,toggleHost}: {
   toggleHost:HTMLElement|null; items: PipelineDefinition[]; selected: string | null; onSelect: (id:string)=>void;
   compare: string[]; onCompare:(ids:string[])=>void;
@@ -19,6 +20,7 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
   useControl(s=>s.catalog);
   const pendingStart=usePipelines(s=>s.pendingStart);
   const findings=useLiveOutputs(s=>s.results);
+  const events=useLiveOutputs(s=>s.events);
   const browser=useRef<HTMLElement>(null);
   const [deleting,setDeleting]=useState<PipelineDefinition|null>(null);
   const [selectionRevision,setSelectionRevision]=useState(0);
@@ -56,7 +58,9 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
           const stageNames:Record<string,string>={hypothesis:'Hypothesis generation',data:'Data extraction',ml:'Model evaluation',interpret:'Interpretation',interpreter:'Interpretation',report:'Explanation'};
           const corpus=researchSkillProfile(p.configuration).label;
           const target=p.running?.configuration?.y_column??p.configuration.y_column??'Not specified';
-          const heading=findingHeading(firstFinding(findings, (p.running??p.latest)?.run_tag??'')?.hypothesis);
+          const execution=p.running??p.latest;
+          const heading=findingHeading(experimentHypothesis(execution?.run_tag??'',p.progress.iteration,!!p.running,execution?.configuration?.trials,events,findings));
+          const title=heading||(p.running?'Generating hypothesis…':p.name);
           return <div key={p.id} data-state={state.toLowerCase().replaceAll(' ','-')} className={`pipeline-browser-row ${selected===p.id?'is-selected':''}`}>
           <div className="pipeline-card-top pipeline-card-header">
             <button type="button" className="pipeline-card-identity pipeline-card-heading-select" aria-label={`Select pipeline ${p.number}: ${p.name}`} aria-pressed={selected===p.id} onClick={()=>choose(p.id)}>Experiment {p.number}</button>
@@ -65,8 +69,8 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
             </div>
           </div>
           <button className="pipeline-card-select" data-help="Inspect this pipeline" data-help-description="Select this card to focus its diagram. Use the buttons on this card to control this pipeline. The position identifies the Pipeline and Replicate in this experiment’s latest execution." aria-label={`Inspect ${p.name}`} aria-pressed={selected===p.id} onClick={()=>choose(p.id)}>
-            <strong className="pipeline-card-name" title={heading||p.name}>{heading||p.name}</strong>
-            {heading&&<span className="pipeline-card-context text-xs text-ink-soft" title={p.name}>Saved as: {p.name}</span>}
+            <strong className="pipeline-card-name" title={title}>{title}</strong>
+            {(heading||p.running)&&<span className="pipeline-card-context text-xs text-ink-soft" title={p.name}>Saved as: {p.name}</span>}
             <span className="pipeline-card-stage pipeline-card-context" title={`Corpus: ${corpus} · Target: ${target}`}>{corpus} · {target}</span>
             <span className="pipeline-card-position"><span className="pipeline-card-loop">{pipelineLoopLabel(p)}</span></span>
             {p.progress.stage&&<span className="pipeline-card-stage">{p.running?'Current':'Last'}: {stageNames[p.progress.stage]??p.progress.stage}</span>}
