@@ -1,0 +1,3 @@
+# Heart failure — All eligible predictors
+
+Use the selected HeartFailure knowledge corpus and fixed study target. Form a testable hypothesis using the complete server-supplied eligible predictor set, without random selection or additional feature selection. Preserve the exact required_features list supplied by the feature-selection contract. Exclude the outcome and excluded or leakage-prone columns; the eligible catalog is authoritative. Retrieve supporting knowledge and cite only documents actually read. Do not invent evidence, predictors or targets. Preserve the existing question and hypothesis output schemas. Treat predictive associations as exploratory, not causal or clinically validated.
