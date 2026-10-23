@@ -1,4 +1,4 @@
-import {chromium} from '@playwright/test';
+import {chromium,expect} from '@playwright/test';
 import assert from 'node:assert/strict';
 // All requests are mocked; no real pipeline or paid model run.
 const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
@@ -29,7 +29,7 @@ try {
   });
   await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Fixture'}}));
   await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
-  await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();await page.getByRole('button',{name:/Add pipeline/i}).click();await page.getByRole('button',{name:/All Combinations/}).click();
+  await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add pipeline/i}).click();await page.getByRole('button',{name:/All Combinations/}).click();
   const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});await dialog.getByLabel('Deployment target column',{exact:true}).fill('fixture_target');await dialog.getByRole('button',{name:'Choose skills'}).click();
   const labels=['Hypothesis','Data','Machine learning','Interpretation','Explanation'];
   for(const [i,role] of roles.entries()){
@@ -58,15 +58,14 @@ try {
   await maximum.fill('10');await consent.check();await dialog.getByRole('checkbox',{name:/Random Start/}).check();assert(await create.isDisabled());
   await consent.check();assert(!(await create.isDisabled()));assert.match(await dialog.innerText(),/only part of the combination set/);
   assert(await dialog.evaluate(e=>e.scrollWidth<=e.clientWidth+2));await dialog.screenshot({path:`/tmp/random-start-${width}-${theme}.png`});
-  await create.click();await dialog.waitFor({state:'hidden'});await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
+  await create.click();await dialog.waitFor({state:'hidden'});await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
   assert.equal(posted.configuration.combination_random_start,true);assert.equal(posted.configuration.combination_max_loops,10);assert.equal(posted.configuration.waves,10);assert.equal(posted.configuration.continuous,false);assert.equal(runPosts,0);
-  rows[0].latest={run_tag:'frozen',exit_code:0,configuration:{waves:10}};await page.reload();await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
+  rows[0].latest={run_tag:'frozen',exit_code:0,configuration:{waves:10}};await page.reload();await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
   const studio=page.getByRole('region',{name:'Combination design',exact:true});await studio.waitFor();
   await page.getByText('Loop 1 / 10 · Latest execution',{exact:true}).waitFor();
-  await studio.getByRole('button',{name:'Preview interpreter flavor 1',exact:true}).waitFor();
-  assert.equal(await studio.getByRole('button',{name:'Preview interpreter flavor 1',exact:true}).getAttribute('aria-pressed'),'true');
+  await expect(studio.locator('.cf-desk.is-selected').filter({hasText:'interpreter flavor 1'})).toHaveCount(1);
   rows[0].progress={iteration:2};await page.getByText('Loop 2 / 10 · Latest execution',{exact:true}).waitFor();
-  await page.waitForFunction(()=>document.querySelector('button[aria-label="Preview interpreter flavor 2"]')?.getAttribute('aria-pressed')==='true');
+  await expect(studio.locator('.cf-desk.is-selected').filter({hasText:'interpreter flavor 2'})).toHaveCount(1);
   assert.equal(await page.getByRole('button',{name:'Loop explorer',exact:true}).count(),0);
   assert.equal(await studio.getByRole('spinbutton',{name:'Combination Loop',exact:true}).count(),0);assert.deepEqual(errors,[]);assert.equal(runPosts,0);
   console.log(JSON.stringify({width,theme,limits:'pass',savedRandomStart:'pass',frozenCurrentLoop:'pass',noRunOnCreate:'pass'}));await page.close();

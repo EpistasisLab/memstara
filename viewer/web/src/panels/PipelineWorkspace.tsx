@@ -252,7 +252,7 @@ export default function PipelineWorkspace(){
   const canvasEdges=edges.filter(e=>canvasIds.has(e.source)&&canvasIds.has(e.target));
   const header=<div className="pipeline-unified-header" role="group" aria-label="Pipeline workspace header">
     <div ref={setCombinationHeader} className="pipeline-context-header"/>
-    {!combinationPipeline&&<div className="pipeline-context-title"><strong>{comparison.length?'Compare pipelines':selectedPipeline?.name??'Research pipelines'}</strong><span>{comparison.length?`${comparison.length} selected`:'Floor plan'}</span></div>}
+    {!combinationPipeline&&<div className="pipeline-context-title"><strong>{comparison.length?'Compare pipelines':selectedPipeline?.name??'Research pipelines'}</strong><span>{comparison.length?`${comparison.length} selected`:'Experiments'}</span></div>}
     <div className="pipeline-global-actions" role="group" aria-label="Controls for all pipelines">
       <span className="pipeline-running-count" data-help="Running pipelines" data-help-description="Number of pipelines currently executing. Paused pipelines are excluded; this is not the number of Loops or combinations." tabIndex={0} title="Pipelines currently executing; paused pipelines are excluded"><Activity size={13}/>{items.filter(p=>floorExecutionState(p.running).live).length} running</span>
       <MasterStop/>
@@ -279,7 +279,7 @@ export default function PipelineWorkspace(){
     })}</div>}
     {combinationPipeline&&<CombinationDesign key={combinationPipeline.id} pipeline={combinationPipeline} headerHost={combinationHeader} onActivity={setFloorActivity}/>}
     <div className="floor-detail-links"><button aria-pressed={showResources} title="Show shared knowledge, data, tools and storage alongside the pipeline" onClick={()=>setShowResources(v=>!v)}>Shared resources</button><button onClick={()=>setDetail('tools')}>Recent tool calls</button><button onClick={()=>setDetail('progress')}>Pipeline progress</button>{focused&&inspected&&<button onClick={()=>setDetail('agent')}>Selected agent details</button>}</div>
-    <div ref={setToolbarHost} className="floor-docked-controls floor-visible-controls" role="group" aria-label="Floor Plan view controls"/>
+    <div ref={setToolbarHost} className="floor-docked-controls floor-visible-controls" role="group" aria-label="Experiments view controls"/>
     {!combinationPipeline&&!comparison.length&&<div className="floor-canvas">
       <ReactFlow nodes={canvasNodes} onNodesChange={onNodesChange} edges={canvasEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
         defaultViewport={{x:16,y:60,zoom:1}} minZoom={.1} maxZoom={1.6} nodesDraggable={false} nodesConnectable={false}
@@ -312,7 +312,7 @@ export default function PipelineWorkspace(){
         </ul></details>
         <p>{observedOwner?`Pipeline: ${observedOwner.name}`:'No matching execution selected.'}{snapshot?.stale?' Live activity is currently unavailable.':''}</p>
         {observedCalls.length?<ul>{observedCalls.map((call,i)=><li key={`${call.agent}-${call.at}-${i}`}><strong>{call.agent} → {call.tool}</strong><span>{floorCallCategory(call.tool,call.place)} · {call.server}</span><time>{call.at}</time></li>)}</ul>:<p>No recent calls observed. This does not mean the pipeline has never used a tool.</p>}
-        <button onClick={()=>{setDetail(null);useViewer.getState().setView('agents');}}>Open Telemetry for history</button>
+        <button onClick={()=>{setDetail(null);useViewer.getState().setView('agents');}}>Open Usage for history</button>
       </div>
     </FloorDetailDialog>}
     {detail==='progress'&&<FloorDetailDialog title="Pipeline progress" close={()=>setDetail(null)}><PipelineStatus ids={visibleItems.map(p=>p.id)}/></FloorDetailDialog>}

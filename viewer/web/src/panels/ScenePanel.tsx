@@ -207,7 +207,7 @@ export default function ScenePanel() {
   return (
     <Panel
       icon={Map}
-      title="Floor plan"
+      title="Experiments"
       // Figures on the floor, planned ones included, because the number beside the title is
       // read as "how many of these am I looking at". `working` below stays on `scene`: a
       // planned figure is not working, and never counting one keeps that number about the

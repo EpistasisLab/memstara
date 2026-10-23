@@ -133,3 +133,27 @@ button[aria-label^="Help:"] {min-width:24px;min-height:24px;}
 
 /* Browser zoom can leave less than 200 CSS pixels for loop navigation. */
 .telemetry-loop-controls > div { display:flex; flex-wrap:wrap; min-width:0; gap:8px; }
+
+/* Primary reading views: interpretation first, details on demand. */
+.analysis-select-label{display:flex;flex-direction:column;gap:.4rem;min-width:0;max-width:100%;font-size:.8rem;font-weight:600;color:rgb(var(--ink-soft))}
+.analysis-select-label select{width:100%;min-width:0;max-width:100%;min-height:44px;padding:.55rem .75rem;border:1px solid rgb(var(--line));border-radius:.5rem;background:rgb(var(--panel));color:rgb(var(--ink));font-size:.875rem}
+.analysis-technical-details{min-width:0;padding:1rem;border:1px solid rgb(var(--line));border-radius:.65rem;background:rgb(var(--panel))}
+.analysis-technical-details>summary{cursor:pointer;font-size:.875rem;font-weight:600;color:rgb(var(--ink));overflow-wrap:anywhere}
+.analysis-technical-details summary:focus-visible,.analysis-select-label select:focus-visible{outline:2px solid rgb(var(--accent));outline-offset:3px}
+.clinical-reading-summary{padding:1.25rem 0;min-width:0;overflow-wrap:anywhere}
+.clinical-reading-summary>h4{margin-bottom:.75rem;font-size:.875rem;font-weight:700;color:rgb(var(--ink-soft))}
+.selected-result-card{min-width:0;overflow-wrap:anywhere}
+.conclusions-reader{width:100%;max-width:60rem;margin:0 auto;padding:clamp(1rem,3vw,2rem);min-width:0;overflow-wrap:anywhere}
+.conclusions-toolbar{display:flex;flex-wrap:wrap;align-items:end;gap:1rem;padding-bottom:1.25rem;border-bottom:1px solid rgb(var(--line))}
+.conclusions-toolbar .analysis-select-label{flex:1 1 260px}
+.conclusions-download{display:flex;align-items:center;justify-content:center;gap:.5rem;min-height:44px;padding:.5rem .75rem;border:1px solid rgb(var(--line));border-radius:.5rem;font-size:.8rem;font-weight:600;color:rgb(var(--ink));background:rgb(var(--panel))}
+.conclusions-download:disabled{opacity:.5;cursor:not-allowed}
+.conclusions-heading{padding:1.5rem 0}
+.pipeline-finding-heading{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;font-size:.8rem;line-height:1.5;color:rgb(var(--ink-soft))}
+/* Follow the measured workspace width used by workspaceGeometry, including tablet gutters. */
+.docked-workspace[data-compact="true"] #workspace-control{position:absolute!important}
+.docked-workspace[data-compact="true"] #workspace-control .window-titlebar{display:none}
+.docked-workspace[data-compact="true"] #workspace-control nav{flex-direction:row;overflow-x:auto;overscroll-behavior-x:contain}
+.docked-workspace[data-compact="true"] #workspace-control .control-nav-label{display:none}
+.docked-workspace[data-compact="true"] #workspace-control .control-view-button{width:auto;flex-shrink:0}
+.docked-workspace[data-compact="true"] #workspace-control .control-view-button>span{white-space:nowrap}

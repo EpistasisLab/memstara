@@ -3,6 +3,8 @@ import * as Tooltip from '@radix-ui/react-tooltip';
 import WindowWorkspace from '../src/components/WindowWorkspace';
 import ControlPanel from '../src/panels/ControlPanel';
 import {VIEWS} from '../src/lib/views';
+import ReportPanel from '../src/panels/ReportPanel';
+import {useCompletedResults} from '../src/lib/useCompletedResults';
 import ResultsPanel from '../src/panels/ResultsPanel';
 import {useViewer} from '../src/store/viewer';
 import {usePipelines} from '../src/store/pipelines';
@@ -20,10 +22,11 @@ usePipelines.setState({loaded: true, selected: 'alpha', resultsScope: 'selected'
   {id:'beta',number:2,name:'Beta research',latest:{run_tag:'beta-run'},running:null,progress:{},configuration:{}},
 ] as never});
 function Workspace(){
+  useCompletedResults();
   const view=useViewer(s=>s.view);
   return <WindowWorkspace items={[
     {id:'control',title:'Control',content:<ControlPanel/>},
-    {id:'pipeline',title:VIEWS[view].label,content:view==='results'?<ResultsPanel embedded/>:<p>{VIEWS[view].label}</p>},
+    {id:'pipeline',title:VIEWS[view].label,content:view==='results'?<ResultsPanel embedded/>:view==='report'?<ReportPanel/>:<p>{VIEWS[view].label}</p>},
   ]}/>;
 }
 createRoot(document.getElementById('root')!).render(<Tooltip.Provider><Workspace/></Tooltip.Provider>);

@@ -79,7 +79,7 @@ try{
    await page.screenshot({path:`/tmp/memstara-universe-simple-${width}-${theme}.png`});
   }
   const names=await page.locator('[aria-label="View navigation"] button').allTextContents();
-  assert.deepEqual(names,['Floor plan','Question universe','Clinician view','Final report','Telemetry']);
+  assert.deepEqual(names,['Experiments','Results','Conclusions','Usage']);
   await page.addInitScript(()=>{HTMLCanvasElement.prototype.getContext=function(){return null;};});await page.reload();
   await expect(page.getByText('Canvas is unavailable.',{exact:false})).toBeVisible();
   await options();await page.getByRole('button',{name:'List',exact:true}).click();await close();

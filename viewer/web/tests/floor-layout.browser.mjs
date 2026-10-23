@@ -7,7 +7,7 @@ try {
  await page.route('**/control/**',r=>r.fulfill({json:new URL(r.request().url()).pathname==='/control/pipelines'?{pipelines:items}:{}}));
  await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Layout fixture: results unavailable'}}));
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
- await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
+ await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
  await page.locator('.floor-canvas .react-flow').waitFor();
  const resources=page.getByRole('button',{name:'Shared resources',exact:true});
  await resources.click();await page.locator('.react-flow__node[data-id="resources-zone"]').waitFor();
@@ -22,14 +22,14 @@ try {
   const floor=await page.locator('#workspace-pipeline').boundingBox();assert(g.bottom<=floor.y+floor.height+1,JSON.stringify({width,g,floor,reason:'Canvas clipped by window'}));
   const visible=await page.locator('.floating-window:not([hidden])').evaluateAll(es=>es.filter(e=>e.id!=='workspace-control').map(e=>({id:e.id,x:e.offsetLeft,y:e.offsetTop,w:e.offsetWidth,h:e.offsetHeight})));
   for(let i=0;i<visible.length;i++)for(let j=i+1;j<visible.length;j++){const a=visible[i],b=visible[j];assert(a.x+a.w<=b.x+1||b.x+b.w<=a.x+1||a.y+a.h<=b.y+1||b.y+b.h<=a.y+1,'Overlapping windows');}
-  for(const name of ['Results','Final report']){if(await page.getByRole('tab',{name,exact:true}).count())await page.getByRole('tab',{name,exact:true}).click();await page.waitForTimeout(60);}
+  for(const name of ['Results','Conclusions']){if(await page.getByRole('tab',{name,exact:true}).count())await page.getByRole('tab',{name,exact:true}).click();await page.waitForTimeout(60);}
   await page.locator('#workspace-pipeline').scrollIntoViewIfNeeded();
   const show=page.getByRole('button',{name:'Show pipeline list',exact:true});if(await show.isVisible())await show.click();
   await page.getByRole('button',{name:'Inspect Research pipeline 2',exact:true}).click();await page.waitForTimeout(600);
   const nav=page.locator('[aria-label="View navigation"]');
   await nav.getByRole('button',{name:'Results',exact:true}).click();
   await page.locator('#results-panel').waitFor();
-  await nav.getByRole('button',{name:'Floor plan',exact:true}).click();await page.waitForTimeout(400);
+  await nav.getByRole('button',{name:'Experiments',exact:true}).click();await page.waitForTimeout(400);
   await page.locator('.floor-canvas .react-flow').waitFor();
   assert((await page.locator('.pipeline-context-title').innerText()).includes('Research pipeline 2'),'Changing views lost the inspected pipeline');
   assert.equal(await page.locator('#workspace-results, #workspace-report').count(),0);

@@ -27,7 +27,7 @@ export default function WorkspaceActions({only}: {only?: 'history' | 'status'}) 
     {open&&<dialog ref={dialog} onCancel={()=>setOpen(null)} aria-labelledby="workspace-action-title" className="workspace-dialog">
       <header><h2 id="workspace-action-title">{open==='history'?'Saved analyses':'System status'}</h2><button aria-label="Close workspace dialog" onClick={close}><X size={18}/></button></header>
       {open==='history'?<>
-        <p>Open previous results here. Start a new analysis using a pipeline's Play button in Floor Plan.</p>
+        <p>Open previous results here. Start a new analysis using a pipeline's Play button in Experiments.</p>
         <button className="workspace-action" onClick={()=>{usePipelines.getState().viewRun(null);close();}}>No saved analysis selected</button>
         <label className="block my-3">Find an analysis<input className="workspace-input" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Pipeline, date, model or run ID"/></label>
         <div className="space-y-2">{runs.map(run=><button key={run.run_tag} className="run-history-item" aria-pressed={run.run_tag===tag}

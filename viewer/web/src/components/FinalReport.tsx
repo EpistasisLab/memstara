@@ -29,7 +29,7 @@ export default function FinalReport() {
     <div className="flex items-center gap-2 p-3">
       <FileText size={16} className="text-ink-soft" />
       <button className="flex-1 text-left text-sm font-bold" aria-expanded={expanded}
-        onClick={() => setExpanded(v => !v)}>Final report <span className="ml-2 text-xs font-normal text-ink-soft">{report.status}</span></button>
+        onClick={() => setExpanded(v => !v)}>Conclusions <span className="ml-2 text-xs font-normal text-ink-soft">{report.status}</span></button>
       {report.text && <button aria-label="Download final report" onClick={download} className="rounded p-1.5 hover:bg-paper"><Download size={15} /></button>}
     </div>
     <p className="px-3 pb-2 text-[12px] text-ink-faint">{tag}</p>

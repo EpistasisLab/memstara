@@ -28,12 +28,11 @@ try {
    return route.fulfill({body:await readFile(file),contentType:path.endsWith('.js')?'application/javascript':path.endsWith('.css')?'text/css':'text/html'});
   });
   await page.goto('http://fixture.local/');
-  await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
-  await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Results',exact:true}).click();
+  await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
+  await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Conclusions',exact:true}).click();
   const tab=page.getByRole('tab',{name:'Results',exact:true});if(await tab.count())await tab.click();
-  await page.getByRole('button',{name:'This execution',exact:true}).click();
-  await page.getByText('Open the report for this execution',{exact:true}).click();
-  const panel=page.getByTestId('final-report').getByRole('region',{name:'Explanation provenance'});await panel.waitFor();
+  await page.getByText('Report records and supporting evidence',{exact:true}).click();
+  const panel=page.getByTestId('report-page').getByRole('region',{name:'Explanation provenance'});await panel.waitFor();
   await panel.getByText('Addiction Expert · Loop 1 · completed',{exact:true}).click();
   await panel.getByText('HIV Expert · Loop 2 · completed',{exact:true}).click();
   const text=await panel.innerText();
@@ -42,12 +41,11 @@ try {
   assert.deepEqual(errors,[]);
   snapshot.report.status='failed';snapshot.report.error='Knowledge database unavailable';
   snapshot.report.specialist_explanation={status:'failed',expert:'hiv',loop:3};
-  await page.reload();await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
-  await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Results',exact:true}).click();
-  await page.getByRole('button',{name:'This execution',exact:true}).click();
-  await page.getByText('Open the report for this execution',{exact:true}).click();
-  await page.getByTestId('final-report').getByText('Knowledge database unavailable',{exact:true}).waitFor();
-  assert((await page.getByTestId('final-report').getByRole('region',{name:'Explanation provenance'}).innerText()).includes('failed'));
+  await page.reload();await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
+  await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Conclusions',exact:true}).click();
+  await page.getByText('Report records and supporting evidence',{exact:true}).click();
+  await page.getByTestId('report-page').getByText('Knowledge database unavailable',{exact:true}).waitFor();
+  assert((await page.getByTestId('report-page').getByRole('region',{name:'Explanation provenance'}).innerText()).includes('failed'));
   assert.deepEqual(errors,[]);await page.close();
  }
 }finally{await browser.close();}

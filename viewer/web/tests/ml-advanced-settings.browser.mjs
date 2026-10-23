@@ -26,7 +26,7 @@ try{
   return r.fulfill({json:{skills:[],runs:[]}});
  });
  await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Isolated fixture'}}));
- await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
+ await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
  await page.getByRole('button',{name:/Add pipeline/i}).click();await openBuildModeFixture(page);
  let dialog=page.getByRole('dialog',{name:'Create a pipeline',exact:true});
  await dialog.getByLabel('Deployment target column').fill('Y');await dialog.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();
@@ -49,7 +49,7 @@ try{
  for(const role of ['Interpretation','Explanation']){const choice=dialog.getByRole('combobox',{name:role+' skill',exact:true});if(!await choice.inputValue())await choice.selectOption(role==='Interpretation'?'shared-anil-shap':'report_general');await dialog.getByRole('button',{name:'Next',exact:true}).click();}
  await dialog.getByLabel('Pipeline name',{exact:true}).fill('Advanced LR fixture');await dialog.getByRole('button',{name:'Next',exact:true}).click();await dialog.getByRole('button',{name:'Create pipeline',exact:true}).click();await dialog.waitFor({state:'hidden'});
  assert.equal(items[0].configuration.ml_overrides.models.logistic_regression.parameters.C,.25);
- await page.reload();await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();await page.getByRole('button',{name:'Inspect Machine learning',exact:true}).click();
+ await page.reload();await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:'Inspect Machine learning',exact:true}).click();
  dialog=page.getByRole('dialog').filter({has:page.locator('#agent-skill-select')});await dialog.getByText(/^Advanced model settings/).click();
  assert.equal(await dialog.getByLabel('Logistic Regression (LR) C',{exact:true}).inputValue(),'0.25');
  await dialog.getByLabel('Logistic Regression (LR) C',{exact:true}).fill('.5');await dialog.getByRole('button',{name:'Save settings',exact:true}).click();await dialog.waitFor({state:'hidden'});

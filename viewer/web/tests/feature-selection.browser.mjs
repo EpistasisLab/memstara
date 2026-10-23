@@ -45,10 +45,11 @@ try {
    return route.fulfill({body:await readFile(file),contentType:path.endsWith('.js')?'application/javascript':path.endsWith('.css')?'text/css':'text/html'});
   });
   await page.goto('http://fixture.local/');
-  await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
+  await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
   await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Results',exact:true}).click();
   const tab=page.getByRole('tab',{name:'Results',exact:true});if(await tab.count())await tab.click();
   await page.getByRole('button',{name:'Latest executions across pipelines',exact:true}).click();
+  await page.getByText('Model performance and technical details',{exact:true}).click();
   const evidence=page.getByRole('article',{name:'Selected analysis evidence'});
   await evidence.getByText(/Hypothesis selection: random/).waitFor();
   const text=await evidence.innerText();
@@ -76,10 +77,11 @@ try {
   result.evaluation.model_results.xgboost.specialist_xai.items[1]={method:'lime',model:'xgboost',replicate:1,
     status:'failed',error_type:'RuntimeError',seed:7};
   await page.reload();
-  await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
+  await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
   await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Results',exact:true}).click();
   const reselect=page.getByRole('tab',{name:'Results',exact:true});if(await reselect.count())await reselect.click();
   await page.getByRole('button',{name:'Latest executions across pipelines',exact:true}).click();
+  await page.getByText('Model performance and technical details',{exact:true}).click();
   await page.getByText('Explanation unavailable (RuntimeError). Do not infer feature effects.',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);
   console.log(`Saved selection and evaluated predictor display passed at ${width}px; all APIs mocked.`);

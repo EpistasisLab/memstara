@@ -21,7 +21,7 @@ try{
  });
  await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Isolated fixture'}}));
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
- await page.getByRole('button',{name:'Floor plan',exact:true}).click();
+ await page.getByRole('button',{name:'Experiments',exact:true}).click();
  assert.equal(await page.getByRole('button',{name:'Settings and more for Pricing fixture',exact:true}).count(),0);
  assert.equal(await page.getByRole('button',{name:'Save manual rates',exact:true}).count(),0);
  assert.equal(saved,0);

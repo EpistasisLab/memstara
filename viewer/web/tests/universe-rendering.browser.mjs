@@ -1,3 +1,4 @@
+import {openRetainedView,retainedWorkspaceUrl} from './retained-views.mjs';
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -21,11 +22,12 @@ try {
    if(/^\/api\/discovery\/questions\/\d+$/.test(path))return route.fulfill({json:{question:questions.find(q=>q.question_id===Number(path.split('/').at(-1))),tasks:[],results:[],record_limit:100}});
    if(path.startsWith('/control/'))return route.fulfill({json:path==='/control/pipelines'?{pipelines:[]}:{}});
    if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unrelated fixture endpoint unavailable'}});
+   if(new URL(route.request().url()).port==='4177')return route.continue();
    const file=path.startsWith('/assets/')?resolve(root,'dist/assets',basename(path)):resolve(root,'dist/index.html');
    return route.fulfill({body:await readFile(file),contentType:path.endsWith('.js')?'application/javascript':path.endsWith('.css')?'text/css':'text/html'});
   });
-  await page.goto('http://localhost/');
-  await page.getByRole('button',{name:/Question universe/}).first().click();
+  await page.goto(retainedWorkspaceUrl);
+  await openRetainedView(page);
   const field=page.locator('.space-surface');
   await field.scrollIntoViewIfNeeded();
   await page.waitForFunction(()=>document.querySelectorAll('.space-label').length===120&&window.universePaints>0);

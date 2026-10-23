@@ -139,7 +139,7 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
         </div>
       </details>
     </dialog>
-    <div className="window-workspace docked-workspace" ref={root} role="main" aria-label="Research workspace">
+    <div className="window-workspace docked-workspace" data-compact={bounds.w < 760} ref={root} role="main" aria-label="Research workspace">
       <div className="workspace-surface" style={{height:layout.contentHeight}}>
       {!!opened.length && !maximized && <div className="workspace-evidence-bar" style={{left:layout.x,top:layout.panelY-42,width:layout.w}}>
         <div role="tablist" aria-label="Analysis panels">
@@ -147,7 +147,7 @@ export default function WindowWorkspace({ items, toolbar }: { items: Item[]; too
             aria-selected={layout.tabbed?active===item.id:!collapsed.includes(item.id)}
             onKeyDown={event=>{const tabs=Array.from(event.currentTarget.parentElement!.querySelectorAll<HTMLButtonElement>('[role="tab"]'));const index=tabs.indexOf(event.currentTarget);const next=event.key==="ArrowRight"?(index+1)%tabs.length:event.key==="ArrowLeft"?(index+tabs.length-1)%tabs.length:event.key==="Home"?0:event.key==="End"?tabs.length-1:-1;if(next>=0){event.preventDefault();tabs[next].focus();tabs[next].click();}}} aria-controls={`workspace-${item.id}`}
             onClick={()=>{if(collapsed.includes(item.id))toggle(item.id);setActivePanel(item.id);}}>
-            {item.id==="feed"?"Activity feed":item.id==="results"?"Results":"Final report"}
+            {item.id==="feed"?"Activity feed":item.id==="results"?"Results":"Conclusions"}
           </button>)}
         </div>
         <button className="workspace-split-handle" aria-label="Resize pipeline and analysis space" title="Drag to give the pipeline more or less room; arrow keys also work."

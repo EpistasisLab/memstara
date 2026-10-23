@@ -26,6 +26,12 @@ try{for(const [width,height] of [[390,500],[768,700],[1440,900]]){
  await log.focus();const keyboardBefore=await log.evaluate(e=>e.scrollTop);
  await page.keyboard.press('PageUp');
  await expect.poll(()=>log.evaluate(e=>e.scrollTop)).toBeLessThan(keyboardBefore);
+ // Wait for the native PageUp animation before testing append/resize.
+ await log.evaluate(el=>new Promise(resolve=>{
+   let previous=el.scrollTop,stable=0;
+   const frame=()=>{const next=el.scrollTop;stable=next===previous?stable+1:0;previous=next;
+     if(stable>=10)resolve();else requestAnimationFrame(frame);};frame();
+ }));
  // Stabilize at the start before checking new records and resize behavior.
  await log.evaluate(e=>e.scrollTop=0);
  await expect.poll(()=>log.evaluate(e=>e.scrollTop)).toBe(0);

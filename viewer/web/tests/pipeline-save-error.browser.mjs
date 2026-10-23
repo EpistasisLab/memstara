@@ -12,7 +12,7 @@ if(r.request().method()==='POST')throw Error('Unexpected write');return r.contin
 await p.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Isolated fixture'}}));
 await p.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');
 for(let i=1;i<=1;i++){
-await p.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();await p.getByRole('button',{name:/Add pipeline/i}).click();await openBuildModeFixture(p);const d=p.getByRole('dialog',{name:'Create a pipeline',exact:true});await d.getByLabel('Deployment target column',{exact:true}).fill('fixture_target');await d.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();await d.getByRole('button',{name:'Next',exact:true}).click();
+await p.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await p.getByRole('button',{name:/Add pipeline/i}).click();await openBuildModeFixture(p);const d=p.getByRole('dialog',{name:'Create a pipeline',exact:true});await d.getByLabel('Deployment target column',{exact:true}).fill('fixture_target');await d.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();await d.getByRole('button',{name:'Next',exact:true}).click();
 for(const label of ['Hypothesis','Data','Machine learning','Interpretation','Explanation']){const c=d.getByRole('combobox',{name:label+' skill',exact:true});const value=await c.inputValue();if(!value){const option=await c.locator('option').evaluateAll(os=>os.find(o=>o.value)?.value);await c.selectOption(option);}await d.getByRole('button',{name:'Next',exact:true}).click();}
 await d.getByLabel('Pipeline name',{exact:true}).fill('Selected '+i);await d.getByRole('button',{name:'Next',exact:true}).click();await d.getByRole('button',{name:'Create pipeline',exact:true}).click();const before=polls;
 await p.waitForTimeout(4500);
@@ -21,7 +21,7 @@ if(await p.getByText(/Configuration save failed: fixture conflict/).count()===0)
 await d.getByRole('button',{name:'Create pipeline',exact:true}).click();
 await d.waitFor({state:'hidden'});if(starts.length!==i-1)throw Error('Create started execution');}
 if(items.length!==1||starts.length)throw Error('Design was not saved independently of execution');
-await p.reload();await p.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
+await p.reload();await p.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
 await p.getByRole('button',{name:'Run Selected 1',exact:true}).waitFor();
 console.log('Save error survived polling; retry saved and reloaded a design without starting it. All requests mocked.');
 }finally{await b.close();}

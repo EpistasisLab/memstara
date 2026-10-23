@@ -898,7 +898,7 @@ export const scenarios:Scenario[] = [
         "title": "Render the evidence",
         "body": "The UI presents linked results and progress. A display error remains separate from the execution state; this tour creates no new run.",
         "input": "Scoped API response",
-        "output": "Floor plan, results, logs and question universe",
+        "output": "Experiments, results, logs and question universe",
         "operation": "HTTP response",
         "owner": "workspace",
         "source": "viewer/web/src/panels/PipelineWorkspace.tsx"

@@ -36,7 +36,7 @@ try {
    try {await r.fulfill({json:{events:[...Array.from({length:12},(_,i)=>event(i)),{...event(99),run_tag:'other-run',detail:'UNRELATED OUTPUT'},...(added?[{...event(20),stage:'report'}]:[])],results:[],questions:[],reports:{},record_limit:200,generated_at:new Date().toISOString()}});} finally{inFlight--;}
   });
   await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
- await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
+ await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
   await page.evaluate(d=>document.documentElement.dataset.theme=d,combination?'dark':'light');
   const panel=page.getByRole('complementary',{name:'Clinical activity log'});
   if(width===390)await page.getByRole('button',{name:'Expand live log'}).click();
@@ -50,7 +50,7 @@ try {
    for(const name of ['Preview combinations','Follow execution'])assert.equal(await page.getByRole('button',{name,exact:true}).count(),0);
    await page.getByRole('button',{name:'Skill architecture',exact:true}).click();
    await panel.locator('[data-role=ml]').getByText('Running',{exact:true}).waitFor();
-   await page.getByRole('navigation',{name:'Combination views'}).getByRole('button',{name:'Floor plan',exact:true}).click();
+   await page.getByRole('navigation',{name:'Combination views'}).getByRole('button',{name:'Experiments',exact:true}).click();
    assert.equal(await page.getByRole('button',{name:'Loop explorer',exact:true}).count(),0);
    await panel.locator('[data-role=ml]').getByText('Running',{exact:true}).waitFor();
    traceUnavailable=true;

@@ -7,7 +7,7 @@ try {
  await page.route('**/control/**',r=>r.fulfill({json:new URL(r.request().url()).pathname==='/control/pipelines'?{pipelines:[item]}:{}}));
  await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'fixture'}}));
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
- await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Floor plan',exact:true}).click();
+ await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Experiments',exact:true}).click();
  const show=page.getByRole('button',{name:'Show pipeline list',exact:true});if(await show.isVisible())await show.click();
  const hide=page.getByRole('button',{name:'Hide pipeline list',exact:true});if(await hide.isVisible())await hide.click();
  const collapse=page.getByRole('button',{name:'Collapse live log',exact:true});if(await collapse.isVisible())await collapse.click();

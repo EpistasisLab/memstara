@@ -25,6 +25,7 @@ import WorkspaceActions from "./components/WorkspaceActions";
 import { useLiveOutputs } from "./store/liveOutputs";
 import { IDLE_REFRESH_MS, LIVE_REFRESH_MS, pollContinuously } from './lib/liveRefresh';
 import { useControl } from "./store/control";
+import { useCompletedResults } from './lib/useCompletedResults';
 
 
 const SECONDARY: Record<Exclude<ViewId, "chain" | "scene" | "log" | "clinician" | "results">, ComponentType> = {
@@ -55,6 +56,7 @@ function TopRegion() {
 }
 
 export default function App() {
+  useCompletedResults();
   const start = useViewer((s) => s.start);
   const stop = useViewer((s) => s.stop);
   const view = useViewer((s) => s.view);

@@ -1,3 +1,4 @@
+import {retainedWorkspaceUrl} from './retained-views.mjs';
 import {corpusSkillBindings} from './corpus-skill-bindings.fixture.mjs';
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
@@ -25,15 +26,15 @@ try {
  });
  await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Fixture'}}));
  await page.addInitScript(()=>localStorage.setItem('memstara.pipelineSelection','fixture'));
- await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
+ await page.goto(retainedWorkspaceUrl);await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
  await page.getByRole('button',{name:'Select pipeline 1: Study switch fixture',exact:true}).click();
- await (combined?page.getByRole('button',{name:'Knowledge sources',exact:true}):page.getByRole('button',{name:/Knowledge sources: HIV study/})).click();
- let dialog=page.getByRole('dialog',{name:/Knowledge sources$/});
+ await page.waitForFunction(()=>typeof window.openStudySettings==='function');await page.evaluate(()=>window.openStudySettings());
+ let dialog=page.getByRole('dialog',{name:/Data & target$/});
  await dialog.getByRole('combobox',{name:'Research inputs',exact:true}).selectOption('heart');
  await dialog.getByText(/Target: chronic_heart_failure/).waitFor();assert.equal(writes.length,0);
  await dialog.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(writes.length,0);
- await (combined?page.getByRole('button',{name:'Knowledge sources',exact:true}):page.getByRole('button',{name:/Knowledge sources: HIV study/})).click();
- dialog=page.getByRole('dialog',{name:/Knowledge sources$/});
+ await page.waitForFunction(()=>typeof window.openStudySettings==='function');await page.evaluate(()=>window.openStudySettings());
+ dialog=page.getByRole('dialog',{name:/Data & target$/});
  await dialog.getByRole('combobox',{name:'Research inputs',exact:true}).selectOption('heart');
  await dialog.getByRole('button',{name:'Save settings',exact:true}).click();
  await dialog.waitFor({state:'hidden'});
@@ -41,9 +42,8 @@ try {
  assert.equal(item.configuration.research_input_id,'heart');assert.equal(item.configuration.y_column,'chronic_heart_failure');
  assert.deepEqual(item.configuration.baseline_columns,[]);
  if(combined){assert.deepEqual(item.configuration.combination_skills.hypothesis,corpusSkillBindings.profiles.heart_failure.hypothesis);assert.deepEqual(item.configuration.combination_skills.report,corpusSkillBindings.profiles.heart_failure.report);assert.deepEqual(item.configuration.combination_skills.ml,['ml_logistic_regression']);assert.equal(item.configuration.combination_max_loops,2);}else assert.deepEqual(item.configuration.combination_skills,{});
- await page.reload();await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();if(combined){await page.getByRole('button',{name:'Knowledge sources',exact:true}).click();await page.getByRole('dialog',{name:/Knowledge sources$/}).getByText(/Target: chronic_heart_failure/).waitFor();}else await page.getByRole('button',{name:/Knowledge sources: HeartFailure study/}).waitFor();
- if(!combined)await page.getByRole('button',{name:/Knowledge sources: HeartFailure study/}).click();
- const savedInputs=page.getByRole('dialog',{name:/Knowledge sources$/});
+ await page.reload();await page.waitForFunction(()=>typeof window.openStudySettings==='function');await page.getByRole('button',{name:'Select pipeline 1: Study switch fixture',exact:true}).waitFor();await page.evaluate(()=>window.openStudySettings());
+ const savedInputs=page.getByRole('dialog',{name:/Data & target$/});
  assert.equal(await savedInputs.getByRole('combobox',{name:'Research inputs',exact:true}).inputValue(),'heart');
  await savedInputs.getByText(/Target: chronic_heart_failure/).waitFor();
  if(!combined)await savedInputs.getByRole('button',{name:'Cancel',exact:true}).click();
@@ -62,5 +62,5 @@ try {
  assert.deepEqual(errors,[]);
  await page.close();
  }
- console.log('Selected and All Combinations Knowledge sources switch HIV to HeartFailure with its target; cancel preserves settings, save/reload persists the whole study, no execution submitted. HTTP mocked.');
+ console.log('Retained study settings for selected and All Combinations pipelines switch HIV to HeartFailure with its target; cancel preserves settings, save/reload persists the whole study, no execution submitted. HTTP mocked.');
 } finally {await browser.close();}

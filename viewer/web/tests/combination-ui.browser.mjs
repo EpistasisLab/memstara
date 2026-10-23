@@ -21,7 +21,7 @@ try{
   return r.continue();
  });
  await page.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');
- await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();await page.getByRole('button',{name:/Add pipeline/i}).click();
+ await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add pipeline/i}).click();
  await openBuildModeFixture(page);
  await page.getByRole('combobox',{name:'Knowledge sources'}).waitFor();
  await page.getByRole('button',{name:'Cancel',exact:true}).click();
@@ -43,7 +43,7 @@ try{
  await page.setViewportSize({width:390,height:844});
  if(await dialog.evaluate(e=>e.scrollWidth>e.clientWidth+2))throw Error('Wizard overflow');
  await dialog.getByRole('button',{name:'Create combination design'}).click();
- await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
+ await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
  const grid=page.getByRole('region',{name:'Combination design'});
  const hide=page.getByRole('button',{name:'Hide pipeline list',exact:true});if(await hide.isVisible())await hide.click();await grid.waitFor();
  await grid.locator('.cf-room').first().waitFor();if(await grid.locator('.cf-room').count()!==5)throw Error('Missing agent role');if(await grid.locator('.cf-desk').count()!==10)throw Error('Missing skill variants');

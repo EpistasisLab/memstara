@@ -1,3 +1,4 @@
+import {openRetainedView,retainedWorkspaceUrl} from './retained-views.mjs';
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -18,11 +19,12 @@ try {
    if(path==='/api/discovery/questions/1')return route.fulfill({json:{question,tasks:[],results:[result],record_limit:100}});
    if(path.startsWith('/control/'))return route.fulfill({json:path==='/control/pipelines'?{pipelines:[]}:{}});
    if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unrelated fixture endpoint unavailable'}});
+   if(new URL(route.request().url()).port==='4177')return route.continue();
    const file=path.startsWith('/assets/')?resolve(root,'dist/assets',basename(path)):resolve(root,'dist/index.html');
    return route.fulfill({body:await readFile(file),contentType:path.endsWith('.js')?'application/javascript':path.endsWith('.css')?'text/css':'text/html'});
   });
-  await page.goto('http://localhost/');
-  await page.getByRole('button',{name:/Question universe/}).first().click();
+  await page.goto(retainedWorkspaceUrl);
+  await openRetainedView(page);
   await page.getByRole('button',{name:'View options',exact:true}).click();await page.getByRole('button',{name:'List',exact:true}).click();await page.getByRole('button',{name:'View options',exact:true}).click();
   await page.locator('.universe-list button').first().click();
   await page.getByText('Source and run details',{exact:true}).click();

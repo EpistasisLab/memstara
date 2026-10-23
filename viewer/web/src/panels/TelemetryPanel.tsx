@@ -91,11 +91,11 @@ export default function TelemetryPanel() {
           if (!disposed) setFailure(null);
           return;
         }
-        if (!response.ok) throw Error(body.detail || 'Telemetry is temporarily unavailable.');
+        if (!response.ok) throw Error(body.detail || 'Usage is temporarily unavailable.');
         if (body.run_tag !== runTag || body.telemetry?.loop !== loop) throw Error('The response did not match the selected scope.');
         if (!disposed) {setRecord({key, data: body}); setCatalog({tag: runTag, loops: body.telemetry.loops}); setFailure(null);}
       } catch (e) {
-        if (!disposed) setFailure({key, text: e instanceof Error ? e.name === 'AbortError' ? 'Telemetry timed out. Retrying automatically.' : e.message : 'Telemetry is temporarily unavailable.'});
+        if (!disposed) setFailure({key, text: e instanceof Error ? e.name === 'AbortError' ? 'Usage timed out. Retrying automatically.' : e.message : 'Usage is temporarily unavailable.'});
       } finally {
         clearTimeout(deadline);
         if (!disposed) {setRefreshing(false); timer = setTimeout(poll, retryDelay);}
@@ -144,7 +144,7 @@ export default function TelemetryPanel() {
         </div>
       </section>
       {pipelineError && <div className="tm-notice" role="status"><AlertCircle size={16}/><p>Pipeline list updates are delayed. Retained selections remain available.</p></div>}
-      <nav aria-label="Telemetry tabs" className="tm-navigation">
+      <nav aria-label="Usage tabs" className="tm-navigation">
         <div className="tm-primary-tabs">{primaryTabs.map(({id, label, icon: Icon}) => <button type="button" key={id} aria-pressed={tab === id} aria-controls="telemetry-content" onClick={() => setTab(id)}><Icon size={16} aria-hidden="true"/>{label}</button>)}</div>
         <label className="tm-detail-picker"><span className="sr-only">Detailed records</span>
           <select aria-label="Detailed records" data-active={recordTabs.some(t => t === tab)} value={recordTabs.some(t => t === tab) ? tab : ''} onChange={e => {if (e.target.value) setTab(e.target.value as Tab);}}>
@@ -159,7 +159,7 @@ export default function TelemetryPanel() {
         {data?.telemetry.legacy_attribution && <p>Legacy agent calls are grouped by recorded loop start times. New executions record the loop directly.</p>}
         {!!data?.telemetry.unassigned_calls && <p>{data.telemetry.unassigned_calls} execution-wide or unassigned calls appear only in All loops.</p>}
       </details>}
-      <div id="telemetry-content" key={globalScope ? 'experiments' : key} tabIndex={0} role="region" aria-label="Telemetry details" className="telemetry-tab-body">
+      <div id="telemetry-content" key={globalScope ? 'experiments' : key} tabIndex={0} role="region" aria-label="Usage details" className="telemetry-tab-body">
         {tab === 'Experiments' ? <div className="tm-records"><ExperimentRegistry refreshRevision={revision}/></div>
           : tab === 'Totals' ? <TelemetryTotals data={totals.data} error={totals.error} runTag={runTag} loop={loop} onRetry={totals.refresh} refreshRevision={revision}/>
           : !runTag ? <TelemetryState title="Choose an execution">Select a pipeline with saved activity to inspect its records.</TelemetryState>

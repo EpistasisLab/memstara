@@ -44,7 +44,7 @@ export default function TelemetryTotals({data,error,runTag,loop,onRetry,refreshR
   const cost=metric?costLabel(metric.cost):'';
   const subtotal=cost.endsWith(' · recorded subtotal');
   const running=current?`${current.running?.pause_requested?'Pausing / paused':'Running'}${current.progress.iteration?` · Loop ${current.progress.iteration}`:''}${current.progress.stage?` · ${current.progress.stage}`:''}`:null;
-  return <section className="telemetry-overview" aria-label="Telemetry totals">
+  return <section className="telemetry-overview" aria-label="Usage totals">
     <header className="tm-section-heading"><div><h3>{loop===null?'Execution overview':`Loop ${loop} overview`}</h3><p>{running??'Time and usage for the selected execution.'}</p></div><span className="tm-scope-badge">{loop===null?'All loops':`Loop ${loop}`}</span></header>
     {error&&<div className="tm-notice" role="status"><AlertCircle size={16} aria-hidden="true"/><p>Updates are delayed. {data?'Last available measurements are shown.':'Waiting for measurements; missing values are not zero.'}</p>{onRetry&&<button type="button" className="tm-button" onClick={onRetry}>Retry</button>}</div>}
     {!runTag?<TelemetryState title="Choose an execution">Select a pipeline with a recorded execution to view its time and usage.</TelemetryState>:!data?<TelemetryState loading={!error} title={error?'Measurements are temporarily unavailable':'Loading measurements'}>{error?'Retry above, or wait for the next automatic update.':'Retrieving recorded time and usage from this workspace.'}</TelemetryState>:!metric?<TelemetryState title="No measurements yet">No usage has been recorded for this selection. Measurements will appear as records become available.</TelemetryState>:<>

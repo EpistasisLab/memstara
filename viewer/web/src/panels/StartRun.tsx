@@ -63,8 +63,8 @@ export default function StartRun() {
   }, []);
 
   if (!pipeline) return <div className="space-y-3 text-sm text-ink-soft">
-    <p>Add or select a pipeline in Floor Plan to configure its agents.</p>
-    <button className="rounded-lg border border-paper-line px-3 py-2 font-bold text-ink" onClick={()=>useViewer.getState().setView("scene")}>Open Floor Plan</button>
+    <p>Add or select a pipeline in Experiments to configure its agents.</p>
+    <button className="rounded-lg border border-paper-line px-3 py-2 font-bold text-ink" onClick={()=>useViewer.getState().setView("scene")}>Open Experiments</button>
   </div>;
 
   if (up === false) {

@@ -23,7 +23,7 @@ try{
   const dock=page.locator('#results-panel');
   const selected=dock.getByRole('article',{name:'Selected analysis evidence'});
   const seen=()=>page.evaluate(key=>JSON.parse(localStorage.getItem(key)||'{}'),receiptKey);
-  const close=()=>nav.getByRole('button',{name:'Floor plan',exact:true}).click();
+  const close=()=>nav.getByRole('button',{name:'Experiments',exact:true}).click();
   await goto();
   await deliver([]);await expect(badge).toHaveCount(0);
   await deliver([result(1,null)]);await expect(badge).toHaveCount(0);

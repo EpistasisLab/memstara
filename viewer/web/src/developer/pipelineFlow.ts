@@ -171,7 +171,7 @@ export const pipelineSteps = [
     "title": "Read & render evidence",
     "owner": "Read API \u2192 frontend",
     "input": "Database records and archived execution artifacts",
-    "output": "Floor plan, results, question universe, live log",
+    "output": "Experiments, results, question universe, live log",
     "detail": "The viewer assembles read-only snapshots. A polling/display error is not evidence of pipeline failure. Selected execution IDs scope detailed inspection.",
     "sources": [
       "viewer/api/scene.py",

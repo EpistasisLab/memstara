@@ -14,7 +14,7 @@ try{
  await page.addScriptTag({path:'/tmp/memstara-ux-audit/node_modules/axe-core/axe.min.js'});
  for(const theme of (process.env.UX_FULL?['light','dark']:['light']))for(const width of [1440,320]){
   await page.setViewportSize({width,height:1000});await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
-  for(const view of ['Floor plan','Status','Clinician view','Board','Telemetry','Final report','Question universe']){
+  for(const view of ['Experiments','Results','Conclusions','Usage']){
    await page.locator('[aria-label="View navigation"]').getByRole('button',{name:view,exact:true}).click();
    await page.waitForTimeout(600);
    const geometry=await page.evaluate(()=>({width:innerWidth,pageWidth:document.documentElement.scrollWidth,
@@ -24,14 +24,14 @@ try{
    if(view==='Telemetry') {
     await page.waitForTimeout(7000);
     for(const tab of ['Totals','Agents','Activity','Logs','Access','Tasks','Results']){
-     await page.locator('[aria-label="Telemetry tabs"]').getByRole('button',{name:tab,exact:true}).click();
+     await page.locator('[aria-label="Usage tabs"]').getByRole('button',{name:tab,exact:true}).click();
      await page.waitForTimeout(250);
      const state=await page.locator('.telemetry-tab-body').evaluate(e=>({height:e.clientHeight,contentWidth:e.clientWidth,scrollWidth:e.scrollWidth,loading:/^Loading|^Waiting to retry|^Preparing/.test(e.textContent.trim()),fallback:!!e.closest('.view-recovery')}));
      tabs.push({theme,width,tab,...state});
     }
-    await page.locator('[aria-label="Telemetry tabs"]').getByRole('button',{name:'Agents',exact:true}).click();
+    await page.locator('[aria-label="Usage tabs"]').getByRole('button',{name:'Agents',exact:true}).click();
    }
-   if(view==='Telemetry'||(width===320&&view==='Floor plan'))await page.screenshot({path:directory+'/'+theme+'-'+width+'-'+view.replaceAll(' ','-')+'.png'});
+   if(view==='Telemetry'||(width===320&&view==='Experiments'))await page.screenshot({path:directory+'/'+theme+'-'+width+'-'+view.replaceAll(' ','-')+'.png'});
   }
  }
  writeFileSync(directory+'/audit.json',JSON.stringify({results,tabs,errors},null,2));

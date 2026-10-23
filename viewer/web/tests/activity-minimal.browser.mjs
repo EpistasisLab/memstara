@@ -10,7 +10,7 @@ try {for(const width of [1440,390]){
  if(url.pathname==='/api/telemetry/conversation')return r.fulfill({json:{run_tag:run.run_tag,loop:null,messages:[{id:'text',kind:'text',stage:'ml',name:'MLAgent',text:'LONG OUTPUT CONTENT '.repeat(100),at:'2026-10-21T12:01:00Z'},{id:'error',kind:'error',stage:'data',name:'DataAgent',text:'The selected column was not found.',at:'2026-10-21T12:02:00Z'}],limited:false}});
  return r.fulfill({json:{events:[],results:[],questions:[],reports:{}}});});
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
- await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Floor plan',exact:true}).click();
+ await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Experiments',exact:true}).click();
  const expand=page.getByRole('button',{name:'Expand live log',exact:true});if(await expand.isVisible())await expand.click();
  const panel=page.getByRole('complementary',{name:'Clinical activity log'});
  await panel.getByRole('button',{name:'Browse activity',exact:true}).click();

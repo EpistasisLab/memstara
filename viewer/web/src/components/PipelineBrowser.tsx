@@ -9,6 +9,8 @@ import {researchSkillProfile} from '../lib/researchSkills';
 import {useControl} from '../store/control';
 import {usePipelines} from '../store/pipelines';
 import {pipelineState} from '../lib/pipelineState';
+import {useLiveOutputs} from '../store/liveOutputs';
+import {findingHeading, firstFinding} from '../lib/findingHeading';
 export default function PipelineBrowser({items, selected, onSelect, compare, onCompare,toggleHost}: {
   toggleHost:HTMLElement|null; items: PipelineDefinition[]; selected: string | null; onSelect: (id:string)=>void;
   compare: string[]; onCompare:(ids:string[])=>void;
@@ -16,6 +18,7 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
   // Profile bindings arrive with the catalog; refresh the source label with it.
   useControl(s=>s.catalog);
   const pendingStart=usePipelines(s=>s.pendingStart);
+  const findings=useLiveOutputs(s=>s.results);
   const browser=useRef<HTMLElement>(null);
   const [deleting,setDeleting]=useState<PipelineDefinition|null>(null);
   const [selectionRevision,setSelectionRevision]=useState(0);
@@ -53,6 +56,7 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
           const stageNames:Record<string,string>={hypothesis:'Hypothesis generation',data:'Data extraction',ml:'Model evaluation',interpret:'Interpretation',interpreter:'Interpretation',report:'Explanation'};
           const corpus=researchSkillProfile(p.configuration).label;
           const target=p.running?.configuration?.y_column??p.configuration.y_column??'Not specified';
+          const heading=findingHeading(firstFinding(findings, (p.running??p.latest)?.run_tag??'')?.hypothesis);
           return <div key={p.id} data-state={state.toLowerCase().replaceAll(' ','-')} className={`pipeline-browser-row ${selected===p.id?'is-selected':''}`}>
           <div className="pipeline-card-top pipeline-card-header">
             <button type="button" className="pipeline-card-identity pipeline-card-heading-select" aria-label={`Select pipeline ${p.number}: ${p.name}`} aria-pressed={selected===p.id} onClick={()=>choose(p.id)}>Pipeline {p.number}</button>
@@ -62,6 +66,7 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
           </div>
           <button className="pipeline-card-select" data-help="Inspect this pipeline" data-help-description="Select this card to focus its diagram. Use the buttons on this card to control this pipeline. The Loop counter refers to this pipeline’s latest execution." aria-label={`Inspect ${p.name}`} aria-pressed={selected===p.id} onClick={()=>choose(p.id)}>
             <strong className="pipeline-card-name" title={p.name}>{p.name}</strong>
+            {heading&&<span className="pipeline-finding-heading" title={`Saved AI hypothesis: ${heading}`}>{heading}</span>}
             <span className="pipeline-card-stage pipeline-card-context" title={`Corpus: ${corpus} · Target: ${target}`}>{corpus} · {target}</span>
             <span className="pipeline-card-position"><span className="pipeline-card-loop">{pipelineLoopLabel(p)}</span></span>
             {p.progress.stage&&<span className="pipeline-card-stage">{p.running?'Current':'Last'}: {stageNames[p.progress.stage]??p.progress.stage}</span>}

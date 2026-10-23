@@ -5,6 +5,7 @@ import ExecutionStatusNotice from "../components/ExecutionStatusNotice";
 import { floorExecutionState } from '../lib/floorActivity';
 import { rankedContributions } from "../lib/featureImportance";
 import ContentOrigin from "../components/ContentOrigin";
+import { findingHeading } from '../lib/findingHeading';
 import { loopLabel } from '../lib/loopLabel';
 import ResultExplorer, { resultKey } from "../components/ResultExplorer";
 import ResultEvidenceVisuals from "../components/ResultEvidenceVisuals";
@@ -14,7 +15,6 @@ const ReportBody = lazy(() => import("../components/ReportBody"));
 import { useEffect, useState, useMemo } from "react";
 import { usePipelines } from "../store/pipelines";
 import type { Result } from "../types";
-import FinalReport from "../components/FinalReport";
 import ExplanationEvidence from "../components/ExplanationEvidence";
 import Help from "../components/Help";
 import { BarChart3 } from "lucide-react";
@@ -36,6 +36,7 @@ import { useResultsReadReceipt } from '../lib/useResultsReadReceipt';
 export default function ResultsPanel({ telemetry = false, embedded = false }: { telemetry?: boolean; embedded?: boolean } = {}) {
   const snapshot = useSnapshot();
   const [chosenResult, setChosenResult] = useState('');
+  const [compareOpen, setCompareOpen] = useState(false);
   const executionContext = useExecutionContext();
   const selectedResults = useResults();
   const savedConfig=snapshot?.run_configuration;
@@ -109,7 +110,7 @@ export default function ResultsPanel({ telemetry = false, embedded = false }: { 
       {!results ? (
         <EmptyState what="the results" />
       ) : results.length === 0 ? (
-        <div className="p-8 text-ink-faint">{savedConfig?.data_mode==='proposal'?'Research proposal mode: no dataset is attached. Training, model metrics and SHAP/LIME computations are not executed. View the proposal report below.':'No finished results yet.'}</div>
+        <div className="p-8 text-ink-faint">{savedConfig?.data_mode==='proposal'?'Research proposal mode: no dataset is attached. Training, model metrics and SHAP/LIME computations are not executed. Open Conclusions to read the proposal.':'No finished results yet.'}</div>
       ) : (
         <div ref={receiptRef} className="space-y-5 p-4">
           {!telemetry && unread.length > 0 && <div className="results-arrival-note" role="status">
@@ -119,8 +120,11 @@ export default function ResultsPanel({ telemetry = false, embedded = false }: { 
               useResultNotices.getState().acknowledge(results);
             }}>View latest results</button>
           </div>}
-          <ResultExplorer results={results} selected={activeResult ? resultKey(activeResult) : ''} onSelect={chooseResult} />
-          <h3 className="result-detail-heading">Selected analysis · evidence and interpretation</h3>
+          <label className="analysis-select-label">Analysis
+            <select aria-label="Analysis to inspect" value={activeResult ? resultKey(activeResult) : ''} onChange={e => chooseResult(e.target.value)}>
+              {results.map(r => <option key={resultKey(r)} value={resultKey(r)}>{resultName(r)}</option>)}
+            </select>
+          </label>
           {(activeResult ? [activeResult] : []).map((r) => {
             // The importances come off the result, not off the board. The board row is
             // cleaned away eventually and `memstara_results.task_id` is ON DELETE SET
@@ -134,22 +138,20 @@ export default function ResultsPanel({ telemetry = false, embedded = false }: { 
 
             return (
               <article key={resultKey(r)} className="selected-result-card rounded-lg border border-paper-line p-4" aria-label="Selected analysis evidence">
-                <header className="flex items-baseline justify-between gap-4">
-                  <h3 className="font-bold">
-                    {resultName(r)}
-                    <span className="ml-2 font-normal text-ink-soft">{displayText(r.perspective)}</span>
-                    {r.run_tag&&<span className="block break-all text-xs font-normal text-ink-faint">{r.run_tag}</span>}
-                  </h3>
-                  <span className="text-right">
-                    <span className="font-mono text-xl font-bold">AUC {r.auc?.toFixed(4) ?? "—"}</span>
-                    {r.y_column && (
-                      <span className="block font-mono text-[12px] text-ink-faint">
-                        → {r.y_column}
-                      </span>
-                    )}
-                  </span>
+                <header className="min-w-0">
+                  <p className="text-xs font-semibold text-ink-soft">{resultName(r)}</p>
+                  <h3 className="mt-2 break-words text-lg font-semibold leading-snug">{findingHeading(r.hypothesis) || displayText(r.perspective) || 'Recorded finding'}</h3>
                 </header>
-
+                <section className="clinical-reading-summary" aria-label="Clinical interpretation summary">
+                  <h4>Clinical interpretation</h4>
+                  <Suspense fallback={<p>Loading interpretation…</p>}>
+                    <ReportBody origin={r.interpretation ? 'llm' : undefined} text={r.interpretation || 'No interpretation was recorded for this analysis yet.'} />
+                  </Suspense>
+                </section>
+                <details className="analysis-technical-details">
+                  <summary>Model performance and technical details</summary>
+                  <div className="mt-4 min-w-0">
+                    <p className="font-mono text-lg font-semibold">AUC {r.auc?.toFixed(4) ?? 'Not recorded'}</p>
                 <ContentOrigin kind="proposal" compact/><p className="mt-2 text-sm leading-relaxed text-ink-soft">{displayText(r.hypothesis)}</p>
 
                 <p className="mt-2 font-mono text-[12px] text-ink-faint">
@@ -190,11 +192,8 @@ export default function ResultsPanel({ telemetry = false, embedded = false }: { 
                   <details><summary>Agent proposal and enforced limits</summary><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all text-xs">{displayJson(r.evaluation.ml_configuration)}</pre></details>
                 </section>}
                 <ResultEvidenceVisuals key={resultKey(r)} result={r} />
-                <section className="mt-3 rounded-lg border border-[#c9d9e8] bg-stage-data/5 p-3" aria-label="Clinical interpretation summary">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h4 className="text-sm font-bold text-ink">Clinical interpretation</h4>
-                    <AucAssessment auc={r.auc}/>
-                  </div>
+                <section className="mt-3 rounded-lg border border-paper-line p-3" aria-label="Predictors and interpretation provenance">
+                  <AucAssessment auc={r.auc}/>
                   <ContentOrigin kind="rule" compact/><p className="text-xs text-ink-soft">The status above uses a fixed rule: AUC unavailable, AUC &lt; 0.5, AUC = 0.5, or AUC &gt; 0.5. It is not a research-priority assessment.</p><p className="mt-2 text-xs text-ink-soft">Predictor inputs used by the model:</p>
                   <div className="mt-2 flex flex-wrap gap-1">
                     {r.evaluation?.feature_selection && <p className="w-full text-xs text-ink-soft">
@@ -217,8 +216,6 @@ export default function ResultsPanel({ telemetry = false, embedded = false }: { 
                     </details>)}
                   </div>}
                   <p className="mt-2 text-sm text-ink-soft">Prediction target (not an input): <strong>{r.y_column || "Not recorded"}</strong></p>
-                  <details className="mt-3" open><summary className="cursor-pointer font-semibold">Read the interpreter’s explanation</summary><Suspense fallback={<p>Loading formatted explanation…</p>}><ReportBody origin={r.interpretation ? "llm" : undefined} text={r.interpretation || "No interpretation was recorded."} /></Suspense></details>
-                  <p className="mt-2 text-[12px] text-ink-faint">Predictive association is not causation. A model response curve is not a validated treatment threshold.</p>
                 </section>
 
                 {/* Same red as a negative bar below — in this panel that colour means
@@ -266,12 +263,18 @@ export default function ResultsPanel({ telemetry = false, embedded = false }: { 
                   <Suspense fallback={null}><ReportBody origin="rule" text={r.evaluation.explanation?.actionability || ""} /></Suspense>
                 </details>}
                 <WhyColumns resultId={r.result_id} />
+                  </div>
+                </details>
               </article>
             );
           })}
+          <details className="analysis-technical-details" onToggle={e => setCompareOpen(e.currentTarget.open)}>
+            <summary>Compare recorded analyses</summary>
+            {compareOpen && <ResultExplorer results={results} selected={activeResult ? resultKey(activeResult) : ''} onSelect={chooseResult} />}
+          </details>
         </div>
       )}
-      {!telemetry && scope==="selected" && <details className="m-4 rounded-lg border border-paper-line p-4"><summary className="cursor-pointer font-semibold">Open the report for this execution</summary><FinalReport /></details>}
+      {!telemetry && <div className="m-4"><button type="button" className="text-sm font-semibold text-accent underline underline-offset-4" onClick={() => useViewer.getState().setView('report')}>Read Conclusions</button></div>}
     </Panel>
   );
 }

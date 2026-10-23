@@ -74,7 +74,7 @@ After the ready message, you can close the terminal.
 
 For the included example:
 
-1. Open **Floor plan → Add pipeline → All Combinations**.
+1. Open **Experiments → Add pipeline → All Combinations**.
 2. In **Research inputs**, select **Heart failure complete-case software demonstration** and review its target.
 3. In **Agent skills**, choose one skill for each stage. Set optional ML evaluation/advanced model settings in the Machine learning step.
 4. In **Review & create**, set a name and a maximum of **1 Loop** for a first run, review the plan and confirm it. **Random Start** is off by default: execution starts at combination 1 and continues in order.
@@ -92,15 +92,18 @@ validated clinical prediction tool.
 
 ## Read activity and results
 
-- **Floor plan:** follow execution. The **Pipelines** and **Live log** toolbar buttons show or hide the side panels. **Browse activity** shows agent, time, action and recorded status; expand an entry for its output or technical details. A recorded tool call does not confirm success.
-- **Control → Results:** review recorded model evaluations and interpretation. A **New** badge marks unread results for the selected execution.
-- **Clinician view:** explore individual findings, interpretations, model evidence and limitations.
-- **Control → Final report:** read the selected execution's Explanation report and download it as Markdown.
-- **Question universe:** explore recorded research questions and their associated results.
-- **Telemetry:** inspect execution usage and Motoro-provided cost estimates. These are estimates, not actual billed charges; unavailable prices remain unknown.
+- **Experiments:** create and run pipelines, follow agents and open the live log.
+- **Results:** read the recorded interpretation; expand **Model performance and technical details** for AUC, charts and settings. **Compare recorded analyses** opens the comparison tools. A **New** badge marks unread results.
+- **Conclusions:** select a pipeline, read its saved Explanation agent output and download Markdown.
+- **Usage:** inspect execution usage and Motoro-provided cost estimates. These are estimates, not actual billed charges; unavailable prices remain unknown.
+
+These four views appear in this order in Control. A selected execution that completes
+while you watch Experiments opens Results automatically (Conclusions for proposal-only
+runs). Opening saved history does not redirect you. Descriptive headings quote saved
+AI hypotheses; your pipeline names and records are retained.
 
 Results and reports appear as they are recorded. An empty view before an execution
-has produced output is expected. Both open in the main workspace; choose **Floor plan**
+has produced output is expected. Both open in the main workspace; choose **Experiments**
 in Control to return to execution monitoring. The header's **Estimated total** stays
 visible across views; click it for the latest-execution cost breakdown by pipeline.
 

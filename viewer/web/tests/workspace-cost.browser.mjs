@@ -73,7 +73,7 @@ try {
  const panel=page.getByRole('dialog',{name:'Pipeline costs',exact:true});
  await expect(panel.locator('tbody tr').first()).toContainText(pipelines[0].name.trim());
  const overflow=await panel.evaluate(e=>e.scrollWidth>e.clientWidth+1);assert(!overflow);
- await panel.getByRole('button',{name:'View in Telemetry',exact:true}).click();
+ await panel.getByRole('button',{name:'View in Usage',exact:true}).click();
  await expect(panel).not.toBeVisible();await expect(page.locator('.telemetry-workspace')).toBeVisible();
  empty=true;await page.reload();await expect(trigger).toContainText('No executions');await expect(trigger).not.toContainText('$0.0000');
  assert.deepEqual(errors,[]);assert.deepEqual(writes,[]);

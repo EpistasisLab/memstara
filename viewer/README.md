@@ -105,22 +105,22 @@ The services bind to loopback. There is no production authentication layer.
 
 | View | Purpose |
 |---|---|
-| Question universe | Generated questions and their hypotheses, evidence, and results |
-| Clinician view | Findings in clinical language with evidence and limitations |
-| Floor plan | Agents, resources, and live activity across pipelines |
-| Run log | Execution messages and troubleshooting |
-| Final report | Saved explanations and research summaries |
-| Board | Waiting, active, completed, or failed tasks |
-| Task life | One task's progress through its stages |
-| Telemetry | Agent calls, tool activity, usage, and database records |
-| Access map | Tool access to stores |
-| Results | Recorded model evaluations and interpretation |
+| Experiments | Create pipelines, follow agents, resources and live activity |
+| Results | Recorded interpretation first; expand technical metrics and comparison tools |
+| Conclusions | Select a pipeline and read or download its saved Explanation output |
+| Usage | Agent calls, tool activity, elapsed time and Motoro cost estimates |
 
-Control exposes Floor plan, Question universe, Results, Clinician view, Final report,
-and Telemetry. Results and Final report open in the main workspace; Floor plan has
-no separate Results or Final report windows. Logs, Board, and task/access detail are additional workspace
-panels rather than all being top-level navigation entries. Pipeline status is shown
-within the workspace; the retained internal Status view is not a primary navigation tab.
+Control exposes these four destinations in order. Results and Conclusions occupy
+the main workspace, without duplicate floating panels in Experiments. Question
+universe and Clinician view are retained components outside MVP primary navigation;
+their saved records are not deleted. Logs, Board and task/access detail remain
+internal diagnostic views.
+
+Completion of the selected live execution opens Results only while the user is
+watching Experiments. Historical, failed, stale or unrelated executions do not
+redirect the user. Proposal-only completion opens Conclusions. The Results badge
+continues to identify unread measured results. Descriptive headings reuse saved AI
+hypothesis text and preserve manual pipeline names and execution IDs.
 
 The five visible roles are Hypothesis, Data, ML, Interpretation, and Explanation.
 The Explanation role retains the internal `report` stage for compatibility.

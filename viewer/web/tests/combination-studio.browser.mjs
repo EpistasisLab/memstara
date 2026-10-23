@@ -24,16 +24,16 @@ try{
  });
  await p.route('**/api/**',r=>r.fulfill({status:503,json:{error:'UI fixture'}}));
  await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
- await p.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
+ await p.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
  const studio=p.getByRole('region',{name:'Combination design',exact:true});
- await p.getByRole('navigation',{name:'Combination views'}).getByRole('button',{name:'Floor plan',exact:true}).waitFor();
+ await p.getByRole('navigation',{name:'Combination views'}).getByRole('button',{name:'Experiments',exact:true}).waitFor();
  const header=p.getByRole('group',{name:'Pipeline workspace header',exact:true});
  for(const name of ['Knowledge sources','Combination schedule and map guide','Prepare research inputs'])assert.equal(await header.getByRole('button',{name,exact:true}).count(),0);
  assert.equal(await header.getByRole('button',{name:'Add pipeline',exact:true}).count(),1);
  for(const theme of ['light','dark'])for(const width of [1440,1024,390,320]){
   console.log('Starting',theme,width);
   await p.setViewportSize({width,height:1000});await p.evaluate(t=>document.documentElement.dataset.theme=t,theme);
-  await p.getByRole('navigation',{name:'Combination views'}).getByRole('button',{name:'Floor plan',exact:true}).click();
+  await p.getByRole('navigation',{name:'Combination views'}).getByRole('button',{name:'Experiments',exact:true}).click();
   for(const name of ['Preview combinations','Follow execution'])assert.equal(await p.getByRole('button',{name,exact:true}).count(),0);
   await studio.locator('.cf-room').first().waitFor();
   assert.equal(await studio.locator('.cf-room').count(),5);
@@ -76,7 +76,7 @@ try{
  assert.equal(await studio.locator('.cf-room').count(),0,'Previous loop records must not leak');
  console.log('Current-loop version mismatch and unavailable records passed');
  liveFixture=true;pipeline.running={run_tag:'fixture-run',execution_state:'running'};pipeline.progress={iteration:1,stage:'ml'};
- await p.reload();await p.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();await p.getByText('Loop 1 / 48 · Live',{exact:true}).waitFor();
+ await p.reload();await p.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await p.getByText('Loop 1 / 48 · Live',{exact:true}).waitFor();
  await p.waitForFunction(()=>document.querySelector('.cf-active-room h4')?.textContent==='Machine learning');
  for(const name of ['Preview combinations','Follow execution'])assert.equal(await p.getByRole('button',{name,exact:true}).count(),0);
  assert.equal(await studio.locator('.cf-active-room h4').innerText(),'Machine learning');

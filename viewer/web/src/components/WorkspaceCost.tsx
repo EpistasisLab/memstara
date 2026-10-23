@@ -63,7 +63,7 @@ export default function WorkspaceCost({state}: {state: WorkspaceCostState}) {
       <footer><p>Motoro estimates, not actual charges.</p><button type="button" onClick={() => {
         panel.current?.hidePopover();
         useViewer.getState().setView('agents');
-      }}>View in Telemetry<ArrowUpRight size={14}/></button></footer>
+      }}>View in Usage<ArrowUpRight size={14}/></button></footer>
     </div>
   </div>;
 }

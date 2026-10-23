@@ -1,3 +1,4 @@
+import {openRetainedView,retainedWorkspaceUrl} from './retained-views.mjs';
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -24,10 +25,11 @@ try {
    if(path==='/api/discovery/questions')return route.fulfill({json:{questions:cleared?[]:[question],next_before:null,cleared_through:cleared?1:0}});
    if(path.startsWith('/control/')){assert.equal(route.request().method(),'GET');return route.fulfill({json:path==='/control/pipelines'?{pipelines:[]}:{}});}
    if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Fixture'}});
+   if(new URL(route.request().url()).port==='4177')return route.continue();
    const file=path.startsWith('/assets/')?resolve(root,'dist/assets',basename(path)):resolve(root,'dist/index.html');
    return route.fulfill({body:await readFile(file),contentType:path.endsWith('.js')?'application/javascript':path.endsWith('.css')?'text/css':'text/html'});
   });
-  const navigate=async()=>{await page.goto('http://localhost/');await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);await page.getByRole('button',{name:/Question universe/}).first().click();};
+  const navigate=async()=>{await page.goto(retainedWorkspaceUrl);await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);await openRetainedView(page);};
   await navigate();
   await page.getByRole('button',{name:'Clear questions',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'Clear Question Universe memory?'});

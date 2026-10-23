@@ -73,7 +73,7 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
     </div>
    </div>
   <div className="cs-control-row"><nav className="cs-tabs" aria-label="Combination views">
-   <button data-help="Floor plan" data-help-description="See the selected skills and recorded stage status for the current Loop." aria-pressed={view==='floor'} onClick={()=>setView('floor')}><Layers3 size={16}/>Floor plan</button>
+   <button data-help="Experiments" data-help-description="See the selected skills and recorded stage status for the current Loop." aria-pressed={view==='floor'} onClick={()=>setView('floor')}><Layers3 size={16}/>Experiments</button>
    <button data-help="Skill architecture" data-help-description="Browse all configured skills by agent role. Search and read their instructions; this is the configuration, not the execution history." aria-pressed={view==='design'} onClick={()=>setView('design')}><Network size={16}/>Skill architecture</button>
   </nav></div>{view==="design"&&<div className="cs-filters" role="search" aria-label="Filter configured skills">
     <label className="cs-search"><Search size={16} aria-hidden="true"/><input type="search" aria-label="Find a combination skill" data-help="Find a skill" data-help-description="Filter the configured skills by name or matching text. This only changes what is shown, not the pipeline configuration." value={search} onChange={e=>setSearch(e.target.value)} placeholder="Find a skill…"/></label>

@@ -22,12 +22,13 @@ try{
   });
   await page.goto('http://fixture.local/');await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
   const nav=page.getByRole('complementary',{name:'View navigation'});
-  for(const name of ['Results','Final report']){
+  assert.deepEqual(await nav.locator('nav button').allTextContents(),['Experiments','Results','Conclusions','Usage']);
+  for(const name of ['Results','Conclusions']){
    await expect(nav.getByRole('button',{name,exact:true})).toHaveCount(1);
    await expect(page.locator('.floor-observatory').getByRole('button',{name:new RegExp(name)})).toHaveCount(0);
   }
-  // Both destinations must remain reachable by keyboard, including after leaving Floor plan.
-  for(const name of ['Results','Final report','Results','Floor plan']){
+  // Both destinations must remain reachable by keyboard, including after leaving Experiments.
+  for(const name of ['Results','Conclusions','Results','Experiments']){
    const button=nav.getByRole('button',{name,exact:true});
    await button.focus();await page.keyboard.press('Enter');
    await expect(button).toHaveAttribute('aria-current','page');
@@ -36,7 +37,7 @@ try{
    await expect(page.locator('.is-evidence-fullscreen')).toHaveCount(0);
    if(name==='Results')await expect(page.locator('#results-panel')).toBeVisible();
    else await expect(page.locator('#results-panel')).toHaveCount(0);
-   if(name==='Floor plan')await expect(page.locator('.floor-observatory')).toBeVisible();
+   if(name==='Experiments')await expect(page.locator('.floor-observatory')).toBeVisible();
    else await expect(page.locator('.floor-observatory')).toHaveCount(0);
    await button.scrollIntoViewIfNeeded();await expect(button).toBeInViewport();
    const geometry=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));
@@ -44,7 +45,7 @@ try{
   }
   await page.getByRole('button',{name:'Workspace settings',exact:true}).click();
   const settings=page.getByRole('dialog',{name:'Workspace settings',exact:true});
-  await expect(settings.getByRole('button',{name:/^(Results|Final report)$/})).toHaveCount(0);
+  await expect(settings.getByRole('button',{name:/^(Results|Conclusions)$/})).toHaveCount(0);
   await page.keyboard.press('Escape');
   if(process.env.MEMSTARA_SCREENSHOT_DIR)await page.screenshot({path:`${process.env.MEMSTARA_SCREENSHOT_DIR}/control-analysis-${theme}-${width}.png`});
   console.log(JSON.stringify({width,theme,analysisViews:'Control only',keyboardNavigation:true,noDuplicatePanels:true}));

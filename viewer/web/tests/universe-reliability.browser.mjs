@@ -1,3 +1,4 @@
+import {openRetainedView,retainedWorkspaceUrl} from './retained-views.mjs';
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -19,14 +20,15 @@ try {
    if(path.startsWith('/control/'))return route.fulfill({json:path==='/control/pipelines'?{pipelines:[]}:{}});
    if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unrelated fixture endpoint unavailable'}});
    if(retired&&path.startsWith('/assets/')){lateAssets++;return route.fulfill({status:404,body:'Retired build asset'});}
+   if(new URL(route.request().url()).port==='4177')return route.continue();
    const file=path.startsWith('/assets/')?resolve(root,'dist/assets',basename(path)):resolve(root,'dist/index.html');
    return route.fulfill({body:await readFile(file),contentType:path.endsWith('.js')?'application/javascript':path.endsWith('.css')?'text/css':'text/html'});
   });
-  await page.goto('http://localhost/');
-  await page.getByRole('button',{name:/Question universe/}).first().waitFor();
+  await page.goto(retainedWorkspaceUrl);
+  await page.waitForFunction(()=>typeof window.openRetainedView==='function');
   // Simulate deployment after the application loaded but before first opening this view.
   retired=true;
-  await page.getByRole('button',{name:/Question universe/}).first().click();
+  await openRetainedView(page);
   await page.getByRole('button',{name:'View options',exact:true}).click();
   await page.getByRole('button',{name:'List',exact:true}).click();
   await page.keyboard.press('Escape');

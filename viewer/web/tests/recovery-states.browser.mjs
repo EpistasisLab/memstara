@@ -23,7 +23,7 @@ try {
  });
  await page.route('**/api/**',route=>route.fulfill({json:{runs:[],results:[],questions:[],events:[],reports:{}}}));
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
- await page.getByRole('navigation').getByRole('button',{name:'Floor plan',exact:true}).first().click();
+ await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
  const card=page.locator('.pipeline-browser-row').filter({hasText:'Recovery fixture'});
  const badge=card.locator('.pipeline-state-badge');
  await badge.getByText('Running',{exact:true}).waitFor();
