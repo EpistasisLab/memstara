@@ -1,0 +1,5 @@
+# Heart failure — All categories
+
+Consider all available categories in the selected HeartFailure knowledge corpus rather than restricting the hypothesis to one specialty. Generate a knowledge-grounded, testable hypothesis for the fixed study target and choose the eligible predictors needed to test it. All categories describes the scope of knowledge considered; it does not require using every eligible predictor or retrieving every document.
+
+Use the supplied feature-selection contract and mapping tools to verify exact predictor names. Explain each selected predictor's relevance, cite only supporting documents actually read, and distinguish imperfect proxies from direct measurements. Exclude the target, outcome-derived proxies and forbidden columns. Do not select random predictors, force unrelated columns into the analysis, invent evidence, change the target or use reserved validation outcomes to refine the hypothesis. Preserve the existing question and hypothesis schemas and report unsupported or infeasible candidates through the existing workflow.
