@@ -69,12 +69,12 @@ After the ready message, you can close the terminal.
 | Configure in | Settings |
 |---|---|
 | `.env` | LLM provider, credentials, common model, optional per-agent model overrides and web port |
-| **Prepare research inputs** | Your CSV, OKF corpus, prediction target and label mapping |
-| **Add pipeline → All Combinations** | Research input, agent skills, ML evaluation options, Loop limit and pipeline name |
+| **Add pipeline → Register or revise research inputs** | Your CSV, OKF corpus, prediction target and label mapping |
+| **Add pipeline** | Research input, agent skills, ML evaluation options, Loop limit and pipeline name |
 
 For the included example:
 
-1. Open **Experiments → Add pipeline → All Combinations**.
+1. Open **Experiments → Add pipeline**.
 2. In **Research inputs**, select **Heart failure complete-case software demonstration** and review its target.
 3. In **Agent skills**, choose one skill for each stage. Set optional ML evaluation/advanced model settings in the Machine learning step.
 4. In **Review & create**, set a name and a maximum of **1 Loop** for a first run, review the plan and confirm it. **Random Start** is off by default: execution starts at combination 1 and continues in order.

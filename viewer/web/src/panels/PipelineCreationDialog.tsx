@@ -4,14 +4,13 @@ import {mlOverridesError,overridesForSkills,overrideCount} from '../lib/mlOverri
 import {compatibleResearchSkill} from '../lib/researchSkills';
 import ResearchInputSelect from '../components/ResearchInputSelect';
 import CombinationWizard from '../components/CombinationWizard';
-import FloorDetailDialog from '../components/FloorDetailDialog';
 import AgentReferenceKnowledge from '../components/AgentReferenceKnowledge';
 import EvaluationSettings from '../components/EvaluationSettings';
 import { evaluationPlanError } from '../lib/evaluationPlan';
 import LoopLimitSettings from "../components/LoopLimitSettings";
 import BaselineSettings from '../components/BaselineSettings';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, Workflow, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react';
 import { useControl, type RunRequest } from '../store/control';
 import { usePipelines } from '../store/pipelines';
 import { newPipelineConfiguration } from '../lib/newPipelineConfiguration';
@@ -33,30 +32,11 @@ const addictionSkills = new Set(['addiction-substance-use', 'addiction-sdoh', 'a
 
 export default function PipelineCreationDialog() {
   const open = usePipelines(s => s.creationOpen);
-  return open ? <ChooseBuildMode /> : null;
+  return open ? <CombinationWizard /> : null;
 }
 
-function ChooseBuildMode() {
-  const [mode,setMode]=useState<'selected'|'all'|null>(null);
-  if(mode==='selected')return <CreationWizard/>;
-  if(mode==='all')return <CombinationWizard/>;
-  return <FloorDetailDialog title="Build pipelines" close={()=>usePipelines.getState().closeCreation()}>
-    <div className="space-y-5 p-3">
-      <div className="grid gap-4" style={{gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,260px),1fr))'}}>
-      <button hidden type="button" className="w-full rounded-xl border border-paper-line p-4 text-left" onClick={()=>setMode('selected')}><strong>Selected Pipelines</strong><p>Build one pipeline, then run it when ready. Add more separately.</p></button>
-      <button aria-label="All Combinations" type="button" className="group flex h-full w-full flex-col gap-3 rounded-xl border border-accent/40 bg-accent/5 p-5 text-left transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-accent" onClick={()=>setMode('all')}>
-        <span className="flex w-full items-center justify-between text-ink-muted"><Workflow size={24} aria-hidden="true"/><span className="text-xs font-semibold">Pipeline setup</span></span>
-        <strong className="text-lg">All Combinations</strong>
-        <p className="text-sm leading-relaxed text-ink-muted">Select or register your study, then choose one or more skills for each agent. Review the combinations and set the maximum Loops.</p>
-        <span className="mt-auto flex items-center gap-2 pt-2 text-sm font-semibold">Configure a pipeline <ArrowRight size={16} aria-hidden="true"/></span>
-      </button>
-      </div>
-      <p className="rounded-lg border border-paper-line bg-paper px-3 py-2 text-xs leading-relaxed text-ink-muted">Choose one skill per agent for a single combination. Creating a design does not start an experiment; review it and press Run when ready.</p>
-    </div>
-  </FloorDetailDialog>;
-}
-
-function CreationWizard() {
+// Retained for isolated compatibility fixtures; not part of the creation menu.
+export function CreationWizard() {
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const [uploading, setUploading] = useState(false);

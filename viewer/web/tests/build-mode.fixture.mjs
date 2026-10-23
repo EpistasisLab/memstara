@@ -1,10 +1,5 @@
-import assert from 'node:assert/strict';
-
-// Selected Pipelines is temporarily hidden from users. Exercise its retained
-// wizard explicitly in fixtures without exposing a production feature flag.
+// Legacy creation is test-only; production Add pipeline opens combinations directly.
 export async function openBuildModeFixture(page,mode='Selected Pipelines') {
- if(mode!=='Selected Pipelines')return page.getByRole('button',{name:new RegExp('^'+mode)}).click();
- const button=page.getByRole('dialog',{name:'Build pipelines',exact:true}).locator('button[hidden]').filter({hasText:'Selected Pipelines'});
- assert.equal(await button.isVisible(),false);
- await button.evaluate(el=>el.click());
+ if(mode!=='Selected Pipelines')return;
+ await page.goto((process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:4177')+'/tests/legacy-creation.fixture.html');
 }

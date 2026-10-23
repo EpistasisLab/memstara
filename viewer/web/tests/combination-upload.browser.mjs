@@ -17,7 +17,7 @@ try {
   if(r.request().method()==='POST')throw Error('Unexpected mutation '+path);
   return r.continue();
  });
- await page.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add pipeline/i}).click();await page.getByRole('button',{name:/All Combinations/}).click();
+ await page.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add pipeline/i}).click();
  const d=page.getByRole('dialog',{name:'All Combinations',exact:true});
  await d.getByLabel('Deployment target column',{exact:true}).fill('outcome');
  await d.getByRole('button',{name:'Choose skills'}).click();

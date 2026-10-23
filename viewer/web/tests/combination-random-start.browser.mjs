@@ -29,7 +29,7 @@ try {
   });
   await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Fixture'}}));
   await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
-  await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add pipeline/i}).click();await page.getByRole('button',{name:/All Combinations/}).click();
+  await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add pipeline/i}).click();
   const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});await dialog.getByLabel('Deployment target column',{exact:true}).fill('fixture_target');await dialog.getByRole('button',{name:'Choose skills'}).click();
   const labels=['Hypothesis','Data','Machine learning','Interpretation','Explanation'];
   for(const [i,role] of roles.entries()){

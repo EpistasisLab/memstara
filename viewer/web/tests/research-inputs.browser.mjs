@@ -57,9 +57,9 @@ try{
   await workspace.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Offline UI fixture'}}));
   await workspace.goto(process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:5179');
   await workspace.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await workspace.getByRole('button',{name:/Add pipeline/i}).click();
-  const chooser=workspace.getByRole('dialog',{name:'Build pipelines',exact:true});
-  assert.equal(await chooser.getByRole('button',{name:'Prepare research inputs',exact:true}).count(),0);
-  await chooser.getByRole('button',{name:'All Combinations',exact:true}).click();
+  assert.equal(await workspace.getByRole('dialog',{name:'Build pipelines',exact:true}).count(),0);
+  assert.equal(await workspace.getByRole('button',{name:'Prepare research inputs',exact:true}).count(),0);
+  await workspace.getByRole('dialog',{name:'All Combinations',exact:true}).waitFor();
   await workspace.getByRole('button',{name:'Register or revise research inputs',exact:true}).click();
   await workspace.getByRole('heading',{name:'Research input preparation',exact:true}).waitFor();
   await workspace.close();
