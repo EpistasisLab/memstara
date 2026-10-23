@@ -218,6 +218,9 @@ def validate_new_design(body: dict) -> None:
     choices = body.get('combination_skills')
     if isinstance(choices, dict) and isinstance(choices.get('hypothesis'), list):
         names += choices['hypothesis']
+    if any(isinstance(name, str) and canonical_name(name.strip()) == 'heart-failure-all' for name in names):
+        raise ValueError('The historical all-predictor skill is unavailable for new designs. '
+                         'Choose Heart failure — All categories instead.')
     if any(isinstance(name, str) and canonical_name(name.strip()) == 'random_features' for name in names):
         raise ValueError('Random-feature hypothesis generation is unavailable for new MVP pipelines. '
                          'Choose a compatible hypothesis skill. Random Start only changes execution order.')

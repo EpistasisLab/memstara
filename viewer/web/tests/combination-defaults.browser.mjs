@@ -10,6 +10,7 @@ try {for(const fallback of [false,true]) {
  const names=['Hypothesis','Data','Machine learning','Interpretation','Explanation'];
  for(let i=0;i<names.length;i++){
   await expect(dialog.locator('.comb-skill-card input:checked')).toHaveCount(1);
+  if(i===0&&fallback)await dialog.locator('.comb-skill-card input:checked').uncheck();
   if(i===2){
    await expect(dialog.locator('.comb-ml-settings')).toHaveCount(0);
    if(fallback)await dialog.locator('.comb-skill-card input:checked').uncheck();

@@ -19,7 +19,7 @@ export function researchSkillProfile(form:Partial<RunRequest>):Profile {
 }
 export function compatibleResearchSkill(skill:{id:string;stage:string},form:Partial<RunRequest>):boolean {
   const id=skill.id??'';
-  if(id==='random_features')return false;
+  if(id==='random_features'||id==='heart-failure-all')return false;
   if(skill.stage!=='hypothesis'&&skill.stage!=='report')return true;
   if(bindings.default==='legacy'&&!form.research_input_id&&form.knowledge_mode!=='llm_only'&&form.data_mode!=='proposal')return !id.startsWith('heart-failure-');
   const profile=researchSkillProfile(form);
@@ -39,7 +39,7 @@ export function resetResearchSkills(current?:Partial<RunRequest>,next?:Partial<R
       const retained=choices.filter(id=>compatibleResearchSkill({id,stage},target));
       // Retain explicit compatible choices; new sources start with one default.
       // Never carry retired random-feature selections into a new draft.
-      combinations[stage]=retained.length?retained:profile[stage].filter(id=>id!=='random_features').slice(0,1);
+      combinations[stage]=retained.length?retained:profile[stage].filter(id=>id!=='random_features'&&id!=='heart-failure-all').slice(0,1);
     }
     reset.combination_skills=combinations;
   }

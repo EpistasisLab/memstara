@@ -16,7 +16,7 @@ PROFILES = {
     },
     'heart_failure': {
         'label': 'HeartFailure knowledge corpus',
-        'hypothesis': ['heart-failure-all', 'heart-failure-cardiovascular', 'heart-failure-metabolic-renal',
+        'hypothesis': ['heart-failure-all-categories', 'heart-failure-all', 'heart-failure-cardiovascular', 'heart-failure-metabolic-renal',
                        'heart-failure-lifestyle-social', 'random_features'],
         'report': ['report_heart_failure_cardiovascular', 'report_heart_failure_cardiorenal'],
     },
@@ -60,7 +60,7 @@ def menu_bindings():
     from memstara.research_inputs import list_inputs
 
     return {'profiles': {key: {**profile, 'hypothesis': [skill for skill in profile['hypothesis']
-            if skill != 'random_features']} for key, profile in PROFILES.items()}, 'default': corpus_profile(),
+            if skill not in ('random_features', 'heart-failure-all')]} for key, profile in PROFILES.items()}, 'default': corpus_profile(),
             'research': {record['id']: corpus_profile(record) for record in list_inputs()}}
 
 
@@ -78,3 +78,18 @@ def validate_hypotheses(books, profile=None, *, knowledge_mode='okf'):
         if name not in reports and not name.startswith('user-report-'):
             raise ValueError(f'{name}: Explanation skill does not match the selected corpus ({scope}). '
                              'Select a matching or general Explanation skill.')
+
+
+def with_default_hypothesis(body):
+    """Resolve an empty new-design selection to an explicit corpus-compatible skill."""
+    choices = body.get('combination_skills')
+    if not isinstance(choices, dict) or not choices or choices.get('hypothesis', []) != []:
+        return body
+    profile = None
+    if body.get('research_input_id'):
+        from memstara.research_inputs import load
+        profile = load(body['research_input_id'])
+    mode = profile['configuration']['knowledge_mode'] if profile else body.get('knowledge_mode', 'okf')
+    scope = corpus_profile(profile, knowledge_mode=mode)
+    default = PROFILES[scope]['hypothesis'][0]
+    return {**body, 'combination_skills': {**choices, 'hypothesis': [default]}}

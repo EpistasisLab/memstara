@@ -202,6 +202,8 @@ class PipelineWorkspace:
     @staticmethod
     def configuration(value):
         value = normalize_agent_configuration(value)
+        from memstara.corpus_skills import with_default_hypothesis
+        value = with_default_hypothesis(value)
         if not isinstance(value, dict) or set(value) - set(DEFAULTS):
             raise ValueError("Invalid pipeline configuration fields")
         config = {

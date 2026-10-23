@@ -76,7 +76,7 @@ For the included example:
 
 1. Open **Experiments → Add pipeline**.
 2. In **Research inputs**, select **Heart failure complete-case software demonstration** and review its target.
-3. In **Agent skills**, each stage starts with one compatible skill selected. Keep these defaults and select **Next**, or change the selections. The HeartFailure example defaults to all eligible predictors, Training-heavy data, Logistic Regression, SHAP Interpretation and cardiovascular Explanation. If you deselect all ML skills, the server runs scikit-learn default Logistic Regression without LLM parameter tuning.
+3. In **Agent skills**, each stage starts with one compatible skill selected. Keep these defaults and select **Next**, or change the selections. The HeartFailure example defaults to hypotheses across all knowledge categories, Training-heavy data, Logistic Regression, SHAP Interpretation and cardiovascular Explanation. Clearing all hypothesis selections uses the compatible default shown in review. If you deselect all ML skills, the server runs scikit-learn default Logistic Regression without LLM parameter tuning.
 4. In **Review & create**, set a name and **1 replicate per pipeline** for a first experiment, review the plan and confirm it. **Random Start** is off by default: execution starts at Pipeline 1 and continues in order.
 5. Select **Create pipeline**, then **Run** on that pipeline's card. Creating a pipeline does not start it.
 

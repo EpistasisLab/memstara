@@ -17,7 +17,7 @@ LEGACY_PLAYBOOKS.update({name: f'legacy/{name}.md' for name in (
 
 # Temporarily hidden from selection only. Keep files and saved configurations intact.
 HIDDEN_PLAYBOOKS = frozenset({
-    'ml_default_logistic_regression', 'random_features',
+    'ml_default_logistic_regression', 'random_features', 'heart-failure-all',
     'interpreter_actionability', 'interpreter_attribution', 'interpreter_clinical',
     'interpreter_factual_observations', 'interpreter_review_pending', 'interpreter_robustness',
 })

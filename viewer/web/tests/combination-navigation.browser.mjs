@@ -56,7 +56,7 @@ try {
    for(const skill of choices)await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).check();
    assert(!(await forward.isDisabled()),'Selected role must advance');
    for(const skill of choices)await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).uncheck();
-   assert.equal(await forward.isDisabled(),role!=='ml','Only ML supports an empty selection via default LR');
+   assert.equal(await forward.isDisabled(),!['ml','hypothesis'].includes(role),'Hypothesis and ML use recorded defaults for empty choices');
    for(const skill of choices)await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).check();
    if(i<4){
     await forward.click();await dialog.getByRole('heading',{name:labels[i+1]+' skills',exact:true}).waitFor();

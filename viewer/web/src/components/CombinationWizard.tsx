@@ -30,10 +30,13 @@ export default function CombinationWizard(){
  const selected=Object.fromEntries(PLAYBOOK_STAGES.map(stage=>{
   if(requested[stage]!==undefined)return [stage,requested[stage]];
   const available=catalog.filter(s=>s.stage===stage&&s.id!=='random_features'&&compatibleResearchSkill(s,draft));
-  const fallback=available.find(s=>s.id===(stage==='hypothesis'?'heart-failure-all':defaults[stage]))??available[0];
+  const fallback=available.find(s=>s.id===(stage==='hypothesis'?'heart-failure-all-categories':defaults[stage]))??available[0];
   return [stage,fallback?[fallback.id]:[]];
  })) as Partial<Record<PlaybookStage,string[]>>;
- const counts=PLAYBOOK_STAGES.map(stage=>stage==='ml'&&!selected.ml?.length?1:new Set((selected[stage]??[]).map(id=>catalog.find(s=>s.id===id)?.hash).filter(Boolean)).size);
+ const hypothesisDefault=catalog.filter(s=>s.stage==='hypothesis'&&compatibleResearchSkill(s,draft));
+ const defaultHypothesis=hypothesisDefault.find(s=>s.id==='heart-failure-all-categories')??hypothesisDefault[0];
+ const effectiveSelected={...selected,hypothesis:selected.hypothesis?.length?selected.hypothesis:defaultHypothesis?[defaultHypothesis.id]:[]};
+ const counts=PLAYBOOK_STAGES.map(stage=>stage==='ml'&&!effectiveSelected.ml?.length?1:new Set((effectiveSelected[stage]??[]).map(id=>catalog.find(s=>s.id===id)?.hash).filter(Boolean)).size);
  const count=counts.reduce((a,b)=>a*b,1),repetitions=draft.combination_repetitions??1,total=count*repetitions,randomStart=!!draft.combination_random_start;
  function toggle(stage:PlaybookStage,id:string,checked:boolean){setReviewed(false);setDraft(d=>{const choices=checked?[...new Set([...(d.combination_skills?.[stage]??selected[stage]??[]),id])]:(d.combination_skills?.[stage]??selected[stage]??[]).filter(x=>x!==id);return {...d,combination_skills:{...d.combination_skills,[stage]:choices},ml_overrides:stage==='ml'?overridesForSkills(d.ml_overrides,choices):d.ml_overrides};});}
  const modelError=evaluationPlanError(draft.evaluation);
@@ -92,6 +95,7 @@ export default function CombinationWizard(){
      </div>
      <div hidden={skillMode!=='custom'}><CustomSkillUpload includeAssistant={false} multiple key={`custom-${activeRole}`} stage={activeRole} disabled={busy||uploading} onBusy={setUploading} onSelect={s=>toggle(activeRole,s.id,true)}/></div>
      {<div hidden={skillMode!=='ai'} className="comb-ai-section"><HypothesisSkillWizard key={activeRole} stage={activeRole} multiple disabled={busy||uploading} onBusy={setUploading} onSelect={s=>toggle(activeRole,s.id,true)}/></div>}
+     {activeRole==='hypothesis'&&!selected.hypothesis?.length&&defaultHypothesis&&<p className="comb-review-hint">Default: {skillLabel(defaultHypothesis.id,defaultHypothesis.title)}. Select Next to use this skill.</p>}
      {activeRole==='ml'&&!selected.ml?.length&&<p className="comb-review-hint">Default: scikit-learn Logistic Regression. No tuning or additional model settings are required.</p>}
     </section>
    </div>}
@@ -111,7 +115,7 @@ export default function CombinationWizard(){
      </section>
      <section className="comb-review-card" aria-labelledby="comb-agents-heading"><h4 id="comb-agents-heading">Your agents</h4><ol className="comb-review-agents">{PLAYBOOK_STAGES.map((stage,i)=>{const Icon=icons[stage];return <li key={stage}>
       <div className="comb-review-agent-heading"><Icon size={18} aria-hidden="true"/><h5>{flavorNames[stage]}</h5><span>{counts[i]} {counts[i]===1?'skill':'skills'}</span><button type="button" aria-label={`Edit ${flavorNames[stage]} skills`} disabled={busy||uploading} onClick={()=>{moveRole(i);setStep(1);}}>Edit</button></div>
-      <ul>{stage==='ml'&&!selected.ml?.length&&<li>Default scikit-learn Logistic Regression</li>}{(selected[stage]??[]).map(id=><li key={id}>{skillLabel(id,catalog.find(s=>s.id===id)?.title)}</li>)}</ul>
+      <ul>{stage==='ml'&&!selected.ml?.length&&<li>Default scikit-learn Logistic Regression</li>}{(effectiveSelected[stage]??[]).map(id=><li key={id}>{skillLabel(id,catalog.find(s=>s.id===id)?.title)}</li>)}</ul>
      </li>;})}</ol></section>
     </div>
     <label className="comb-consent comb-review-confirm"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/><span><strong>I reviewed the pipelines, replicates and model settings.</strong><small>Creation saves the design. Usage and costs begin when you select Run.</small></span></label>
@@ -119,7 +123,7 @@ export default function CombinationWizard(){
 
    </div>
    {total>10000&&<p role="alert">Choose at most 10,000 total replicates.</p>}{error&&<p role="alert">{error}</p>}
-   <footer className="comb-footer"><div className="comb-next-help" id="comb-next-help" role="status" aria-live="polite"><strong>{busy?'Saving…':uploading?'Saving skill…':blocker?'To continue':'Ready to continue'}</strong><span>{blocker||(step===2?'Create pipeline saves your design. Select Run afterward to start.':`Select ${nextLabel} to continue.`)}</span></div><div className="comb-footer-actions">{step>0&&<button disabled={busy||uploading} onClick={back}><ArrowLeft size={16}/>Back</button>}{step<2?<button className="comb-primary" aria-describedby="comb-next-help" disabled={!!blocker} onClick={next}>{nextLabel}<ArrowRight size={16}/></button>:<button className="comb-primary" aria-label="Create combination design" aria-describedby="comb-next-help" disabled={!valid||busy||uploading} onClick={()=>void create(name.trim(),{...draft,combination_skills:selected,ml_overrides:{},waves:total})}>{busy?'Creating…':'Create pipeline'}<Check size={16}/></button>}</div></footer>
+   <footer className="comb-footer"><div className="comb-next-help" id="comb-next-help" role="status" aria-live="polite"><strong>{busy?'Saving…':uploading?'Saving skill…':blocker?'To continue':'Ready to continue'}</strong><span>{blocker||(step===2?'Create pipeline saves your design. Select Run afterward to start.':`Select ${nextLabel} to continue.`)}</span></div><div className="comb-footer-actions">{step>0&&<button disabled={busy||uploading} onClick={back}><ArrowLeft size={16}/>Back</button>}{step<2?<button className="comb-primary" aria-describedby="comb-next-help" disabled={!!blocker} onClick={next}>{nextLabel}<ArrowRight size={16}/></button>:<button className="comb-primary" aria-label="Create combination design" aria-describedby="comb-next-help" disabled={!valid||busy||uploading} onClick={()=>void create(name.trim(),{...draft,combination_skills:effectiveSelected,ml_overrides:{},waves:total})}>{busy?'Creating…':'Create pipeline'}<Check size={16}/></button>}</div></footer>
   </div>
  </FloorDetailDialog>;
 }

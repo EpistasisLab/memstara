@@ -152,6 +152,8 @@ def build_argv(
 ) -> list[str]:
     """The arguments for one run, or `ValueError` saying which field was wrong."""
     body = normalize_agent_configuration(body)
+    from memstara.corpus_skills import with_default_hypothesis
+    body = with_default_hypothesis(body)
     # The HTTP boundary rejects these fields from callers; workspace retry owns them.
     retry_fields = {"_retry_from_loop", "_retry_source_run", "_retry_combination_plan"}
     unknown = sorted(set(body) - set(DEFAULTS) - retry_fields)
@@ -240,7 +242,7 @@ def build_argv(
 
     # Retired skills may still appear in trusted saved runs. New API designs
     # are rejected by validate_new_design before reaching this execution adapter.
-    known = set(playbooks) | {'random_features'}
+    known = set(playbooks) | {'random_features', 'heart-failure-all'}
     if combination_plan:
         known.update(item['id'] for entries in combination_plan['skills'].values() for item in entries)
     markable = set(playbook_stages)

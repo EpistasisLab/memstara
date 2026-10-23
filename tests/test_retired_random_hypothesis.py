@@ -71,4 +71,4 @@ def test_live_menu_profiles_hide_random_without_changing_historical_profiles(mon
     menu = corpus_skills.menu_bindings()
     assert all('random_features' not in p['hypothesis'] for p in menu['profiles'].values())
     assert all('random_features' in p['hypothesis'] for p in corpus_skills.PROFILES.values())
-    catalog.validate_new_design({'playbook_hypothesis': 'heart-failure-all', 'combination_random_start': True})
+    catalog.validate_new_design({'playbook_hypothesis': 'heart-failure-all-categories', 'combination_random_start': True})
