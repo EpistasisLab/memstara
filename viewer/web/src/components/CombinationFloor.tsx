@@ -1,6 +1,6 @@
 import { skillLabel } from '../lib/displayText';
 import {floorCallRole as callRole, floorCallStatus} from '../lib/floorActivity';
-import {useMemo, useCallback, useState, useEffect, type CSSProperties} from 'react';
+import {useMemo, useCallback, useState, useEffect, useRef, type CSSProperties} from 'react';
 import {ReactFlow, Panel, useReactFlow, useStore, getViewportForBounds, Background, BackgroundVariant, Controls, Handle, Position, MarkerType, type NodeProps, type Node} from '@xyflow/react';
 import {Sparkles, Database, BrainCircuit, ScanEye, FileText, ExternalLink} from 'lucide-react';
 import {PLAYBOOK_STAGES, type PlaybookStage} from '../store/control';
@@ -39,6 +39,7 @@ function Navigation(){
  const element=useStore(s=>s.domNode);
  const geometry=useStore(s=>Array.from(s.nodeLookup.values()).map(n=>`${n.id}:${n.measured.width}:${n.measured.height}`).join('|'));
  const [focus,setFocus]=useState('all');
+ const initiallyFitted=useRef(false);
  const fit=useCallback((id:string)=>{
   if(!element)return;
   const {width,height}=element.getBoundingClientRect();
@@ -51,14 +52,16 @@ function Navigation(){
   void setViewport(next,{duration:0});
  },[element,getNodes,getNodesBounds,getViewport,setViewport]);
  useEffect(()=>{
-  if(!element)return;
-  let frame=0;
-  const schedule=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>fit(focus));};
-  const observer=new ResizeObserver(schedule);
-  observer.observe(element);schedule();
-  return()=>{observer.disconnect();cancelAnimationFrame(frame);};
- },[element,geometry,focus,fit]);
- return <Panel position="top-left" className="cf-navigation"><label>Go to agent <select aria-label="Focus floor plan agent" value={focus} onChange={e=>setFocus(e.target.value)}><option value="all">Overview</option>{PLAYBOOK_STAGES.map(s=><option key={s} value={s}>{labels[s]}</option>)}</select></label><button onClick={()=>{setFocus('all');fit('all');}}>Fit all</button><span>Drag to explore · + / − to zoom</span></Panel>;
+  if(initiallyFitted.current||!element)return;
+  const nodes=getNodes();
+  if(!nodes.length||nodes.some(n=>!n.measured?.width||!n.measured?.height))return;
+  const frame=requestAnimationFrame(()=>{
+   if(!element.clientWidth||!element.clientHeight)return;
+   fit('all');initiallyFitted.current=true;
+  });
+  return()=>cancelAnimationFrame(frame);
+ },[element,geometry,fit,getNodes]);
+ return <Panel position="top-left" className="cf-navigation"><label>Go to agent <select aria-label="Focus floor plan agent" value={focus} onChange={e=>{setFocus(e.target.value);fit(e.target.value);}}><option value="all">Overview</option>{PLAYBOOK_STAGES.map(s=><option key={s} value={s}>{labels[s]}</option>)}</select></label><button onClick={()=>{setFocus('all');fit('all');}}>Fit all</button><span>Drag to explore · + / − to zoom</span></Panel>;
 }
 
 export default function CombinationFloor({skills,inspect,recorded=false,calls=EMPTY_CALLS,activeSkills,live=false,paused=false,stale=false,stopping=false,currentStage}:{skills:Skill[][];inspect:(s:Skill)=>void;recorded?:boolean;calls?:Call[];activeSkills?:Skill[];live?:boolean;paused?:boolean;stale?:boolean;stopping?:boolean;currentStage?:string}){
@@ -78,7 +81,7 @@ export default function CombinationFloor({skills,inspect,recorded=false,calls=EM
  return <div className="cf-floor-shell">
 
   <div className="cf-map" role="region" aria-label={recorded?'Recorded combination floor plan':'Configured combination floor plan'}>
-   <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView fitViewOptions={fitOptions} minZoom={.05} maxZoom={1.4} nodesConnectable={false} nodesDraggable={false} elementsSelectable={false} panOnScroll zoomOnScroll={false} preventScrolling={false} proOptions={{hideAttribution:true}}>
+   <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} minZoom={.05} maxZoom={1.4} nodesConnectable={false} nodesDraggable={false} elementsSelectable={false} panOnScroll zoomOnScroll={false} preventScrolling={false} proOptions={{hideAttribution:true}}>
     <Navigation/><Background variant={BackgroundVariant.Lines} gap={32} color="var(--cf-grid)" size={.5}/><Controls showInteractive={false} fitViewOptions={fitOptions}/>
    </ReactFlow>
   </div>

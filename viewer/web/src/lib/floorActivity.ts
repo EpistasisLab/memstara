@@ -6,7 +6,7 @@ export type FloorActivity = {pipelineId: string; runTag?: string; loop: number; 
 export function floorExecutionState(run?: {pause_requested?: boolean; execution_state?: string; waiting_for_questions?: boolean; connection_health?: {state?: string}} | null) {
  const paused = run?.execution_state === 'paused';
  const stopping = !paused && !!(run?.pause_requested || run?.execution_state === 'stopping');
- return {live: !!run && !paused && !stopping && !run.waiting_for_questions && run.connection_health?.state!=='verifying', paused, stopping};
+ return {live: !!run && !paused && !stopping && !run.waiting_for_questions && (!run.connection_health?.state||run.connection_health.state==='healthy'), paused, stopping};
 }
 const roles: PlaybookStage[] = ['hypothesis', 'data', 'ml', 'interpreter', 'report'];
 export const floorCallRole = (c: FloorCall): PlaybookStage | undefined => c.skill?.stage ?? (c.stage.startsWith('question') ? 'hypothesis' : c.stage.startsWith('interpret') ? 'interpreter' : roles.find(s => c.stage.startsWith(s)));

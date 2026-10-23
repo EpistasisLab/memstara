@@ -46,3 +46,12 @@ test('overlapping invocations do not imply overlapping training and interpretati
  assert.equal(floorCallStatus({...calls[0],status:'failed'},{live:true,currentStage:'interpreter'}),'failed');
  assert.equal(floorCallStatus({...calls[0],status:'completed'},{live:true,currentStage:'interpreter'}),'Completed');
 });
+
+test('unverified and lost connections cannot animate as running',()=>{
+ for(const state of ['lost','verifying','disconnected','unknown']){
+  const status=floorExecutionState({execution_state:'running',connection_health:{state}});
+  assert.equal(status.live,false);
+  assert.equal(floorCallStatus({stage:'ml',status:'started'},{...status,currentStage:'ml'}),'Last recorded: call open');
+ }
+ assert.equal(floorExecutionState({execution_state:'running',connection_health:{state:'healthy'}}).live,true);
+});

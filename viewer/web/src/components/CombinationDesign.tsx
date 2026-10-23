@@ -22,7 +22,7 @@ const roles={
 type Flavor={stage:PlaybookStage;id:string;title?:string;hash?:string};
 function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:PipelineDefinition;headerHost?:HTMLDivElement|null;onActivity?:(activity:FloorActivity|null)=>void}){
  const catalog=useControl(s=>s.catalog),busy=usePipelines(s=>s.busy);
- const controlError=usePipelines(s=>s.error);
+ const controlError=usePipelines(s=>s.error==='Error: Pipeline workspace is unavailable; last settings are retained.'?s.error:null);
  const board=useRef<HTMLDivElement>(null);
  const [view,setView]=useState<'floor'|'design'>('floor'),[role,setRole]=useState<PlaybookStage|'all'>('all');
  const [search,setSearch]=useState(''),[detail,setDetail]=useState<Flavor|null>(null);
@@ -87,9 +87,10 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
   {view==='floor'?<>
 
    {following&&error&&<div className="cs-error" role="alert"><AlertCircle size={16}/><span>{displayText(error)} {trace?'Last available records; activity may have changed.':'Waiting for this Replicate’s records.'}</span><button onClick={()=>setRetry(n=>n+1)}>Retry</button></div>}
-   {following&&!trace?<p role="status" className="cs-empty">{error?'Execution records unavailable.':'Loading current Replicate…'}</p>:<CombinationFloor
+   {following&&!trace&&<p role="status" className="cs-empty">{error?'Execution records unavailable.':'Loading current Replicate…'}</p>}
+   <CombinationFloor
     skills={PLAYBOOK_STAGES.map((stage,i)=>{const configured=lists[i].map(id=>({stage,id,title:skillFor(id)?.title,hash:skillFor(id)?.hash}));const frozen=trace?.calls.filter(c=>callRole(c)===stage).at(-1)?.skill??trace?.planned?.agents.find(a=>a.stage===stage);return following&&frozen?[...configured.map(s=>s.id===frozen.id?frozen:s),...(!configured.some(s=>s.id===frozen.id)?[frozen]:[])]:configured;})}
-    currentStage={currentStage} activeSkills={following?(trace?.planned?.agents??[]):undefined} recorded={following} calls={following?trace?.calls:undefined} live={following&&live&&!error} paused={following&&paused} stopping={following&&stopping} stale={following&&!!error} inspect={setDetail}/>}
+    currentStage={currentStage} activeSkills={following?(trace?.planned?.agents??[]):undefined} recorded={following} calls={following?trace?.calls:undefined} live={following&&!!trace&&live&&!error} paused={following&&paused} stopping={following&&stopping} stale={following&&!!error} inspect={setDetail}/>
   </>:<>
    <p className="cs-architecture-caption">One skill from each agent column defines a Pipeline. A Replicate repeats its complete research process. Scroll across, or filter by role.</p>
 

@@ -73,7 +73,9 @@ try{
  pipeline.progress={iteration:3};
  await studio.getByRole('alert').waitFor();
  assert.equal(await studio.locator('.cf-active-room').count(),0,'Unavailable records cannot show running agents');
- assert.equal(await studio.locator('.cf-room').count(),0,'Previous loop records must not leak');
+ assert.equal(await studio.locator('.cf-room').count(),5,'Graph remains mounted while records are unavailable');
+ assert.equal(await studio.locator('.cf-desk.is-selected').count(),0,'Previous replicate selections must not leak');
+ assert.equal(await studio.locator('.react-flow__edge').count(),0,'Previous replicate edges must not leak');
  console.log('Current-loop version mismatch and unavailable records passed');
  liveFixture=true;pipeline.running={run_tag:'fixture-run',execution_state:'running'};pipeline.progress={iteration:1,stage:'ml'};
  await p.reload();await p.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await p.getByText('Pipeline 1 · Replicate 1 · Live',{exact:true}).waitFor();
