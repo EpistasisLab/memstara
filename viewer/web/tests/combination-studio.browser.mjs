@@ -37,6 +37,13 @@ try{
   for(const name of ['Preview combinations','Follow execution'])assert.equal(await p.getByRole('button',{name,exact:true}).count(),0);
   await studio.locator('.cf-room').first().waitFor();
   assert.equal(await studio.locator('.cf-room').count(),5);
+  const layout=await studio.evaluate(e=>{
+   const nav=e.querySelector('.cf-navigation').getBoundingClientRect();
+   const map=e.querySelector('.cf-map').getBoundingClientRect();
+   return {navigationBottom:nav.bottom,mapTop:map.top,navLeft:nav.left,navRight:nav.right,mapLeft:map.left,mapRight:map.right};
+  });
+  assert(layout.navigationBottom<=layout.mapTop+1,`Navigation covers agents: ${JSON.stringify(layout)}`);
+  assert(layout.navLeft>=layout.mapLeft-1&&layout.navRight<=layout.mapRight+1,`Navigation overflows: ${JSON.stringify(layout)}`);
   assert.equal(await studio.locator('.cf-desk').count(),10);
   await studio.getByRole('combobox',{name:'Focus floor plan agent',exact:true}).selectOption('hypothesis');
   assert.equal(await studio.getByRole('button',{name:/^Preview /}).count(),0);

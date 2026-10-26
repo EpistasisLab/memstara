@@ -44,3 +44,9 @@
 /* Keep the small opacity/transform indicators; avoid repainting the whole room. */
 .cf-room.cf-active-room,.cf-active-room .cf-room-icon { animation:none; }
 .cf-room.cf-active-room:before { content:none; animation:none; }
+
+/* Navigation occupies its own row so it cannot cover agent nodes. */
+.cf-navigation-dock { flex:0 0 auto; min-width:0; border-bottom:1px solid var(--border); }
+.cf-navigation-dock .cf-navigation { margin:0; max-width:none; border:0; border-radius:0; box-shadow:none; gap:8px 12px; }
+.cf-navigation-dock .cf-navigation label { min-width:0; flex-wrap:wrap; }
+.cf-navigation-dock .cf-navigation select { min-width:0; max-width:100%; }

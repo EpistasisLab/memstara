@@ -20,7 +20,7 @@ try{
  await expect(p.locator('.cf-active-room')).toContainText('Data');
  await p.getByRole('combobox',{name:'Focus floor plan agent'}).selectOption('data');
  await p.waitForTimeout(1000);
- const read=()=>p.locator('.cf-map').evaluate(e=>({transform:e.querySelector('.react-flow__viewport').style.transform,heights:[...e.querySelectorAll('.react-flow__node-room')].map(n=>({id:n.dataset.id,height:n.offsetHeight})),focus:e.querySelector('select').value}));
+ const read=()=>p.locator('.cf-map').evaluate(e=>({transform:e.querySelector('.react-flow__viewport').style.transform,heights:[...e.querySelectorAll('.react-flow__node-room')].map(n=>({id:n.dataset.id,height:n.offsetHeight})),focus:e.closest('.cf-floor-shell').querySelector('select').value}));
  const before=await read();
  const show=p.getByRole('button',{name:'Show pipeline list',exact:true});if(await show.isVisible())await show.click();
  await p.getByRole('button',{name:'Pause Transition diagnosis',exact:true}).click();await p.waitForTimeout(800);await expect(p.locator('.cf-active-room')).toContainText('Data');

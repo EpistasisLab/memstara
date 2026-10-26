@@ -1,7 +1,8 @@
 import { skillLabel } from '../lib/displayText';
 import {floorCallRole as callRole, floorCallStatus, floorStageProcessing} from '../lib/floorActivity';
 import {useMemo, useCallback, useState, useEffect, useRef, type CSSProperties} from 'react';
-import {ReactFlow, Panel, useReactFlow, useStore, getViewportForBounds, Background, BackgroundVariant, Controls, Handle, Position, MarkerType, type NodeProps, type Node} from '@xyflow/react';
+import {createPortal} from 'react-dom';
+import {ReactFlow, useReactFlow, useStore, getViewportForBounds, Background, BackgroundVariant, Controls, Handle, Position, MarkerType, type NodeProps, type Node} from '@xyflow/react';
 import {Sparkles, Database, BrainCircuit, ScanEye, FileText, ExternalLink} from 'lucide-react';
 import {PLAYBOOK_STAGES, type PlaybookStage} from '../store/control';
 import {STAGE_COLOR} from '../lib/stage';
@@ -34,8 +35,8 @@ function Room({data}:NodeProps<Node<RoomData>>){
  </div>;
 }
 const nodeTypes={room:Room};
-const fitOptions={padding:{top:'80px',bottom:'48px',left:'24px',right:'24px'},minZoom:.05,maxZoom:1,duration:0} as const;
-function Navigation(){
+const fitOptions={padding:{top:'24px',bottom:'48px',left:'24px',right:'24px'},minZoom:.05,maxZoom:1,duration:0} as const;
+function Navigation({host}:{host:HTMLDivElement|null}){
  const {getNodes,getNodesBounds,getViewport,setViewport}=useReactFlow();
  const element=useStore(s=>s.domNode);
  const geometry=useStore(s=>Array.from(s.nodeLookup.values()).map(n=>`${n.id}:${n.measured.width}:${n.measured.height}`).join('|'));
@@ -62,10 +63,11 @@ function Navigation(){
   });
   return()=>cancelAnimationFrame(frame);
  },[element,geometry,fit,getNodes]);
- return <Panel position="top-left" className="cf-navigation"><label>Go to agent <select aria-label="Focus floor plan agent" value={focus} onChange={e=>{setFocus(e.target.value);fit(e.target.value);}}><option value="all">Overview</option>{PLAYBOOK_STAGES.map(s=><option key={s} value={s}>{labels[s]}</option>)}</select></label><button onClick={()=>{setFocus('all');fit('all');}}>Fit all</button><span>Drag to explore · + / − to zoom</span></Panel>;
+ return host ? createPortal(<div className="cf-navigation"><label>Go to agent <select aria-label="Focus floor plan agent" value={focus} onChange={e=>{setFocus(e.target.value);fit(e.target.value);}}><option value="all">Overview</option>{PLAYBOOK_STAGES.map(s=><option key={s} value={s}>{labels[s]}</option>)}</select></label><button onClick={()=>{setFocus('all');fit('all');}}>Fit all</button><span>Drag to explore · + / − to zoom</span></div>,host) : null;
 }
 
 export default function CombinationFloor({skills,inspect,recorded=false,calls=EMPTY_CALLS,activeSkills,live=false,paused=false,stale=false,stopping=false,currentStage}:{skills:Skill[][];inspect:(s:Skill)=>void;recorded?:boolean;calls?:Call[];activeSkills?:Skill[];live?:boolean;paused?:boolean;stale?:boolean;stopping?:boolean;currentStage?:string}){
+ const [navigationHost,setNavigationHost]=useState<HTMLDivElement|null>(null);
  const contentKey=JSON.stringify(skills);
  const callsKey=JSON.stringify(calls);
  const lastCalls=PLAYBOOK_STAGES.map(role=>calls.filter(c=>callRole(c)===role).at(-1));
@@ -80,10 +82,11 @@ export default function CombinationFloor({skills,inspect,recorded=false,calls=EM
   });return {nodes,edges};
  },[contentKey,chosen.join('|'),recorded,callsKey,inspect,live,paused,stopping,stale,currentStage]);
  return <div className="cf-floor-shell">
+  <div className="cf-navigation-dock" ref={setNavigationHost}/>
 
   <div className="cf-map" role="region" aria-label={recorded?'Recorded combination floor plan':'Configured combination floor plan'}>
    <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} minZoom={.05} maxZoom={1.4} nodesConnectable={false} nodesDraggable={false} elementsSelectable={false} panOnScroll zoomOnScroll={false} preventScrolling={false} proOptions={{hideAttribution:true}}>
-    <Navigation/><Background variant={BackgroundVariant.Lines} gap={32} color="var(--cf-grid)" size={.5}/><Controls showInteractive={false} fitViewOptions={fitOptions}/>
+    <Navigation host={navigationHost}/><Background variant={BackgroundVariant.Lines} gap={32} color="var(--cf-grid)" size={.5}/><Controls showInteractive={false} fitViewOptions={fitOptions}/>
    </ReactFlow>
   </div>
 

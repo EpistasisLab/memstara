@@ -74,7 +74,7 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
             <HypothesisHeading text={title}/>
             {(heading||p.running)&&<span className="pipeline-card-context text-xs text-ink-soft" title={p.name}>Saved as: {p.name}</span>}
             <span className="pipeline-card-stage pipeline-card-context" title={`Corpus: ${corpus} · Target: ${target}`}>{corpus} · {target}</span>
-            <span className="pipeline-card-position"><span className="pipeline-card-loop">{pipelineLoopLabel(p)}</span></span>
+            <span className="pipeline-card-position"><span className="pipeline-card-loop">{pipelineLoopLabel(p).split(' · ').map((part,i)=><span key={i}>{part}</span>)}</span></span>
             {p.progress.stage&&<span className="pipeline-card-stage">{p.running?'Current':'Last'}: {stageNames[p.progress.stage]??p.progress.stage}</span>}
           </button>
           <PipelineRowActions compact pipeline={p}/>
