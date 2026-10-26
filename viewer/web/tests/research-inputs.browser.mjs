@@ -12,10 +12,11 @@ try{
    return route.fulfill({json:{configuration,dataset:{rows:10,column_count:6,columns:['target'],missing_cells:2},knowledge:{documents:1,domains:['example']},issues:[{code:'missing_values',message:'Selected columns contain missing values.'}],input_checks_passed:false,execution_ready:false,execution_note:'Input registration only.'}});
   });
   await page.goto((process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:5179')+'/tests/research-inputs.fixture.html');
-  await page.getByLabel('Research name',{exact:true}).fill('Example');
+  await page.getByLabel('Study name',{exact:true}).fill('Example');
+  await page.getByText('Use a server file instead of uploading',{exact:true}).click();
   await page.getByLabel('Dataset CSV path').fill('/local/example.csv');
-  await page.getByLabel('OKF bundle folder (contains index.md)').fill('/local/okf');
-  await page.getByRole('button',{name:'Inspect inputs'}).click();
+  await page.getByLabel('OKF corpus folder').fill('/local/okf');
+  await page.getByRole('button',{name:'Check inputs'}).click();
   await page.getByText('Resolve input issues before execution',{exact:true}).waitFor();
   assert.equal(calls,1);
   await page.getByLabel('Prediction objective and target meaning').fill('Updated objective');
@@ -42,6 +43,11 @@ try{
  await page.getByText('Selected CSV and OKF files',{exact:true}).click();
  await page.getByText('/fixtures/study.csv',{exact:true}).waitFor();
  await page.getByText('/fixtures/study-okf',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Upload new CSV',exact:true}).click();
+ await page.getByLabel('Upload CSV',{exact:true}).waitFor();
+ assert.equal(await page.getByLabel('Target column',{exact:true}).inputValue(),'');
+ assert.equal(await page.getByText('Saved research versions',{exact:true}).count(),0);
+ await page.getByRole('button',{name:'Cancel editing',exact:true}).click();
  await page.getByLabel('Research inputs',{exact:true}).selectOption('');
  const deployment=JSON.parse(await page.getByLabel('Selected research configuration').innerText());
  assert.equal(deployment.y_column,'');
@@ -60,11 +66,11 @@ try{
   assert.equal(await workspace.getByRole('dialog',{name:'Build pipelines',exact:true}).count(),0);
   assert.equal(await workspace.getByRole('button',{name:'Prepare research inputs',exact:true}).count(),0);
   await workspace.getByRole('dialog',{name:'All Combinations',exact:true}).waitFor();
-  await workspace.getByRole('button',{name:'Register or revise research inputs',exact:true}).click();
-  await workspace.getByRole('heading',{name:'Research input preparation',exact:true}).waitFor();
+  await workspace.getByRole('button',{name:'Upload new CSV',exact:true}).click();
+  await workspace.getByRole('heading',{name:'Set up your CSV',exact:true}).waitFor();
   await workspace.close();
  }
- for(const suffix of ['', '?selector']){
+ for(const suffix of ['?selector']){
   const malformed=await browser.newPage(),errors=[];let invalid=true;
   malformed.on('pageerror',e=>errors.push(e.message));
   await malformed.route('**/control/research-inputs',r=>r.fulfill({json:invalid?{}:{inputs:[]}}));
@@ -77,7 +83,7 @@ try{
    await malformed.getByRole('alert').waitFor({state:'hidden'});
   }else{
    await malformed.reload();
-   await malformed.getByRole('button',{name:'Inspect inputs',exact:true}).waitFor();
+   await malformed.getByRole('button',{name:'Check inputs',exact:true}).waitFor();
   }
   assert.deepEqual(errors,[]);await malformed.close();
  }

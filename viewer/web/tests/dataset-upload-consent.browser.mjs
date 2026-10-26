@@ -18,14 +18,15 @@ try{
   await expect(page.getByText('Missing values found. Some classifiers cannot run without imputation.',{exact:true})).toBeVisible();
   await expect(page.getByLabel('No — require complete input before starting.',{exact:true})).toBeChecked();
   await page.getByLabel('Target column',{exact:true}).selectOption('outcome');
-  await page.getByRole('button',{name:'Inspect inputs',exact:true}).click();
+  await page.getByRole('button',{name:'Check inputs',exact:true}).click();
   await expect(page.getByText('Resolve input issues before execution',{exact:true})).toBeVisible();
   await page.getByLabel('Yes — use training-only mean / most frequent values.',{exact:true}).check();
   await page.getByLabel('Other categorical predictor columns (one exact name per line)',{exact:true}).fill('d');
-  await page.getByRole('button',{name:'Save preparation record',exact:true}).click();
-  await expect(page.getByText('Input checks passed; select this saved version in a pipeline',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Check & use this data',exact:true}).click();
+  await expect(page.getByText('Inputs are ready to use',{exact:true})).toBeVisible();
   expect(registered.missing_policy).toBe('impute_train_v1');
   expect(registered.categorical_columns).toEqual(['d']);
+  await page.getByText('Use a server file instead of uploading',{exact:true}).click();
   await page.getByLabel('Dataset CSV path',{exact:true}).fill('/other.csv');
   await expect(page.getByLabel('No — require complete input before starting.',{exact:true})).toBeChecked();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);

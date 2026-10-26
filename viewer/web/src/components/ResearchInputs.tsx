@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react';
+import {useState} from 'react';
 
 type Target={column:string;description:string;positive_label:string;negative_label:string;prediction_time:string;horizon:string};
 export type ResearchConfig={name:string;dataset_path:string;knowledge_path:string;target:Target;excluded_columns:string[];missing_policy:'reject'|'impute_train_v1';categorical_columns?:string[];knowledge_mode?:'okf'|'llm_only';data_mode?:'dataset'|'proposal'};
@@ -10,11 +10,9 @@ type UploadInspection={dataset_path:string;columns:string[];rows:number;missing_
 const style='w-full min-w-0 rounded border border-paper-line bg-paper px-3 py-2 text-sm';
 
 export default function ResearchInputs({onSaved,initialConfig,disabled=false}:{onSaved?:(record:Inspection)=>void;initialConfig?:ResearchConfig;disabled?:boolean}={}){
- const [form,setForm]=useState<ResearchConfig>(initialConfig??initial),[result,setResult]=useState<Inspection|null>(null),[saved,setSaved]=useState<Inspection[]>([]);
+ const [form,setForm]=useState<ResearchConfig>(initialConfig??initial),[result,setResult]=useState<Inspection|null>(null);
  const [uploaded,setUploaded]=useState<UploadInspection|null>(null);
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
- async function reload(){try{const r=await fetch('/control/research-inputs');const d=await r.json();if(!r.ok||!Array.isArray(d.inputs))throw Error(d.error||'Research inputs unavailable');setSaved(d.inputs);}catch(e){setError(String(e));}}
- useEffect(()=>{void reload();},[]);
  function edit(next:ResearchConfig){setForm(next);setResult(null);setError('');}
  async function upload(file:File){
   setBusy(true);setError('');setResult(null);setUploaded(null);
@@ -29,11 +27,10 @@ export default function ResearchInputs({onSaved,initialConfig,disabled=false}:{o
  async function submit(action:'inspect'|'register'){
   setBusy(true);setError('');setResult(null);
   try{const r=await fetch(`/control/research-inputs/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)});
-   const d=await r.json();if(!r.ok)throw Error(d.error||'Inspection failed');setResult(d);if(action==='register'){await reload();onSaved?.(d);}
+   const d=await r.json();if(!r.ok)throw Error(d.error||'Inspection failed');setResult(d);if(action==='register'){onSaved?.(d);}
   }catch(e){setError(String(e));}finally{setBusy(false);}
  }
  return <section className="space-y-4 p-4" aria-label="Research input preparation">
-  <h3 className="font-semibold">Research input preparation</h3>
   <p>Add your dataset, knowledge source and prediction target.</p>
   <p className="text-sm">Upload a CSV or use an existing server file. Original data is never changed.</p>
   <fieldset disabled={busy||disabled} className="min-w-0 space-y-3">
@@ -50,21 +47,23 @@ export default function ResearchInputs({onSaved,initialConfig,disabled=false}:{o
      {form.missing_policy==='impute_train_v1'&&<><p className="text-sm">Continuous columns use the training mean; text and 0/1 binary columns use the most frequent training value. Target labels are never filled. Test data never determines fill values.</p><label className="block text-sm">Other categorical predictor columns (one exact name per line)<textarea className={style} value={(form.categorical_columns??[]).join('\n')} onChange={e=>edit({...form,categorical_columns:e.target.value.split('\n').map(x=>x.trim()).filter(Boolean)})}/></label><p className="text-sm">Include numeric category codes here so they use the most frequent value, not the mean.</p></>}
     </fieldset>
    </div>}
-   {(['name','dataset_path','knowledge_path'] as const).filter(key=>key==='name'||(key==='dataset_path'?form.data_mode!=='proposal':form.knowledge_mode!=='llm_only')).map(key=><label className="block" key={key}>{({name:'Research name',dataset_path:'Dataset CSV path',knowledge_path:'OKF bundle folder (contains index.md)'})[key]}<input className={style} value={form[key]} onChange={e=>{if(key==='dataset_path'){setUploaded(null);edit({...form,dataset_path:e.target.value,missing_policy:'reject',categorical_columns:[]});}else edit({...form,[key]:e.target.value});}}/></label>)}
+   <label className="block text-sm">Study name<input className={style} value={form.name} onChange={e=>edit({...form,name:e.target.value})}/></label>
+   {form.data_mode!=='proposal'&&<details className="rounded-lg border border-paper-line p-3 text-sm"><summary className="cursor-pointer">Use a server file instead of uploading</summary><label className="mt-3 block">Dataset CSV path<input className={style} value={form.dataset_path} onChange={e=>{setUploaded(null);edit({...form,dataset_path:e.target.value,missing_policy:'reject',categorical_columns:[]});}}/></label></details>}
+   {form.knowledge_mode!=='llm_only'&&<label className="block text-sm">OKF corpus folder<input aria-label="OKF corpus folder" className={style} placeholder="user-inputs/my-study/okf" value={form.knowledge_path} onChange={e=>edit({...form,knowledge_path:e.target.value})}/><span className="text-xs text-slate-500">Folder on the server containing index.md. Choose LLM knowledge only if you do not have an OKF corpus.</span></label>}
    <label className="block">Target column{uploaded?<select aria-label="Target column" className={style} value={form.target.column} onChange={e=>edit({...form,target:{...form.target,column:e.target.value}})}><option value="">Choose a target</option>{uploaded.columns.map(c=><option key={c} value={c}>{c}</option>)}</select>:<input className={style} value={form.target.column} onChange={e=>edit({...form,target:{...form.target,column:e.target.value}})}/>}</label>
    <label className="block">Prediction objective and target meaning<textarea className={style} value={form.target.description} onChange={e=>edit({...form,target:{...form.target,description:e.target.value}})}/></label>
    {(['positive_label','negative_label','prediction_time','horizon'] as const).map(key=><label className="block" key={key}>{({positive_label:'Positive-class value (exact CSV value)',negative_label:'Negative-class value (exact CSV value)',prediction_time:'When are predictors available?',horizon:'Prediction horizon (if applicable)'})[key]}<input className={style} value={form.target[key]} onChange={e=>edit({...form,target:{...form.target,[key]:e.target.value}})}/></label>)}
    <label className="block">Excluded columns (one exact name per line)<textarea className={style} value={form.excluded_columns.join('\n')} onChange={e=>edit({...form,excluded_columns:e.target.value.split('\n')})}/></label>
-   <div className="flex flex-wrap gap-2"><button type="button" className={style+' !w-auto'} onClick={()=>void submit('inspect')}>Inspect inputs</button><button type="button" className={style+' !w-auto'} onClick={()=>void submit('register')}>Save preparation record</button></div>
+   <div className="flex flex-wrap gap-2"><button type="button" className={style+' !w-auto'} onClick={()=>void submit('inspect')}>Check inputs</button><button type="button" className={style+' !w-auto'} onClick={()=>void submit('register')}>Check & use this data</button></div>
   </fieldset>
   {busy&&<p role="status">Checking inputs…</p>}
   {error&&<p role="alert" className="break-words">{error}</p>}
   {result&&<div className="space-y-2" role="status">
-   <p>{result.id?'Preparation record saved.':'Inspection complete.'} {result.dataset.rows.toLocaleString()} rows · {result.dataset.column_count} columns · {result.dataset.missing_cells.toLocaleString()} missing cells · {result.knowledge.documents} OKF documents.</p>
-   <p className="font-semibold">{result.input_checks_passed?'Input checks passed; select this saved version in a pipeline':'Resolve input issues before execution'}</p>
+   <p>{result.id?'Study saved.':'Input check complete.'} {result.dataset.rows.toLocaleString()} rows · {result.dataset.column_count} columns · {result.dataset.missing_cells.toLocaleString()} missing cells · {result.knowledge.documents} OKF documents.</p>
+   <p className="font-semibold">{result.input_checks_passed?'Inputs are ready to use':'Resolve input issues before execution'}</p>
    <ul className="list-disc pl-5">{result.issues.map(x=><li key={x.code}>{x.message}</li>)}</ul>
    <details><summary>Dataset columns</summary><ul>{result.dataset.columns.map(c=><li className="break-all" key={c}>{c}</li>)}</ul></details>
   </div>}
-  {saved.length>0&&<div><h4 className="font-semibold">Saved research versions</h4><ul>{saved.map(x=><li className="my-2" key={x.id}><button type="button" className="underline" disabled={busy||disabled} onClick={()=>{setForm(x.configuration);setUploaded(null);setResult(null);setError('Saved record loaded. Inspect again and save a new version after editing.');}}>{x.configuration.name} · {x.id?.slice(0,8)}</button> — {x.input_checks_passed?'input checks passed':'input review needed'}</li>)}</ul></div>}
+
  </section>;
 }

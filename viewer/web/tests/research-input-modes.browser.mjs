@@ -20,18 +20,19 @@ try {
   await page.getByLabel('Knowledge mode',{exact:true}).selectOption(knowledge);
   await page.getByLabel('Data mode',{exact:true}).selectOption(data);
   assert.equal(await page.getByLabel('Dataset CSV path',{exact:true}).count(),data==='dataset'?1:0);
-  assert.equal(await page.getByLabel('OKF bundle folder (contains index.md)',{exact:true}).count(),knowledge==='okf'?1:0);
-  await page.getByLabel('Research name',{exact:true}).fill('Synthetic mode matrix');
+  assert.equal(await page.getByLabel('OKF corpus folder',{exact:true}).count(),knowledge==='okf'?1:0);
+  await page.getByLabel('Study name',{exact:true}).fill('Synthetic mode matrix');
   await page.getByLabel('Prediction objective and target meaning',{exact:true}).fill('Predict a synthetic future event');
   if(data==='dataset') {
+   await page.getByText('Use a server file instead of uploading',{exact:true}).click();
    await page.getByLabel('Dataset CSV path',{exact:true}).fill('/synthetic/data.csv');
    await page.getByLabel('Target column',{exact:true}).fill('event');
    await page.getByLabel('Positive-class value (exact CSV value)',{exact:true}).fill('yes');
    await page.getByLabel('Negative-class value (exact CSV value)',{exact:true}).fill('no');
   } else await page.getByText('Without a dataset, this creates an analysis plan, not measured results.',{exact:false}).waitFor();
-  if(knowledge==='okf') await page.getByLabel('OKF bundle folder (contains index.md)',{exact:true}).fill('/synthetic/okf');
-  await page.getByRole('button',{name:'Inspect inputs',exact:true}).click();
-  await page.getByText('Input checks passed; select this saved version in a pipeline',{exact:true}).waitFor();
+  if(knowledge==='okf') await page.getByLabel('OKF corpus folder',{exact:true}).fill('/synthetic/okf');
+  await page.getByRole('button',{name:'Check inputs',exact:true}).click();
+  await page.getByText('Inputs are ready to use',{exact:true}).waitFor();
   assert.equal(requests.length,1);
   assert.equal(requests[0].knowledge_mode,knowledge);
   assert.equal(requests[0].data_mode,data);
@@ -39,7 +40,7 @@ try {
   if(data==='proposal') assert.equal(requests[0].target.column,'');
   // An implicit textarea label can include its current value in its accessible name.
   await page.getByLabel('Prediction objective and target meaning').fill('A new objective');
-  assert.equal(await page.getByText('Input checks passed; select this saved version in a pipeline',{exact:true}).count(),0);
+  assert.equal(await page.getByText('Inputs are ready to use',{exact:true}).count(),0);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
   assert.deepEqual(errors,[]);
   await page.close();

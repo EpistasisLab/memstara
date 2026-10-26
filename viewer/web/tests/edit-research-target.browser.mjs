@@ -19,11 +19,11 @@ try{
  });
  await page.goto((process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:4177')+'/tests/research-inputs.fixture.html?selector');
  await page.getByRole('combobox',{name:'Research inputs',exact:true}).selectOption('original');
- await page.getByRole('button',{name:'Edit prediction target',exact:true}).click();
+ await page.getByRole('button',{name:'Edit data & target',exact:true}).click();
  assert.equal(await page.getByLabel('Target column',{exact:true}).inputValue(),'old_label');
  assert.equal(await page.getByLabel('Dataset CSV path').inputValue(),'/inputs/data.csv');
  await page.getByLabel('Target column',{exact:true}).fill('new_label');
- await page.getByRole('button',{name:'Save preparation record'}).click();
+ await page.getByRole('button',{name:'Check & use this data'}).click();
  await page.waitForFunction(()=>JSON.parse(document.querySelector('output').textContent).research_input_id==='revised');
  const selected=JSON.parse(await page.getByLabel('Selected research configuration').textContent());
  assert.equal(selected.y_column,'new_label');
