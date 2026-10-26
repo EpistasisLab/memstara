@@ -485,3 +485,12 @@
 .pipeline-browser-row .pipeline-card-context { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .pipeline-browser-row .pipeline-card-status-actions { min-width:0; }
 .pipeline-browser-row .pipeline-card-header .pipeline-state-badge { white-space:normal; line-height:1.3; }
+
+/* Portaled hypothesis preview keeps card dimensions and surrounding layout fixed. */
+.hypothesis-popup-trigger { cursor:help; }
+.hypothesis-popup-trigger:focus-visible { outline:2px solid rgb(var(--accent) / .65); outline-offset:3px; border-radius:3px; }
+.hypothesis-popup { z-index:10000; box-sizing:border-box; width:380px; max-width:calc(100vw - 24px); max-height:min(420px,calc(100dvh - 24px),var(--radix-tooltip-content-available-height)); overflow:auto; overscroll-behavior:contain; padding:17px 19px 19px; border:1px solid rgb(var(--line)); border-radius:12px; background:linear-gradient(145deg,rgb(var(--accent) / .045),transparent 65%),rgb(var(--panel)); color:rgb(var(--ink)); box-shadow:0 12px 36px rgb(0 0 0 / .16),0 2px 7px rgb(0 0 0 / .06); user-select:text; transform-origin:var(--radix-tooltip-content-transform-origin); animation:hypothesis-popup-enter 140ms ease-out; }
+.hypothesis-popup-label { display:block; margin-bottom:9px; font-size:10px; font-weight:650; line-height:1.4; letter-spacing:.075em; text-transform:uppercase; color:rgb(var(--ink-soft)); }
+.hypothesis-popup p { margin:0; font-size:14px; line-height:1.65; font-weight:450; overflow-wrap:anywhere; white-space:normal; }
+@keyframes hypothesis-popup-enter { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
+@media (prefers-reduced-motion:reduce) { .hypothesis-popup { animation:none; } }

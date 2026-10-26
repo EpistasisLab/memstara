@@ -10,7 +10,7 @@ import {useControl} from '../store/control';
 import {usePipelines} from '../store/pipelines';
 import {pipelineState} from '../lib/pipelineState';
 import {useLiveOutputs} from '../store/liveOutputs';
-import {findingHeading} from '../lib/findingHeading';
+import HypothesisHeading from './HypothesisHeading';
 import {displayText} from '../lib/displayText';
 import {experimentHypothesis} from '../lib/experimentHeading';
 export default function PipelineBrowser({items, selected, onSelect, compare, onCompare,toggleHost}: {
@@ -61,7 +61,7 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
           const target=p.running?.configuration?.y_column??p.configuration.y_column??'Not specified';
           const execution=p.running??p.latest;
           const fullHypothesis=displayText(experimentHypothesis(execution?.run_tag??'',p.progress.iteration,!!p.running,execution?.configuration?.trials,events,findings)).replace(/\s+/g,' ').trim();
-          const heading=findingHeading(fullHypothesis);
+          const heading=fullHypothesis;
           const title=heading||(p.running?'Generating hypothesis…':p.name);
           return <div key={p.id} data-state={state.toLowerCase().replaceAll(' ','-')} className={`pipeline-browser-row ${selected===p.id?'is-selected':''}`}>
           <div className="pipeline-card-top pipeline-card-header">
@@ -70,8 +70,8 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
             <button type="button" className="pipeline-card-delete" aria-label={`Delete ${p.name}`} title={`Delete ${p.name}`} aria-haspopup="dialog" onClick={()=>setDeleting(p)}><Trash2 size={16} aria-hidden="true"/></button>
             </div>
           </div>
-          <button className="pipeline-card-select" data-help="Inspect this pipeline" data-help-description="Select this card to focus its diagram. Use the buttons on this card to control this pipeline. The position identifies the Pipeline and Replicate in this experiment’s latest execution." aria-label={`Inspect ${p.name}`} aria-pressed={selected===p.id} onClick={()=>choose(p.id)}>
-            <strong className="pipeline-card-name" title={fullHypothesis||title} aria-label={fullHypothesis||title}>{title}</strong>
+          <button className="pipeline-card-select" aria-label={`Inspect ${p.name}`} aria-pressed={selected===p.id} onClick={()=>choose(p.id)}>
+            <HypothesisHeading text={title}/>
             {(heading||p.running)&&<span className="pipeline-card-context text-xs text-ink-soft" title={p.name}>Saved as: {p.name}</span>}
             <span className="pipeline-card-stage pipeline-card-context" title={`Corpus: ${corpus} · Target: ${target}`}>{corpus} · {target}</span>
             <span className="pipeline-card-position"><span className="pipeline-card-loop">{pipelineLoopLabel(p)}</span></span>
