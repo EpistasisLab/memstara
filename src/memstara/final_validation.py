@@ -425,6 +425,7 @@ def _evaluate_with_budget(candidate: dict[str, Any], config: dict, run_dir: Path
     }
     minimal_config = {key: config.get(key) for key in
                       ("evaluation", "validation_partition", "ml_configuration_policy")}
+    minimal_config['ml_configuration_policy'] = limits
     with tempfile.TemporaryDirectory(prefix="final-validation-", dir=root) as folder:
         temporary_root = Path(folder)
         request_path, result_path = temporary_root / "request.json", temporary_root / "result.json"
