@@ -45,6 +45,12 @@ try{
   assert(layout.navigationBottom<=layout.mapTop+1,`Navigation covers agents: ${JSON.stringify(layout)}`);
   assert(layout.navLeft>=layout.mapLeft-1&&layout.navRight<=layout.mapRight+1,`Navigation overflows: ${JSON.stringify(layout)}`);
   assert.equal(await studio.locator('.cf-desk').count(),10);
+  const overlappingHeaders=await p.locator('.pipeline-card-header').evaluateAll(headers=>headers.filter(h=>{
+   const title=h.querySelector('.pipeline-card-identity').getBoundingClientRect();
+   const actions=h.querySelector('.pipeline-card-status-actions').getBoundingClientRect();
+   return title.width>0&&title.right>actions.left+1&&title.bottom>actions.top+1&&actions.bottom>title.top+1;
+  }).length);
+  assert.equal(overlappingHeaders,0,'Experiment title must not overlap status actions');
   await studio.getByRole('combobox',{name:'Focus floor plan agent',exact:true}).selectOption('hypothesis');
   assert.equal(await studio.getByRole('button',{name:/^Preview /}).count(),0);
   assert.equal(await studio.locator('.cf-desk.is-selected').count(),0,'Drafts must not suggest a selected execution path');

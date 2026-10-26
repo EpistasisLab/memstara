@@ -499,3 +499,5 @@
 .pipeline-card-loop { display:flex; flex-wrap:wrap; gap:2px 10px; min-width:0; }
 .pipeline-card-loop > span { white-space:nowrap; }
 .pipeline-card-top.pipeline-card-header { flex-wrap:wrap; }
+.pipeline-browser-row .pipeline-card-header .pipeline-card-heading-select { flex:0 0 auto; width:auto; min-width:max-content; }
+.pipeline-browser-row .pipeline-card-header .pipeline-card-status-actions { flex:0 0 auto; }
