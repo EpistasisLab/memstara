@@ -27,6 +27,7 @@ FIELDS = {
     "target",
     "excluded_columns",
     "missing_policy",
+    "categorical_columns",
     "knowledge_mode",
     "data_mode",
 }
@@ -83,9 +84,14 @@ def config(value):
     if not isinstance(excluded, list) or any(not isinstance(x, str) for x in excluded):
         raise ValueError("Excluded columns must be an array of exact column names")
     result["excluded_columns"] = sorted({x.strip() for x in excluded if x.strip()})
+    categories = result.get("categorical_columns", [])
+    if not isinstance(categories, list) or any(not isinstance(x, str) for x in categories):
+        raise ValueError("Categorical columns must be an array of exact column names")
+    if categories:
+        result["categorical_columns"] = sorted(set(categories))
     result["missing_policy"] = result.get("missing_policy", "reject")
-    if result["missing_policy"] != "reject":
-        raise ValueError("Only reject is currently supported; no automatic imputation or row deletion")
+    if result["missing_policy"] not in ("reject", "impute_train_v1"):
+        raise ValueError("Choose reject or explicit training-only imputation; no automatic imputation")
     return result
 
 
@@ -168,9 +174,13 @@ def inspect(value):
         predictors = [h for h in headers if h != target["column"] and h not in value["excluded_columns"]]
         if len(predictors) < 4:
             issue("feature_count", "At least four eligible predictors are required")
+        if set(value.get("categorical_columns", [])) - set(predictors):
+            issue("categorical_columns", "Categorical columns must be eligible predictor columns")
         active = set(predictors) | {target["column"]}
-        if any(missing[k] for k in active):
+        if any(missing[k] for k in active) and value["missing_policy"] == "reject":
             issue("missing_values", "Selected columns contain missing values. No rows or values were modified")
+        if any(missing[k] == rows for k in predictors) and value["missing_policy"] == "impute_train_v1":
+            issue("empty_predictor", "A predictor has no observed values; exclude it or supply complete data")
         if any(nonfinite[k] for k in active):
             issue("nonfinite_values", "Selected columns contain non-finite numbers")
         identifiers = [h for h in predictors if h.casefold() in {"id", "record_id", "patient_id", "subject_id"}]
@@ -223,6 +233,8 @@ def inspect(value):
     }
     if value["knowledge_mode"] != "okf" or value["data_mode"] != "dataset":
         identity["input_modes"] = {key: value[key] for key in ("knowledge_mode", "data_mode")}
+    if value.get("categorical_columns"):
+        identity["categorical_columns"] = value["categorical_columns"]
     fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     return {
         "configuration": {
@@ -458,6 +470,10 @@ def instructions(profile):
         + "\n"
         + data
         + knowledge
+        + ("User consented to training-only missing-predictor imputation. Preserve missing values during "
+           "extraction; only the model training pipeline may fit/apply mean or mode fills. "
+           if configuration.get("missing_policy") == "impute_train_v1" else
+           "Missing predictors are not approved for imputation. Do not fill values or remove rows. ")
         + "Do not substitute a prior study target or assume undocumented timing or label meanings. "
         "Avoid predictors unavailable at the specified prediction time; report uncertainty explicitly.\n"
     )

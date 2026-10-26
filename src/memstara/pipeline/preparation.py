@@ -109,7 +109,8 @@ async def prepare_execution(
 
         verify_materialized(args.research_profile)
         data_preflight(Path(os.environ['MEMSTARA_DATASET_PATH']), args.y_column,
-                       validate_evaluation(json.loads(args.evaluation)), reserve_validation=True)
+                       validate_evaluation(json.loads(args.evaluation)), reserve_validation=True,
+                       missing_policy=args.research_profile.get("configuration", {}).get("missing_policy", "reject"))
         ensure_matcher(args.research_profile)
     if models:
         from memstara.stage_models import preflight_profiles

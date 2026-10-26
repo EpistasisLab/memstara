@@ -113,7 +113,7 @@ def test_preparation_order_and_reserved_partition_before_configuration_freeze(tm
         'settings', 'configure', 'diagnostics', 'models', 'verify', 'data',
         'matcher', 'provider', 'freeze', 'explanation']
     assert preflight[0][1] == {'update': {'llm_call_timeout_seconds': 123}}
-    assert preflight[5][1] == {'reserve_validation': True}
+    assert preflight[5][1] == {'reserve_validation': True, 'missing_policy': 'reject'}
     assert prepared.stage_models == args.stage_models
     assert preflight[-1][1]['stage_models'] == prepared.stage_models
     assert prepared.combination_plan is None

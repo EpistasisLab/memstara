@@ -79,7 +79,7 @@ def model_for(engine: str, seed: int, trial: int = 0):
     raise ValueError(f'Unsupported model: {engine}')
 
 
-def validate_clean_dataset(path: Path, target: str, *, allow_missing: bool = False):
+def validate_clean_dataset(path: Path, target: str, *, allow_missing: bool = False, missing_policy=None):
     """Validate the MVP input contract without repairing or dropping any values."""
     import numpy as np
     import pandas as pd
@@ -89,7 +89,8 @@ def validate_clean_dataset(path: Path, target: str, *, allow_missing: bool = Fal
             headers = next(csv.reader(stream), [])
         if not headers or any(not c.strip() for c in headers) or len(set(headers)) != len(headers):
             raise DataQualityError('Dataset columns must have non-empty, unique names.')
-        df = pd.read_csv(path)
+        from memstara.research_inputs import MISSING
+        df = pd.read_csv(path, na_values=list(MISSING))
     except (OSError, UnicodeError, pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
         raise DataQualityError('Cannot read the configured dataset as CSV. Check the file and its format.') from exc
     if target not in df:
@@ -100,6 +101,8 @@ def validate_clean_dataset(path: Path, target: str, *, allow_missing: bool = Fal
         raise DataQualityError('The target must contain both binary classes 0 and 1')
     if len(df.columns) < 2:
         raise DataQualityError('No predictor features are available')
+    from memstara.missing_values import resolve_policy, POLICY
+    allow_missing = allow_missing or (missing_policy or resolve_policy()) == POLICY
     missing = df.drop(columns=[target]).isna()
     if missing.any().any() and not allow_missing:
         raise DataQualityError(
@@ -167,16 +170,16 @@ def evaluation_splits(y, plan: dict, partition=None):
 
 
 def preflight(path: Path, target: str, plan: dict, *, reserve_validation: bool = False,
-              allow_missing: bool | None = None) -> None:
+              allow_missing: bool | None = None, missing_policy=None) -> None:
     plan = validate(plan)
     frame = validate_clean_dataset(path, target, allow_missing=(
-        plan['engine'] == 'xgboost' if allow_missing is None else allow_missing))
+        plan['engine'] == 'xgboost' if allow_missing is None else allow_missing), missing_policy=missing_policy)
     partition = discovery_partition(frame[target], plan["seed"]) if reserve_validation else None
     evaluation_splits(frame[target], plan, partition=partition)
 
 
 def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=None, explain=True,
-          persist=True, partition=None, configuration=None, xai_request=None) -> dict:
+          persist=True, partition=None, configuration=None, xai_request=None, missing_policy=None, imputation_categories=None) -> dict:
     import numpy as np
     import sklearn
     from sklearn.metrics import roc_auc_score, average_precision_score, balanced_accuracy_score, confusion_matrix
@@ -185,6 +188,11 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
+    from memstara.missing_values import resolve_policy, POLICY, TrainingImputer, imputation_record
+    missing_policy = missing_policy or resolve_policy()
+    use_imputation = missing_policy == POLICY
+    if imputation_categories is None:
+        imputation_categories = (active_plan() or {}).get("research_profile", {}).get("configuration", {}).get("categorical_columns", [])
     began = time.time()
     source_bytes = path.read_bytes()
     if partition is None:
@@ -193,7 +201,7 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
         if snapshot.get('hypothesis_policy', {}).get('version') == 'iterative_discovery_v1' and not partition:
             raise DataQualityError('Iterative discovery requires a reserved validation partition')
     plan = validate(plan)
-    df = validate_clean_dataset(path, target, allow_missing=plan['engine'] == 'xgboost')
+    df = validate_clean_dataset(path, target, allow_missing=plan['engine'] == 'xgboost', missing_policy=missing_policy)
     X, y = df.drop(columns=[target]), df[target]
     if predictors is not None:
         if target in predictors or any(c not in X for c in predictors):
@@ -213,7 +221,7 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     numeric = X.select_dtypes(include='number').columns.tolist()
     categorical = [c for c in X if c not in numeric]
     missing_cells = int(X.isna().sum().sum())
-    if missing_cells:
+    if missing_cells and not use_imputation:
         warnings.append('Missing numeric predictors are retained as NaN for XGBoost tree routing; '
                         'categorical missingness is encoded as a category when observed in training. '
                         'Missingness may reflect measurement practices; review before clinical interpretation.')
@@ -250,7 +258,11 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                 if parameters.get('missing') == 'NaN':
                     parameters['missing'] = float('nan')
                 model.set_params(**parameters)
-            pipe = Pipeline([('encode', pre), ('model', model)])
+            steps = []
+            if use_imputation:
+                steps.append(('impute', TrainingImputer(categorical_columns=tuple(imputation_categories))))
+            steps.extend([('encode', pre), ('model', model)])
+            pipe = Pipeline(steps)
             cv_scores = None
             if fold_count:
                 cv = StratifiedKFold(n_splits=fold_count, shuffle=True, random_state=seed)
@@ -285,6 +297,7 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                      'prediction_sha256': hashlib.sha256(probability.tobytes()).hexdigest(),
                      'selected_trial': selected_trial, 'operating_point': operating_point,
                      'n_train': len(train), 'n_test': len(test), 'parameters': best_params,
+                     'imputation': imputation_record(best, missing_policy),
                      'average_precision': float(average_precision_score(y.iloc[test], probability)),
                      'balanced_accuracy_at_0_5': float(balanced_accuracy_score(y.iloc[test], probability >= .5)),
                      'train_class_counts': {str(k): int(v) for k, v in y.iloc[train].value_counts().items()},
@@ -324,9 +337,10 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
               'feature_importance': importance, 'model': plan['engine'], 'seed': plan['seed'],
               'test_size': plan['test_size'], 'n_train': len(train), 'n_test': len(test),
               'data_quality': {'missing_predictor_cells': missing_cells,
-                               'missing_value_policy': 'native_xgboost' if plan['engine'] == 'xgboost' else 'reject',
+                               'imputation_categories': list(imputation_categories),
+                               'missing_value_policy': missing_policy if use_imputation else ('native_xgboost' if plan['engine'] == 'xgboost' else 'reject'),
                                'warnings': list(dict.fromkeys(warnings)),
-                               'preprocessing': 'No cleaning or imputation. '
+                               'preprocessing': ('User-approved training-only imputation. ' if use_imputation else 'No cleaning or imputation. ') +
                                                 'Training-fold one-hot encoding; numeric passthrough for XGBoost, '
                                                 'training-fold scaling for other models.',
                                'source_preserved': True, 'target_imputed': False},
@@ -435,7 +449,10 @@ def _explain(best, X, y, train, test, numeric, plan, runs):
     if plan['engine'] == 'xgboost':
         try:
             import xgboost as xgb
-            encoded = best.named_steps['encode'].transform(X.iloc[test])
+            observed = X.iloc[test]
+            if 'impute' in best.named_steps:
+                observed = best.named_steps['impute'].transform(observed)
+            encoded = best.named_steps['encode'].transform(observed)
             contributions = best.named_steps['model'].get_booster().predict(xgb.DMatrix(encoded), pred_contribs=True)
             names = best.named_steps['encode'].get_feature_names_out()
             explanation['shap'] = {'method': 'XGBoost TreeSHAP', 'units': 'log-odds',

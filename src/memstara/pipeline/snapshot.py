@@ -12,6 +12,9 @@ from memstara.pipeline.prompts import load_prompt
 
 def freeze(args, run_dir: Path, books: dict) -> dict:
     os.environ.pop("MEMSTARA_RUN_CONFIG", None)
+    from memstara.missing_values import POLICY
+    missing_policy = (getattr(args, "research_profile", None) or {}).get("configuration", {}).get("missing_policy", "reject")
+    impute = missing_policy == POLICY
     combination_plan = json.loads(getattr(args, "combination_plan", "") or "null")
     if combination_plan:
         books = {stage: [s['id'] for s in entries] for stage, entries in combination_plan['skills'].items()}
@@ -33,12 +36,12 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     evaluation = validate({**skill_policy, **json.loads(args.evaluation)})
     if not getattr(args, "report_only", False):
         preflight(dataset, args.y_column, evaluation,
-                  allow_missing=bool(combination_plan) or evaluation["engine"] == "xgboost")
+                  allow_missing=bool(combination_plan) or evaluation["engine"] == "xgboost", missing_policy=missing_policy)
     partition = None
     if not getattr(args, "report_only", False):
         from memstara.evaluation import validate_clean_dataset, discovery_partition, evaluation_splits
         frame = validate_clean_dataset(dataset, args.y_column,
-                                       allow_missing=bool(combination_plan) or evaluation['engine'] == 'xgboost')
+                                       allow_missing=bool(combination_plan) or evaluation['engine'] == 'xgboost', missing_policy=missing_policy)
         partition = discovery_partition(frame[args.y_column], evaluation['seed'])
         evaluation_splits(frame[args.y_column], evaluation, partition=partition)
     from memstara.study_comparison import resolve_comparison
@@ -100,7 +103,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         "dataset_sha256": digest.hexdigest(),
         **({"feature_context": freeze_feature_context(
             dataset, args.y_column,
-            require_complete=bool(combination_plan and combination_has_lr))}
+            require_complete=bool(combination_plan and combination_has_lr and not impute))}
            if not getattr(args, "report_only", False) else {}),
         "knowledge_path": None if ablate_okf else os.environ.get("AGENTIC_OKF_BUNDLE_DIR"),
         "trials": args.trials,
@@ -109,7 +112,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     }
     if getattr(args, 'research_profile', None):
         state['research_profile'] = args.research_profile
-        state['missing_value_policy'] = 'reject'
+        state['missing_value_policy'] = missing_policy
     from memstara.ml_configuration import validate_overrides
     ml_skills = ([item['id'] for item in combination_plan['skills']['ml']]
                  if combination_plan else books.get('ml', []))

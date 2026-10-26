@@ -73,6 +73,8 @@ def _mapping(pre, features):
 def _shap(model, X, train, explained, background, seed, name):
     import numpy as np
     import shap
+    if 'impute' in model.named_steps:
+        X = model.named_steps['impute'].transform(X)
     pre, estimator = model.named_steps['encode'], model.named_steps['model']
     reference = pre.transform(X.iloc[background])
     encoded = pre.transform(X.iloc[explained])
@@ -112,6 +114,8 @@ def _lime(model, X, train, explained, background, seed, name, samples):
     import numpy as np
     import pandas as pd
     from lime.lime_tabular import LimeTabularExplainer
+    if 'impute' in model.named_steps:
+        X = model.named_steps['impute'].transform(X)
     features = list(X.columns)
     training = X.iloc[train]
     observed = X.iloc[explained]

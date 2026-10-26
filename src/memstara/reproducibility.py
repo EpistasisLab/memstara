@@ -50,7 +50,8 @@ def save_bundle(source, target, plan, predictors, fixed_trials, partition, artif
     root.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix='ml-', dir=root))
     (directory / 'input.csv').write_bytes(source)
-    frame = pd.read_csv(BytesIO(source))
+    from memstara.research_inputs import MISSING
+    frame = pd.read_csv(BytesIO(source), na_values=list(MISSING))
     X, y = frame[predictors], frame[target]
     checks = []
     for index, (model, train, test, probability) in enumerate(artifacts):
@@ -75,7 +76,7 @@ def save_bundle(source, target, plan, predictors, fixed_trials, partition, artif
         from memstara.specialist_xai import save
         save(directory, X, artifacts, result, xai_request)
     code = {}
-    sources: tuple[str, ...] = ('evaluation.py', 'reproducibility.py')
+    sources: tuple[str, ...] = ('evaluation.py', 'reproducibility.py', 'missing_values.py')
     if agent_plan:
         sources += ('ml_configuration.py', 'paired_ml.py', 'comparisons.py', 'data_allocation.py')
     if xai_request:
@@ -99,6 +100,8 @@ def save_bundle(source, target, plan, predictors, fixed_trials, partition, artif
         'schema': {str(k): str(v) for k, v in frame.dtypes.items()},
         'target_classes': [0, 1], 'decision_threshold': configuration['threshold'] if configuration else .5,
         'configuration': configuration,
+        'imputation_categories': result.get('data_quality', {}).get('imputation_categories', []),
+        'missing_policy': result.get('data_quality', {}).get('missing_value_policy', 'reject'),
         'files': {p.name: digest(p) for p in directory.iterdir() if p.is_file()},
         'verification': checks,
     }
@@ -126,7 +129,7 @@ def replay(directory: Path) -> dict:
             return {'status': 'integrity_mismatch'}
     for name, expected in manifest['code'].items():
         allowed = ('evaluation.py', 'reproducibility.py', 'ml_configuration.py',
-                   'paired_ml.py', 'comparisons.py', 'data_allocation.py', 'specialist_xai.py')
+                   'paired_ml.py', 'comparisons.py', 'data_allocation.py', 'specialist_xai.py', 'missing_values.py')
         if name not in allowed or digest(Path(__file__).with_name(name)) != expected:
             return {'status': 'code_mismatch'}
     # Load the evaluation libraries before recording native thread pools, as in score().
@@ -136,6 +139,8 @@ def replay(directory: Path) -> dict:
         return {'status': 'environment_mismatch'}
     expected = json.loads((directory / 'result.json').read_text())
     actual = score(directory / 'input.csv', manifest['target'], manifest['plan'],
+                   missing_policy=manifest.get('missing_policy', 'reject'),
+                   imputation_categories=manifest.get('imputation_categories', []),
                    predictors=manifest['predictors'], fixed_trials=manifest['fixed_trials'],
                    partition=manifest['partition'], persist=False, explain=False,
                    configuration=manifest.get('configuration'))

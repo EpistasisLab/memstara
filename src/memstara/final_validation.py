@@ -92,7 +92,8 @@ def evaluate_candidate(candidate: dict[str, Any], config: dict, run_dir: Path) -
     if exceeds_limit(limits, "max_csv_bytes", len(source_bytes)):
         raise ValueError("Final validation input exceeds the configured CSV size budget")
     from memstara.evaluation import validate_clean_dataset
-    frame = validate_clean_dataset(path, target, allow_missing=model_name == "xgboost")
+    from memstara.missing_values import resolve_policy, imputation_record
+    frame = validate_clean_dataset(path, target, allow_missing=model_name == "xgboost", missing_policy=resolve_policy(config))
     features = [name for name in candidate["columns_used"] if name != target]
     if not features or any(name not in frame for name in features):
         raise ValueError("Hypothesis task feature list does not match its saved input")
@@ -202,6 +203,7 @@ def evaluate_candidate(candidate: dict[str, Any], config: dict, run_dir: Path) -
         "target": target, "features": features,
         "fit_scope": "all non-reserve development rows; frozen settings; fresh preprocessing and model fit",
         "training_split_id": hashlib.sha256(development.tobytes()).hexdigest(),
+        "imputation": imputation_record(model, resolve_policy(config), fit_scope="development_partition"),
         "n_fit": int(len(development)),
         "n_validation": int(len(reserve)),
         "fit_class_counts": {str(k): int(v) for k, v in y.iloc[development].value_counts().items()},
@@ -391,7 +393,7 @@ def _evaluate_with_budget(candidate: dict[str, Any], config: dict, run_dir: Path
     root.mkdir(parents=True, exist_ok=True)
     limits = config.get("ml_configuration_policy")
     if not limits:
-        from memstara.ml_configuration import policy
+        from memstara.ml_configuration import resolve_policy
         limits = policy()
     # Only pass the frozen ML plan and the row-allocation provenance the child needs.
     evaluation = candidate["evaluation"]

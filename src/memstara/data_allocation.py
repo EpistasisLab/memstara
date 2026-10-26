@@ -145,7 +145,8 @@ def prepare(value, task, snapshot, subset):
     original = archived if archived and archived.is_file() else Path(os.environ['MEMSTARA_DATASET_PATH'])
     if hashlib.sha256(original.read_bytes()).hexdigest() != snapshot['dataset_sha256']:
         raise ValueError('Source dataset differs from the frozen run input')
-    source = pd.read_csv(original)
+    from memstara.research_inputs import MISSING
+    source = pd.read_csv(original, na_values=list(MISSING))
     try:
         pd.testing.assert_frame_equal(frame, source[list(frame.columns)], check_dtype=False,
                                       check_exact=False, rtol=1e-12, atol=0)

@@ -519,7 +519,9 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             raise ValueError("Content-Length is not a number") from None
-        if length > 64_000:
+        from memstara.dataset_upload import MAX_REQUEST_BYTES
+        limit = MAX_REQUEST_BYTES if urlsplit(self.path).path.rstrip("/") == "/control/research-inputs/upload" else 64_000
+        if length < 0 or length > limit:
             raise ValueError("that is not a run request")
         raw = self.rfile.read(length) if length else b"{}"
         try:
@@ -699,6 +701,16 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/control/pricing":
             self._send(410, {"error": "Manual execution pricing is retired. Motoro owns cost estimation."})
+            return
+
+        if path == "/control/research-inputs/upload":
+            from memstara.dataset_upload import upload
+            try:
+                self._send(201, upload(body))
+            except ValueError as exc:
+                self._send(400, {"error": str(exc)})
+            except OSError:
+                self._send(503, {"error": "Dataset could not be stored. Check available storage and retry."})
             return
 
         if path in ("/control/research-inputs/inspect", "/control/research-inputs/register"):
@@ -904,11 +916,13 @@ class Handler(BaseHTTPRequestHandler):
                 book = body.get("playbook_ml", "")
                 policy = resolve(book).get("evaluation", {}) if book else {}
                 plan = validate({**policy, **body.get("evaluation", {})})
-                preflight(Path(dataset), argv[argv.index("--y-column") + 1], plan, reserve_validation=True)
+                input_policy = (research or {}).get('configuration', {}).get('missing_policy', 'reject')
+                preflight(Path(dataset), argv[argv.index("--y-column") + 1], plan,
+                          reserve_validation=True, missing_policy=input_policy)
                 if body.get("combination_skills"):
                     from memstara.pipeline.feature_context import freeze_feature_context
                     freeze_feature_context(Path(dataset), argv[argv.index("--y-column") + 1],
-                                           require_complete=True)
+                                           require_complete=input_policy != "impute_train_v1")
                 from memstara.comparisons import validate_baseline
                 validate_baseline(body.get("baseline_columns", []), argv[argv.index("--y-column") + 1], Path(dataset))
         except ValueError as e:
