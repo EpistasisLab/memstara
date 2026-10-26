@@ -16,6 +16,18 @@ class DataQualityError(ValueError):
     """A safe, aggregate-only diagnostic for input that cannot be evaluated."""
 
 
+CLASSIFIER_SEED_POLICY = 'split_seed_v1'
+LEGACY_CLASSIFIER_SEED_POLICY = 'configured_seed_v1'
+
+
+def classifier_seed_policy(snapshot=None):
+    """Missing policy in a saved run retains its historical model seed behavior."""
+    if snapshot is None:
+        snapshot = active_plan()
+    return (snapshot.get('classifier_seed_policy', LEGACY_CLASSIFIER_SEED_POLICY)
+            if snapshot else CLASSIFIER_SEED_POLICY)
+
+
 def validate(plan: dict) -> dict:
     unknown = set(plan) - set(DEFAULTS)
     if unknown:
@@ -185,7 +197,7 @@ def preflight(path: Path, target: str, plan: dict, *, reserve_validation: bool =
 
 
 def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=None, explain=True,
-          persist=True, partition=None, configuration=None, xai_request=None, missing_policy=None, imputation_categories=None, preprocessing_policy=None) -> dict:
+          persist=True, partition=None, configuration=None, xai_request=None, missing_policy=None, imputation_categories=None, preprocessing_policy=None, seed_policy=None) -> dict:
     import numpy as np
     import sklearn
     from sklearn.metrics import roc_auc_score, average_precision_score, balanced_accuracy_score, confusion_matrix
@@ -204,6 +216,9 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     from memstara.preprocessing_policy import analysis_ready, resolve as preprocessing_version
     policy_snapshot = {'preprocessing_policy': preprocessing_policy} if preprocessing_policy else None
     prepared_input = analysis_ready(policy_snapshot)
+    seed_policy = seed_policy or classifier_seed_policy()
+    if seed_policy not in (CLASSIFIER_SEED_POLICY, LEGACY_CLASSIFIER_SEED_POLICY):
+        raise DataQualityError("Unsupported classifier seed policy")
     if prepared_input and configuration and configuration.get('scale_numeric'):
         raise DataQualityError('Automatic scaling is disabled; scale_numeric must be false')
     began = time.time()
@@ -244,8 +259,9 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     runs: list[dict[str, Any]] = []
     artifacts = []
     last = None
-    # Replicates share their split across hypotheses; only feature sets change.
-    for seed, train, test in evaluation_splits(y, plan, partition=partition):
+    splits = evaluation_splits(y, plan, partition=partition)
+    replicate_seeds = [seed for seed, _, _ in splits]
+    for seed, train, test in splits:
         pre = ColumnTransformer([('numeric', 'passthrough', list(X.columns))],
                                 verbose_feature_names_out=False) if prepared_input else ColumnTransformer([
             ('numeric', (StandardScaler() if configuration['scale_numeric'] else 'passthrough') if configuration else
@@ -272,6 +288,10 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                 if parameters.get('missing') == 'NaN':
                     parameters['missing'] = float('nan')
                 model.set_params(**parameters)
+            # Reconcile the proposal before CV or fitting; never allow model settings
+            # to replace the Data Agent split seed for a new execution.
+            if seed_policy == CLASSIFIER_SEED_POLICY:
+                model.set_params(random_state=seed)
             steps = []
             if use_imputation:
                 steps.append(('impute', TrainingImputer(categorical_columns=tuple(imputation_categories))))
@@ -310,6 +330,9 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                      'train_split_id': hashlib.sha256(train.tobytes()).hexdigest(),
                      'prediction_sha256': hashlib.sha256(probability.tobytes()).hexdigest(),
                      'selected_trial': selected_trial, 'operating_point': operating_point,
+                     'classifier_seed_policy': seed_policy,
+                     'requested_random_state': configuration['parameters'].get('random_state') if configuration else seed,
+                     'effective_random_state': best_params.get('random_state'),
                      'n_train': len(train), 'n_test': len(test), 'parameters': best_params,
                      'imputation': imputation_record(best, missing_policy),
                      'average_precision': float(average_precision_score(y.iloc[test], probability)),
@@ -358,7 +381,8 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                                                 'Training-fold one-hot encoding; numeric passthrough for XGBoost, '
                                                 'training-fold scaling for other models.',
                                'source_preserved': True, 'target_imputed': False},
-              'evaluation': {'plan': plan, 'replicates': runs, 'sklearn_version': sklearn.__version__,
+              'evaluation': {'plan': plan, 'replicates': runs,
+                             'classifier_seed_policy': seed_policy, 'replicate_seeds': replicate_seeds, 'sklearn_version': sklearn.__version__,
                              'dataset_sha256': hashlib.sha256(source_bytes).hexdigest(),
                              'started_at': began, 'duration_seconds': time.time() - began,
                              'score_scope': 'adaptive_exploration' if reserve else 'exploratory_holdout',

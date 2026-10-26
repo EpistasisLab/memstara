@@ -211,9 +211,14 @@ def context(snapshot, evaluation):
                             'Configure only the selected model before seeing results. '
                             'Preserve upstream features/splits. '
                             'LR l1 requires liblinear. No hold-out tuning; accepted proposals are immutable.'}
+    from memstara.evaluation import classifier_seed_policy, CLASSIFIER_SEED_POLICY
+    if classifier_seed_policy(snapshot) == CLASSIFIER_SEED_POLICY:
+        specification['fixed']['classifier_seed_policy'] = CLASSIFIER_SEED_POLICY
+        specification['instructions'] += (' The server applies each recorded split seed as classifier random_state '
+            'before fitting; any proposed random_state is recorded but cannot override the split seed.')
     if prepared_input:
         specification['preprocessing_contract'] = ('Require prepared numeric predictors. No automatic encoding or scaling. '
-            'Only explicitly approved imputation may be fitted on training rows/CV folds.')
+            'Missing values block execution for every classifier; no imputation is permitted.')
         specification['instructions'] = specification['instructions'].replace('parameter, numeric scaling, threshold', 'parameter, threshold') + ' Keep scale_numeric false.'
     overrides = validate_overrides(snapshot.get('ml_overrides', {}))
     if prepared_input and any(v.get('scale_numeric') for v in overrides.get('models', {}).values()):

@@ -100,6 +100,7 @@ def save_bundle(source, target, plan, predictors, fixed_trials, partition, artif
         'schema': {str(k): str(v) for k, v in frame.dtypes.items()},
         'target_classes': [0, 1], 'decision_threshold': configuration['threshold'] if configuration else .5,
         'configuration': configuration,
+        'classifier_seed_policy': result['evaluation'].get('classifier_seed_policy', 'configured_seed_v1'),
         'preprocessing_policy': result.get('data_quality', {}).get('preprocessing_policy', 'legacy_encoding_v1'),
         'imputation_categories': result.get('data_quality', {}).get('imputation_categories', []),
         'missing_policy': result.get('data_quality', {}).get('missing_value_policy', 'reject'),
@@ -145,7 +146,8 @@ def replay(directory: Path) -> dict:
                    predictors=manifest['predictors'], fixed_trials=manifest['fixed_trials'],
                    partition=manifest['partition'], persist=False, explain=False,
                    configuration=manifest.get('configuration'),
-                   preprocessing_policy=manifest.get('preprocessing_policy', 'legacy_encoding_v1'))
+                   preprocessing_policy=manifest.get('preprocessing_policy', 'legacy_encoding_v1'),
+                   seed_policy=manifest.get('classifier_seed_policy', 'configured_seed_v1'))
     equal = (actual['evaluation']['replicates'] == expected['evaluation']['replicates']
              and actual['features'] == expected['features'] and actual['auc'] == expected['auc'])
     status = {'status': 'verified' if equal else 'mismatch',

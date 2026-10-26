@@ -67,6 +67,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     from memstara.stage_models import for_stage
     state = {
         "preprocessing_policy": VERSION,
+        "classifier_seed_policy": "split_seed_v1",
         "schema_version": 1,
         "critic_policy": {"version": "deterministic_feasibility_v1", "extra_llm_calls": 0},
         "knowledge_policy": {"mode": "no_okf" if ablate_okf else "okf", "retrieval_enabled": not ablate_okf},
@@ -190,6 +191,10 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         state['preprocessing_policy'] = original.get('preprocessing_policy', 'legacy_encoding_v1')
         if 'preprocessing_policy' not in original:
             state.pop('preprocessing_policy', None)
+        if 'classifier_seed_policy' in original:
+            state['classifier_seed_policy'] = original['classifier_seed_policy']
+        else:
+            state.pop('classifier_seed_policy', None)
         if 'ml_configuration_policy' in original:
             state['ml_configuration_policy'] = original['ml_configuration_policy']
     state["config_hash"] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
