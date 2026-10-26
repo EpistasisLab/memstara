@@ -76,7 +76,7 @@ def save_bundle(source, target, plan, predictors, fixed_trials, partition, artif
         from memstara.specialist_xai import save
         save(directory, X, artifacts, result, xai_request)
     code = {}
-    sources: tuple[str, ...] = ('evaluation.py', 'reproducibility.py', 'missing_values.py')
+    sources: tuple[str, ...] = ('evaluation.py', 'reproducibility.py', 'missing_values.py', 'preprocessing_policy.py')
     if agent_plan:
         sources += ('ml_configuration.py', 'paired_ml.py', 'comparisons.py', 'data_allocation.py')
     if xai_request:
@@ -100,6 +100,7 @@ def save_bundle(source, target, plan, predictors, fixed_trials, partition, artif
         'schema': {str(k): str(v) for k, v in frame.dtypes.items()},
         'target_classes': [0, 1], 'decision_threshold': configuration['threshold'] if configuration else .5,
         'configuration': configuration,
+        'preprocessing_policy': result.get('data_quality', {}).get('preprocessing_policy', 'legacy_encoding_v1'),
         'imputation_categories': result.get('data_quality', {}).get('imputation_categories', []),
         'missing_policy': result.get('data_quality', {}).get('missing_value_policy', 'reject'),
         'files': {p.name: digest(p) for p in directory.iterdir() if p.is_file()},
@@ -129,7 +130,7 @@ def replay(directory: Path) -> dict:
             return {'status': 'integrity_mismatch'}
     for name, expected in manifest['code'].items():
         allowed = ('evaluation.py', 'reproducibility.py', 'ml_configuration.py',
-                   'paired_ml.py', 'comparisons.py', 'data_allocation.py', 'specialist_xai.py', 'missing_values.py')
+                   'paired_ml.py', 'comparisons.py', 'data_allocation.py', 'specialist_xai.py', 'missing_values.py', 'preprocessing_policy.py')
         if name not in allowed or digest(Path(__file__).with_name(name)) != expected:
             return {'status': 'code_mismatch'}
     # Load the evaluation libraries before recording native thread pools, as in score().
@@ -143,7 +144,8 @@ def replay(directory: Path) -> dict:
                    imputation_categories=manifest.get('imputation_categories', []),
                    predictors=manifest['predictors'], fixed_trials=manifest['fixed_trials'],
                    partition=manifest['partition'], persist=False, explain=False,
-                   configuration=manifest.get('configuration'))
+                   configuration=manifest.get('configuration'),
+                   preprocessing_policy=manifest.get('preprocessing_policy', 'legacy_encoding_v1'))
     equal = (actual['evaluation']['replicates'] == expected['evaluation']['replicates']
              and actual['features'] == expected['features'] and actual['auc'] == expected['auc'])
     status = {'status': 'verified' if equal else 'mismatch',

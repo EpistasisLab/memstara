@@ -50,10 +50,13 @@ def test_current_skill_freeze_excludes_old_and_checks_method(specification,skill
         xai.freeze(snapshot['books'],snapshot['prompts'])
 
 
-def test_both_specialists_selected_saved_model_and_offline_replay(specification,monkeypatch):
+@pytest.mark.parametrize('prepared_input', [False, True])
+def test_both_specialists_selected_saved_model_and_offline_replay(specification,monkeypatch,prepared_input):
     from memstara.mcp_servers.ml import train_and_score
     from memstara import paired_ml
     path,snapshot,_,proposal=specification
+    if prepared_input:
+        snapshot['preprocessing_policy'] = 'analysis_ready_v1'
     # Real child process has no access to pytest mocks; all frozen skills are in its request.
     result=json.loads(train_and_score(str(path),'Y',ml_plan=proposal))
     assert not result.get('error'),result

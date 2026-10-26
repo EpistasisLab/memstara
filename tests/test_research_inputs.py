@@ -452,3 +452,12 @@ def test_control_launch_uses_selected_inputs_without_changing_server_environment
     assert argv[argv.index('--research-input-id') + 1] == record['id']
     assert scopes == [Path(prepare(record['id'])['root']) / 'okf']
     assert dict(os.environ) == before
+
+
+def test_text_predictors_block_registration_without_exposing_rows(sample):
+    path = Path(sample['dataset_path'])
+    path.write_text(path.read_text().replace('1,1,2,3,4,yes', '1,private-text,2,3,4,yes'))
+    result = inspect(sample)
+    assert not result['input_checks_passed']
+    assert any(i['code'] == 'nonnumeric_predictors' for i in result['issues'])
+    assert 'private-text' not in json.dumps(result)

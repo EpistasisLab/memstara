@@ -108,6 +108,7 @@ def inspect(value):
     counts: Counter[str] = Counter()
     missing: Counter[str] = Counter()
     nonfinite: Counter[str] = Counter()
+    nonnumeric: Counter[str] = Counter()
     if value["data_mode"] == "dataset":
         dataset = Path(value["dataset_path"]).expanduser().resolve()
         if dataset.suffix.lower() != ".csv" or not dataset.is_file():
@@ -136,7 +137,7 @@ def inspect(value):
                                 if not math.isfinite(float(raw)):
                                     nonfinite[key] += 1
                             except ValueError:
-                                pass
+                                nonnumeric[key] += 1
                         if key == target["column"]:
                             # Never expose label values until the user provides their mapping.
                             if raw == target["positive_label"] and raw not in MISSING:
@@ -176,6 +177,10 @@ def inspect(value):
             issue("feature_count", "At least four eligible predictors are required")
         if set(value.get("categorical_columns", [])) - set(predictors):
             issue("categorical_columns", "Categorical columns must be eligible predictor columns")
+        unsupported = [h for h in predictors if nonnumeric[h]]
+        if unsupported:
+            issue("nonnumeric_predictors", "Encode or exclude nonnumeric predictors before running; "
+                  "automatic encoding and scaling are disabled: " + ", ".join(unsupported))
         active = set(predictors) | {target["column"]}
         if any(missing[k] for k in active) and value["missing_policy"] == "reject":
             issue("missing_values", "Selected columns contain missing values. No rows or values were modified")

@@ -173,6 +173,8 @@ def context(snapshot, evaluation):
         base['fixed']['primary_model'] = controls['ml_plan']['primary_model']
         return base
     from memstara.evaluation import model_for
+    from memstara.preprocessing_policy import analysis_ready
+    prepared_input = analysis_ready(snapshot)
     chosen_model = selected_model(snapshot)
     models = {}
     for name in (chosen_model,):
@@ -184,7 +186,7 @@ def context(snapshot, evaluation):
                              subsample=1., colsample_bytree=1., reg_alpha=0., reg_lambda=1.,
                              gamma=0., scale_pos_weight=1., max_bin=256)
         params = json.loads(json.dumps(model.get_params(), default=str), parse_constant=str)
-        models[name] = {'parameters': params, 'scale_numeric': name == 'logistic_regression',
+        models[name] = {'parameters': params, 'scale_numeric': not prepared_input and name == 'logistic_regression',
                         'threshold': .5}
     specification = {'version': VERSION, 'required': enabled(snapshot),
             'proposal_template': {'primary_model': chosen_model,
@@ -192,7 +194,7 @@ def context(snapshot, evaluation):
                                   'models': models, 'rationale': ''},
             'editable_parameter_ranges': {chosen_model: RANGES[chosen_model]},
             'editable_parameter_choices': {chosen_model: CHOICES[chosen_model]},
-            'editable_common_settings': {'scale_numeric': [True, False], 'threshold': [.05, .95],
+            'editable_common_settings': {'scale_numeric': [False] if prepared_input else [True, False], 'threshold': [.05, .95],
                                          'folds': [0, 2, 3, 4, 5]},
             'fixed': {'primary_model': snapshot.get('_selected_ml_primary'),
                       'data_seed': evaluation['seed'], 'test_size': evaluation['test_size'],
@@ -209,7 +211,13 @@ def context(snapshot, evaluation):
                             'Configure only the selected model before seeing results. '
                             'Preserve upstream features/splits. '
                             'LR l1 requires liblinear. No hold-out tuning; accepted proposals are immutable.'}
+    if prepared_input:
+        specification['preprocessing_contract'] = ('Require prepared numeric predictors. No automatic encoding or scaling. '
+            'Only explicitly approved imputation may be fitted on training rows/CV folds.')
+        specification['instructions'] = specification['instructions'].replace('parameter, numeric scaling, threshold', 'parameter, threshold') + ' Keep scale_numeric false.'
     overrides = validate_overrides(snapshot.get('ml_overrides', {}))
+    if prepared_input and any(v.get('scale_numeric') for v in overrides.get('models', {}).values()):
+        raise ValueError('Automatic scaling is disabled; remove scale_numeric overrides')
     if overrides:
         specification['proposal_template'] = apply_overrides(specification['proposal_template'], overrides)
         params = specification['proposal_template']['models'][chosen_model]['parameters']
@@ -286,6 +294,9 @@ def validate(proposal, snapshot, evaluation):
             raise ValueError('Each model requires parameters, scale_numeric and threshold')
         if type(choice['scale_numeric']) is not bool:
             raise ValueError('scale_numeric must be boolean')
+        from memstara.preprocessing_policy import analysis_ready
+        if analysis_ready(snapshot) and choice['scale_numeric']:
+            raise ValueError('Automatic scaling is disabled; scale_numeric must be false')
         number(choice['threshold'], .05, .95, 'threshold')
         parameters = choice['parameters']
         defaults = spec['proposal_template']['models'][name]['parameters']

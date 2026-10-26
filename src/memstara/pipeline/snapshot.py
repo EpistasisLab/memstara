@@ -12,6 +12,11 @@ from memstara.pipeline.prompts import load_prompt
 
 def freeze(args, run_dir: Path, books: dict) -> dict:
     os.environ.pop("MEMSTARA_RUN_CONFIG", None)
+    from memstara.preprocessing_policy import VERSION, analysis_ready
+    previous = None
+    if getattr(args, 'resume', False) and (run_dir / 'config.json').exists():
+        previous = json.loads((run_dir / 'config.json').read_text())
+    prepared_input = analysis_ready(previous)
     from memstara.missing_values import POLICY
     missing_policy = (getattr(args, "research_profile", None) or {}).get("configuration", {}).get("missing_policy", "reject")
     impute = missing_policy == POLICY
@@ -32,16 +37,23 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     combination_ml_skills = ([item["id"] for item in combination_plan["skills"].get("ml", [])]
                              if combination_plan else ml_books)
     combination_has_lr = "ml_logistic_regression" in combination_ml_skills
+    allow_native_missing = (all(name == 'ml_xgboost' for name in combination_ml_skills)
+                            and bool(combination_ml_skills)) if combination_plan else None
     # A skill supplies defaults; only explicitly supplied controls override them.
     evaluation = validate({**skill_policy, **json.loads(args.evaluation)})
+    allow_missing = (allow_native_missing if combination_plan else evaluation['engine'] == 'xgboost')
+    if previous and not prepared_input:
+        allow_missing = bool(combination_plan) or evaluation['engine'] == 'xgboost'
     if not getattr(args, "report_only", False):
         preflight(dataset, args.y_column, evaluation,
-                  allow_missing=bool(combination_plan) or evaluation["engine"] == "xgboost", missing_policy=missing_policy)
+                  allow_missing=allow_missing, missing_policy=missing_policy,
+                  require_numeric=prepared_input)
     partition = None
     if not getattr(args, "report_only", False):
         from memstara.evaluation import validate_clean_dataset, discovery_partition, evaluation_splits
         frame = validate_clean_dataset(dataset, args.y_column,
-                                       allow_missing=bool(combination_plan) or evaluation['engine'] == 'xgboost', missing_policy=missing_policy)
+                                       allow_missing=allow_missing, missing_policy=missing_policy,
+                                       require_numeric=prepared_input)
         partition = discovery_partition(frame[args.y_column], evaluation['seed'])
         evaluation_splits(frame[args.y_column], evaluation, partition=partition)
     from memstara.study_comparison import resolve_comparison
@@ -58,6 +70,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     from memstara.pipeline.feature_context import freeze_feature_context
     from memstara.stage_models import for_stage
     state = {
+        "preprocessing_policy": VERSION,
         "schema_version": 1,
         "critic_policy": {"version": "deterministic_feasibility_v1", "extra_llm_calls": 0},
         "knowledge_policy": {"mode": "no_okf" if ablate_okf else "okf", "retrieval_enabled": not ablate_okf},
@@ -118,6 +131,9 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
                  if combination_plan else books.get('ml', []))
     overrides = validate_overrides(
         json.loads(getattr(args, 'ml_overrides', '{}')), ml_skills, replicates=evaluation['replicates'])
+    if prepared_input and any(
+            settings.get('scale_numeric') for settings in overrides.get('models', {}).values()):
+        raise ValueError('Automatic scaling is disabled for new runs; remove scale_numeric overrides')
     if overrides:
         state['ml_overrides'] = overrides
     if combination_plan and not getattr(args, "report_only", False):
@@ -161,6 +177,9 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     from memstara.controlled_comparison import freeze as freeze_controls
     controls = freeze_controls(getattr(args, 'controlled_comparison', '{}'), state)
     if controls:
+        if prepared_input and any(
+                settings.get('scale_numeric') for settings in controls['ml_plan'].get('models', {}).values()):
+            raise ValueError('Automatic scaling is disabled for new runs; update the comparison plan')
         if overrides:
             raise ValueError('Controlled comparisons cannot also use advanced ML overrides')
         state['controlled_comparison'] = controls
@@ -173,6 +192,9 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     # recovery changes are separately validated and recorded by active_plan().
     if getattr(args, 'resume', False) and (run_dir / 'config.json').exists():
         original = json.loads((run_dir / 'config.json').read_text())
+        state['preprocessing_policy'] = original.get('preprocessing_policy', 'legacy_encoding_v1')
+        if 'preprocessing_policy' not in original:
+            state.pop('preprocessing_policy', None)
         if 'ml_configuration_policy' in original:
             state['ml_configuration_policy'] = original['ml_configuration_policy']
     state["config_hash"] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()

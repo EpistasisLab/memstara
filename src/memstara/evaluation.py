@@ -79,7 +79,7 @@ def model_for(engine: str, seed: int, trial: int = 0):
     raise ValueError(f'Unsupported model: {engine}')
 
 
-def validate_clean_dataset(path: Path, target: str, *, allow_missing: bool = False, missing_policy=None):
+def validate_clean_dataset(path: Path, target: str, *, allow_missing: bool = False, missing_policy=None, require_numeric=None):
     """Validate the MVP input contract without repairing or dropping any values."""
     import numpy as np
     import pandas as pd
@@ -111,6 +111,14 @@ def validate_clean_dataset(path: Path, target: str, *, allow_missing: bool = Fal
             'The current policy rejects missing values and does not clean or impute data. '
             'Choose XGBoost for native missing-value handling or provide a complete dataset; '
             'no values or rows were changed.')
+    from memstara.preprocessing_policy import analysis_ready
+    if require_numeric is None:
+        require_numeric = analysis_ready()
+    if require_numeric:
+        unsupported = [c for c in df if c != target and not pd.api.types.is_numeric_dtype(df[c])]
+        if unsupported:
+            raise DataQualityError('Prepare numeric predictors before running; automatic encoding is disabled. '
+                                   'Encode or exclude columns: ' + ', '.join(unsupported))
     numeric = df.select_dtypes(include='number')
     if np.isinf(numeric.to_numpy(dtype=float)).any():
         raise DataQualityError('AI-ready input required: non-finite values must be resolved before upload. '
@@ -170,16 +178,16 @@ def evaluation_splits(y, plan: dict, partition=None):
 
 
 def preflight(path: Path, target: str, plan: dict, *, reserve_validation: bool = False,
-              allow_missing: bool | None = None, missing_policy=None) -> None:
+              allow_missing: bool | None = None, missing_policy=None, require_numeric=None) -> None:
     plan = validate(plan)
     frame = validate_clean_dataset(path, target, allow_missing=(
-        plan['engine'] == 'xgboost' if allow_missing is None else allow_missing), missing_policy=missing_policy)
+        plan['engine'] == 'xgboost' if allow_missing is None else allow_missing), missing_policy=missing_policy, require_numeric=require_numeric)
     partition = discovery_partition(frame[target], plan["seed"]) if reserve_validation else None
     evaluation_splits(frame[target], plan, partition=partition)
 
 
 def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=None, explain=True,
-          persist=True, partition=None, configuration=None, xai_request=None, missing_policy=None, imputation_categories=None) -> dict:
+          persist=True, partition=None, configuration=None, xai_request=None, missing_policy=None, imputation_categories=None, preprocessing_policy=None) -> dict:
     import numpy as np
     import sklearn
     from sklearn.metrics import roc_auc_score, average_precision_score, balanced_accuracy_score, confusion_matrix
@@ -193,6 +201,11 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     use_imputation = missing_policy == POLICY
     if imputation_categories is None:
         imputation_categories = (active_plan() or {}).get("research_profile", {}).get("configuration", {}).get("categorical_columns", [])
+    from memstara.preprocessing_policy import analysis_ready, resolve as preprocessing_version
+    policy_snapshot = {'preprocessing_policy': preprocessing_policy} if preprocessing_policy else None
+    prepared_input = analysis_ready(policy_snapshot)
+    if prepared_input and configuration and configuration.get('scale_numeric'):
+        raise DataQualityError('Automatic scaling is disabled; scale_numeric must be false')
     began = time.time()
     source_bytes = path.read_bytes()
     if partition is None:
@@ -201,7 +214,7 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
         if snapshot.get('hypothesis_policy', {}).get('version') == 'iterative_discovery_v1' and not partition:
             raise DataQualityError('Iterative discovery requires a reserved validation partition')
     plan = validate(plan)
-    df = validate_clean_dataset(path, target, allow_missing=plan['engine'] == 'xgboost', missing_policy=missing_policy)
+    df = validate_clean_dataset(path, target, allow_missing=plan['engine'] == 'xgboost', missing_policy=missing_policy, require_numeric=prepared_input)
     X, y = df.drop(columns=[target]), df[target]
     if predictors is not None:
         if target in predictors or any(c not in X for c in predictors):
@@ -233,7 +246,8 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     last = None
     # Replicates share their split across hypotheses; only feature sets change.
     for seed, train, test in evaluation_splits(y, plan, partition=partition):
-        pre = ColumnTransformer([
+        pre = ColumnTransformer([('numeric', 'passthrough', list(X.columns))],
+                                verbose_feature_names_out=False) if prepared_input else ColumnTransformer([
             ('numeric', (StandardScaler() if configuration['scale_numeric'] else 'passthrough') if configuration else
              ('passthrough' if plan['engine'] == 'xgboost' else StandardScaler()), numeric),
             ('categorical', OneHotEncoder(handle_unknown='ignore', sparse_output=False), categorical),
@@ -357,6 +371,11 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
             'Training-fold one-hot encoding; numeric ' +
             ('standard scaling.' if configuration['scale_numeric'] else 'passthrough.') +
             ' No cleaning, imputation or row changes.')
+    result['data_quality']['preprocessing_policy'] = preprocessing_version(policy_snapshot)
+    if prepared_input:
+        result['data_quality']['preprocessing'] = (
+            'Numeric predictors unchanged: no encoding, scaling, row removal or resampling. '
+            + ('User-approved training-only imputation.' if use_imputation else 'No imputation.'))
     if path.read_bytes() != source_bytes:
         raise DataQualityError('Input changed during evaluation; results cannot be reproduced.')
     if persist:

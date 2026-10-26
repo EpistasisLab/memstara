@@ -93,7 +93,9 @@ def evaluate_candidate(candidate: dict[str, Any], config: dict, run_dir: Path) -
         raise ValueError("Final validation input exceeds the configured CSV size budget")
     from memstara.evaluation import validate_clean_dataset
     from memstara.missing_values import resolve_policy, imputation_record
-    frame = validate_clean_dataset(path, target, allow_missing=model_name == "xgboost", missing_policy=resolve_policy(config))
+    from memstara.preprocessing_policy import analysis_ready
+    frame = validate_clean_dataset(path, target, allow_missing=model_name == "xgboost",
+                                   missing_policy=resolve_policy(config), require_numeric=analysis_ready(config))
     features = [name for name in candidate["columns_used"] if name != target]
     if not features or any(name not in frame for name in features):
         raise ValueError("Hypothesis task feature list does not match its saved input")

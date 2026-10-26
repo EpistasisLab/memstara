@@ -11,7 +11,10 @@ from memstara.evaluation import discovery_partition
 from memstara.final_validation import eligible_tasks, evaluate_candidate, run
 
 
-def fixture_run(tmp_path, monkeypatch, engine="logistic_regression", replicates=1):
+def fixture_run(tmp_path, monkeypatch, engine="logistic_regression", replicates=1, prepared=False):
+    from memstara import evaluation
+    monkeypatch.setattr(evaluation, 'active_plan', lambda: (
+        {'preprocessing_policy': 'analysis_ready_v1'} if prepared else {'run_tag': 'legacy-final'}))
     rng = np.random.default_rng(120)
     n = 240
     signal = rng.normal(size=n)
@@ -28,7 +31,7 @@ def fixture_run(tmp_path, monkeypatch, engine="logistic_regression", replicates=
         from xgboost import XGBClassifier
         model = XGBClassifier(n_estimators=8, max_depth=2, n_jobs=1, random_state=73)
     params = json.loads(json.dumps(model.get_params()), parse_constant=str)
-    settings = {"parameters": params, "scale_numeric": True, "threshold": .45}
+    settings = {"parameters": params, "scale_numeric": not prepared, "threshold": .45}
     effective = {"primary_model": engine, "folds": 0,
                  "models": {engine: settings}, "rationale": "synthetic test"}
     plan = {"engine": engine, "seed": 41, "test_size": .25,
@@ -234,3 +237,16 @@ def test_unlimited_final_refit_can_wait_for_busy_ml_lock(tmp_path, monkeypatch):
     assert len(attempts) >= 2
     assert result['status'] == 'completed'
     assert result['resource_usage']['memory_ceiling_bytes'] is None
+
+
+@pytest.mark.parametrize("engine", ["logistic_regression", "xgboost"])
+def test_analysis_ready_final_refit_preserves_numeric_values(tmp_path, monkeypatch, engine):
+    import joblib
+    path, partition, task, config = fixture_run(tmp_path, monkeypatch, engine, prepared=True)
+    config['preprocessing_policy'] = 'analysis_ready_v1'
+    result = evaluate_candidate(task, config, tmp_path)
+    assert result['status'] == 'completed'
+    model = joblib.load(Path(result['final_model_artifact']['bundle_path']) / 'model.joblib')
+    frame = pd.read_csv(path)[['signal', 'noise']]
+    np.testing.assert_array_equal(model.named_steps['encode'].transform(frame), frame.to_numpy())
+    assert result['numeric_scaling'] is False

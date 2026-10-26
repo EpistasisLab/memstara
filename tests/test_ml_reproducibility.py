@@ -16,6 +16,9 @@ from memstara.reproducibility import replay
 def cohort(tmp_path, monkeypatch):
     monkeypatch.setenv('MEMSTARA_OUTPUT_DIR', str(tmp_path / 'outputs'))
     monkeypatch.delenv('MEMSTARA_RUN_CONFIG', raising=False)
+    # Historical encoded artifacts must remain replayable under their frozen policy.
+    from memstara import evaluation
+    monkeypatch.setattr(evaluation, 'active_plan', lambda: {'run_tag': 'historical-encoding'})
     rng = np.random.default_rng(8)
     path = tmp_path / 'synthetic.csv'
     pd.DataFrame({'a': rng.normal(size=80), 'category': ['a', 'b', 'c', 'a'] * 20,
