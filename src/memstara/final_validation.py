@@ -322,6 +322,9 @@ def _load_fitted_model(candidate: dict[str, Any], config: dict, features: list[s
 
 def run(run_dir: Path, config: dict, tasks: list[dict]) -> dict:
     """Score every eligible hypothesis task once and persist each outcome as it finishes."""
+    if config.get('partition_policy') == 'two_way_stratified_v1':
+        return {'status': 'not_applicable', 'policy': 'two_way_stratified_v1', 'results': [],
+                'reason': 'Use each task train/test evaluation. No reserve scoring or final refit.'}
     from memstara.pipeline.checkpoint import atomic_json
 
     artifact = run_dir / "final_validation.json"
@@ -395,7 +398,7 @@ def _evaluate_with_budget(candidate: dict[str, Any], config: dict, run_dir: Path
     root.mkdir(parents=True, exist_ok=True)
     limits = config.get("ml_configuration_policy")
     if not limits:
-        from memstara.ml_configuration import resolve_policy
+        from memstara.ml_configuration import policy
         limits = policy()
     # Only pass the frozen ML plan and the row-allocation provenance the child needs.
     evaluation = candidate["evaluation"]

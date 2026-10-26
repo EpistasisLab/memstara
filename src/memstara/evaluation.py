@@ -91,7 +91,8 @@ def model_for(engine: str, seed: int, trial: int = 0):
     raise ValueError(f'Unsupported model: {engine}')
 
 
-def validate_clean_dataset(path: Path, target: str, *, allow_missing: bool = False, missing_policy=None, require_numeric=None):
+def validate_clean_dataset(path: Path, target: str, *, allow_missing: bool = False,
+                           missing_policy=None, require_numeric=None):
     """Validate the MVP input contract without repairing or dropping any values."""
     import numpy as np
     import pandas as pd
@@ -160,7 +161,8 @@ def evaluation_splits(y, plan: dict, partition=None):
     if partition is None:
         snapshot = active_plan() or {}
         partition = snapshot.get('validation_partition')
-        if snapshot.get('hypothesis_policy', {}).get('version') == 'iterative_discovery_v1' and not partition:
+        if (snapshot.get('hypothesis_policy', {}).get('version') == 'iterative_discovery_v1'
+                and snapshot.get('partition_policy') != 'two_way_stratified_v1' and not partition):
             raise DataQualityError('Iterative discovery requires a reserved validation partition')
     indices = np.arange(len(y))
     if partition:
@@ -191,13 +193,15 @@ def preflight(path: Path, target: str, plan: dict, *, reserve_validation: bool =
               allow_missing: bool | None = None, missing_policy=None, require_numeric=None) -> None:
     plan = validate(plan)
     frame = validate_clean_dataset(path, target, allow_missing=(
-        plan['engine'] == 'xgboost' if allow_missing is None else allow_missing), missing_policy=missing_policy, require_numeric=require_numeric)
+        plan['engine'] == 'xgboost' if allow_missing is None else allow_missing),
+        missing_policy=missing_policy, require_numeric=require_numeric)
     partition = discovery_partition(frame[target], plan["seed"]) if reserve_validation else None
     evaluation_splits(frame[target], plan, partition=partition)
 
 
 def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=None, explain=True,
-          persist=True, partition=None, configuration=None, xai_request=None, missing_policy=None, imputation_categories=None, preprocessing_policy=None, seed_policy=None) -> dict:
+          persist=True, partition=None, configuration=None, xai_request=None, missing_policy=None,
+          imputation_categories=None, preprocessing_policy=None, seed_policy=None) -> dict:
     import numpy as np
     import sklearn
     from sklearn.metrics import roc_auc_score, average_precision_score, balanced_accuracy_score, confusion_matrix
@@ -206,13 +210,14 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-    from memstara.missing_values import resolve_policy, POLICY, TrainingImputer, imputation_record
+    from memstara.missing_values import resolve_policy, TrainingImputer, imputation_record
     missing_policy = missing_policy or resolve_policy()
     if missing_policy not in ("reject", "native_xgboost"):
         raise DataQualityError("Imputation is disabled. Supply a complete CSV and select reject missing values.")
     use_imputation = False
     if imputation_categories is None:
-        imputation_categories = (active_plan() or {}).get("research_profile", {}).get("configuration", {}).get("categorical_columns", [])
+        research = (active_plan() or {}).get("research_profile", {}).get("configuration", {})
+        imputation_categories = research.get("categorical_columns", [])
     from memstara.preprocessing_policy import analysis_ready, resolve as preprocessing_version
     policy_snapshot = {'preprocessing_policy': preprocessing_policy} if preprocessing_policy else None
     prepared_input = analysis_ready(policy_snapshot)
@@ -226,10 +231,12 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     if partition is None:
         snapshot = active_plan() or {}
         partition = snapshot.get('validation_partition') or {}
-        if snapshot.get('hypothesis_policy', {}).get('version') == 'iterative_discovery_v1' and not partition:
+        if (snapshot.get('hypothesis_policy', {}).get('version') == 'iterative_discovery_v1'
+                and snapshot.get('partition_policy') != 'two_way_stratified_v1' and not partition):
             raise DataQualityError('Iterative discovery requires a reserved validation partition')
     plan = validate(plan)
-    df = validate_clean_dataset(path, target, allow_missing=plan['engine'] == 'xgboost', missing_policy=missing_policy, require_numeric=prepared_input)
+    df = validate_clean_dataset(path, target, allow_missing=plan['engine'] == 'xgboost',
+                                missing_policy=missing_policy, require_numeric=prepared_input)
     X, y = df.drop(columns=[target]), df[target]
     if predictors is not None:
         if target in predictors or any(c not in X for c in predictors):
@@ -308,7 +315,7 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                 # XGBoost's missing-value sentinel is NaN. Persist it symbolically;
                 # PostgreSQL JSONB and browser JSON require finite JSON numbers.
                 best_params = json.loads(json.dumps(model.get_params(), default=str), parse_constant=str)
-        if best is None:
+        if best is None or best_params is None:
             raise DataQualityError('Evaluation requires at least one candidate model')
         best.fit(X.iloc[train], y.iloc[train])
         probability = best.predict_proba(X.iloc[test])[:, 1]
@@ -331,7 +338,8 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                      'prediction_sha256': hashlib.sha256(probability.tobytes()).hexdigest(),
                      'selected_trial': selected_trial, 'operating_point': operating_point,
                      'classifier_seed_policy': seed_policy,
-                     'requested_random_state': configuration['parameters'].get('random_state') if configuration else seed,
+                     'requested_random_state': (configuration['parameters'].get('random_state')
+                                                if configuration else seed),
                      'effective_random_state': best_params.get('random_state'),
                      'n_train': len(train), 'n_test': len(test), 'parameters': best_params,
                      'imputation': imputation_record(best, missing_policy),
@@ -377,15 +385,19 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                                'imputation_categories': list(imputation_categories),
                                'missing_value_policy': 'reject',
                                'warnings': list(dict.fromkeys(warnings)),
-                               'preprocessing': ('User-approved training-only imputation. ' if use_imputation else 'No cleaning or imputation. ') +
+                               'preprocessing': ('User-approved training-only imputation. '
+                                                 if use_imputation else 'No cleaning or imputation. ') +
                                                 'Training-fold one-hot encoding; numeric passthrough for XGBoost, '
                                                 'training-fold scaling for other models.',
                                'source_preserved': True, 'target_imputed': False},
               'evaluation': {'plan': plan, 'replicates': runs,
-                             'classifier_seed_policy': seed_policy, 'replicate_seeds': replicate_seeds, 'sklearn_version': sklearn.__version__,
+                             'classifier_seed_policy': seed_policy, 'replicate_seeds': replicate_seeds,
+                             'sklearn_version': sklearn.__version__,
                              'dataset_sha256': hashlib.sha256(source_bytes).hexdigest(),
                              'started_at': began, 'duration_seconds': time.time() - began,
-                             'score_scope': 'adaptive_exploration' if reserve else 'exploratory_holdout',
+                             'score_scope': ('two_way_test' if (active_plan() or {}).get('partition_policy')
+                                             == 'two_way_stratified_v1' else
+                                             'adaptive_exploration' if reserve else 'exploratory_holdout'),
                              'validation_reserve': {k:v for k,v in reserve.items()
                                                     if k != 'exploration_rows'}},
               'explanation': explanation}

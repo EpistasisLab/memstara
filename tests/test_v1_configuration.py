@@ -29,7 +29,8 @@ def clean_data(tmp_path, monkeypatch):
         {
             "x": x,
             "noise": rng.normal(size=100),
-            "kind": ["a", "b"] * 50,
+            "kind": [0, 1] * 50,
+            "extra": rng.normal(size=100),
             "outcome": (x + rng.normal(size=100) * 0.5 > 0).astype(int),
         }
     )
@@ -67,9 +68,14 @@ def test_snapshot_freezes_prompt_and_forces_model_and_seed(clean_data, tmp_path,
         load_prompt("board/hypothesis", "treatment-toxicity")
         == snapshot["prompts"]["board/hypothesis:treatment-toxicity"]
     )
+    args.resume = True
+    assert freeze(args, tmp_path, {"hypothesis": ["treatment-toxicity"]}) == snapshot
     from memstara.comparisons import write_context
-    write_context(clean_data, {"columns": ["x", "noise", "kind"], "y_column": "outcome",
-                               "evaluation": {}}, snapshot)
+    from memstara.data_allocation import prepare
+    task = {"task_id": 1, "trial": 0, "columns": ["x", "noise", "kind", "extra"],
+            "y_column": "outcome", "evaluation": {}}
+    allocation = prepare({'test_size': .3, 'seed': 7, 'stratify': True}, task, snapshot, clean_data)
+    write_context(clean_data, task, snapshot, data_allocation=allocation)
     result = json.loads(train_and_score(str(clean_data), "outcome", seed=999))
     assert "error" not in result, result
     assert result["seed"] == 7
@@ -206,7 +212,8 @@ def test_encoding_statistics_never_include_holdout(clean_data, monkeypatch):
         return fitted
 
     monkeypatch.setattr(StandardScaler, "fit", track)
-    score(clean_data, "outcome", {"engine": "logistic_regression"})
+    score(clean_data, "outcome", {"engine": "logistic_regression"},
+          preprocessing_policy='legacy_encoding_v1')
     assert len(captured) == 2  # Original fit plus independent reproducibility refit.
     for fitted_mean in captured:
         assert fitted_mean[0] == pytest.approx(frame.iloc[train]["x"].mean())

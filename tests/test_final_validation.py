@@ -108,11 +108,14 @@ def test_old_scoring_policy_is_preserved_without_refitting(tmp_path, monkeypatch
     assert json.loads(artifact.read_text()) == old
 
 
-def test_final_validation_worker_uses_the_bounded_subprocess(tmp_path, monkeypatch):
+@pytest.mark.parametrize('recorded_limits', [True, False])
+def test_final_validation_worker_uses_the_bounded_subprocess(tmp_path, monkeypatch, recorded_limits):
     from memstara.final_validation import _evaluate_with_budget
     from memstara.ml_configuration import policy
     _, _, task, config = fixture_run(tmp_path, monkeypatch)
     config["ml_configuration_policy"] = policy()
+    if not recorded_limits:
+        config.pop('ml_configuration_policy')
     monkeypatch.setenv("MEMSTARA_OUTPUT_DIR", str(tmp_path))
     result = _evaluate_with_budget(task, config, tmp_path)
     assert result["status"] == "completed"

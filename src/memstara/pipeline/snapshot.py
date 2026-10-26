@@ -16,6 +16,11 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     previous = None
     if getattr(args, 'resume', False) and (run_dir / 'config.json').exists():
         previous = json.loads((run_dir / 'config.json').read_text())
+    from memstara.data_allocation import TWO_WAY_VERSION
+    # Historical resumes and explicitly frozen comparison protocols retain their
+    # original partition contract. New ordinary MVP runs use the entire cohort.
+    two_way = (previous.get('partition_policy') == TWO_WAY_VERSION if previous is not None
+               else not bool(json.loads(getattr(args, 'controlled_comparison', '{}') or '{}')))
     prepared_input = analysis_ready(previous)
     research_config = (getattr(args, "research_profile", None) or {}).get("configuration", {})
     missing_policy = research_config.get("missing_policy", "reject")
@@ -28,7 +33,15 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     resolved = {}
     for stage in ("hypothesis", "data", "ml", "interpreter", "report"):
         for book in books.get(stage) or [""]:
-            resolved[f"board/{stage}:{book}"] = load_prompt(f"board/{stage}", book)
+            key = f"board/{stage}:{book}"
+            stored = (previous or {}).get('prompts', {}).get(key)
+            resolved[key] = dict(stored) if stored else load_prompt(f"board/{stage}", book)
+    if two_way and previous is None:
+        from memstara.paths import PROMPTS_DIR
+        contract = (PROMPTS_DIR / 'board/_two_way_data.md').read_text()
+        for key, prompt in resolved.items():
+            if key.startswith('board/data:'):
+                prompt['system_prompt'] += '\n\n' + contract
     if getattr(args, "report_only", False) and not os.environ.get("MEMSTARA_DATASET_PATH"):
         return {}
     dataset = Path(os.environ["MEMSTARA_DATASET_PATH"])
@@ -48,8 +61,19 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         frame = validate_clean_dataset(dataset, args.y_column,
                                        allow_missing=allow_missing, missing_policy=missing_policy,
                                        require_numeric=prepared_input)
-        partition = discovery_partition(frame[args.y_column], evaluation['seed'])
+        if not two_way:
+            partition = discovery_partition(frame[args.y_column], evaluation['seed'])
         evaluation_splits(frame[args.y_column], evaluation, partition=partition)
+        if two_way:
+            import math
+            from memstara.evaluation import DataQualityError
+            # Check the most restrictive requested allocation before paid calls.
+            for skill in books.get('data') or ['data_training_heavy']:
+                fraction = .5 if skill == 'data_balanced_stratified' else .3
+                splits = evaluation_splits(frame[args.y_column], {**evaluation, 'test_size': fraction,
+                                                                  'replicates': 1}, partition={})
+                if any(len(test) != math.ceil(len(frame) * fraction) for _, _, test in splits):
+                    raise DataQualityError('Too few rows for the selected Data skill train/test ratio')
     from memstara.study_comparison import resolve_comparison
     comparison_policy = resolve_comparison(json.loads(getattr(args, "baseline_columns", "[]")), args.y_column, dataset)
     ablate_okf = bool(getattr(args, "ablate_okf", False))
@@ -157,7 +181,10 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         else {}
     )
     from memstara.data_allocation import SKILLS, VERSION as allocation_version
-    if any(book in SKILLS for book in books.get("data", [])):
+    if two_way:
+        state['partition_policy'] = TWO_WAY_VERSION
+        allocation_version = TWO_WAY_VERSION
+    if two_way or any(book in SKILLS for book in books.get("data", [])):
         state["data_allocation_policy"] = {"version": allocation_version}
     if not getattr(args, "report_only", False):
         from memstara.specialist_xai import freeze as freeze_xai
@@ -179,7 +206,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         if overrides:
             raise ValueError('Controlled comparisons cannot also use advanced ML overrides')
         state['controlled_comparison'] = controls
-    if state.get("data_allocation_policy") and not controls:
+    if state.get("data_allocation_policy") and not controls and not two_way:
         # A normal run lets the first Data Agent seed the independent reserve.
         # Controlled comparisons retain their precommitted server split.
         state["validation_partition_policy"] = "data_agent_seed_v1"
@@ -201,6 +228,12 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
             state.pop('pause_policy', None)
         if 'ml_configuration_policy' in original:
             state['ml_configuration_policy'] = original['ml_configuration_policy']
+        for key in ('partition_policy', 'data_allocation_policy',
+                    'validation_partition_policy', 'validation_partition'):
+            if key in original:
+                state[key] = original[key]
+            else:
+                state.pop(key, None)
     state["config_hash"] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
     location = run_dir / "config.json"
     if location.exists():

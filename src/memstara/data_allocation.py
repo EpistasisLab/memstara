@@ -7,20 +7,25 @@ from pathlib import Path
 
 VERSION = 'agent_stratified_allocation_v2'
 PREVIOUS_VERSION = 'agent_stratified_allocation_v1'
+TWO_WAY_VERSION = 'two_way_stratified_v1'
 SKILLS = {'data_training_heavy': (.1, .3), 'data_balanced_stratified': (.5, .5)}
 
 
 def request(snapshot, trial):
     version = (snapshot or {}).get('data_allocation_policy', {}).get('version')
-    if version not in (VERSION, PREVIOUS_VERSION):
+    if version not in (VERSION, PREVIOUS_VERSION, TWO_WAY_VERSION):
         return None
     from memstara.combinations import task_books
     books = task_books(snapshot, trial).get('data', [])
+    if not books and version == TWO_WAY_VERSION:
+        books = ['data_training_heavy']
     if len(books) != 1 or books[0] not in SKILLS:
         return None
     skill = books[0]
     low, high = SKILLS[skill]
-    prompt = snapshot['prompts'][f'board/data:{skill}']
+    if version == TWO_WAY_VERSION:
+        low = high = .3 if skill == 'data_training_heavy' else .5
+    prompt = snapshot['prompts'].get(f'board/data:{skill}', snapshot['prompts'].get('board/data:', {}))
     instruction = ('Supply data_plan with these three fields in submit_result. '
                    'Preserve all rows and exact hypothesis predictors. The server performs the split.')
     if version == VERSION:
@@ -33,6 +38,11 @@ def request(snapshot, trial):
                        'validation settings exactly, and choose fresh exploration settings and a fresh '
                        'seed for each Loop. '
                        'Preserve all rows and exact hypothesis predictors. The server performs the split.')
+    if version == TWO_WAY_VERSION:
+        instruction = ('Use the recorded two-way allocation contract for the entire input dataset. '
+                       'Submit only test_size, seed and stratify. Do not create a validation reserve '
+                       'or extra inner replicates. Preserve all rows and predictors. '
+                       'The server performs and records the split; any CV uses training rows only.')
     result = {'version': version, 'skill': skill,
             'skill_prompt_sha256': hashlib.sha256(json.dumps(prompt, sort_keys=True).encode()).hexdigest(),
             'minimum_test_size': low, 'maximum_test_size': high, 'stratify': True,
@@ -44,6 +54,13 @@ def request(snapshot, trial):
                            'replicates': 'integer 1..5'} if version == VERSION else {}),
                        'stratify': True},
             'instruction': instruction}
+    if version == TWO_WAY_VERSION:
+        result['population'] = 'entire_registered_dataset'
+        from memstara.seed_schedule import task_seed
+        recorded_seed = task_seed(snapshot, trial)
+        if recorded_seed is not None:
+            result['required_data_plan'] = {'test_size': low, 'seed': recorded_seed, 'stratify': True}
+            result['instruction'] += ' Submit required_data_plan exactly; never redraw a seed on retry.'
     if version == VERSION:
         partition = snapshot.get('validation_partition')
         if snapshot.get('validation_partition_policy') == 'data_agent_seed_v1' and partition:
@@ -100,6 +117,8 @@ def validate(value, specification, shared):
     from memstara.evaluation import validate as validate_evaluation
     effective = validate_evaluation({**shared, 'test_size': fraction, 'seed': value['seed'],
                                       **({'replicates': value['replicates']} if 'replicates' in fields else {})})
+    if specification.get('version') == TWO_WAY_VERSION:
+        effective['replicates'] = 1
     if effective['seed'] + effective['replicates'] - 1 > 2147483647:
         raise ValueError('Data seed plus replicate index exceeds the supported range')
     return effective
@@ -109,9 +128,12 @@ def partition_records(frame, target, effective, snapshot):
     from memstara.evaluation import evaluation_splits
     import numpy as np
     partition = snapshot.get('validation_partition')
-    if not partition:
+    two_way = snapshot.get('data_allocation_policy', {}).get('version') == TWO_WAY_VERSION
+    if not partition and not two_way:
         raise ValueError('Data allocation requires the frozen independent validation reserve')
-    rows = set(partition['exploration_rows'])
+    if two_way and partition:
+        raise ValueError('Two-way allocation cannot contain an independent reserve')
+    rows = set(range(len(frame))) if two_way else set(partition['exploration_rows'])
     reserved = sorted(set(range(len(frame))) - rows)
     def counts(indices):
         return {str(int(k)): int(v) for k, v in frame[target].iloc[indices].value_counts().items()}
@@ -123,8 +145,9 @@ def partition_records(frame, target, effective, snapshot):
                         'n_train': len(train), 'n_test': len(test),
                         'split_id': hashlib.sha256(test.tobytes()).hexdigest(),
                         'train_class_counts': counts(train), 'test_class_counts': counts(test)})
-    return {'validation_partition': {k: partition[k] for k in
-                ('version', 'seed', 'row_count', 'reserved_count', 'reserved_split_id', 'status', 'fraction')},
+    return {'validation_partition': ({k: partition[k] for k in
+                ('version', 'seed', 'row_count', 'reserved_count', 'reserved_split_id', 'status', 'fraction')}
+                if partition else None),
             'replicates': records, 'reserved_rows': reserved,
             'reserved_class_counts': counts(np.asarray(reserved, dtype=int)),
             'exploration_count': len(rows), 'reserved_count': len(reserved)}

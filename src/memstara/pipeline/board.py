@@ -2199,13 +2199,27 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         )
         report_state = await board_state(registry, args.run_tag)
         final_validation = None
+        two_way_evaluation = False
         config_path = run_dir / "config.json"
         if config_path.is_file() and not args.report_only:
             from memstara.final_validation import run as run_final_validation
             from memstara.evaluation import active_plan
             frozen_config = active_plan() or json.loads(config_path.read_text())
-            final_validation = run_final_validation(run_dir, frozen_config, report_state["tasks"])
-            note("final independent validation: " + str(final_validation.get("status", "unknown")))
+            two_way_evaluation = frozen_config.get('partition_policy') == 'two_way_stratified_v1'
+            if not two_way_evaluation:
+                final_validation = run_final_validation(run_dir, frozen_config, report_state["tasks"])
+                note("final independent validation: " + str(final_validation.get("status", "unknown")))
+        validation_note = (
+            " Two-way train/test policy: report each task's saved test metrics. There is no independent "
+            "validation reserve and no final refit. Do not describe these test results as independent "
+            "validation. Training-only CV may choose settings; test results must not tune them. "
+            if two_way_evaluation else
+            " Final independent-validation record, computed once after every exploration Loop: "
+            + json.dumps(final_validation, ensure_ascii=False, allow_nan=False)
+            + ". This record was withheld from all Loops. Describe its scope accurately; if its status is not "
+              "completed, say independent validation metrics are unavailable. Do not tune or select candidates "
+              "using this same reserve. "
+        )
         incomplete = [{"trial": t["trial"], "status": t["status"], "error": t.get("error", "")}
                       for t in report_state["tasks"] if t["status"] != "done"]
         text, report_entry = await checkpoint.phase("final_report", lambda: call_report(
@@ -2220,11 +2234,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             + " Each result may contain several interpretations of ONE ML evaluation. "
               "Compare all interpreter perspectives, including disagreement and unavailable interpretations. "
               "Do not count interpretations as independent hypotheses or repeated ML experiments. "
-            + " Final independent-validation record, computed once after every exploration Loop: "
-            + json.dumps(final_validation, ensure_ascii=False, allow_nan=False)
-            + ". This record was withheld from all Loops. Describe its scope accurately; if its status is not "
-              "completed, say independent validation metrics are unavailable. Do not tune or select candidates "
-              "using this same reserve. "
+            + validation_note
             + report_skill_note(args.skill) + " Unfinished trials (report these explicitly): " + json.dumps(incomplete),
             tools=by_stage["report"], registry=registry, stage="report",
         ))

@@ -313,6 +313,11 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
     assert frozen["data_mode"] == data and frozen["knowledge_mode"] == knowledge
     assert frozen["stage_models"] == live_batch["profiles"]
     assert frozen.get('combination_plan') == combination
+    if frozen.get('partition_policy') == 'two_way_stratified_v1':
+        assert frozen['validation_partition'] is None
+        assert status.get('final_validation') is None
+        assert not (run / 'validation_partition.json').exists()
+        assert not (run / 'final_validation.json').exists()
     if combination:
         from memstara.combinations import loop_flavors
         schedule_audit = []
@@ -409,6 +414,10 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
                     evaluation = row['evaluation']
                     evaluation = json.loads(evaluation) if isinstance(evaluation, str) else evaluation
                     evaluation = evaluation['evaluation']
+                    if frozen.get('partition_policy') == 'two_way_stratified_v1':
+                        assert evaluation['score_scope'] == 'two_way_test'
+                        assert len(evaluation['replicates']) == 1
+                        assert evaluation['validation_reserve'] == {}
                     assert evaluation['classifier_seed_policy'] == 'split_seed_v1'
                     for replicate in evaluation['replicates']:
                         seed = replicate['seed']
