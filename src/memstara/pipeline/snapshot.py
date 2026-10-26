@@ -17,9 +17,9 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     if getattr(args, 'resume', False) and (run_dir / 'config.json').exists():
         previous = json.loads((run_dir / 'config.json').read_text())
     prepared_input = analysis_ready(previous)
-    from memstara.missing_values import POLICY
     missing_policy = (getattr(args, "research_profile", None) or {}).get("configuration", {}).get("missing_policy", "reject")
-    impute = missing_policy == POLICY
+    if missing_policy != "reject":
+        raise ValueError("Imputation is disabled. Correct the CSV and use missing_policy=reject.")
     combination_plan = json.loads(getattr(args, "combination_plan", "") or "null")
     if combination_plan:
         books = {stage: [s['id'] for s in entries] for stage, entries in combination_plan['skills'].items()}
@@ -37,13 +37,9 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     combination_ml_skills = ([item["id"] for item in combination_plan["skills"].get("ml", [])]
                              if combination_plan else ml_books)
     combination_has_lr = "ml_logistic_regression" in combination_ml_skills
-    allow_native_missing = (all(name == 'ml_xgboost' for name in combination_ml_skills)
-                            and bool(combination_ml_skills)) if combination_plan else None
-    # A skill supplies defaults; only explicitly supplied controls override them.
+    # Skills supply model defaults; missing values are rejected for every model.
     evaluation = validate({**skill_policy, **json.loads(args.evaluation)})
-    allow_missing = (allow_native_missing if combination_plan else evaluation['engine'] == 'xgboost')
-    if previous and not prepared_input:
-        allow_missing = bool(combination_plan) or evaluation['engine'] == 'xgboost'
+    allow_missing = False
     if not getattr(args, "report_only", False):
         preflight(dataset, args.y_column, evaluation,
                   allow_missing=allow_missing, missing_policy=missing_policy,
@@ -110,13 +106,12 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         "evaluation": evaluation,
         "comparison_policy": comparison_policy,
         "input_contract": "clean single dataset; column selection only; fixed binary target",
-        "missing_value_policy": "reject" if combination_has_lr else (
-            "native_xgboost" if evaluation["engine"] == "xgboost" else "reject"),
+        "missing_value_policy": "reject",
         "explainability_review": "Review required; provisional specification",
         "dataset_sha256": digest.hexdigest(),
         **({"feature_context": freeze_feature_context(
             dataset, args.y_column,
-            require_complete=bool(combination_plan and combination_has_lr and not impute))}
+            require_complete=True)}
            if not getattr(args, "report_only", False) else {}),
         "knowledge_path": None if ablate_okf else os.environ.get("AGENTIC_OKF_BUNDLE_DIR"),
         "trials": args.trials,

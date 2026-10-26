@@ -208,7 +208,7 @@ def test_path_escape_via_corpus_symlink_is_rejected(sample, tmp_path):
 
 def test_no_implicit_imputation(sample):
     sample['missing_policy'] = 'impute'
-    with pytest.raises(ValueError, match='no automatic'):
+    with pytest.raises(ValueError, match='Imputation is disabled'):
         inspect(sample)
 
 

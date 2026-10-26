@@ -1,7 +1,7 @@
 """Versioned feature contract: new runs accept prepared numeric predictors.
 
 Historical frozen runs retain their original transformation contract. This does
-not infer consent or change saved models; imputation remains a separate policy.
+not change saved models. Missing values are rejected independently of this version.
 """
 VERSION = 'analysis_ready_v1'
 LEGACY = 'legacy_encoding_v1'

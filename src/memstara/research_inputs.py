@@ -90,8 +90,8 @@ def config(value):
     if categories:
         result["categorical_columns"] = sorted(set(categories))
     result["missing_policy"] = result.get("missing_policy", "reject")
-    if result["missing_policy"] not in ("reject", "impute_train_v1"):
-        raise ValueError("Choose reject or explicit training-only imputation; no automatic imputation")
+    if result["missing_policy"] != "reject":
+        raise ValueError("Imputation is disabled. Supply a complete CSV and use missing_policy=reject")
     return result
 
 
@@ -182,10 +182,8 @@ def inspect(value):
             issue("nonnumeric_predictors", "Encode or exclude nonnumeric predictors before running; "
                   "automatic encoding and scaling are disabled: " + ", ".join(unsupported))
         active = set(predictors) | {target["column"]}
-        if any(missing[k] for k in active) and value["missing_policy"] == "reject":
+        if any(missing.values()):
             issue("missing_values", "Selected columns contain missing values. No rows or values were modified")
-        if any(missing[k] == rows for k in predictors) and value["missing_policy"] == "impute_train_v1":
-            issue("empty_predictor", "A predictor has no observed values; exclude it or supply complete data")
         if any(nonfinite[k] for k in active):
             issue("nonfinite_values", "Selected columns contain non-finite numbers")
         identifiers = [h for h in predictors if h.casefold() in {"id", "record_id", "patient_id", "subject_id"}]
@@ -475,10 +473,7 @@ def instructions(profile):
         + "\n"
         + data
         + knowledge
-        + ("User consented to training-only missing-predictor imputation. Preserve missing values during "
-           "extraction; only the model training pipeline may fit/apply mean or mode fills. "
-           if configuration.get("missing_policy") == "impute_train_v1" else
-           "Missing predictors are not approved for imputation. Do not fill values or remove rows. ")
+        + "Missing values block execution. Do not fill values or remove rows. "
         + "Do not substitute a prior study target or assume undocumented timing or label meanings. "
         "Avoid predictors unavailable at the specified prediction time; report uncertainty explicitly.\n"
     )

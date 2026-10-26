@@ -110,7 +110,7 @@ def upload(body: dict[str, Any]) -> dict[str, Any]:
         'sha256': hashlib.sha256(raw).hexdigest(),
         'original_preserved': True,
         'message': (
-            'Missing values found. Some classifiers cannot run without imputation.'
+            'Missing values found. Execution is blocked. Correct the CSV and upload it again; no values or rows were changed.'
             if inspection['missing_cells'] else
             'No missing values found. Select a target and validate before execution.'
         ),

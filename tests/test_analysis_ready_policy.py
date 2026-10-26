@@ -86,3 +86,24 @@ def test_user_override_cannot_reenable_scaling():
                 'ml_overrides': {'version': 1, 'models': {'logistic_regression': {'scale_numeric': True}}}}
     with pytest.raises(ValueError, match='remove scale_numeric overrides'):
         ml_configuration.context(snapshot, evaluation.validate({}))
+
+
+@pytest.mark.parametrize('engine', ['logistic_regression', 'xgboost'])
+@pytest.mark.parametrize('policy', ['reject', 'impute_train_v1'])
+def test_missing_values_never_reach_training(prepared, engine, policy):
+    frame = pd.read_csv(prepared)
+    frame.loc[0, 'x'] = np.nan
+    frame.to_csv(prepared, index=False)
+    original = prepared.read_bytes()
+    with pytest.raises(evaluation.DataQualityError):
+        evaluation.score(prepared, 'y', {'engine': engine}, missing_policy=policy, explain=False)
+    assert prepared.read_bytes() == original
+
+
+@pytest.mark.parametrize('policy', ['reject', 'impute_train_v1'])
+def test_native_missing_and_imputation_flags_cannot_bypass_validation(prepared, policy):
+    frame = pd.read_csv(prepared)
+    frame.loc[0, 'z'] = np.nan
+    frame.to_csv(prepared, index=False)
+    with pytest.raises(evaluation.DataQualityError, match='Correct the CSV'):
+        evaluation.validate_clean_dataset(prepared, 'y', allow_missing=True, missing_policy=policy)

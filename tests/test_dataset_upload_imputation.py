@@ -1,4 +1,4 @@
-"""Upload, explicit consent and training-only imputation; synthetic inputs only."""
+"""Reject incomplete uploads; preserve the reader for historical model artifacts."""
 import base64
 import json
 from pathlib import Path
@@ -67,37 +67,34 @@ def registered(tmp_path, monkeypatch):
                        'negative_label': '0', 'prediction_time': 'Baseline'}, 'excluded_columns': []}
 
 
-def test_consent_is_frozen_and_source_unchanged(registered):
+def test_old_consent_cannot_bypass_input_checks(registered):
     original = Path(registered['dataset_path']).read_bytes()
     assert not inspect(registered)['input_checks_passed']
-    consent = {**registered, 'missing_policy': POLICY, 'categorical_columns': ['d']}
-    assert inspect(consent)['input_checks_passed']
-    assert inspect(consent)['fingerprint'] != inspect(registered)['fingerprint']
-    record = register(consent)
-    prepared = prepare(record['id'])
-    assert prepared['configuration']['missing_policy'] == POLICY
-    assert pd.read_csv(Path(prepared['root'])/'dataset.csv')['a'].isna().sum() == 4
+    with pytest.raises(ValueError, match='Imputation is disabled'):
+        register({**registered, 'missing_policy': POLICY})
     assert Path(registered['dataset_path']).read_bytes() == original
 
 
-def test_lr_cv_and_replay_use_training_only_imputation(registered):
+@pytest.mark.parametrize('engine', ['logistic_regression', 'xgboost'])
+def test_missing_values_block_every_classifier(registered, engine):
     path = Path(registered['dataset_path'])
     with pytest.raises(DataQualityError, match='missing predictor'):
-        score(path, 'target', {'engine': 'logistic_regression'}, explain=False)
-    result = score(path, 'target', {'engine': 'logistic_regression', 'folds': 3, 'replicates': 2},
-                   missing_policy=POLICY, imputation_categories=['d'], explain=False)
-    bundle = Path(result['evaluation']['reproducibility']['bundle_path'])
-    frame = pd.read_csv(path)
-    for i, record in enumerate(result['evaluation']['replicates']):
-        split = np.load(bundle/f'split-{i}.npz')
-        assert record['imputation']['fill_values']['a'] == pytest.approx(frame.iloc[split['train']]['a'].mean())
-        assert record['imputation']['strategies']['d'] == 'most_frequent'
-    assert replay(bundle)['status'] == 'verified'
+        score(path, 'target', {'engine': engine}, explain=False)
+    with pytest.raises(DataQualityError, match='Imputation is disabled'):
+        score(path, 'target', {'engine': engine}, missing_policy=POLICY, explain=False)
 
 
-def test_target_missing_never_imputed(registered):
+def test_target_missing_blocks_input_checks(registered):
     path = Path(registered['dataset_path'])
-    frame = pd.read_csv(path);frame.loc[0, 'target'] = np.nan;frame.to_csv(path, index=False)
-    assert not inspect({**registered, 'missing_policy': POLICY})['input_checks_passed']
+    frame = pd.read_csv(path)
+    frame.loc[0, 'target'] = np.nan
+    frame.to_csv(path, index=False)
+    assert not inspect(registered)['input_checks_passed']
     with pytest.raises(DataQualityError, match='Target labels'):
-        score(path, 'target', {}, missing_policy=POLICY, explain=False)
+        score(path, 'target', {}, explain=False)
+
+
+def test_excluding_column_does_not_hide_missing_csv_values(registered):
+    registered['excluded_columns'] = ['a']
+    problems = inspect(registered)['issues']
+    assert any(p['code'] == 'missing_values' for p in problems)

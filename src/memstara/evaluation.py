@@ -101,15 +101,13 @@ def validate_clean_dataset(path: Path, target: str, *, allow_missing: bool = Fal
         raise DataQualityError('The target must contain both binary classes 0 and 1')
     if len(df.columns) < 2:
         raise DataQualityError('No predictor features are available')
-    from memstara.missing_values import resolve_policy, POLICY
-    allow_missing = allow_missing or (missing_policy or resolve_policy()) == POLICY
     missing = df.drop(columns=[target]).isna()
-    if missing.any().any() and not allow_missing:
+    if missing.any().any():
         raise DataQualityError(
             f'AI-ready input required: {int(missing.sum().sum()):,} missing predictor values '
             f'across {int(missing.any().sum()):,} columns. '
             'The current policy rejects missing values and does not clean or impute data. '
-            'Choose XGBoost for native missing-value handling or provide a complete dataset; '
+            'Correct the CSV and upload it again before starting; '
             'no values or rows were changed.')
     from memstara.preprocessing_policy import analysis_ready
     if require_numeric is None:
@@ -198,7 +196,9 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
 
     from memstara.missing_values import resolve_policy, POLICY, TrainingImputer, imputation_record
     missing_policy = missing_policy or resolve_policy()
-    use_imputation = missing_policy == POLICY
+    if missing_policy not in ("reject", "native_xgboost"):
+        raise DataQualityError("Imputation is disabled. Supply a complete CSV and select reject missing values.")
+    use_imputation = False
     if imputation_categories is None:
         imputation_categories = (active_plan() or {}).get("research_profile", {}).get("configuration", {}).get("categorical_columns", [])
     from memstara.preprocessing_policy import analysis_ready, resolve as preprocessing_version
@@ -352,7 +352,7 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
               'test_size': plan['test_size'], 'n_train': len(train), 'n_test': len(test),
               'data_quality': {'missing_predictor_cells': missing_cells,
                                'imputation_categories': list(imputation_categories),
-                               'missing_value_policy': missing_policy if use_imputation else ('native_xgboost' if plan['engine'] == 'xgboost' else 'reject'),
+                               'missing_value_policy': 'reject',
                                'warnings': list(dict.fromkeys(warnings)),
                                'preprocessing': ('User-approved training-only imputation. ' if use_imputation else 'No cleaning or imputation. ') +
                                                 'Training-fold one-hot encoding; numeric passthrough for XGBoost, '
