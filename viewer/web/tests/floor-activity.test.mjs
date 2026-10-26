@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {floorActivityRows, floorCallRole, floorCallStatus, floorExecutionState} from '../src/lib/floorActivity.ts';
+import {floorActivityRows, floorCallRole, floorCallStatus, floorExecutionState, floorStageProcessing} from '../src/lib/floorActivity.ts';
 const trace={calls:[{stage:'question6-1',status:'completed',skill:{stage:'hypothesis',id:'psychiatric'}},{stage:'hypothesis6',status:'completed',skill:{stage:'hypothesis',id:'psychiatric'}},{stage:'data#1',status:'started',skill:{stage:'data',id:'exact-features'}}],planned:{agents:[{stage:'ml',id:'governance'}]}};
 test('pause request stops live animation before the worker finishes',()=>{
  for(const run of [{pause_requested:true,execution_state:'running'},{execution_state:'stopping'}]){
@@ -54,4 +54,18 @@ test('unverified and lost connections cannot animate as running',()=>{
   assert.equal(floorCallStatus({stage:'ml',status:'started'},{...status,currentStage:'ml'}),'Last recorded: call open');
  }
  assert.equal(floorExecutionState({execution_state:'running',connection_health:{state:'healthy'}}).live,true);
+});
+
+
+test('current stage remains visible between calls without changing call completion',()=>{
+ const state={live:true,currentStage:'hypothesis'};
+ const call={stage:'question22-1',status:'completed'};
+ assert.equal(floorStageProcessing('hypothesis',call,state),true);
+ assert.equal(floorCallStatus(call,state),'Completed');
+ assert.equal(floorStageProcessing('data',undefined,state),false);
+ assert.equal(floorStageProcessing('hypothesis',undefined,state),true);
+ assert.equal(floorStageProcessing('hypothesis',{...call,status:'started'},state),false);
+ assert.equal(floorStageProcessing('hypothesis',{...call,status:'failed'},state),false);
+ for(const guard of [{live:false},{paused:true},{stopping:true},{stale:true}])
+  assert.equal(floorStageProcessing('hypothesis',call,{...state,...guard}),false);
 });

@@ -26,3 +26,10 @@ export function floorActivityRows(activity: FloorActivity) {
   return {role, call, skill: call?.skill ?? activity.trace?.planned?.agents.find(s => s.stage === role), status: floorCallStatus(call, {stale: !!activity.error, live: activity.live, paused: activity.paused, stopping: activity.stopping, currentStage: activity.currentStage})};
  });
 }
+
+/** Stage work also includes preparation and persistence outside model calls. */
+export function floorStageProcessing(role: string, call: FloorCall | undefined, state: {live?:boolean; paused?:boolean; stopping?:boolean; stale?:boolean; currentStage?:string}) {
+ if (!state.live || state.paused || state.stopping || state.stale || !state.currentStage) return false;
+ if (floorCallRole({stage:state.currentStage,status:''}) !== role) return false;
+ return !call || call.status === 'completed';
+}

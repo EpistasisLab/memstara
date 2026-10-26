@@ -40,7 +40,9 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
  const trace=response?.key===key?response.data:null,error=controlError||(failure?.key===key?failure.message:'');
 
  const currentStage=following?p.progress.stage:undefined;
- const {live,paused,stopping}=floorExecutionState(p.failure?null:p.running);
+ const executionState=floorExecutionState(p.failure?null:p.running);
+ const {paused,stopping}=executionState;
+ const live=executionState.live&&!p.progress.iteration_completed;
  useEffect(()=>{onActivity?.(following?{pipelineId:p.id,runTag,loop:requestedLoop,currentStage,mode:activityMode,trace,error,live:live&&!error,paused,stopping}:null);},[currentStage,onActivity,p.id,runTag,requestedLoop,following,activityMode,trace,error,live,paused,stopping]);
  useEffect(()=>()=>onActivity?.(null),[onActivity]);
  useEffect(()=>{setResponse(null);setFailure(null);setDetail(null);},[p.id,p.latest?.run_tag]);
