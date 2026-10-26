@@ -32,8 +32,8 @@
       agents will be confined to. A second enumeration written here would be a
       list that drifts, and it would drift in the direction of offering a
       branch that selects nothing.
-   2. **Stop uses a durable marker for current drivers.** In-flight work finishes;
-      the Python continuation waits before any new agent call. Resume removes the
+   2. **Stop uses a durable marker for current drivers.** Tools finish safely;
+      versioned model requests can pause inside the live continuation. Resume removes the
       marker. End and legacy-driver Stop use SIGINT so traces can be saved. This
       does not recover the continuation after a driver crash or machine restart.
    3. **The child is started in its own session** (`start_new_session=True`),
@@ -173,11 +173,13 @@ class _Runs:
             except (OSError, ValueError):
                 pass
             record["resumable"] = bool(record.get("resumable") or control.get("resumable"))
+            pending = control.get('active_calls', 1) > control.get('paused_model_calls', 0)
             record["execution_state"] = (
-                ('stopping' if control.get('active_calls', 1) else 'paused')
+                ('stopping' if pending else 'paused')
                 if record['pause_requested'] else 'running'
             )
             record["active_calls"] = control.get('active_calls')
+            record["paused_model_calls"] = control.get('paused_model_calls', 0)
             from memstara.pipeline.run_ownership import infrastructure_status
             record.update(infrastructure_status(record["run_dir"]))
             return record
@@ -520,7 +522,8 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             raise ValueError("Content-Length is not a number") from None
         from memstara.dataset_upload import MAX_REQUEST_BYTES
-        limit = MAX_REQUEST_BYTES if urlsplit(self.path).path.rstrip("/") == "/control/research-inputs/upload" else 64_000
+        uploading = urlsplit(self.path).path.rstrip("/") == "/control/research-inputs/upload"
+        limit = MAX_REQUEST_BYTES if uploading else 64_000
         if length < 0 or length > limit:
             raise ValueError("that is not a run request")
         raw = self.rfile.read(length) if length else b"{}"

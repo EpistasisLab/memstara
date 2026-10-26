@@ -31,6 +31,6 @@ CMD ["python", "-m", "memstara.control"]
 FROM runtime AS acceptance
 RUN SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0+container uv sync --frozen --extra runtime --extra dev --no-dev
 COPY tests/conftest.py /app/tests/conftest.py
-COPY tests/live/test_haiku_pipeline.py /app/tests/live/test_haiku_pipeline.py
+COPY tests/live/test_haiku_pipeline.py tests/live/test_request_pause.py /app/tests/live/
 COPY scripts/prepare_heart_failure_demo.py /app/scripts/prepare_heart_failure_demo.py
 CMD ["python", "/app/deployment/live_acceptance.py"]

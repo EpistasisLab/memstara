@@ -17,7 +17,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     if getattr(args, 'resume', False) and (run_dir / 'config.json').exists():
         previous = json.loads((run_dir / 'config.json').read_text())
     prepared_input = analysis_ready(previous)
-    missing_policy = (getattr(args, "research_profile", None) or {}).get("configuration", {}).get("missing_policy", "reject")
+    research_config = (getattr(args, "research_profile", None) or {}).get("configuration", {})
+    missing_policy = research_config.get("missing_policy", "reject")
     if missing_policy != "reject":
         raise ValueError("Imputation is disabled. Correct the CSV and use missing_policy=reject.")
     combination_plan = json.loads(getattr(args, "combination_plan", "") or "null")
@@ -34,9 +35,6 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     from memstara.control.catalog import resolve
     ml_books = books.get("ml") or []
     skill_policy = resolve(ml_books[0]).get("evaluation", {}) if ml_books else {}
-    combination_ml_skills = ([item["id"] for item in combination_plan["skills"].get("ml", [])]
-                             if combination_plan else ml_books)
-    combination_has_lr = "ml_logistic_regression" in combination_ml_skills
     # Skills supply model defaults; missing values are rejected for every model.
     evaluation = validate({**skill_policy, **json.loads(args.evaluation)})
     allow_missing = False
@@ -68,6 +66,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     state = {
         "preprocessing_policy": VERSION,
         "classifier_seed_policy": "split_seed_v1",
+        "pause_policy": "fresh_model_request_v1",
         "schema_version": 1,
         "critic_policy": {"version": "deterministic_feasibility_v1", "extra_llm_calls": 0},
         "knowledge_policy": {"mode": "no_okf" if ablate_okf else "okf", "retrieval_enabled": not ablate_okf},
@@ -143,7 +142,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         prior_path = run_dir / "config.json"
         prior_profiles = json.loads(prior_path.read_text()).get("stage_models") if prior_path.exists() else None
         state["stage_models"] = snapshot_profiles(args.stage_models, prior_profiles)
-    if any(book in ('ml_logistic_regression', 'ml_xgboost', 'ml_default_logistic_regression') for book in books.get('ml', [])):
+    configurable_models = ('ml_logistic_regression', 'ml_xgboost', 'ml_default_logistic_regression')
+    if any(book in configurable_models for book in books.get('ml', [])):
         from memstara.ml_configuration import policy
         state['ml_configuration_policy'] = policy()
     knowledge = Path(os.environ.get("AGENTIC_OKF_BUNDLE_DIR", "/nonexistent"))
@@ -195,6 +195,10 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
             state['classifier_seed_policy'] = original['classifier_seed_policy']
         else:
             state.pop('classifier_seed_policy', None)
+        if 'pause_policy' in original:
+            state['pause_policy'] = original['pause_policy']
+        else:
+            state.pop('pause_policy', None)
         if 'ml_configuration_policy' in original:
             state['ml_configuration_policy'] = original['ml_configuration_policy']
     state["config_hash"] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()

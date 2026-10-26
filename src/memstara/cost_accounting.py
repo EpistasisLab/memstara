@@ -75,7 +75,7 @@ def estimate(profile, prompt, output, cached=0, written=0):
         return None
 
 
-def record_attempt(context, loop, config, record=None, error=False):
+def record_attempt(context, loop, config, record=None, error=False, interrupted=False):
     from memstara.pipeline.diagnostics import request_id
     if not context:
         return
@@ -110,7 +110,9 @@ def record_attempt(context, loop, config, record=None, error=False):
         "source": source,
         "calculated_by": "motoro",
         "price_receipt": receipt,
-        "reason": "Request failed; provider may still bill usage"
+        "reason": "Request interrupted by user pause; provider outcome and cost are unknown"
+        if interrupted
+        else "Request failed; provider may still bill usage"
         if error
         else ("Price or complete usage unavailable" if not known else None),
         "prompt_tokens": getattr(record, "prompt_tokens", None),

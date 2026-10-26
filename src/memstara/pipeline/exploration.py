@@ -3,6 +3,9 @@ import asyncio
 import itertools
 from pathlib import Path
 from typing import TYPE_CHECKING
+from contextvars import ContextVar
+
+current_agent_gate: ContextVar[tuple["ExecutionGate", str] | None] = ContextVar("memstara_agent_gate", default=None)
 
 if TYPE_CHECKING:
     from memstara.pipeline.checkpoint import Checkpoint
@@ -111,7 +114,8 @@ def close_active_round(run_dir, outcome, reason):
 class ExecutionGate:
     """Stop scheduling agent calls while retaining the live Python continuation.
 
-    An in-flight agent is allowed to finish (its existing timeout still applies).
+    Tools and local fits finish before waiting. Versioned model-request pause
+    cancels the provider await and retains the live agent's messages for resume.
     No model call is started while the durable pause marker exists. This is not
     process suspension: database transactions are never frozen with SIGSTOP.
     Durable driver checkpoints permit recovery at verified boundaries after a crash.
@@ -120,14 +124,17 @@ class ExecutionGate:
     def __init__(self, run_dir: Path):
         self.run_dir = run_dir
         self.active_calls = 0
+        self.paused_calls: set[str] = set()
         self.checkpoint: Checkpoint | None = None
         self.publish()
 
     def publish(self):
         from memstara.pipeline.checkpoint import atomic_json
         requested = (self.run_dir / 'pause.request').exists()
+        pending = self.active_calls > len(self.paused_calls)
         data = {'resumable': True, 'active_calls': self.active_calls,
-                'state': ('stopping' if self.active_calls else 'paused') if requested else 'running'}
+                'paused_model_calls': len(self.paused_calls),
+                'state': ('stopping' if pending else 'paused') if requested else 'running'}
         if data == getattr(self, '_last_state', None):
             return
         atomic_json(self.run_dir / 'execution_control.json', data)
@@ -153,9 +160,12 @@ class ExecutionGate:
             self.checkpoint.call_started(call_key)
         self.active_calls += 1
         self.publish()
+        binding = current_agent_gate.set((self, call_key))
         try:
             result = await operation(*args, **kwargs)
         finally:
+            current_agent_gate.reset(binding)
+            self.paused_calls.discard(call_key)
             self.active_calls -= 1
             self.publish()
         from memstara.pipeline.run_ownership import require_ownership

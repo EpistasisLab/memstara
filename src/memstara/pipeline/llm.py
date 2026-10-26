@@ -188,12 +188,15 @@ class PipelineLLMService(LLMService):
                 from memstara.specialist_explanation import record_model
                 record_model(config, context, call_loop.get())
         with request_scope(config.model):
-            for attempt in range(6):
+            attempt = 0
+            resumed_from = None
+            while attempt < 6:
                 await request_ready(context)
                 identity_token = request_id.set(str(uuid4()))
                 started = time.monotonic()
                 provider = getattr(getattr(config, 'provider', None), 'value', getattr(config, 'provider', None))
                 record_event(context, 'started', attempt=attempt + 1,
+                             resumed_from_request_id=resumed_from,
                              operation=getattr(method, '__name__', 'completion'),
                              model=config.model, provider=provider,
                              message_count=len(prepared),
@@ -209,6 +212,7 @@ class PipelineLLMService(LLMService):
                 record_event(context, 'input_saved' if input_evidence else 'input_unavailable',
                              evidence=input_evidence)
                 from memstara.cost_accounting import record_attempt
+                from memstara.pipeline.request_pause import invoke, RequestPaused, mark_waiting
                 try:
                     if context:
                         from memstara.evaluation import active_plan
@@ -223,9 +227,23 @@ class PipelineLLMService(LLMService):
                     call_timeout = runtime_timeouts(config.model).get('llm_call_timeout_seconds')
                     if call_timeout:
                         async with asyncio.timeout(call_timeout):
-                            result = await method(config, copy.deepcopy(prepared), *args, **kwargs)
+                            result = await invoke(
+                                lambda: method(config, copy.deepcopy(prepared), *args, **kwargs), context)
                     else:
-                        result = await method(config, copy.deepcopy(prepared), *args, **kwargs)
+                        result = await invoke(lambda: method(config, copy.deepcopy(prepared), *args, **kwargs), context)
+                except RequestPaused:
+                    record_event(context, 'cancelled', duration_seconds=time.monotonic() - started,
+                                 reason='user_pause', provider_outcome='unknown',
+                                 resume_policy='fresh_model_request_v1')
+                    record_attempt(context, call_loop.get(), config, interrupted=True)
+                    resumed_from = request_id.get()
+                    mark_waiting(True)
+                    try:
+                        await request_ready(context)
+                    finally:
+                        mark_waiting(False)
+                    record_event(context, 'resume_requested', resume_policy='fresh_model_request_v1')
+                    continue  # A user pause does not consume a transport retry.
                 except Exception as exc:
                     from memstara.pipeline.failures import provider_error_details, exception_chain
                     record_event(context, 'failed', duration_seconds=time.monotonic() - started,
@@ -240,6 +258,7 @@ class PipelineLLMService(LLMService):
                         delay = TRANSPORT_RETRY_DELAYS[attempt]
                         record_retry(context, call_loop.get(), 'retry_wait', attempt + 1, exc, delay)
                         await asyncio.sleep(delay)
+                        attempt += 1
                         continue
                     if retryable:
                         record_retry(context, call_loop.get(), 'exhausted', attempt + 1, exc)
@@ -263,6 +282,16 @@ class PipelineLLMService(LLMService):
                         record_retry(context, call_loop.get(), 'recovered', attempt + 1)
                 finally:
                     request_id.reset(identity_token)
+                # A response may win the race with Pause. Keep its receipt and
+                # output, but do not let Motoro execute its next tool until Resume.
+                if context and (Path(context[0]) / 'pause.request').exists():
+                    from memstara.evaluation import active_plan
+                    if (active_plan() or {}).get('pause_policy') == 'fresh_model_request_v1':
+                        mark_waiting(True)
+                        try:
+                            await request_ready(context)
+                        finally:
+                            mark_waiting(False)
                 return result
 
     async def complete(self, config, messages, *args, **kwargs):

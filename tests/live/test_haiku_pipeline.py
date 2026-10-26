@@ -242,7 +242,8 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
                             print(f'{case}: pause requested after a real completed agent call', flush=True)
                         control = read(run / 'execution_control.json', {})
                         if pause_evidence and 'resumed_at_seconds' not in pause_evidence:
-                            if control.get('state') == 'paused' and control.get('active_calls') == 0:
+                            waiting = control.get('active_calls') == control.get('paused_model_calls', 0)
+                            if control.get('state') == 'paused' and waiting:
                                 ledger_path = run / 'cost_ledger.jsonl'
                                 before = ledger_path.read_bytes() if ledger_path.exists() else b''
                                 time.sleep(3)
@@ -319,7 +320,15 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
         audit = inspect(run)
         (area / 'input_output_audit.json').write_text(json.dumps(audit, indent=2))
         assert audit['request_evidence_complete'], audit['issues']
-        assert audit['service_io_evidence_complete'], audit['payload_issues']
+        if pytestconfig.getoption('--live-pause-resume'):
+            events = [json.loads(line) for line in (run / 'request_events.jsonl').read_text().splitlines()]
+            expected_unobserved = {f"{e['request_id']}: response unobserved (cancelled)"
+                                   for e in events if e.get('reason') == 'user_pause'}
+            assert not (set(audit['payload_issues']) - expected_unobserved), audit['payload_issues']
+            # Cancellation has no observed provider output; retain that fact in
+            # the audit rather than labelling response evidence complete.
+        else:
+            assert audit['service_io_evidence_complete'], audit['payload_issues']
         assert audit['stage_evidence_complete'], audit['stage_issues']
         assert {r['loop'] for r in audit['requests'] if r['loop'] is not None} >= set(range(1, loops + 1))
 
