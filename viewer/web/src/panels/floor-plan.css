@@ -495,9 +495,25 @@
 @keyframes hypothesis-popup-enter { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
 @media (prefers-reduced-motion:reduce) { .hypothesis-popup { animation:none; } }
 
-/* Keep progress counters readable in narrow experiment cards. */
-.pipeline-card-loop { display:flex; flex-wrap:wrap; gap:2px 10px; min-width:0; }
-.pipeline-card-loop > span { white-space:nowrap; }
-.pipeline-card-top.pipeline-card-header { flex-wrap:wrap; }
-.pipeline-browser-row .pipeline-card-header .pipeline-card-heading-select { flex:0 0 auto; width:auto; min-width:max-content; }
-.pipeline-browser-row .pipeline-card-header .pipeline-card-status-actions { flex:0 0 auto; }
+/* Stable card hierarchy, independent of status wording and counter length. */
+.pipeline-browser-row .pipeline-card-top.pipeline-card-header {
+  display:grid; grid-template-columns:minmax(0,1fr) 32px;
+  gap:0 8px; align-items:center; padding:6px 10px 4px;
+}
+.pipeline-browser-row .pipeline-card-header .pipeline-card-heading-select {
+  grid-column:1; grid-row:1; width:auto; min-width:0; justify-self:start;
+  font-size:11px; min-height:32px;
+}
+.pipeline-browser-row .pipeline-card-header .pipeline-card-delete {
+  grid-column:2; grid-row:1; width:32px; height:32px; min-height:32px;
+  padding:8px; border:0; color:rgb(var(--ink-soft));
+}
+.pipeline-browser-row .pipeline-card-header .pipeline-state-badge {
+  grid-column:1 / -1; grid-row:2; justify-self:start; white-space:nowrap;
+  margin:0 0 2px; font-size:10px; line-height:1.4;
+}
+.pipeline-card-position { width:100%; }
+.pipeline-browser-row .pipeline-card-loop { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; width:100%; min-width:0; }
+.pipeline-browser-row .pipeline-card-counter { display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-width:0; }
+.pipeline-browser-row .pipeline-card-counter > span { font-size:10px; font-weight:500; color:rgb(var(--ink-soft)); }
+.pipeline-browser-row .pipeline-card-counter > strong { font-size:12px; font-weight:650; font-variant-numeric:tabular-nums; white-space:nowrap; }

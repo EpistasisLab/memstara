@@ -47,7 +47,7 @@ try{
   assert.equal(await studio.locator('.cf-desk').count(),10);
   const overlappingHeaders=await p.locator('.pipeline-card-header').evaluateAll(headers=>headers.filter(h=>{
    const title=h.querySelector('.pipeline-card-identity').getBoundingClientRect();
-   const actions=h.querySelector('.pipeline-card-status-actions').getBoundingClientRect();
+   const actions=h.querySelector('.pipeline-state-badge').getBoundingClientRect();
    return title.width>0&&title.right>actions.left+1&&title.bottom>actions.top+1&&actions.bottom>title.top+1;
   }).length);
   assert.equal(overlappingHeaders,0,'Experiment title must not overlap status actions');

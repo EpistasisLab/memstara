@@ -66,15 +66,14 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
           return <div key={p.id} data-state={state.toLowerCase().replaceAll(' ','-')} className={`pipeline-browser-row ${selected===p.id?'is-selected':''}`}>
           <div className="pipeline-card-top pipeline-card-header">
             <button type="button" className="pipeline-card-identity pipeline-card-heading-select" aria-label={`Select pipeline ${p.number}: ${p.name}`} aria-pressed={selected===p.id} onClick={()=>choose(p.id)}>Experiment {p.number}</button>
-            <div className="pipeline-card-status-actions"><span className="pipeline-state-badge"><i aria-hidden="true"/>{state}</span>
+            <span className="pipeline-state-badge"><i aria-hidden="true"/>{state}</span>
             <button type="button" className="pipeline-card-delete" aria-label={`Delete ${p.name}`} title={`Delete ${p.name}`} aria-haspopup="dialog" onClick={()=>setDeleting(p)}><Trash2 size={16} aria-hidden="true"/></button>
-            </div>
           </div>
           <button className="pipeline-card-select" aria-label={`Inspect ${p.name}`} aria-pressed={selected===p.id} onClick={()=>choose(p.id)}>
             <HypothesisHeading text={title}/>
             {(heading||p.running)&&<span className="pipeline-card-context text-xs text-ink-soft" title={p.name}>Saved as: {p.name}</span>}
             <span className="pipeline-card-stage pipeline-card-context" title={`Corpus: ${corpus} · Target: ${target}`}>{corpus} · {target}</span>
-            <span className="pipeline-card-position"><span className="pipeline-card-loop">{pipelineLoopLabel(p).split(' · ').map((part,i)=><span key={i}>{part}</span>)}</span></span>
+            <span className="pipeline-card-position"><span className="pipeline-card-loop">{pipelineLoopLabel(p).split(' · ').map((part,i)=>{const match=/^(Pipeline|Replicate) (.+)$/.exec(part);return <span className="pipeline-card-counter" key={i}>{match?<><span>{match[1]} </span><strong>{match[2]}</strong></>:part}</span>})}</span></span>
             {p.progress.stage&&<span className="pipeline-card-stage">{p.running?'Current':'Last'}: {stageNames[p.progress.stage]??p.progress.stage}</span>}
           </button>
           <PipelineRowActions compact pipeline={p}/>
