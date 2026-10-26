@@ -118,6 +118,15 @@ services:
       runtime: {condition: service_healthy}
       redis: {condition: service_healthy}
 
+  acceptance:
+    <<: *runtime
+    profiles: [verification]
+    build:
+      context: .
+      dockerfile: deployment/Dockerfile
+      target: acceptance
+    command: ["python", "/app/deployment/live_acceptance.py"]
+
   control:
     <<: *runtime
     depends_on:

@@ -9,3 +9,6 @@
 !deployment/**
 src/**/__pycache__
 src/**/*.pyc
+!tests/conftest.py
+!tests/live/test_haiku_pipeline.py
+!scripts/prepare_heart_failure_demo.py

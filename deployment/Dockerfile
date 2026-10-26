@@ -26,3 +26,11 @@ RUN .venv/bin/python -c "from importlib.metadata import version; assert version(
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 MEMSTARA_CONFIG_MODE=environment
 ENTRYPOINT ["python", "/app/deployment/exec_service.py"]
 CMD ["python", "-m", "memstara.control"]
+
+# Opt-in paid acceptance runner; never started by the application profile.
+FROM runtime AS acceptance
+RUN SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0+container uv sync --frozen --extra runtime --extra dev --no-dev
+COPY tests/conftest.py /app/tests/conftest.py
+COPY tests/live/test_haiku_pipeline.py /app/tests/live/test_haiku_pipeline.py
+COPY scripts/prepare_heart_failure_demo.py /app/scripts/prepare_heart_failure_demo.py
+CMD ["python", "/app/deployment/live_acceptance.py"]

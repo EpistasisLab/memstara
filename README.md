@@ -127,8 +127,10 @@ Saved records are retained. Use an unused web port for a second installation.
 - [Environment settings and examples](.env.example)
 - [HeartFailure data and preparation](examples/heart-failure/README.md)
 
-For developer verification including mandatory paid model calls, run
-`uv run --frozen --extra dev --extra runtime python -m scripts.verify_pipeline`.
+To verify one real Haiku 5.5 pipeline in a running Docker installation, run
+`./test-live.sh`. This makes paid model calls using the generated application settings,
+connects to databases inside Docker, and retains evidence in `outputs/verification/`.
+It does not restart existing experiments or require publishing database ports.
 App startup and offline tests alone do not verify a real pipeline execution.
 
 ### Pipelines and replicates
