@@ -156,7 +156,7 @@ def build_argv(
     from memstara.corpus_skills import with_default_hypothesis
     body = with_default_hypothesis(body)
     # The HTTP boundary rejects these fields from callers; workspace retry owns them.
-    retry_fields = {"_retry_from_loop", "_retry_source_run", "_retry_combination_plan"}
+    retry_fields = {"_retry_from_loop", "_retry_source_run", "_retry_combination_plan", "_retry_seed_schedule"}
     unknown = sorted(set(body) - set(DEFAULTS) - retry_fields)
     if unknown:
         raise ValueError(
@@ -362,4 +362,6 @@ def build_argv(
         if type(start) is not int or not 1 <= start <= waves:
             raise ValueError('The requested replicate is outside the saved schedule')
         argv += ['--start-loop', str(start), '--retry-source-run', body['_retry_source_run']]
+        if body.get('_retry_seed_schedule'):
+            argv += ['--retry-seed-schedule', json.dumps(body['_retry_seed_schedule'], allow_nan=False)]
     return argv

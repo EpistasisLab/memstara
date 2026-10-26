@@ -234,6 +234,22 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
                 state[key] = original[key]
             else:
                 state.pop(key, None)
+    from memstara.seed_schedule import freeze as freeze_seeds
+    freeze_seeds(state, args, previous)
+    if state.get('seed_schedule') and not getattr(args, 'report_only', False):
+        from memstara.data_allocation import request as allocation_request
+        from memstara.seed_schedule import task_seed
+        total = combination_plan['total_loops'] if combination_plan else args.waves * args.trials
+        checked = set()
+        for trial in range(total):
+            allocation = allocation_request(state, trial)
+            if not allocation or not allocation.get('required_data_plan'):
+                raise ValueError('The selected Data skill must support the recorded split contract')
+            fraction, seed = allocation['minimum_test_size'], task_seed(state, trial)
+            if (fraction, seed) not in checked:
+                evaluation_splits(frame[args.y_column], {**evaluation, 'test_size': fraction,
+                                                        'seed': seed, 'replicates': 1}, partition={})
+                checked.add((fraction, seed))
     state["config_hash"] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
     location = run_dir / "config.json"
     if location.exists():

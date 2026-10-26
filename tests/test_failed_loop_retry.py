@@ -33,6 +33,24 @@ def test_retry_preserves_source_and_starts_at_failed_ordinal(source):
     assert before == {p.name: p.read_bytes() for p in Path(record['run_dir']).iterdir()}
 
 
+def test_retry_carries_original_seed_schedule_and_rejects_missing_record(source):
+    from pathlib import Path
+    from memstara.seed_schedule import create, VERSION
+    record, config = source
+    root = Path(record['run_dir'])
+    frozen = {'seed_policy': VERSION, 'seed_schedule': create(1, 10, 'shared_replicates'),
+              'dataset_sha256': 'original-data', 'y_column': 'outcome'}
+    (root / 'config.json').write_text(json.dumps(frozen))
+    retry = configuration_for_retry(record, config, 'p')
+    assert retry['_retry_seed_schedule'] == {k: frozen[k] for k in
+                                            ('seed_schedule', 'dataset_sha256', 'y_column')}
+    assert retry['_retry_from_loop'] == 6
+    frozen.pop('seed_schedule')
+    (root / 'config.json').write_text(json.dumps(frozen))
+    with pytest.raises(ValueError, match='seed schedule is missing'):
+        configuration_for_retry(record, config, 'p')
+
+
 @pytest.mark.parametrize('change', ['source', 'owner', 'earlier', 'missing', 'completed'])
 def test_retry_rejects_unconfirmed_or_changed_source(source, change):
     from pathlib import Path

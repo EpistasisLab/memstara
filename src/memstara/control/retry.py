@@ -40,7 +40,7 @@ def configuration_for_retry(record, configuration, pipeline_id):
         raise ValueError('Research source changed; use a separate new execution')
     result = copy.deepcopy(configuration)
     # Preserve original experimental settings; new attempt gets new artifacts and
-    # new seeds selected by agents, not a pretend continuation of trained models.
+    # a separate attempt identity, not a pretend continuation of trained models.
     for key in tuple(result):
         if key in saved:
             result[key] = copy.deepcopy(saved[key])
@@ -61,4 +61,10 @@ def configuration_for_retry(record, configuration, pipeline_id):
         result['_retry_combination_plan'] = validate_plan(plan)
         result['combination_skills'] = {stage: [entry['id'] for entry in entries]
                                        for stage, entries in plan['skills'].items()}
+    from memstara.seed_schedule import VERSION as seed_version
+    if frozen.get('seed_policy') == seed_version and not frozen.get('seed_schedule'):
+        raise ValueError('Original seed schedule is missing; restore it before retry')
+    if frozen.get('seed_schedule'):
+        result['_retry_seed_schedule'] = {key: copy.deepcopy(frozen[key]) for key in
+                                          ('seed_schedule', 'dataset_sha256', 'y_column')}
     return result

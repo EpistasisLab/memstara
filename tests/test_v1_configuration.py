@@ -71,14 +71,15 @@ def test_snapshot_freezes_prompt_and_forces_model_and_seed(clean_data, tmp_path,
     args.resume = True
     assert freeze(args, tmp_path, {"hypothesis": ["treatment-toxicity"]}) == snapshot
     from memstara.comparisons import write_context
-    from memstara.data_allocation import prepare
+    from memstara.data_allocation import prepare, request
     task = {"task_id": 1, "trial": 0, "columns": ["x", "noise", "kind", "extra"],
             "y_column": "outcome", "evaluation": {}}
-    allocation = prepare({'test_size': .3, 'seed': 7, 'stratify': True}, task, snapshot, clean_data)
+    required = request(snapshot, 0)['required_data_plan']
+    allocation = prepare(required, task, snapshot, clean_data)
     write_context(clean_data, task, snapshot, data_allocation=allocation)
     result = json.loads(train_and_score(str(clean_data), "outcome", seed=999))
     assert "error" not in result, result
-    assert result["seed"] == 7
+    assert result["seed"] == required['seed'] == snapshot['seed_schedule']['seeds'][0][0]
     assert result["model"] == "logistic_regression"
     assert "fixed target" in json.loads(train_and_score(str(clean_data), "x"))["error"]
 
@@ -316,4 +317,5 @@ def test_model_skill_enables_paired_policy_without_all_combinations(clean_data, 
                            trials=1, waves=1)
     snapshot = freeze(args, tmp_path, {'ml': [skill]})
     assert enabled(snapshot)
-    assert 'Common training, evaluation and result contract' in snapshot['prompts'][f'board/ml:{skill}']['system_prompt']
+    prompt = snapshot['prompts'][f'board/ml:{skill}']['system_prompt']
+    assert 'Common training, evaluation and result contract' in prompt

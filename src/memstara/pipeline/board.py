@@ -2548,6 +2548,7 @@ async def main() -> int:
     ap.add_argument("--research-input-id", default="", help="Saved user corpus, dataset and prediction target")
     ap.add_argument("--start-loop", type=int, default=1, help="First ordinal in a new retry attempt")
     ap.add_argument("--retry-source-run", default="", help="Original failed run retained as evidence")
+    ap.add_argument("--retry-seed-schedule", default="", help="Recorded seed schedule from the retry source")
     ap.add_argument("--resume", action="store_true", help="Recover this execution from its durable checkpoint")
     args = ap.parse_args()
     if args.start_loop < 1 or (args.start_loop > 1 and not args.retry_source_run):

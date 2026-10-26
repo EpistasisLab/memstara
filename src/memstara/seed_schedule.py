@@ -1,4 +1,5 @@
 """Immutable seeds keyed by scientific condition and replicate, not execution order."""
+import json
 import secrets
 
 VERSION = 'recorded_replicate_seeds_v1'
@@ -41,6 +42,8 @@ def seed_for(schedule, pipeline, replicate):
         raise ValueError('Recorded seed schedule is incomplete')
     if schedule['policy'] == 'shared_replicates' and any(row != rows[0] for row in rows):
         raise ValueError('Shared replicate seeds differ between pipelines')
+    if len(set(rows[0])) != repeats:
+        raise ValueError('Replicates must have distinct recorded seeds')
     if pipeline > count or replicate > repeats:
         raise ValueError('Execution is outside the recorded seed schedule')
     return rows[pipeline - 1][replicate - 1]
@@ -52,6 +55,8 @@ def task_seed(snapshot, trial):
         raise ValueError('Task trial must be a non-negative integer')
     schedule = snapshot.get('seed_schedule')
     if not schedule:
+        if snapshot.get('seed_policy') == VERSION:
+            raise ValueError('Recorded seed schedule is missing; do not generate replacement seeds')
         return None  # Historical agent-chosen seeds remain supported.
     plan = snapshot.get('combination_plan')
     if plan:
@@ -59,3 +64,48 @@ def task_seed(snapshot, trial):
         identity = loop_flavors(plan, trial + 1)
         return seed_for(schedule, identity['combination'], identity['repetition'])
     return seed_for(schedule, 1, trial + 1)
+
+
+def dimensions(snapshot):
+    """Include the largest replicate ordinal in truncated or extended schedules."""
+    plan = snapshot.get('combination_plan')
+    if plan:
+        from memstara.combinations import loop_flavors
+        repeats = max(loop_flavors(plan, n)['repetition'] for n in range(1, plan['total_loops'] + 1))
+        return plan['combinations'], repeats
+    return 1, snapshot['waves'] * snapshot['trials']
+
+
+def freeze(snapshot, args, previous=None):
+    """Attach the approved seed schedule before agents start, never redraw on resume."""
+    if previous is not None:
+        if previous.get('seed_policy') == VERSION and not previous.get('seed_schedule'):
+            raise ValueError('Recorded seed schedule is missing; recovery requires the original record')
+        if 'seed_schedule' in previous:
+            snapshot['seed_schedule'] = previous['seed_schedule']
+        if 'seed_policy' in previous:
+            snapshot['seed_policy'] = previous['seed_policy']
+        return  # Pre-policy records keep their original agent-selected seed behavior.
+    if snapshot.get('partition_policy') != 'two_way_stratified_v1' or snapshot.get('mode') == 'report_only':
+        return
+    if getattr(args, 'continuous', False):
+        raise ValueError('Recorded replicate seeds require a finite number of replicates')
+    count, repeats = dimensions(snapshot)
+    recorded = json.loads(getattr(args, 'retry_seed_schedule', '') or 'null')
+    if recorded is not None:
+        if not getattr(args, 'retry_source_run', ''):
+            raise ValueError('A recorded retry seed schedule requires its source execution')
+        if (recorded.get('dataset_sha256') != snapshot['dataset_sha256']
+                or recorded.get('y_column') != snapshot['y_column']):
+            raise ValueError('Retry seed schedule belongs to a different dataset or target')
+        schedule = recorded['seed_schedule']
+        seed_for(schedule, count, repeats)
+        if (schedule['pipelines'], schedule['replicates'], schedule['policy']) != (
+                count, repeats, 'shared_replicates'):
+            raise ValueError('Retry seed schedule differs from the original experiment dimensions')
+    else:
+        if getattr(args, 'retry_source_run', ''):
+            return  # A historical retry must not silently acquire a new schedule.
+        schedule = create(count, repeats, 'shared_replicates')
+    snapshot['seed_schedule'] = schedule
+    snapshot['seed_policy'] = VERSION
