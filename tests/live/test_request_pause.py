@@ -13,7 +13,8 @@ def test_real_haiku_request_pause_resume(monkeypatch):
     load_env()
     from memstara.config import Settings
     from motoro import configure
-    configure(Settings())
+    from memstara.pipeline.runtime import runtime_timeouts
+    configure(Settings(**runtime_timeouts('claude-haiku-5-5')))
     from memstara.paths import output_dir
     from memstara.stage_models import deployment_profiles, for_stage
     from memstara.pipeline.diagnostics import call_context

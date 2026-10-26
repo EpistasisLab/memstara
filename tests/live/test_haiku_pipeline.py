@@ -92,9 +92,9 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
         area = max(completed, key=lambda p: p.stat().st_mtime)
     old_status = read(area / "run" / "pipeline_status.json", {})
     failed_exit = read(area / "acceptance.json", {}).get("exit_code") not in (None, 0)
-    failed_validation = (read(area / "acceptance.json", {}).get("validation_status") == "not_passed"
-                         or (area / "validation_failure.json").exists())
-    if failed_exit or failed_validation or ((area / "run").exists() and old_status.get("status") != "completed"):
+    # An audit assertion can fail after a successful paid run. Re-audit its
+    # preserved evidence instead of silently buying another pipeline execution.
+    if failed_exit or ((area / "run").exists() and old_status.get("status") != "completed"):
         assert old_status.get("status") != "running", "Do not duplicate an active live execution"
         assert pytestconfig.getoption("--live-retry-failed"), "Investigate failure before explicitly retrying"
         area = case_area / ("attempt_" + uuid.uuid4().hex[:8])
@@ -381,12 +381,25 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
             try:
                 tag = read(run / "config.json")["run_tag"]
                 rows = await connection.fetch(
-                    "SELECT trial, auc, interpretation FROM memstara_results WHERE run_tag=$1", tag)
+                    "SELECT trial, auc, interpretation, evaluation FROM memstara_results WHERE run_tag=$1", tag)
                 persisted = await connection.fetchval(
                     "SELECT count(*) FROM memstara_execution_costs WHERE run_tag=$1", tag)
                 assert rows and all(r["auc"] is not None and r["interpretation"] for r in rows)
                 assert {r["trial"] for r in rows} == set(range(loops)), "Missing per-Loop measured result"
                 assert persisted == len(ledger)
+                seed_audit = []
+                for row in rows:
+                    evaluation = row['evaluation']
+                    evaluation = json.loads(evaluation) if isinstance(evaluation, str) else evaluation
+                    evaluation = evaluation['evaluation']
+                    assert evaluation['classifier_seed_policy'] == 'split_seed_v1'
+                    for replicate in evaluation['replicates']:
+                        seed = replicate['seed']
+                        assert seed == replicate['effective_random_state'] == replicate['parameters']['random_state']
+                        seed_audit.append({'trial': row['trial'], 'split_seed': seed,
+                                           'classifier_random_state': replicate['effective_random_state']})
+                assert seed_audit, 'No persisted classifier seed evidence'
+                (area / 'classifier_seed_audit.json').write_text(json.dumps(seed_audit, indent=2))
             finally:
                 await connection.close()
         asyncio.run(measured())
