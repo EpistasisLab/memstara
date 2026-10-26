@@ -12,6 +12,10 @@ try{for(const width of [390,1440]){
  const show=page.getByRole('button',{name:'Show pipeline list',exact:true});if(await show.isVisible())await show.click();
  const first=page.getByRole('button',{name:'Inspect My experiment',exact:true});
  await expect(first.locator('.pipeline-card-name')).toContainText('Blood pressure and exercise',{timeout:25000});
+ await expect(first.locator('.pipeline-card-name')).toHaveAttribute('title',hypothesis.trim());
+ await expect(first.locator('.pipeline-card-name')).toHaveAttribute('aria-label',hypothesis.trim());
+ await expect.poll(()=>first.locator('.pipeline-card-name').evaluate(e=>e.getBoundingClientRect().height<=parseFloat(getComputedStyle(e).lineHeight)*2+1)).toBe(true);
+ await first.locator('.pipeline-card-name').hover();
  await expect(first).toContainText('Saved as: My experiment');
  await expect(first).not.toContainText('Unrelated finding');
  await expect(page.getByRole('button',{name:'Inspect Waiting for hypothesis',exact:true}).locator('.pipeline-card-name')).toHaveText('Waiting for hypothesis');
@@ -23,5 +27,6 @@ try{for(const width of [390,1440]){
  events=[{id:'h3',revision:'1',run_tag:'a',stage:'hypothesis',detail:'Current replicate hypothesis',iteration:3,trial:2,at:new Date().toISOString()}];
  await expect(first.locator('.pipeline-card-name')).toHaveText('Current replicate hypothesis',{timeout:25000});
  await expect(first).not.toContainText('Blood pressure and exercise');
+ await expect(first.locator('.pipeline-card-name')).toHaveAttribute('title','Current replicate hypothesis');
  await page.close();
 }}finally{await browser.close();}

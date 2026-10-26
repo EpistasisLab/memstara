@@ -372,7 +372,7 @@
 .pipeline-browser-row[data-state=running] .pipeline-state-badge,.pipeline-browser-row[data-state=completed] .pipeline-state-badge { color:rgb(var(--accent)); background:rgb(var(--accent) / .1); }
 .pipeline-browser-row[data-state=needs-attention] .pipeline-state-badge,.pipeline-browser-row[data-state=interrupted] .pipeline-state-badge { color:#a34514; background:#c56b1914; }
 [data-theme=dark] .pipeline-browser-row[data-state=needs-attention] .pipeline-state-badge,[data-theme=dark] .pipeline-browser-row[data-state=interrupted] .pipeline-state-badge { color:#f4b184; background:#f4b18415; }
-.pipeline-browser-row .pipeline-card-name { font-size:14px; line-height:1.5; font-weight:650; letter-spacing:-.012em; color:rgb(var(--ink)); }
+.pipeline-browser-row .pipeline-card-name { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; overflow-wrap:anywhere; min-width:0; font-size:14px; line-height:1.5; font-weight:650; letter-spacing:-.012em; color:rgb(var(--ink)); }
 .pipeline-browser-row .pipeline-card-position { display:flex; align-items:center; justify-content:space-between; gap:8px; padding-top:2px; }
 .pipeline-browser-row .pipeline-card-loop { font-size:13px; font-weight:650; font-variant-numeric:tabular-nums; color:rgb(var(--ink)); }
 .pipeline-card-position > svg { color:rgb(var(--ink-soft)); flex-shrink:0; opacity:.6; transition:transform .18s; }
