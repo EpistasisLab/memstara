@@ -1,4 +1,5 @@
 import {useState} from 'react';
+import {UploadCloud} from 'lucide-react';
 
 type Target={column:string;description:string;positive_label:string;negative_label:string;prediction_time:string;horizon:string};
 export type ResearchConfig={name:string;dataset_path:string;knowledge_path:string;target:Target;excluded_columns:string[];missing_policy:'reject'|'impute_train_v1';categorical_columns?:string[];knowledge_mode?:'okf'|'llm_only';data_mode?:'dataset'|'proposal'};
@@ -12,11 +13,14 @@ const style='w-full min-w-0 rounded border border-paper-line bg-paper px-3 py-2 
 export default function ResearchInputs({onSaved,initialConfig,disabled=false}:{onSaved?:(record:Inspection)=>void;initialConfig?:ResearchConfig;disabled?:boolean}={}){
  const [form,setForm]=useState<ResearchConfig>(initialConfig??initial),[result,setResult]=useState<Inspection|null>(null);
  const [uploaded,setUploaded]=useState<UploadInspection|null>(null);
+ const [dragging,setDragging]=useState(false);
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
  function edit(next:ResearchConfig){setForm(next);setResult(null);setError('');}
  async function upload(file:File){
+  if(busy||disabled)return;
   setBusy(true);setError('');setResult(null);setUploaded(null);
   try{
+   if(!file.name.toLowerCase().endsWith('.csv'))throw Error('Choose a CSV file.');
    if(file.size>5*1024*1024)throw Error('CSV upload limit is 5 MiB.');
    const content=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(Error('Could not read CSV'));reader.readAsDataURL(file);});
    const response=await fetch('/control/research-inputs/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:file.name,content_base64:content})});
@@ -38,7 +42,18 @@ export default function ResearchInputs({onSaved,initialConfig,disabled=false}:{o
    <label className="block">Data mode<select aria-label="Data mode" className={style} value={form.data_mode??'dataset'} onChange={e=>edit({...form,data_mode:e.target.value as ResearchConfig['data_mode']})}><option value="dataset">Use my CSV — empirical evaluation</option><option value="proposal">No CSV — research proposal and analysis plan</option></select></label>
    {form.data_mode==='proposal'&&<p>Without a dataset, this creates an analysis plan, not measured results. Describe your research objective below.</p>}
    {form.data_mode!=='proposal'&&<div className="space-y-3">
-    <label className="block">Upload CSV (UTF-8, up to 5 MiB)<input type="file" accept=".csv,text/csv" aria-label="Upload CSV" className="block w-full text-sm" onChange={e=>{const file=e.target.files?.[0];if(file)void upload(file);e.target.value='';}}/></label>
+    <div role="group" aria-label="CSV upload area" aria-disabled={busy||disabled}
+      onDragEnter={event=>{event.preventDefault();if(!busy&&!disabled)setDragging(true);}}
+      onDragOver={event=>{event.preventDefault();event.dataTransfer.dropEffect=busy||disabled?'none':'copy';}}
+      onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node|null))setDragging(false);}}
+      onDrop={event=>{event.preventDefault();setDragging(false);if(busy||disabled)return;const files=event.dataTransfer.files;if(files.length!==1){setError('Drop one CSV file at a time.');return;}void upload(files[0]);}}
+      className={`rounded-xl border-2 border-dashed p-5 text-center transition-colors ${dragging?'border-sky-500 bg-sky-50 dark:bg-sky-950/30':'border-paper-line bg-paper'}`}>
+      <UploadCloud size={26} className="mx-auto mb-2 text-slate-500" aria-hidden="true"/>
+      <p className="text-sm font-semibold">{dragging?'Drop your CSV here':'Drag your CSV here'}</p>
+      <p className="mt-1 text-xs text-slate-500">or choose a file below · UTF-8 CSV · up to 5 MiB</p>
+      <label className="mt-3 block"><span className="sr-only">Upload CSV</span><input type="file" accept=".csv,text/csv" aria-label="Upload CSV" className="block w-full min-w-0 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-sky-600 file:px-3 file:py-2 file:text-white" onChange={event=>{const file=event.target.files?.[0];if(file)void upload(file);event.target.value='';}}/></label>
+      <p className="mt-3 text-xs text-slate-500">We check for missing values as soon as the file uploads.</p>
+    </div>
     {uploaded&&<div role="status" className="rounded border border-paper-line p-3 text-sm"><strong>{uploaded.rows.toLocaleString()} rows · {uploaded.columns.length} columns</strong><p>{uploaded.message}</p>{Object.entries(uploaded.columns_with_missing).map(([column,count])=><p key={column}>{column}: {count.toLocaleString()} missing</p>)}{uploaded.nonfinite_columns.length>0&&<p>Resolve infinite values in: {uploaded.nonfinite_columns.join(', ')}</p>}</div>}
     <fieldset className="space-y-2 rounded border border-paper-line p-3"><legend className="text-sm font-medium">Missing-value handling</legend>
      <p className="text-sm">Some classifiers cannot use missing values. Do you want us to impute your data?</p>

@@ -18,7 +18,7 @@ try{
   throw Error('Unexpected request '+path);
  });
  await page.goto((process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:4177')+'/tests/research-inputs.fixture.html?selector');
- await page.getByRole('combobox',{name:'Research inputs',exact:true}).selectOption('original');
+ await page.getByRole('button',{name:'Use Existing study',exact:true}).click();
  await page.getByRole('button',{name:'Edit data & target',exact:true}).click();
  assert.equal(await page.getByLabel('Target column',{exact:true}).inputValue(),'old_label');
  assert.equal(await page.getByLabel('Dataset CSV path').inputValue(),'/inputs/data.csv');
@@ -29,7 +29,7 @@ try{
  assert.equal(selected.y_column,'new_label');
  assert.equal(original.configuration.target.column,'old_label');
  assert.equal(submitted.dataset_path,config.dataset_path);
- await page.getByRole('combobox',{name:'Research inputs',exact:true}).selectOption('');
+ await page.getByRole('button',{name:'Use server defaults instead',exact:true}).click();
  assert.equal(JSON.parse(await page.getByLabel('Selected research configuration').textContent()).y_column,'');
  console.log('Existing target prefilled, saved as a new version, automatically selected; old target and source preserved.');
 }finally{await browser.close();}

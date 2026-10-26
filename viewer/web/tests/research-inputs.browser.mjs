@@ -32,15 +32,16 @@ try{
   {id:'b'.repeat(32),input_checks_passed:false,configuration:{name:'Incomplete study',target:{}}}
  ]}}));
  await page.goto((process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:5179')+'/tests/research-inputs.fixture.html?selector');
- await page.getByLabel('Research inputs',{exact:true}).selectOption('a'.repeat(32));
+ await page.getByRole('button',{name:'Use Synthetic study',exact:true}).click();
  const selected=JSON.parse(await page.getByLabel('Selected research configuration').innerText());
  assert.equal(selected.y_column,'new_target');assert.equal(selected.skill,'');assert.deepEqual(selected.baseline_columns,[]);
  assert.equal(selected.playbook_hypothesis,'hypothesis_general');
  assert.equal(selected.playbook_data,'data_training_heavy');
  assert.equal(selected.playbook_explanation,'report_general');
  assert.deepEqual(selected.combination_skills,{});
- assert.equal(await page.locator(`option[value="${'b'.repeat(32)}"]`).evaluate(option=>option.disabled),true);
- await page.getByText('Selected CSV and OKF files',{exact:true}).click();
+ assert.equal(await page.getByRole('button',{name:'Review Incomplete study',exact:true}).count(),1);
+ assert.equal(await page.getByRole('button',{name:'Use Incomplete study',exact:true}).count(),0);
+ await page.getByRole('article',{name:'Synthetic study',exact:true}).getByText('Study details',{exact:true}).click();
  await page.getByText('/fixtures/study.csv',{exact:true}).waitFor();
  await page.getByText('/fixtures/study-okf',{exact:true}).waitFor();
  await page.getByRole('button',{name:'Upload new CSV',exact:true}).click();
@@ -48,7 +49,7 @@ try{
  assert.equal(await page.getByLabel('Target column',{exact:true}).inputValue(),'');
  assert.equal(await page.getByText('Saved research versions',{exact:true}).count(),0);
  await page.getByRole('button',{name:'Cancel editing',exact:true}).click();
- await page.getByLabel('Research inputs',{exact:true}).selectOption('');
+ await page.getByRole('button',{name:'Use server defaults instead',exact:true}).click();
  const deployment=JSON.parse(await page.getByLabel('Selected research configuration').innerText());
  assert.equal(deployment.y_column,'');
  assert.equal(await page.getByLabel('Deployment target column',{exact:true}).inputValue(),'');

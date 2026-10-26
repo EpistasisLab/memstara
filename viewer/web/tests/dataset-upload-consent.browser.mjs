@@ -12,7 +12,7 @@ try{
    const valid=registered.missing_policy==='impute_train_v1';
    return route.fulfill({json:{id:valid?'a'.repeat(32):undefined,configuration:registered,dataset:{rows:40,column_count:5,columns:['a','b','c','d','outcome'],missing_cells:2},knowledge:{documents:0},issues:valid?[]:[{code:'missing_values',message:'Selected columns contain missing values.'}],input_checks_passed:valid,execution_ready:false}});
   });
-  await page.goto('http://127.0.0.1:5189/tests/research-inputs.fixture.html');
+  await page.goto((process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:4177')+'/tests/research-inputs.fixture.html');
   await page.getByLabel('Knowledge mode',{exact:true}).selectOption('llm_only');
   await page.getByLabel('Upload CSV',{exact:true}).setInputFiles({name:'example.csv',mimeType:'text/csv',buffer:Buffer.from('a,b,c,d,outcome\n,1,2,3,0\n')});
   await expect(page.getByText('Missing values found. Some classifiers cannot run without imputation.',{exact:true})).toBeVisible();
