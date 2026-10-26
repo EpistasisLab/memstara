@@ -17,7 +17,7 @@ export const flavorNames:Record<PlaybookStage,string>={hypothesis:'Hypothesis',d
 export default function CombinationWizard(){
  const {catalog,form,loadPlaybooks,loadSkills}=useControl();
  const {create,closeCreation,busy,error}=usePipelines();
- const [draft,setDraft]=useState<RunRequest>(()=>({...newPipelineConfiguration(form),combination_skills:{},ml_overrides:{},evaluation:{...form.evaluation,engine:'logistic_regression',folds:0,replicates:1,search_trials:1},combination_repetitions:1,combination_random_start:false,combination_max_loops:null,trials:1,hypothesis_agents:1,interpret_agents:1,continuous:false,waves:1}));
+ const [draft,setDraft]=useState<RunRequest>(()=>({...newPipelineConfiguration(form),combination_skills:{},ml_overrides:{},evaluation:{...form.evaluation,engine:'logistic_regression',folds:0,replicates:1,search_trials:1},combination_repetitions:1,combination_execution_order:'all_pipelines_first',combination_random_start:false,combination_max_loops:null,trials:1,hypothesis_agents:1,interpret_agents:1,continuous:false,waves:1}));
  const [sourceError,setSourceError]=useState('');
  const [skillMode,setSkillMode]=useState<'library'|'custom'|'ai'>('library');
  const [step,setStep]=useState(0);const [activeRole,setActiveRole]=useState<PlaybookStage>('hypothesis');const [search,setSearch]=useState('');
@@ -108,9 +108,13 @@ export default function CombinationWizard(){
        <label>Name<input value={name} placeholder="e.g. Study comparison" maxLength={80} onChange={e=>setName(e.target.value)}/></label>
        <label>Replicates per pipeline<input aria-describedby="comb-limit-help" type="number" min={1} max={100} step={1} value={Number.isNaN(repetitions)?'':repetitions} onChange={e=>{setDraft(d=>({...d,combination_repetitions:e.target.valueAsNumber,combination_max_loops:null}));setReviewed(false);}}/></label>
       </div>
+      <label>Execution order<select aria-label="Execution order" value={draft.combination_execution_order??'all_pipelines_first'} onChange={e=>{setDraft(d=>({...d,combination_execution_order:e.target.value as RunRequest['combination_execution_order']}));setReviewed(false);}}>
+       <option value="all_pipelines_first">All pipelines first</option>
+       <option value="pipeline_replicates_first">One pipeline all replicates first</option>
+      </select></label>
       <p id="comb-limit-help" className="comb-review-hint">One Pipeline is one skill combination. One Replicate completes that Pipeline’s research process once. {count} pipelines × {Number.isInteger(repetitions)?repetitions:'—'} replicates per pipeline = {Number.isInteger(total)?total:'—'} total replicates.</p>
       <label className="comb-consent comb-review-random"><input type="checkbox" checked={randomStart} onChange={e=>{setDraft(d=>({...d,combination_random_start:e.target.checked}));setReviewed(false);}}/><span><strong>Random Start</strong><small>Off by default: start at Pipeline 1 and continue in order. Turn on to choose a random starting Pipeline.</small></span></label>
-      <details className="comb-review-rules"><summary>How execution works</summary><p>All pipelines complete their first replicate before the next replicate cycle begins. The schedule contains {Number.isInteger(total)?total.toLocaleString():'—'} total replicates. A blocked attempt is recorded separately from successful completion; retries stay attached to the same scheduled replicate. Resume preserves the schedule.</p></details>
+      <details className="comb-review-rules"><summary>How execution works</summary><p>{draft.combination_execution_order==='pipeline_replicates_first'?'Complete every replicate of one pipeline before moving to the next pipeline.':'All pipelines complete their first replicate before the next replicate cycle begins.'} The schedule contains {Number.isInteger(total)?total.toLocaleString():'—'} total replicates. A blocked attempt is recorded separately from successful completion; retries stay attached to the same scheduled replicate. Resume preserves the schedule.</p></details>
       <div className="comb-review-evaluation"><h4>Model</h4><p>{draft.data_mode==='proposal'?'Proposal only: no model training or measured results.':selected.ml?.length?'One selected model':'Default scikit-learn Logistic Regression · no tuning'}</p></div>
      </section>
      <section className="comb-review-card" aria-labelledby="comb-agents-heading"><h4 id="comb-agents-heading">Your agents</h4><ol className="comb-review-agents">{PLAYBOOK_STAGES.map((stage,i)=>{const Icon=icons[stage];return <li key={stage}>

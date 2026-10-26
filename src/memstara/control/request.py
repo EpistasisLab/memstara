@@ -88,6 +88,7 @@ DEFAULTS: dict[str, Any] = {
     "question": "",
     "combination_skills": {},
     "combination_repetitions": 1,
+    "combination_execution_order": "all_pipelines_first",
     "combination_random_start": False,
     "combination_max_loops": None,
     "evaluation": {},
@@ -229,6 +230,7 @@ def build_argv(
         from memstara.combinations import build_plan
         combination_plan = build_plan(body["combination_skills"], body.get("combination_repetitions", 1),
                                       random_start=body.get('combination_random_start', False),
+                                      execution_order=body.get('combination_execution_order', 'all_pipelines_first'),
                                       max_loops=body.get('combination_max_loops'))
         continuous = False
         if combination_plan['total_loops'] > 10000:

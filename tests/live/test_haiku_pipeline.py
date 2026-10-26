@@ -76,13 +76,14 @@ print(json.dumps({'version': version('memstara'), 'module': memstara.__file__,
     ("synthetic", "okf", "proposal"), ("synthetic", "llm_only", "proposal"),
     ("heart_combinations", "okf", "dataset"), ("heart_random", "okf", "dataset"),
     ("heart_guided", "okf", "dataset"), ("synthetic_paths", "okf", "dataset"),
+    ("synthetic_pipeline_first", "okf", "dataset"),
 ])
 def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowledge, data):
     from memstara import blackboard
     from memstara.research_inputs import register, digest
 
     case = f"{knowledge}_{data}" if study == "synthetic" else study
-    loops = 4 if study == "heart_combinations" else pytestconfig.getoption('--live-loops')
+    loops = 4 if study in ("heart_combinations", "synthetic_pipeline_first") else pytestconfig.getoption('--live-loops')
     case_area = live_batch["root"] / case
     area = case_area
     completed = [p for p in area.glob("attempt_*")
@@ -134,6 +135,11 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
     books = {"hypothesis": ["hypothesis_general"], "data": ["data_training_heavy"],
              "ml": ["ml_logistic_regression"], "interpreter": ["shared-anil-shap"],
              "report": ["report_general"]}
+    if study == "synthetic_pipeline_first":
+        from memstara.combinations import build_plan
+        books['data'] = ['data_training_heavy', 'data_balanced_stratified']
+        combination = build_plan(books, 2, execution_order='pipeline_replicates_first')
+        assert combination['total_loops'] == loops
     if study.startswith("heart"):
         books.update(hypothesis=["heart-failure-cardiovascular"], data=["data_balanced_stratified"],
                      report=["report_heart_failure_cardiovascular"])
@@ -308,6 +314,17 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
     assert frozen["stage_models"] == live_batch["profiles"]
     assert frozen.get('combination_plan') == combination
     if combination:
+        from memstara.combinations import loop_flavors
+        schedule_audit = []
+        for position in range(1, loops + 1):
+            expected = loop_flavors(combination, position)
+            actual = read(run / f'loop_{position}_flavors.json')
+            assert actual['combination'] == expected['combination']
+            assert actual['repetition'] == expected['repetition']
+            assert [a['id'] for a in actual['agents']] == [a['id'] for a in expected['agents']]
+            schedule_audit.append({'position': position, 'pipeline': actual['combination'],
+                                   'replicate': actual['repetition']})
+        (area / 'schedule_audit.json').write_text(json.dumps(schedule_audit, indent=2))
         from memstara.feature_reproduction import replay
         reproduction = replay(run / 'feature_reproduction')
         (area / 'feature_reproduction_audit.json').write_text(json.dumps(reproduction, indent=2))

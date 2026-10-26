@@ -75,6 +75,7 @@ export type RunRequest = {
   combination_plan?: import("../lib/replicateIdentity").Schedule | null;
   combination_skills?: Partial<Record<PlaybookStage,string[]>>;
   combination_repetitions?: number;
+  combination_execution_order?: "all_pipelines_first" | "pipeline_replicates_first";
   combination_random_start?: boolean;
   combination_max_loops?: number | null;
   question: string;

@@ -281,10 +281,45 @@ def test_empty_ml_selection_freezes_default_and_survives_launch(monkeypatch):
         monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'test-model')
     choices = {'hypothesis': ['hypothesis_general'], 'data': ['data_training_heavy'],
                'ml': [], 'interpreter': ['shared-anil-shap'], 'report': ['report_general']}
-    plan = build_plan(choices, 2)
+    plan = build_plan(choices, 2, execution_order='all_pipelines_first')
     assert plan['combinations'] == 1 and plan['total_loops'] == 2
     assert plan['skills']['ml'][0]['id'] == 'ml_default_logistic_regression'
     assert validate_plan(plan) == plan
     configuration = PipelineWorkspace.configuration({'combination_skills': choices, 'combination_repetitions': 2})
     argv = build_argv(configuration, [], [x['id'] for x in catalog.catalog()], STAGES)
     assert json.loads(argv[argv.index('--combination-plan') + 1]) == plan
+
+
+@pytest.mark.parametrize('order', ['all_pipelines_first', 'pipeline_replicates_first'])
+@pytest.mark.parametrize('limit', [1, 25, 48, 53])
+def test_versioned_orders_cover_prefix_and_replay(skills, order, limit):
+    import json
+    from memstara.combinations import validate_plan
+    plan = build_plan(skills, 2, execution_order=order, random_start=True, start_index=7, max_loops=limit)
+    frozen = validate_plan(json.loads(json.dumps(plan)))
+    expected = ([(p, r) for r in range(1, 5) for p in range(24)] if order == 'all_pipelines_first'
+                else [(p, cycle * 2 + r) for cycle in range(2) for p in range(24) for r in (1, 2)])
+    for n, (pipeline, replicate) in enumerate(expected[:limit], 1):
+        item = loop_flavors(frozen, n)
+        assert (item['combination'], item['repetition']) == ((pipeline + 7) % 24 + 1, replicate)
+        assert item == loop_flavors(plan, n)
+
+
+def test_pipeline_first_workspace_launch_and_retry_preserve_order(skills, monkeypatch):
+    import json
+    from memstara.control.workspace import PipelineWorkspace
+    from memstara.control.request import build_argv
+    for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'test-model')
+    config = PipelineWorkspace.configuration({'combination_skills': skills, 'combination_repetitions': 3,
+                                             'combination_execution_order': 'pipeline_replicates_first'})
+    offered = [key for ids in skills.values() for key in ids]
+    argv = build_argv(config, [], offered, STAGES)
+    plan = json.loads(argv[argv.index('--combination-plan') + 1])
+    assert [(loop_flavors(plan,n)['combination'],loop_flavors(plan,n)['repetition']) for n in range(1,5)] == [
+        (1,1),(1,2),(1,3),(2,1)]
+    argv = build_argv({**config, '_retry_combination_plan': plan}, [], offered, STAGES)
+    assert json.loads(argv[argv.index('--combination-plan') + 1]) == plan
+    with pytest.raises(ValueError, match='execution order'):
+        PipelineWorkspace.configuration({**config, 'combination_execution_order': 'unsupported'})

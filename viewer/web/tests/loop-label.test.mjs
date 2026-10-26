@@ -22,3 +22,13 @@ test('recorded identity wins; legacy analysis grouping remains supported',()=>{
  for(const trial of [undefined,null,-1,1.5,Infinity])assert.equal(loopLabel({trial},1),'Pipeline — · Replicate —');
  assert.equal(loopLabel({trial:8}),'Pipeline — · Replicate —');
 });
+
+
+test('pipeline-first preserves replicate identity for rotated, partial and repeated cycles',()=>{
+ const plan={combinations:4,repetitions:3,total_loops:15,start_index:2,execution_order:'pipeline_replicates_first'};
+ const expected=[[3,1,6],[3,2,6],[3,3,6],[4,1,3],[4,2,3],[4,3,3],[1,1,3],[1,2,3],[1,3,3],
+  [2,1,3],[2,2,3],[2,3,3],[3,4,6],[3,5,6],[3,6,6]];
+ expected.forEach(([p,r,total],i)=>assert.deepEqual(scheduleIdentity(i+1,plan),
+  {pipeline_number:p,pipeline_count:4,replicate_number:r,replicate_count:total}));
+ assert.deepEqual(scheduleIdentity(1,{...plan,repetitions:0}),{});
+});

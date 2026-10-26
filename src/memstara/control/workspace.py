@@ -241,6 +241,7 @@ class PipelineWorkspace:
             from memstara.combinations import build_plan
             plan = build_plan(config['combination_skills'], config['combination_repetitions'],
                               random_start=config['combination_random_start'],
+                              execution_order=config['combination_execution_order'],
                               max_loops=config['combination_max_loops'], start_index=0)
             if plan['total_loops'] > 10000:
                 raise ValueError('At most 10000 total replicates are supported')

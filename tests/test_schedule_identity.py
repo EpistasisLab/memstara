@@ -1,3 +1,4 @@
+import pytest
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'viewer' / 'api'))
@@ -24,13 +25,14 @@ def test_single_pipeline_and_invalid_position():
         assert identity({}, value) == {}
 
 
-def test_display_matches_actual_scheduler_for_all_480_positions(monkeypatch):
+@pytest.mark.parametrize('order', [None, 'all_pipelines_first', 'pipeline_replicates_first'])
+def test_display_matches_actual_scheduler_for_all_480_positions(monkeypatch, order):
     import memstara.control.catalog as catalog
     from memstara.combinations import STAGES, build_plan, loop_flavors
     choices = {stage: [f'{stage}-{i}' for i in range(3 if stage == 'hypothesis' else 2)] for stage in STAGES}
     monkeypatch.setattr(catalog, 'resolve', lambda name: {
         'id': name, 'stage': name.rsplit('-', 1)[0], 'title': name, 'hash': name})
-    plan = build_plan(choices, 10, random_start=True, start_index=17)
+    plan = build_plan(choices, 10, random_start=True, start_index=17, execution_order=order)
     assert plan['combinations'] == 48 and plan['total_loops'] == 480
     for position in range(1, 481):
         actual = loop_flavors(plan, position)

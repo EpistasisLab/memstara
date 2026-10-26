@@ -5,7 +5,7 @@ import secrets
 STAGES = ('hypothesis', 'data', 'ml', 'interpreter', 'report')
 
 
-def build_plan(choices, repetitions=1, *, random_start=False, max_loops=None, start_index=None):
+def build_plan(choices, repetitions=1, *, random_start=False, max_loops=None, start_index=None, execution_order=None):
     """Each complete ordered combination is one Loop, repeated in stable cycles."""
     from memstara.control.catalog import resolve
     if not isinstance(choices, dict) or set(choices) != set(STAGES):
@@ -14,6 +14,8 @@ def build_plan(choices, repetitions=1, *, random_start=False, max_loops=None, st
         raise ValueError('Repetitions must be an integer from 1 to 100')
     if type(random_start) is not bool:
         raise ValueError('Random Start must be a boolean')
+    if execution_order not in (None, 'all_pipelines_first', 'pipeline_replicates_first'):
+        raise ValueError('Unsupported execution order')
     if max_loops is not None and (type(max_loops) is not int or not 1 <= max_loops <= 10000):
         raise ValueError('Maximum Loops must be an integer from 1 to 10000')
     resolved = {}
@@ -40,7 +42,7 @@ def build_plan(choices, repetitions=1, *, random_start=False, max_loops=None, st
     plan = {'version': 1, 'stages': list(STAGES), 'skills': resolved,
             'combinations': count, 'repetitions': repetitions, 'total_loops': total,
             'rows': max(len(items) for items in resolved.values())}
-    if random_start or max_loops is not None:
+    if random_start or max_loops is not None or execution_order is not None:
         # Sample only at launch. Workspace validation passes zero; replay passes
         # the recorded index, so neither polling nor resume changes the schedule.
         if start_index is None:
@@ -51,15 +53,17 @@ def build_plan(choices, repetitions=1, *, random_start=False, max_loops=None, st
             raise ValueError('Ordered execution must start at combination 1')
         plan.update(version=2, max_loops=max_loops, start_index=start_index,
                     selection_policy='random_start_then_cycle_v1' if random_start else 'ordered_cycle_v1')
+    if execution_order is not None:
+        plan.update(version=3, execution_order=execution_order)
     return plan
 
 
 def validate_plan(plan):
     """Validate a frozen schedule without drawing a new random start."""
-    if not isinstance(plan, dict) or plan.get('version') not in (1, 2):
+    if not isinstance(plan, dict) or plan.get('version') not in (1, 2, 3):
         raise ValueError('Unsupported combination schedule')
     options = {}
-    if plan['version'] == 2:
+    if plan['version'] in (2, 3):
         policy = plan.get('selection_policy')
         if policy not in ('random_start_then_cycle_v1', 'ordered_cycle_v1'):
             raise ValueError('Unsupported combination selection policy')
@@ -67,6 +71,10 @@ def validate_plan(plan):
                        max_loops=plan['max_loops'], start_index=plan['start_index'])
         if type(options['start_index']) is not int:
             raise ValueError('Frozen schedule requires an integer start index')
+    if plan['version'] == 3:
+        options['execution_order'] = plan.get('execution_order')
+        if options['execution_order'] not in ('all_pipelines_first', 'pipeline_replicates_first'):
+            raise ValueError('Frozen schedule requires an execution order')
     rebuilt = build_plan({stage: [s['id'] for s in entries]
                           for stage, entries in plan['skills'].items()}, plan['repetitions'], **options)
     if rebuilt != plan:
@@ -78,7 +86,15 @@ def loop_flavors(plan, loop):
     """Resolve a 1-based Loop without expanding the full Cartesian product in memory."""
     if type(loop) is not int or not 1 <= loop <= plan['total_loops']:
         raise ValueError('Loop is outside this schedule')
-    index = (plan.get('start_index', 0) + loop - 1) % plan['combinations']
+    position = loop - 1
+    repetition = position // plan['combinations'] + 1
+    offset = position
+    if plan.get('execution_order') == 'pipeline_replicates_first':
+        repeats = plan['repetitions']
+        offset = position // repeats
+        cycle = position // (plan['combinations'] * repeats)
+        repetition = cycle * repeats + position % repeats + 1
+    index = (plan.get('start_index', 0) + offset) % plan['combinations']
     remaining = index
     chosen = {}
     for stage in reversed(STAGES):
@@ -86,9 +102,10 @@ def loop_flavors(plan, loop):
         chosen[stage] = variants[remaining % len(variants)]
         remaining //= len(variants)
     return {'loop': loop, 'combination': index + 1,
-            'repetition': (loop - 1) // plan['combinations'] + 1,
+            'repetition': repetition,
+            **({'execution_order': plan['execution_order']} if plan.get('version') == 3 else {}),
             **({'selection_policy': plan['selection_policy'], 'start_combination': plan['start_index'] + 1}
-               if plan.get('version') == 2 else {}),
+               if plan.get('version') in (2, 3) else {}),
             'agents': [{'stage': stage, **chosen[stage]} for stage in STAGES]}
 
 

@@ -26,6 +26,7 @@ try{for(const [width,height,theme] of [[1440,900,'light'],[390,700,'light'],[390
  const limit=dialog.getByLabel('Replicates per pipeline',{exact:true});await limit.fill('4');await expect(budget).toContainText('1total pipelines×4replicates per pipeline=4total replicates');
  const consent=dialog.getByRole('checkbox',{name:/I reviewed/});const create=dialog.getByRole('button',{name:'Create combination design'});
  await expect(create).toBeDisabled();await consent.check();await expect(create).toBeEnabled();
+ await dialog.getByLabel('Execution order',{exact:true}).selectOption('pipeline_replicates_first');await expect(consent).not.toBeChecked();
  await dialog.getByRole('checkbox',{name:/Random Start/}).check();await expect(consent).not.toBeChecked();
  await dialog.getByRole('button',{name:'Edit Data skills',exact:true}).click();
  await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'});await expect(dialog.locator('.comb-skill-card input').first()).toBeChecked();
@@ -41,6 +42,6 @@ try{for(const [width,height,theme] of [[1440,900,'light'],[390,700,'light'],[390
  await page.screenshot({path:join(tmpdir(),`combination-review-${width}-${height}-${theme}.png`)});
  await create.focus();await expect(create).toBeInViewport();await page.keyboard.press('Enter');
  const saved=JSON.parse(await page.locator('body').getAttribute('data-created'));
- assert.equal(saved.name,'Reviewed design');assert.equal(saved.configuration.waves,8);assert.equal(saved.configuration.combination_random_start,true);assert.equal(saved.configuration.combination_skills.data.length,2);
+ assert.equal(saved.name,'Reviewed design');assert.equal(saved.configuration.waves,8);assert.equal(saved.configuration.combination_random_start,true);assert.equal(saved.configuration.combination_execution_order,'pipeline_replicates_first');assert.equal(saved.configuration.combination_skills.data.length,2);
  assert.deepEqual(errors,[]);console.log(JSON.stringify({width,height,theme,review:true,editRetainsSettings:true,confirmation:true,savedConfiguration:true}));await page.close();
 }}finally{await browser.close();}
