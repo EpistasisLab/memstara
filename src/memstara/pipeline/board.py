@@ -493,7 +493,18 @@ async def _call_agent_uncontrolled(
     from memstara.pipeline.ablation import enabled, filter_tools, INSTRUCTIONS
     plan = active_plan()
     from memstara.research_inputs import instructions as research_instructions
-    prompt += research_instructions((plan or {}).get('research_profile'))
+    skill_authored_stage = stage.split('#', 1)[0] in ('interpret', 'interpreter', 'report')
+    if skill_authored_stage:
+        # Supply input metadata, not a second set of report-writing rules.
+        configuration = ((plan or {}).get('research_profile') or {}).get('configuration')
+        if configuration:
+            prompt += '\n\nResearch input metadata:\n' + json.dumps({
+                key: configuration[key] for key in (
+                    'target', 'data_mode', 'knowledge_mode', 'missing_policy', 'predictor_types'
+                ) if key in configuration
+            }, ensure_ascii=False)
+    else:
+        prompt += research_instructions((plan or {}).get('research_profile'))
     if stage.startswith(("hypothesis", "question")):
         from memstara.pipeline.feature_selection import scoped, hypothesis_tools, instructions as selection_instructions
         wave = max(0, (_CURRENT_LOOP.get() or 1) - 1)
@@ -501,7 +512,7 @@ async def _call_agent_uncontrolled(
         tools = hypothesis_tools(tools, plan, wave)
         plan = scoped(plan, wave)
     tools = filter_tools(tools, plan)
-    if enabled(plan):
+    if enabled(plan) and not skill_authored_stage:
         prompt += '\n' + INSTRUCTIONS
     check_primary_tools(stage, tools)
 
@@ -547,7 +558,9 @@ async def _call_agent_uncontrolled(
     context_token = call_context.set((str(_TRACE_DIR.parent), str(run.id), stage)) if _TRACE_DIR else None
     loop_token = call_loop.set(_CURRENT_LOOP.get())
     try:
-        async with asyncio.timeout((plan or {}).get('runtime_timeouts', {}).get('agent_timeout_seconds', 600)):
+        from memstara.pipeline.pause_runtime import active_timeout
+        async with active_timeout((plan or {}).get('runtime_timeouts', {}).get('agent_timeout_seconds', 600),
+                                  _TRACE_DIR.parent if _TRACE_DIR else None):
             from memstara.pipeline.llm import PipelineLLMService
             result = await execute_run(run_id=run.id, registry=registry, available_tools=tools,
                                        llm_service=PipelineLLMService(principal_id=run.owner_id))
@@ -1465,7 +1478,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     if checkpoint and not args.resume:
         first_loop = getattr(args, 'start_loop', 1)
         if not 1 <= first_loop <= args.waves:
-            raise ValueError('Retry Loop exceeds the frozen schedule')
+            raise ValueError('Retry position exceeds the frozen schedule')
         checkpoint.state['next_wave'] = first_loop - 1
         checkpoint.save()
         if getattr(args, 'retry_source_run', ''):
@@ -1583,7 +1596,9 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     from memstara.pipeline.scheduler import StageWorkers
     live_workers = StageWorkers()
     seed_task = None
-    registry = await setup_tools()
+    # Startup is not user-paused work and must retain a finite connection cap.
+    async with asyncio.timeout(300):
+        registry = await setup_tools()
     done("(2)", "paper store · data machine · learning machine · board window")
     try:
         # -- (3) decide who gets which button ----------------------------
@@ -1680,6 +1695,9 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         # stale_after still applies: a run that is genuinely still alive holds the
         # advisory lock above, so we cannot get here while one is.
         if args.resume:
+            if checkpoint.state.get('calls') or any(p['status'] != 'done' for p in checkpoint.state['phases'].values()):
+                from memstara.pipeline.paused_recovery import reconcile
+                await reconcile(checkpoint, args.run_tag, asyncpg.connect, dsn())
             recovery_board = await board_state(registry, args.run_tag)
             if recovery_board.get("error") or "tasks" not in recovery_board:
                 raise RuntimeError("Cannot verify saved task state for recovery")
@@ -1703,6 +1721,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         from memstara.pipeline.exploration import (rounds, wait_for_new_questions, write_progress,
                                                     record_round, round_summary, finalize_rounds)
         async for wave in rounds(args.waves, args.continuous, run_dir, start=checkpoint.state["next_wave"]):
+            from memstara.combinations import execution_label
+            note(execution_label(wave + 1, combination_plan) + " · starting research process")
             _CURRENT_LOOP.set(wave + 1)
             if combination_plan:
                 from memstara.combinations import prepare_loop
@@ -2278,6 +2298,12 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         return 0 if successful_analyses else 1
     except asyncio.CancelledError:
         from memstara.pipeline.exploration import close_active_round
+        from memstara.pipeline.paused_recovery import enabled as durable_pause
+        if durable_pause(run_dir) and (run_dir / 'pause.request').exists():
+            # A service shutdown during an acknowledged pause is not user Stop.
+            # Keep call receipts, tasks and checkpoint open for a fresh process.
+            close_active_round(run_dir, 'interrupted', 'Paused execution preserved for Resume.')
+            raise
         if ownership_lost():
             # Preserve unfinished checkpoint calls/phases: their effects must not
             # be blindly replayed. No database cleanup after losing ownership.
@@ -2529,8 +2555,8 @@ async def main() -> int:
             *( ["--playbook-explanation", "--playbook-report"] if stage_flag == "report"
                else [f"--playbook-{stage_flag}"] ),
             dest="playbook_explanation" if stage_flag == "report" else f"playbook_{stage_flag}",
-            default={"interpreter": "interpreter_factual_observations",
-                     "report": "report_clinical_explanations"}.get(stage_flag, ""),
+            default={"interpreter": "shared-shap",
+                     "report": "shared-addiction"}.get(stage_flag, ""),
             help=f"a behavioural standard for the {public_stage} stage, named without the "
                  f".md — the prompt must carry a {{{{playbook}}}} line to receive it "
                  f"(default: the prompt as written)",
@@ -2552,7 +2578,7 @@ async def main() -> int:
     ap.add_argument("--resume", action="store_true", help="Recover this execution from its durable checkpoint")
     args = ap.parse_args()
     if args.start_loop < 1 or (args.start_loop > 1 and not args.retry_source_run):
-        ap.error("Starting after Loop 1 requires an explicit retry source")
+        ap.error("Starting after the first scheduled run requires an explicit retry source")
     if args.specialist_pilot_config:
         from memstara.pipeline.specialist_pilot import preflight as pilot_preflight, run_study
         config = json.loads(args.specialist_pilot_config.read_text())

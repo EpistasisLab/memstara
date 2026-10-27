@@ -90,13 +90,22 @@ def test_user_override_cannot_reenable_scaling():
 
 @pytest.mark.parametrize('engine', ['logistic_regression', 'xgboost'])
 @pytest.mark.parametrize('policy', ['reject', 'impute_train_v1'])
-def test_missing_values_never_reach_training(prepared, engine, policy):
+def test_missing_values_require_consent_and_training_only_imputation(prepared, engine, policy):
     frame = pd.read_csv(prepared)
     frame.loc[0, 'x'] = np.nan
     frame.to_csv(prepared, index=False)
     original = prepared.read_bytes()
-    with pytest.raises(evaluation.DataQualityError):
-        evaluation.score(prepared, 'y', {'engine': engine}, missing_policy=policy, explain=False)
+    if policy == 'reject':
+        with pytest.raises(evaluation.DataQualityError):
+            evaluation.score(prepared, 'y', {'engine': engine}, missing_policy=policy, explain=False)
+    else:
+        result = evaluation.score(prepared, 'y', {'engine': engine}, missing_policy=policy, explain=False)
+        bundle = Path(result['evaluation']['reproducibility']['bundle_path'])
+        split = np.load(bundle/'split-0.npz')
+        fill = result['evaluation']['replicates'][0]['imputation']['fill_values']['x']
+        assert fill == pytest.approx(frame.iloc[split['train']].x.mean())
+        model = joblib.load(bundle/'model-0.joblib')
+        assert np.isfinite(model.predict_proba(frame.drop(columns='y'))).all()
     assert prepared.read_bytes() == original
 
 
@@ -105,5 +114,9 @@ def test_native_missing_and_imputation_flags_cannot_bypass_validation(prepared, 
     frame = pd.read_csv(prepared)
     frame.loc[0, 'z'] = np.nan
     frame.to_csv(prepared, index=False)
-    with pytest.raises(evaluation.DataQualityError, match='Correct the CSV'):
-        evaluation.validate_clean_dataset(prepared, 'y', allow_missing=True, missing_policy=policy)
+    if policy == 'reject':
+        with pytest.raises(evaluation.DataQualityError, match='Correct the CSV'):
+            evaluation.validate_clean_dataset(prepared, 'y', allow_missing=True, missing_policy=policy)
+    else:
+        checked = evaluation.validate_clean_dataset(prepared, 'y', allow_missing=True, missing_policy=policy)
+        assert checked.z.isna().sum() == 1  # Preflight must not impute before splitting.

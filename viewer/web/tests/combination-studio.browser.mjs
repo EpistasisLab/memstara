@@ -29,7 +29,7 @@ try{
  await p.getByRole('navigation',{name:'Combination views'}).getByRole('button',{name:'Experiments',exact:true}).waitFor();
  const header=p.getByRole('group',{name:'Pipeline workspace header',exact:true});
  for(const name of ['Knowledge sources','Combination schedule and map guide','Prepare research inputs'])assert.equal(await header.getByRole('button',{name,exact:true}).count(),0);
- assert.equal(await header.getByRole('button',{name:'Add pipeline',exact:true}).count(),1);
+ assert.equal(await header.getByRole('button',{name:'Add experiment',exact:true}).count(),1);
  for(const theme of ['light','dark'])for(const width of [1440,1024,390,320]){
   console.log('Starting',theme,width);
   await p.setViewportSize({width,height:1000});await p.evaluate(t=>document.documentElement.dataset.theme=t,theme);

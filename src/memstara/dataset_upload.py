@@ -11,10 +11,11 @@ import hashlib
 import io
 import math
 import uuid
+from pathlib import Path
 from collections import Counter
 from typing import Any, TypedDict
 
-from memstara.research_inputs import MISSING, registry_root
+from memstara.research_inputs import MAX_BYTES, MISSING, registry_root
 
 MAX_UPLOAD = 5 * 1024 * 1024
 MAX_REQUEST_BYTES = 7_100_000
@@ -27,6 +28,9 @@ class CsvInspection(TypedDict):
     missing_cells: int
     nonfinite_columns: list[str]
     nonnumeric_columns: list[str]
+    binary_columns: list[str]
+    column_kinds: dict[str, str]
+    type_confirmation_columns: list[str]
 
 
 def decode_upload(body: dict[str, Any]) -> bytes:
@@ -55,6 +59,9 @@ def inspect_csv(raw: bytes) -> CsvInspection:
     nonfinite: Counter[str] = Counter()
     nonnumeric: Counter[str] = Counter()
     rows = 0
+    binary_masks: dict[str, int] = {}
+    from memstara.predictor_types import ColumnTypes
+    types = ColumnTypes()
     try:
         reader = csv.reader(io.StringIO(raw.decode('utf-8-sig')), strict=True)
         headers = next(reader, [])
@@ -65,9 +72,11 @@ def inspect_csv(raw: bytes) -> CsvInspection:
                 raise ValueError('CSV rows must have the same number of fields as the header')
             rows += 1
             for column, value in zip(headers, row, strict=True):
+                types.observe(column, value, value.strip().lower() in MISSING)
                 if value.strip().lower() in MISSING:
                     missing[column] += 1
                     continue
+                binary_masks[column] = binary_masks.get(column, 0) | ({'0': 1, '1': 2}.get(value, 4))
                 try:
                     if not math.isfinite(float(value)):
                         nonfinite[column] += 1
@@ -77,13 +86,71 @@ def inspect_csv(raw: bytes) -> CsvInspection:
         raise ValueError('CSV cannot be parsed; check quoting and field sizes') from None
     if not rows:
         raise ValueError('CSV has no data rows')
+    metadata = types.metadata(headers)
     return {
+        **metadata,
+        'column_kinds': metadata['column_kinds'],
+        'type_confirmation_columns': metadata['type_confirmation_columns'],
         'columns': headers,
         'rows': rows,
         'columns_with_missing': dict(missing),
         'missing_cells': sum(missing.values()),
         'nonfinite_columns': list(nonfinite),
         'nonnumeric_columns': list(nonnumeric),
+        'binary_columns': [column for column in headers if binary_masks.get(column) == 3],
+    }
+
+
+def setup_options(columns: list[str]) -> dict[str, Any]:
+    """Offer documented example settings for explicit user selection, never infer consent."""
+    from memstara.paths import REPO_ROOT
+    from memstara.heart_failure_demo import FEATURES, TARGET
+    corpus = REPO_ROOT / 'examples' / 'heart-failure' / 'okf'
+    sources = ([{'label': 'Heart failure research library', 'path': str(corpus.resolve())}]
+               if (corpus / 'index.md').is_file() else [])
+    preset = None
+    if set(columns) == set((*FEATURES, TARGET)):
+        preset = {
+            "name": "Heart failure study",
+            "target": {
+                "column": TARGET,
+                "positive_label": "1",
+                "negative_label": "0",
+                "description": (
+                    "Classify the recorded chronic heart failure indicator (1 = present, 0 = absent). "
+                    "Software demonstration; clinical endpoint not independently validated."
+                ),
+                "prediction_time": "Timing not established in the supplied files; software demonstration only.",
+                "horizon": "Not established; do not interpret as future risk prediction.",
+            },
+            "categorical_columns": ["essential_hypertension_stage"],
+            "knowledge_path": sources[0]["path"] if sources else "",
+        }
+    return {'knowledge_sources': sources, 'preset': preset}
+
+
+def check_csv(body: dict[str, Any]) -> dict[str, Any]:
+    """Recheck a CSV without requiring a study, target, or knowledge source."""
+    if set(body) != {'dataset_path'} or not isinstance(body['dataset_path'], str) or not body['dataset_path'].strip():
+        raise ValueError('Upload or select a CSV file before checking inputs')
+    path = Path(body['dataset_path']).expanduser().resolve()
+    if path.suffix.lower() != '.csv' or not path.is_file():
+        raise ValueError('Select an existing CSV file')
+    with path.open('rb') as stream:
+        raw = stream.read(MAX_BYTES + 1)
+    if len(raw) > MAX_BYTES:
+        raise ValueError('CSV exceeds the current 100 MiB inspection limit')
+    try:
+        if b'\x00' in raw:
+            raise ValueError('Upload a UTF-8 CSV without null bytes')
+        inspection = inspect_csv(raw)
+    except UnicodeError:
+        raise ValueError('Upload a UTF-8 encoded CSV file') from None
+    return {
+        **inspection, 'setup_options': setup_options(inspection['columns']), 'dataset_path': str(path),
+        'sha256': hashlib.sha256(raw).hexdigest(), 'original_preserved': True,
+        'message': ('Missing values found. Choose whether to impute predictor values during training.'
+                    if inspection['missing_cells'] else 'No missing values found.'),
     }
 
 
@@ -106,11 +173,13 @@ def upload(body: dict[str, Any]) -> dict[str, Any]:
         raise
     return {
         **inspection,
+        'setup_options': setup_options(inspection['columns']),
         'dataset_path': str(destination.resolve()),
         'sha256': hashlib.sha256(raw).hexdigest(),
         'original_preserved': True,
         'message': (
-            'Missing values found. Execution is blocked. Correct the CSV and upload it again; no values or rows were changed.'
+            'Missing values found. Choose whether to impute predictor values during training; '
+            'no values or rows were changed.'
             if inspection['missing_cells'] else
             'No missing values found. Select a target and validate before execution.'
         ),

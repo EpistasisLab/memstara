@@ -88,7 +88,7 @@ export default function App() {
     <PipelineCreationDialog />
     <WindowWorkspace toolbar={<WorkspaceActions only="history"/>} items={[
       { id: "control", title: "Control", content: <ControlPanel /> },
-      { id: "pipeline", title: `${VIEWS[view].label}${pipeline && view !== "discovery" ? ` · ${pipeline.name}${view === "agents" ? "" : ` · ${pipelineLoopLabel(pipeline)}`}` : ""}`, content: <TopRegion /> },
+      { id: "pipeline", title: `${VIEWS[view].label}${pipeline && view !== "discovery" ? ` · ${pipeline.name}${(view === "agents" || view === "report") ? "" : ` · ${pipelineLoopLabel(pipeline)}`}` : ""}`, content: <TopRegion /> },
     ]} />
   </Tooltip.Provider>;
 }

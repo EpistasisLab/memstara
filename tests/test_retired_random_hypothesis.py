@@ -12,7 +12,7 @@ from memstara.control.workspace import PipelineWorkspace
 def configuration():
     return {'combination_skills': {'hypothesis': ['random_features'],
             'data': ['data_training_heavy'], 'ml': ['ml_logistic_regression'],
-            'interpreter': ['shared-anil-shap'], 'report': ['report_general']}}
+            'interpreter': ['shared-shap'], 'report': ['report_general']}}
 
 
 def test_random_is_hidden_but_historical_resolution_and_prompt_are_available():

@@ -1,0 +1,51 @@
+import {chromium,expect} from '@playwright/test';
+import assert from 'node:assert/strict';
+const browser=await chromium.launch();
+try{for(const width of [390,1200])for(const theme of ['light','dark']){
+ const page=await browser.newPage({viewport:{width,height:1000}});let posted;
+ const configuration={name:'Example dataset',dataset_path:'/saved.csv',knowledge_path:'',knowledge_mode:'llm_only',data_mode:'dataset',target:{column:'outcome',positive_label:'1',negative_label:'0',description:'',prediction_time:'',horizon:''},excluded_columns:[],missing_policy:'reject'};
+ let records=[{id:'saved-study',input_checks_passed:true,configuration}];
+ await page.route('**/control/**',route=>{
+  const req=route.request(),path=new URL(req.url()).pathname;
+  if(req.method()==='GET')return route.fulfill({json:{inputs:records}});
+  if(path.endsWith('/upload'))return route.fulfill({json:{dataset_path:'/uploads/'+('a'.repeat(32))+'/dataset.csv',columns:['a','b','c','d','outcome'],binary_columns:['outcome'],rows:80,missing_cells:1,columns_with_missing:{a:1},nonfinite_columns:[],message:'Missing values found.'}});
+  if(path.endsWith('/register')){posted=req.postDataJSON();const result={id:'uploaded-study',configuration:posted,input_checks_passed:true,issues:[],dataset:{rows:80,column_count:5,columns:['a','b','c','d','outcome'],missing_cells:1},knowledge:{documents:0}};records=[...records,result];return route.fulfill({json:result});}
+  throw Error('Unexpected endpoint '+path);
+ });
+ await page.goto('http://127.0.0.1:4177/tests/research-inputs.fixture.html?selector');
+ await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;document.documentElement.classList.toggle('dark',theme==='dark');},theme);
+ await expect(page.getByText('Use server defaults',{exact:true})).toHaveCount(0);
+ await expect(page.locator('.research-source-options .research-badge')).toHaveCount(0);
+ await page.getByRole('button',{name:'Use Example dataset',exact:true}).click();
+ await expect(page.getByLabel('Selected dataset')).toContainText('LLM only');
+ await page.getByRole('button',{name:'Use saved data',exact:false}).click();
+ await expect(page.getByRole('button',{name:'Use Example dataset',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Upload new CSV',exact:true}).click();
+ await expect(page.getByLabel('Target column',{exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Check inputs',exact:true})).toHaveCount(0);
+ await page.getByLabel('Upload CSV',{exact:true}).setInputFiles({name:'my-study.csv',mimeType:'text/csv',buffer:Buffer.from('a,outcome\n,0\n2,1')});
+ await page.getByRole('button',{name:'Check & use this data',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'Review your data settings'})).toContainText('Choose the outcome column');
+ await page.getByRole('button',{name:'Back to settings'}).click();
+ await page.getByLabel('Fill missing values for me').check();
+ await page.getByLabel('Target column',{exact:true}).selectOption('outcome');
+ await page.getByRole('radio',{name:'LLM only',exact:true}).check();
+ await expect(page.getByRole('radio',{name:'LLM only',exact:true})).toBeChecked();
+ await expect(page.locator('.research-knowledge-summary')).toContainText('LLM only');
+ await expect(page.getByLabel('Knowledge source',{exact:true})).toBeVisible();
+ await page.getByRole('radio',{name:'LLM only',exact:true}).check();
+ await expect(page.getByText('Additional information',{exact:true})).toHaveCount(0);
+ await expect(page.getByLabel('Study name',{exact:true})).toHaveCount(0);
+ await expect(page.getByLabel('When are predictors available?',{exact:true})).toHaveCount(0);
+ await expect(page.getByText('Review data columns',{exact:true})).toHaveCount(0);
+ await expect(page.getByLabel('Dataset CSV path',{exact:true})).toHaveCount(0);
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+ await page.screenshot({path:`/tmp/simple-data-${width}-${theme}.png`,fullPage:true});
+ await page.getByRole('button',{name:'Check & use this data',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'Your data is ready'})).toContainText('Choose skills');
+ await page.getByRole('button',{name:'Got it'}).click();
+ await expect(page.getByLabel('Selected dataset')).toContainText('my-study');
+ await expect(page.getByRole('button',{name:'Upload new CSV',exact:true})).toHaveAttribute('aria-pressed','true');
+ assert.deepEqual(posted.excluded_columns,[]);assert.equal(posted.name,'my-study');assert.equal(posted.target.prediction_time,'');assert.equal(posted.missing_policy,'impute_train_v1');
+ console.log(JSON.stringify({width,theme,twoPaths:true,progressiveUpload:true,knowledgeSummary:true,saveFlow:true,noOverflow:true}));await page.close();
+}}finally{await browser.close();}

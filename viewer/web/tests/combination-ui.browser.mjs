@@ -21,11 +21,11 @@ try{
   return r.continue();
  });
  await page.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');
- await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add pipeline/i}).click();
+ await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add experiment/i}).click();
  await openBuildModeFixture(page);
  await page.getByRole('combobox',{name:'Knowledge sources'}).waitFor();
  await page.getByRole('button',{name:'Cancel',exact:true}).click();
- await page.getByRole('button',{name:/Add pipeline/i}).click();
+ await page.getByRole('button',{name:/Add experiment/i}).click();
 
  const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});
  const budget=dialog.getByRole('status',{name:'Pipeline replicate summary'});await expect(budget).toHaveCount(0);
@@ -39,10 +39,10 @@ try{
  await dialog.getByRole('heading',{name:'Review your design',exact:true}).waitFor();
  await dialog.getByText('One selected model',{exact:true}).waitFor();
  await dialog.getByLabel('Replicates per pipeline').fill('10');
- await expect(budget).toBeVisible();await expect(budget).toContainText('48total pipelines×10replicates per pipeline=480total replicates');
+ await expect(budget).toBeVisible();await expect(budget).toContainText('48total pipelines×10replicates per pipeline=480total runs');
  await dialog.getByLabel('Name',{exact:true}).fill('Combination test');
  await dialog.getByRole('checkbox',{name:/I reviewed/}).check();
- await dialog.getByText('How execution works',{exact:true}).click();await dialog.getByText(/The schedule contains 480 total replicates/).waitFor();
+ await dialog.getByText('How execution works',{exact:true}).click();await dialog.getByText(/The schedule contains 480 total runs/).waitFor();
  await page.setViewportSize({width:390,height:844});
  if(await dialog.evaluate(e=>e.scrollWidth>e.clientWidth+2))throw Error('Wizard overflow');
  await dialog.getByRole('button',{name:'Create combination design'}).click();
@@ -59,5 +59,5 @@ try{
  await page.getByText('Pipeline 24 · Replicate 2 · Latest execution',{exact:true}).waitFor();await expect(page.getByRole('status',{name:'Saved pipeline replicate summary'})).toHaveCount(0);await grid.getByText('Actual skill 48',{exact:true}).first().waitFor();
  rows[0].progress={iteration:1};await page.getByText('Pipeline 1 · Replicate 1 · Latest execution',{exact:true}).waitFor();await grid.getByText('Actual skill 1',{exact:true}).first().waitFor();
  if(await grid.getByText('Actual skill 48',{exact:true}).count())throw Error('Stale Loop content');
- console.log('Current-loop frozen skills verified; Selected workflow opens; 48 pipelines/10 replicates per pipeline/480 total replicates; legacy archived 24-pipeline schedule/5 roles; narrow layout valid; create does not run; all writes mocked.');
+ console.log('Current-loop frozen skills verified; Selected workflow opens; 48 pipelines/10 replicates per pipeline/480 total runs; legacy archived 24-pipeline schedule/5 roles; narrow layout valid; create does not run; all writes mocked.');
 }finally{await browser.close();}

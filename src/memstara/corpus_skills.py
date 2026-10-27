@@ -9,23 +9,38 @@ import os
 from pathlib import Path
 
 PROFILES = {
-    'hiv': {
-        'label': 'HIV / Addiction knowledge corpus',
-        'hypothesis': ['addiction-substance-use', 'addiction-sdoh', 'addiction-psychiatric', 'random_features'],
-        'report': ['shared-anil-addiction', 'shared-anil-hiv'],
+    "hiv": {
+        "label": "HIV / Addiction knowledge corpus",
+        "hypothesis": ["addiction-substance-use", "addiction-sdoh", "addiction-psychiatric", "random_features"],
+        "report": ["shared-addiction", "shared-hiv"],
     },
-    'heart_failure': {
-        'label': 'HeartFailure knowledge corpus',
-        'hypothesis': ['heart-failure-all-categories', 'heart-failure-all', 'heart-failure-cardiovascular', 'heart-failure-metabolic-renal',
-                       'heart-failure-lifestyle-social', 'random_features'],
-        'report': ['report_heart_failure_cardiovascular', 'report_heart_failure_cardiorenal'],
+    "heart_failure": {
+        "label": "HeartFailure knowledge corpus",
+        "hypothesis": [
+            "heart-failure-all-categories",
+            "heart-failure-all",
+            "heart-failure-cardiovascular",
+            "heart-failure-metabolic-renal",
+            "heart-failure-lifestyle-social",
+            "random_features",
+        ],
+        "report": ["shared-heart-failure-cardiovascular", "shared-heart-failure-comorbidity"],
     },
-    'general': {
-        'label': 'General research corpus / model knowledge',
-        'hypothesis': ['hypothesis_general', 'random_features'],
-        'report': ['report_general'],
+    "general": {
+        "label": "General research corpus / model knowledge",
+        "hypothesis": ["hypothesis_general", "random_features"],
+        "report": ["shared-addiction", "shared-hiv"],
     },
 }
+# Explanation perspectives are selectable independently of the corpus. Keep the
+# corpus-specific ordering so existing defaults do not change.
+EXPLANATION_SKILLS = (
+    'shared-addiction', 'shared-hiv',
+    'shared-heart-failure-cardiovascular', 'shared-heart-failure-comorbidity',
+)
+for _profile in PROFILES.values():
+    _profile['report'] = list(dict.fromkeys([*_profile['report'], *EXPLANATION_SKILLS]))
+
 INDEX_PROFILES = {
     'aec7452874f70ec9b427f55187aad44a8115d0720e585294fc70e6ad11b12527': 'hiv',
     'e90b6191d13c1c1bc626713bf4c12787f445b72e24aac523598ac483156c7a06': 'heart_failure',
@@ -59,9 +74,19 @@ def corpus_profile(profile=None, *, knowledge_mode='okf'):
 def menu_bindings():
     from memstara.research_inputs import list_inputs
 
-    return {'profiles': {key: {**profile, 'hypothesis': [skill for skill in profile['hypothesis']
-            if skill not in ('random_features', 'heart-failure-all')]} for key, profile in PROFILES.items()}, 'default': corpus_profile(),
-            'research': {record['id']: corpus_profile(record) for record in list_inputs()}}
+    return {
+        "profiles": {
+            key: {
+                **profile,
+                "hypothesis": [
+                    skill for skill in profile["hypothesis"] if skill not in ("random_features", "heart-failure-all")
+                ],
+            }
+            for key, profile in PROFILES.items()
+        },
+        "default": corpus_profile(),
+        "research": {record["id"]: corpus_profile(record) for record in list_inputs()},
+    }
 
 
 def validate_hypotheses(books, profile=None, *, knowledge_mode='okf'):
@@ -73,17 +98,17 @@ def validate_hypotheses(books, profile=None, *, knowledge_mode='okf'):
         if name not in permitted and not name.startswith('user-hypothesis-'):
             raise ValueError(f'{name}: Hypothesis skill does not match the selected corpus ({scope}). '
                              'Review Knowledge sources and select a matching skill.')
-    reports = set(PROFILES[scope]['report']) | {'report_general'}
+    reports = set(EXPLANATION_SKILLS)
+    from memstara.control.catalog import canonical_name
     for name in books.get('report', []):
-        if name not in reports and not name.startswith('user-report-'):
-            raise ValueError(f'{name}: Explanation skill does not match the selected corpus ({scope}). '
-                             'Select a matching or general Explanation skill.')
+        if canonical_name(name) not in reports:
+            raise ValueError(f'{name}: select a supplied Explanation skill from the library.')
 
 
 def with_default_hypothesis(body):
     """Resolve an empty new-design selection to an explicit corpus-compatible skill."""
     choices = body.get('combination_skills')
-    if not isinstance(choices, dict) or not choices or choices.get('hypothesis', []) != []:
+    if not isinstance(choices, dict) or not choices:
         return body
     profile = None
     if body.get('research_input_id'):
@@ -91,5 +116,8 @@ def with_default_hypothesis(body):
         profile = load(body['research_input_id'])
     mode = profile['configuration']['knowledge_mode'] if profile else body.get('knowledge_mode', 'okf')
     scope = corpus_profile(profile, knowledge_mode=mode)
-    default = PROFILES[scope]['hypothesis'][0]
-    return {**body, 'combination_skills': {**choices, 'hypothesis': [default]}}
+    updated = dict(choices)
+    for stage in ('hypothesis', 'report'):
+        if updated.get(stage, []) == []:
+            updated[stage] = [PROFILES[scope][stage][0]]
+    return {**body, 'combination_skills': updated}

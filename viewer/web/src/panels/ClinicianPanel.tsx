@@ -1,10 +1,10 @@
+import {savedReportText} from '../lib/savedReportText';
 import { displayJson } from '../lib/displayText';
 import AucAssessment from '../components/AucAssessment';
 import { featureImportance, rankedContributions, contributionScale } from "../lib/featureImportance";
 import SignedContributionBar from "../components/SignedContributionBar";
 import Help from "../components/Help";
 import ContentOrigin from "../components/ContentOrigin";
-import { transparentReportMarkdown } from "../lib/reportTransparency";
 import { useLoopLabel } from '../lib/useLoopLabel';
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { ArrowUpRight, BookOpen, Download, Search, Stethoscope, Microscope, ClipboardCheck, ChevronDown } from "lucide-react";
@@ -18,6 +18,7 @@ import type { Result } from "../types";
 
 import "./clinician.css";
 
+const InterpretationOutput = lazy(() => import("../components/InterpretationOutput"));
 const ReportBody = lazy(() => import("../components/ReportBody"));
 const section = "rounded-xl border border-paper-line bg-white workspace-padding";
 
@@ -33,7 +34,7 @@ function Evidence({ result }: { result: Result }) {
     <section className="clinical-meaning">
       <div className="clinical-section-title"><Stethoscope size={21}/><h3>What did the analysis observe?</h3></div>
       <p className="clinical-caption">Interpretation Agent summary of recorded observations and limitations. AI-written; review it against the measured evidence.</p>
-      {result.interpretation ? <Suspense fallback={<p>Loading interpretation…</p>}><ReportBody origin="llm" text={result.interpretation} /></Suspense>
+      {result.interpretation ? <Suspense fallback={<p>Loading interpretation…</p>}><InterpretationOutput result={result}/></Suspense>
         : <p className="clinical-empty">An interpretation has not arrived yet. We will show it here when it is recorded.</p>}
     </section>
     <section className="clinical-next-step">
@@ -89,12 +90,11 @@ export default function ClinicianPanel() {
   const active=results.find(r=>r.result_id===selected);
   const activeRun=mode==='live'?(active?.run_tag||Object.keys(live.reports).at(-1)):runTag;
   const report=mode==='live'?(activeRun?live.reports[activeRun]:null):snapshot?.report;
-  const analysesPerLoop = activeRun === snapshot?.run_tag ? snapshot?.run_configuration?.trials : undefined;
-  const recommendation=report?.text?.match(/^##\s+Executive recommendation\s*\n([\s\S]*?)(?=^##\s|$(?![\s\S]))/im)?.[1]?.trim();
+  const reportText=savedReportText(report);
   const runs=snapshot?.runs??knownRuns;
   const download=()=>{
-    if(!report?.text)return;
-    const url=URL.createObjectURL(new Blob([transparentReportMarkdown(report.text, analysesPerLoop)],{type:'text/markdown;charset=utf-8'}));
+    if(!reportText)return;
+    const url=URL.createObjectURL(new Blob([reportText],{type:'text/markdown;charset=utf-8'}));
     const a=document.createElement('a');a.href=url;a.download=`${activeRun||'analysis'}_report.md`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
   const switchMode=(next:'live'|'archive')=>{setMode(next);setSelected(null);setQuery('');};
@@ -113,7 +113,7 @@ export default function ClinicianPanel() {
       {(mode==='live'?live.error:snapshot?.stale)&&<p role="status" className="clinical-warning">Updates are temporarily unavailable. You can keep reading the last available findings.</p>}
       <div className="clinical-findings-layout"><aside className={`${section} min-w-0`}><h2 className="text-lg font-semibold">Explore findings</h2><p className="clinical-caption">{mode==='live'?'Newest first':'From your selected analysis'}</p><label className="my-4 flex items-center gap-2 rounded-lg border border-paper-line px-3"><Search size={16}/><input aria-label="Search clinical findings" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search findings or measurements" className="min-w-0 flex-1 bg-transparent py-2.5 text-sm outline-hidden"/></label><div className="max-h-[720px] space-y-2 overflow-auto">{matches.map(result=><button data-help="Inspect this finding" data-help-description="Select this hypothesis to read its model evidence, interpretation, limitations and linked report. The selection stays pinned while new findings arrive." key={result.result_id} aria-pressed={active?.result_id===result.result_id} onClick={()=>{setSelected(result.result_id);}} className={`w-full rounded-xl border p-3 text-left transition ${active?.result_id===result.result_id?'border-[#71ae9e] bg-stage-hypothesis/5':'border-paper-line hover:bg-paper'}`}><span className="flex justify-between gap-2 text-xs text-ink-faint">{pipelineLabel(result,pipelines)} · {labelLoop(result)}<ArrowUpRight size={14}/></span><span className="mt-2 line-clamp-4 text-sm font-medium leading-relaxed">{result.hypothesis||result.perspective||'Untitled finding'}</span><span className="mt-2 block text-xs text-ink-soft">{result.interpretation?'Interpretation available':'Awaiting interpretation'}</span></button>)}{!matches.length&&<p className="py-5 text-sm text-ink-soft">{query?'No matching findings.':'As analyses produce findings, they will appear here automatically.'}</p>}</div></aside>
       {active?<div className="min-w-0"><p className="mb-3 text-xs text-ink-faint">Reading: {pipelineLabel(active,pipelines)} · {labelLoop(active)}</p><Evidence key={active.result_id} result={active}/></div>:<section className={`${section} py-16 text-center`}><BookOpen className="mx-auto mb-4 text-ink-faint"/><h2 className="font-semibold">The next finding will appear here.</h2><p className="mt-3 text-sm text-ink-soft">Questions and hypotheses may already be in progress. Clinical evidence appears when the pipeline records analysis results.</p></section>}</div>
-      <details className="clinical-disclosure" aria-label="Research report"><summary><BookOpen size={20}/><span><strong>Read the research report</strong><small>Summary, full report and download</small></span><ChevronDown size={18}/></summary><div className="clinical-disclosure-body"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-stage-hypothesis">The bigger picture</p><h2 className="mt-1 text-lg font-semibold">Research team briefing</h2></div><button onClick={download} disabled={!report?.text} className="flex items-center gap-2 rounded-lg border border-paper-line px-3 py-2 text-xs disabled:opacity-40"><Download size={14}/>Download report (.md)</button></div><p className="mt-2 break-words text-xs text-ink-faint">{activeRun||'No linked report yet'} · {report?.status||'Awaiting report'}</p>{recommendation?<Suspense fallback={<p>Loading recommendation…</p>}><ReportBody report analysesPerLoop={analysesPerLoop} text={recommendation}/></Suspense>:<p className="mt-3 text-sm text-ink-soft">{report?.text?'Read the original report below; no separate executive recommendation was recorded.':'The run report will appear here when it is recorded.'}</p>}{report?.error&&<p className="mt-2 text-sm">{report.error}</p>}{report?.text&&<details className="mt-4 border-t border-paper-line pt-3"><summary className="cursor-pointer text-sm font-semibold">Read the complete report</summary><Suspense fallback={<p>Loading report…</p>}><ReportBody report analysesPerLoop={analysesPerLoop} text={report.text}/></Suspense></details>}</div></details>
+      <details className="clinical-disclosure" aria-label="Research report"><summary><BookOpen size={20}/><span><strong>Read the research report</strong><small>Summary, full report and download</small></span><ChevronDown size={18}/></summary><div className="clinical-disclosure-body"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-stage-hypothesis">The bigger picture</p><h2 className="mt-1 text-lg font-semibold">Research team briefing</h2></div><button onClick={download} disabled={!reportText} className="flex items-center gap-2 rounded-lg border border-paper-line px-3 py-2 text-xs disabled:opacity-40"><Download size={14}/>Download report (.md)</button></div><p className="mt-2 break-words text-xs text-ink-faint">{activeRun||'No linked report yet'} · {report?.status||'Awaiting report'}</p>{report?.error&&<p className="mt-2 text-sm">{report.error}</p>}{reportText&&<details className="mt-4 border-t border-paper-line pt-3"><summary className="cursor-pointer text-sm font-semibold">Read the complete report</summary><Suspense fallback={<p>Loading report…</p>}><ReportBody verbatim text={reportText}/></Suspense></details>}</div></details>
       <footer className="pb-5 text-xs text-ink-faint">Research findings for review with your study team. Not a treatment recommendation.</footer>
     </div>
   </main>;

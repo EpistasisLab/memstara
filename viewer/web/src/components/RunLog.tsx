@@ -1,4 +1,6 @@
-import { cleanLog } from "../lib/telemetry";
+import {useSnapshot} from '../store/viewer';
+import {usePipelines} from '../store/pipelines';
+import { cleanLog, executionLog } from "../lib/telemetry";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "../lib/cn";
 
@@ -51,6 +53,7 @@ const KIND_CLASS: Record<LogKind, string> = {
 };
 
 export interface RunLogProps {
+  runTag?: string;
   lines: string[];
   /** Bytes the service jumped over. Drawn as a break in the transcript, because a
    *  transcript with a silent hole in it is the one thing a transcript may not be. */
@@ -59,7 +62,11 @@ export interface RunLogProps {
   tail: string;
 }
 
-export default function RunLog({ lines, skipped, tail }: RunLogProps) {
+export default function RunLog({ lines, skipped, tail, runTag }: RunLogProps) {
+  const snapshot=useSnapshot(),items=usePipelines(s=>s.items);
+  const config=runTag&&snapshot?.run_tag===runTag?snapshot.run_configuration:
+    items.flatMap(p=>[p.running,p.latest]).find(e=>runTag&&e?.run_tag===runTag)?.configuration;
+  const format=(text:string)=>executionLog(text,config?(config.combination_plan??null):undefined);
   const box = useRef<HTMLDivElement>(null);
   const [following, setFollowing] = useState(true);
   const [showPolling, setShowPolling] = useState(false);
@@ -110,7 +117,7 @@ export default function RunLog({ lines, skipped, tail }: RunLogProps) {
         ) : (
           <pre className="whitespace-pre-wrap break-words font-mono text-[12px] leading-[1.45]">
             {lines.map((raw, i) => {
-              const line = cleanLog(raw);
+              const line = format(raw);
               const kind = kindOf(line);
               if (kind === null || (kind === "lap" && !showPolling)) return null;
               return (
@@ -121,7 +128,7 @@ export default function RunLog({ lines, skipped, tail }: RunLogProps) {
             })}
             {/* The half-written line, kept apart so it is never mistaken for a finished
                 one and never classified — its shape is not decided yet. */}
-            {tail && <div className="text-ink-faint opacity-60">{cleanLog(tail)}</div>}
+            {tail && <div className="text-ink-faint opacity-60">{format(tail)}</div>}
           </pre>
         )}
       </div>

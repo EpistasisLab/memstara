@@ -87,7 +87,11 @@ def instructions(plan, wave):
     if selected is None:
         return ''
     if selected['mode'] == 'all':
-        return '\nFEATURE SELECTION INPUT: ' + json.dumps(selected, ensure_ascii=False) + '\nUse exactly required_features in the recorded order; do not sample or select a subset.'
+        return (
+            "\nFEATURE SELECTION INPUT: "
+            + json.dumps(selected, ensure_ascii=False)
+            + "\nUse exactly required_features in the recorded order; do not sample or select a subset."
+        )
     message = ('\nFEATURE SELECTION INPUT: ' + json.dumps(selected, ensure_ascii=False)
                + '\nSelect 4–20 distinct original columns (before encoding), excluding the outcome. '
                  'create_task enforces the range and pool. Do not add baseline predictors. ')

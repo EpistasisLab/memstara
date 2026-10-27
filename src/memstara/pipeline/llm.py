@@ -224,7 +224,9 @@ class PipelineLLMService(LLMService):
                     # indefinitely. Keep this per-attempt limit aligned with the
                     # frozen runtime policy; the existing bounded retry loop owns
                     # recovery and records each timed-out attempt.
-                    call_timeout = runtime_timeouts(config.model).get('llm_call_timeout_seconds')
+                    # The application enforces provider deadlines independently of
+                    # Motoro's outer wall-clock wrappers, which include user pause.
+                    call_timeout = runtime_timeouts(config.model).get('llm_call_timeout_seconds', 120)
                     if call_timeout:
                         async with asyncio.timeout(call_timeout):
                             result = await invoke(
@@ -286,7 +288,11 @@ class PipelineLLMService(LLMService):
                 # output, but do not let Motoro execute its next tool until Resume.
                 if context and (Path(context[0]) / 'pause.request').exists():
                     from memstara.evaluation import active_plan
-                    if (active_plan() or {}).get('pause_policy') == 'fresh_model_request_v1':
+
+                    if (active_plan() or {}).get("pause_policy") in (
+                        "fresh_model_request_v1",
+                        "fresh_request_and_ml_restart_v2",
+                    ):
                         mark_waiting(True)
                         try:
                             await request_ready(context)

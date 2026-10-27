@@ -79,6 +79,7 @@ def test_recorded_seed_cannot_be_replaced_by_agent_or_retry():
     from memstara.seed_schedule import create, seed_for
     schedule = create(1, 3, 'independent_pipelines')
     snapshot = {'data_allocation_policy': {'version': allocation.TWO_WAY_VERSION},
+                'evaluation': evaluation.validate({'test_size': .3}),
                 'books': {}, 'prompts': {}, 'seed_schedule': schedule}
     spec = allocation.request(snapshot, 1)
     proposal = spec['required_data_plan']

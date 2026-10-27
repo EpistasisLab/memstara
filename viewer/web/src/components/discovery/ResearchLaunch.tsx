@@ -3,7 +3,7 @@ import {useViewer} from '../../store/viewer';
 export default function ResearchLaunch() {
  const state=usePipelines();
  return <section className="universe-section research-launch" aria-label="Research workflow">
-  <div className="universe-tools"><button disabled={state.busy} onClick={()=>void state.add()} aria-label="Add pipeline — set up research">New research</button>
+  <div className="universe-tools"><button disabled={state.busy} onClick={()=>void state.add()} aria-label="Add experiment — set up research">New research</button>
    <button onClick={()=>useViewer.getState().setView('scene')}>View floor plan</button></div>
   {state.error&&<p role="alert">{state.error}</p>}
   <details className="research-controls"><summary>Pipeline controls · {state.items.length} configured · {state.items.filter(p=>p.running).length} active</summary><div className="research-pipelines">{state.items.map(p=><article key={p.id} className="universe-section">

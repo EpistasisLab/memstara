@@ -12,7 +12,7 @@ from memstara.pipeline.prompts import load_prompt
 
 def freeze(args, run_dir: Path, books: dict) -> dict:
     os.environ.pop("MEMSTARA_RUN_CONFIG", None)
-    from memstara.preprocessing_policy import VERSION, analysis_ready
+    from memstara.preprocessing_policy import VERSION, TYPED, requires_numeric
     previous = None
     if getattr(args, 'resume', False) and (run_dir / 'config.json').exists():
         previous = json.loads((run_dir / 'config.json').read_text())
@@ -21,11 +21,18 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     # original partition contract. New ordinary MVP runs use the entire cohort.
     two_way = (previous.get('partition_policy') == TWO_WAY_VERSION if previous is not None
                else not bool(json.loads(getattr(args, 'controlled_comparison', '{}') or '{}')))
-    prepared_input = analysis_ready(previous)
     research_config = (getattr(args, "research_profile", None) or {}).get("configuration", {})
+    preprocessing = (
+        previous.get("preprocessing_policy", "legacy_encoding_v1")
+        if previous is not None
+        else TYPED
+        if "predictor_types" in research_config
+        else VERSION
+    )
+    prepared_input = requires_numeric({'preprocessing_policy': preprocessing})
     missing_policy = research_config.get("missing_policy", "reject")
-    if missing_policy != "reject":
-        raise ValueError("Imputation is disabled. Correct the CSV and use missing_policy=reject.")
+    if missing_policy not in ("reject", "impute_train_v1"):
+        raise ValueError("Unsupported missing-value policy")
     combination_plan = json.loads(getattr(args, "combination_plan", "") or "null")
     if combination_plan:
         books = {stage: [s['id'] for s in entries] for stage, entries in combination_plan['skills'].items()}
@@ -48,7 +55,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     from memstara.control.catalog import resolve
     ml_books = books.get("ml") or []
     skill_policy = resolve(ml_books[0]).get("evaluation", {}) if ml_books else {}
-    # Skills supply model defaults; missing values are rejected for every model.
+    # Skills supply model defaults; registered consent controls imputation.
     evaluation = validate({**skill_policy, **json.loads(args.evaluation)})
     allow_missing = False
     if not getattr(args, "report_only", False):
@@ -79,8 +86,9 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     ablate_okf = bool(getattr(args, "ablate_okf", False))
     if ablate_okf:
         from memstara.pipeline.ablation import INSTRUCTIONS
-        for prompt in resolved.values():
-            prompt['system_prompt'] = INSTRUCTIONS + '\n\n' + prompt['system_prompt']
+        for key, prompt in resolved.items():
+            if not key.startswith(('board/interpreter:', 'board/report:')):
+                prompt['system_prompt'] = INSTRUCTIONS + '\n\n' + prompt['system_prompt']
     digest = hashlib.sha256()
     with dataset.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -88,9 +96,10 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     from memstara.pipeline.feature_context import freeze_feature_context
     from memstara.stage_models import for_stage
     state = {
-        "preprocessing_policy": VERSION,
+        "preprocessing_policy": preprocessing,
         "classifier_seed_policy": "split_seed_v1",
-        "pause_policy": "fresh_model_request_v1",
+        "pause_policy": "fresh_request_and_ml_restart_v2",
+        "pause_recovery_policy": "durable_paused_agents_v1",
         "schema_version": 1,
         "critic_policy": {"version": "deterministic_feasibility_v1", "extra_llm_calls": 0},
         "knowledge_policy": {"mode": "no_okf" if ablate_okf else "okf", "retrieval_enabled": not ablate_okf},
@@ -101,13 +110,13 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
                          if getattr(args, "stage_models", None) else None),
         "validation_partition": partition,
         "hypothesis_policy": {} if getattr(args, "report_only", False) else {
-            "version": "knowledge_only_v1" if combination_plan else "iterative_discovery_v1",
-            "kind": "independent_combination" if combination_plan else "iterative_discovery",
-            **({"combination_questions": "independent_combination_questions_v1"} if combination_plan else {}),
+            "version": "knowledge_only_v1",
+            "kind": "independent_combination",
+            "combination_questions": "independent_combination_questions_v1",
             "question_contract": "fixed_target_v1",
-            "prior_ml_feedback": not bool(combination_plan),
+            "prior_ml_feedback": False,
             "validation_status": "exploratory_not_independently_validated",
-            "refinement": "none" if combination_plan else "prior_iteration_evidence_with_explicit_lineage",
+            "refinement": "none",
         },
         "data_mode": "dataset",
         "knowledge_mode": "llm_only" if ablate_okf else "okf",
@@ -130,12 +139,12 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         "evaluation": evaluation,
         "comparison_policy": comparison_policy,
         "input_contract": "clean single dataset; column selection only; fixed binary target",
-        "missing_value_policy": "reject",
+        "missing_value_policy": missing_policy,
         "explainability_review": "Review required; provisional specification",
         "dataset_sha256": digest.hexdigest(),
         **({"feature_context": freeze_feature_context(
             dataset, args.y_column,
-            require_complete=True)}
+            require_complete=True, missing_policy=missing_policy, require_numeric=prepared_input)}
            if not getattr(args, "report_only", False) else {}),
         "knowledge_path": None if ablate_okf else os.environ.get("AGENTIC_OKF_BUNDLE_DIR"),
         "trials": args.trials,
@@ -194,7 +203,17 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
             from memstara.ml_configuration import policy
             state.setdefault("ml_configuration_policy", policy())
     from memstara.specialist_explanation import freeze as freeze_explanation
-    explanation = None if ablate_okf else freeze_explanation(books, resolved)
+    from memstara.corpus_skills import corpus_profile
+    # A specialist's writing skill must not switch a Heart Failure/general
+    # dataset to an unrelated expert corpus. Explicit source bindings remain opt-in.
+    has_expert_sources = bool(os.environ.get('MEMSTARA_EXPLANATION_SOURCES')
+                              or os.environ.get('MEMSTARA_EXPLANATION_SOURCES_JSON'))
+    scoped_expert = has_expert_sources or corpus_profile(getattr(args, 'research_profile', None)) == 'hiv'
+    from memstara.specialist_explanation import SKILLS as bound_expert_skills
+    # A mixed perspective plan uses the same per-result handoff for every report;
+    # it must not force unrelated perspectives into a specialty database binding.
+    bound_only = bool(books.get('report')) and set(books['report']).issubset(bound_expert_skills)
+    explanation = freeze_explanation(books, resolved) if not ablate_okf and scoped_expert and bound_only else None
     if explanation:
         state["specialist_explanation_policy"] = explanation
     from memstara.controlled_comparison import freeze as freeze_controls
@@ -215,6 +234,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     # recovery changes are separately validated and recorded by active_plan().
     if getattr(args, 'resume', False) and (run_dir / 'config.json').exists():
         original = json.loads((run_dir / 'config.json').read_text())
+        state['hypothesis_policy'] = original.get('hypothesis_policy', {})
         state['preprocessing_policy'] = original.get('preprocessing_policy', 'legacy_encoding_v1')
         if 'preprocessing_policy' not in original:
             state.pop('preprocessing_policy', None)
@@ -222,6 +242,10 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
             state['classifier_seed_policy'] = original['classifier_seed_policy']
         else:
             state.pop('classifier_seed_policy', None)
+        if 'pause_recovery_policy' in original:
+            state['pause_recovery_policy'] = original['pause_recovery_policy']
+        else:
+            state.pop('pause_recovery_policy', None)
         if 'pause_policy' in original:
             state['pause_policy'] = original['pause_policy']
         else:

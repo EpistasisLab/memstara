@@ -133,7 +133,7 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
         config["knowledge_path"] = str(corpus)
     combination = None
     books = {"hypothesis": ["hypothesis_general"], "data": ["data_training_heavy"],
-             "ml": ["ml_logistic_regression"], "interpreter": ["shared-anil-shap"],
+             "ml": ["ml_logistic_regression"], "interpreter": ["shared-shap"],
              "report": ["report_general"]}
     if study == "synthetic_pipeline_first":
         from memstara.combinations import build_plan
@@ -145,16 +145,16 @@ def test_real_haiku_pipeline(live_batch, monkeypatch, pytestconfig, study, knowl
                      report=["report_heart_failure_cardiovascular"])
         if study == "heart_combinations":
             from memstara.combinations import build_plan
-            books["interpreter"] = ["shared-anil-shap", "shared-anil-lime"]
+            books["interpreter"] = ["shared-shap", "shared-lime"]
             books["report"] += ["report_heart_failure_cardiorenal"]
             combination = build_plan(books)
             assert combination["total_loops"] == loops
         elif study == "heart_random":
-            books.update(hypothesis=["random_features"], ml=["ml_xgboost"], interpreter=["shared-anil-lime"])
+            books.update(hypothesis=["random_features"], ml=["ml_xgboost"], interpreter=["shared-lime"])
             from memstara.combinations import build_plan
             combination = build_plan(books, max_loops=loops)
     if study == "private_hiv":
-        books.update(hypothesis=["addiction-psychiatric"], report=["shared-anil-hiv"])
+        books.update(hypothesis=["addiction-psychiatric"], report=["shared-hiv"])
     source = Path(config["dataset_path"])
     source_sha = digest(source)
     run = area / "run"

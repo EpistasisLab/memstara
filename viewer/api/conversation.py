@@ -76,7 +76,8 @@ async def _conversation(tag, loop):
                                      'stage': call['stage'], 'name': name, 'label': stores.label_of(name),
                                      'kind': field, 'kind_label': label, 'loop': call['loop'],
                                      'at': r['started_at'].isoformat() if r['started_at'] else None,
-                                     'text': text[:50000], 'truncated': len(text) > 50000})
+                                     'text': text if call['stage'] in ('interpreter', 'interpret', 'report') else text[:50000],
+                                     'truncated': call['stage'] not in ('interpreter', 'interpret', 'report') and len(text) > 50000})
             return {'run_tag': tag, 'loop': loop, 'messages': messages, 'limited': True, 'note': 'Showing up to 200 message-bearing records from the latest 500 steps in this scope. Select a loop to inspect older history.'}
     except TimeoutError:
         raise HTTPException(503, 'Conversation lookup timed out.') from None

@@ -104,7 +104,7 @@ def test_ui_arguments_reach_cli_environment_check_with_prepared_domain(sample, s
     choices = {'hypothesis': PROFILES[scope]['hypothesis'],
                'data': ['data_training_heavy', 'data_balanced_stratified'],
                'ml': ['ml_logistic_regression', 'ml_xgboost'],
-               'interpreter': ['shared-anil-shap', 'shared-anil-lime'],
+               'interpreter': ['shared-shap', 'shared-lime'],
                'report': PROFILES[scope]['report']}
     body = {'research_input_id': record['id'], 'trials': 1,
             **{('playbook_explanation' if stage == 'report' else 'playbook_' + stage): ids[0]
@@ -148,7 +148,7 @@ def test_missing_target_semantics_and_identifiers_are_explicit(sample):
     sample['excluded_columns'] = []
     result = inspect(sample)
     codes = {x['code'] for x in result['issues']}
-    assert {'target_column', 'target_description', 'target_prediction_time', 'identifier_review'} <= codes
+    assert {'target_column', 'target_positive_label', 'target_negative_label', 'identifier_review'} <= codes
     assert not result['input_checks_passed']
 
 
@@ -208,7 +208,7 @@ def test_path_escape_via_corpus_symlink_is_rejected(sample, tmp_path):
 
 def test_no_implicit_imputation(sample):
     sample['missing_policy'] = 'impute'
-    with pytest.raises(ValueError, match='Imputation is disabled'):
+    with pytest.raises(ValueError, match='Unsupported missing-value policy'):
         inspect(sample)
 
 
@@ -297,7 +297,7 @@ def test_registered_target_replaces_stale_browser_target(sample, monkeypatch):
 
 
 def test_prepare_rejects_invalid_inputs_before_any_runtime(sample):
-    sample['target']['prediction_time'] = ''
+    sample['target']['positive_label'] = ''
     record = register(sample)
     with pytest.raises(ValueError, match='need review'):
         prepare(record['id'])
@@ -415,7 +415,7 @@ def test_unbound_profiles_do_not_silently_apply_domain_skills(monkeypatch):
     with pytest.raises(ValueError, match='disabled'):
         validate_skills({'hypothesis':['comorbidity']})
     with pytest.raises(ValueError, match='does not match the selected corpus'):
-        validate_skills({'report':['shared-anil-hiv']})
+        validate_skills({'report':['shared-hiv']})
 
 
 def test_control_launch_uses_selected_inputs_without_changing_server_environment(sample, tmp_path, monkeypatch):
@@ -461,3 +461,17 @@ def test_text_predictors_block_registration_without_exposing_rows(sample):
     assert not result['input_checks_passed']
     assert any(i['code'] == 'nonnumeric_predictors' for i in result['issues'])
     assert 'private-text' not in json.dumps(result)
+
+
+def test_optional_outcome_details_do_not_block_dataset(sample):
+    sample['target']['description'] = ''
+    sample['target']['prediction_time'] = ''
+    sample['target']['horizon'] = ''
+    original = Path(sample['dataset_path']).read_bytes()
+    saved = register(sample)
+    assert saved['input_checks_passed']
+    profile = prepare(saved['id'])
+    target = profile['configuration']['target']
+    assert 'Classify outcome' in target['description']
+    assert target['prediction_time'] == target['horizon'] == ''
+    assert Path(sample['dataset_path']).read_bytes() == original

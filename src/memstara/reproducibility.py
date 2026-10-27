@@ -103,6 +103,7 @@ def save_bundle(source, target, plan, predictors, fixed_trials, partition, artif
         'classifier_seed_policy': result['evaluation'].get('classifier_seed_policy', 'configured_seed_v1'),
         'preprocessing_policy': result.get('data_quality', {}).get('preprocessing_policy', 'legacy_encoding_v1'),
         'imputation_categories': result.get('data_quality', {}).get('imputation_categories', []),
+        'predictor_types': result.get('data_quality', {}).get('predictor_types', {}),
         'missing_policy': result.get('data_quality', {}).get('missing_value_policy', 'reject'),
         'files': {p.name: digest(p) for p in directory.iterdir() if p.is_file()},
         'verification': checks,
@@ -130,8 +131,17 @@ def replay(directory: Path) -> dict:
         if Path(name).name != name or not (directory / name).is_file() or digest(directory / name) != expected:
             return {'status': 'integrity_mismatch'}
     for name, expected in manifest['code'].items():
-        allowed = ('evaluation.py', 'reproducibility.py', 'ml_configuration.py',
-                   'paired_ml.py', 'comparisons.py', 'data_allocation.py', 'specialist_xai.py', 'missing_values.py', 'preprocessing_policy.py')
+        allowed = (
+            "evaluation.py",
+            "reproducibility.py",
+            "ml_configuration.py",
+            "paired_ml.py",
+            "comparisons.py",
+            "data_allocation.py",
+            "specialist_xai.py",
+            "missing_values.py",
+            "preprocessing_policy.py",
+        )
         if name not in allowed or digest(Path(__file__).with_name(name)) != expected:
             return {'status': 'code_mismatch'}
     # Load the evaluation libraries before recording native thread pools, as in score().
@@ -143,6 +153,7 @@ def replay(directory: Path) -> dict:
     actual = score(directory / 'input.csv', manifest['target'], manifest['plan'],
                    missing_policy=manifest.get('missing_policy', 'reject'),
                    imputation_categories=manifest.get('imputation_categories', []),
+                   predictor_types=manifest.get('predictor_types', {}),
                    predictors=manifest['predictors'], fixed_trials=manifest['fixed_trials'],
                    partition=manifest['partition'], persist=False, explain=False,
                    configuration=manifest.get('configuration'),

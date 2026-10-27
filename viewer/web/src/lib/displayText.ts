@@ -1,26 +1,30 @@
-/** UI labels only. Never use these values for API requests, hashes or saved evidence. */
-const specialistLabels: Record<string, string> = {
-  'shared-anil-shap': 'SHAP Interpretation',
-  'shared-anil-lime': 'LIME Interpretation',
-  'shared-anil-addiction': 'Addiction Expert Explanation',
-  'shared-anil-hiv': 'HIV Expert Explanation',
-};
+import legacyRules from './legacyDisplayRules.json' with {type: 'json'};
 
-/** Remove legacy project contributor attribution from visible text, including old records.
- * This is a presentation rule for known project names, not a general PII detector.
- * Letter/number boundaries preserve clinical terms such as neutrophil and aniline.
- */
+/** Display aliases never change saved evidence or API identifiers. */
+const specialistLabels: Record<string, string> = {
+  'shared-shap': 'SHAP Interpretation',
+  'shared-lime': 'LIME Interpretation',
+  'shared-addiction': 'Addiction Expert Explanation',
+  'shared-hiv': 'HIV Expert Explanation',
+  'shared-heart-failure-cardiovascular': 'Heart Failure — Cardiovascular Explanation',
+  'shared-heart-failure-comorbidity': 'Heart Failure — Comorbidities and Social Context Explanation',
+};
+const legacyPatterns = legacyRules.map(rule => ({...rule, regex: new RegExp(rule.pattern, rule.flags)}));
+
+/** Read legacy contributor-prefixed IDs without using names as code identifiers. */
+function canonicalSkillId(id: string): string {
+  return id.replace(/^shared-[^-]+-(shap|lime|addiction|hiv)$/i, 'shared-$1').toLowerCase();
+}
+
 export function displayText(text: string | null | undefined): string {
-  return (text ?? '')
-    .replace(/(?<![\p{L}\p{N}])shared[-_ ]anil[-_ ](shap|lime|addiction|hiv)(?![\p{L}\p{N}])/giu,
-      (_, role: string) => specialistLabels[`shared-anil-${role.toLowerCase()}`])
-    .replace(/\ban Anil-authored\b/gi, 'a contributor-authored')
-    .replace(/(?<![\p{L}\p{N}])(?:anil|phil)[-_]shared(?![\p{L}\p{N}])/giu, 'contributed-resources')
-    .replace(/(?<![\p{L}\p{N}])(?:anil(?:\s+saini)?|phil(?:\s+freda)?|jason(?:\s+moore)?|hyunjun(?:\s+choi|a)?|choih2|junchoi)(?![\p{L}\p{N}])/giu, 'contributor');
+  let visible = (text ?? '').replace(/(?<![\p{L}\p{N}])shared[-_ ](?:[\p{L}]+[-_ ])?(shap|lime|addiction|hiv)(?![\p{L}\p{N}])/giu,
+    (_, role: string) => specialistLabels[`shared-${role.toLowerCase()}`]);
+  for (const rule of legacyPatterns) visible = visible.replace(rule.regex, rule.replacement);
+  return visible;
 }
 
 export function skillLabel(id?: string | null, title?: string | null, fallback = 'Skill not recorded'): string {
-  const key = id?.toLowerCase() ?? '';
+  const key = canonicalSkillId(id ?? '');
   return Object.hasOwn(specialistLabels, key) ? specialistLabels[key] : displayText(title?.trim() || id?.trim() || fallback);
 }
 

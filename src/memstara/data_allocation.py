@@ -18,12 +18,16 @@ def request(snapshot, trial):
     from memstara.combinations import task_books
     books = task_books(snapshot, trial).get('data', [])
     if not books and version == TWO_WAY_VERSION:
-        books = ['data_training_heavy']
-    if len(books) != 1 or books[0] not in SKILLS:
+        # Older frozen runs without a data skill used the 70/30 fallback.
+        manual = snapshot.get('seed_schedule', {}).get('policy') in (
+            'pipeline_sequence_v1', 'independent_pipelines', 'fixed_experiment_v1')
+        books = ['data_manual_split' if manual else 'data_training_heavy']
+    manual = books == ['data_manual_split'] and version == TWO_WAY_VERSION
+    if len(books) != 1 or (books[0] not in SKILLS and not manual):
         return None
     skill = books[0]
-    low, high = SKILLS[skill]
-    if version == TWO_WAY_VERSION:
+    low, high = (snapshot['evaluation']['test_size'],) * 2 if manual else SKILLS[skill]
+    if version == TWO_WAY_VERSION and not manual:
         low = high = .3 if skill == 'data_training_heavy' else .5
     prompt = snapshot['prompts'].get(f'board/data:{skill}', snapshot['prompts'].get('board/data:', {}))
     instruction = ('Supply data_plan with these three fields in submit_result. '
@@ -92,7 +96,7 @@ def validate(value, specification, shared):
     if not isinstance(value, dict) or set(value) != fields:
         raise ValueError('Data skill requires data_plan matching the complete schema from claim_task')
     if specification.get('required_data_plan') and value != specification['required_data_plan']:
-        raise ValueError('Data plan must equal the frozen controlled-comparison split')
+        raise ValueError('Data plan must equal the frozen split for this execution')
     fraction = value['test_size']
     if (type(fraction) not in (int, float) or not math.isfinite(fraction)
             or not specification['minimum_test_size'] <= fraction <= specification['maximum_test_size']):

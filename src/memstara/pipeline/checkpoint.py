@@ -4,6 +4,9 @@ import hashlib
 import os
 from pathlib import Path
 from uuid import uuid4
+from contextvars import ContextVar
+
+current_phase = ContextVar('memstara_checkpoint_phase', default=None)
 
 
 class RecoveryBlocked(RuntimeError):
@@ -94,6 +97,9 @@ class Checkpoint:
     def problem(self):
         if self.state.get('finished'):
             return 'This execution has ended; start a new execution instead.'
+        from .paused_recovery import recoverable
+        if recoverable(self):
+            return None
         if any(v == 'active' for v in self.state.get('calls', {}).values()):
             return ('An agent call was interrupted. Its external effects require review before recovery; '
                     'no call will be replayed automatically.')
@@ -102,12 +108,15 @@ class Checkpoint:
                     'Review persisted artifacts before recovery.')
         return None
 
-    def call_started(self, key):
+    def call_started(self, key, metadata=None):
         self.state['calls'][key] = 'active'
+        if metadata is not None:
+            self.state.setdefault('call_metadata', {})[key] = metadata
         self.save()
 
     def call_finished(self, key):
         self.state['calls'].pop(key, None)
+        self.state.get('call_metadata', {}).pop(key, None)
         self.save()
 
     async def phase(self, key, operation):
@@ -118,7 +127,11 @@ class Checkpoint:
             return previous['result']
         self.state['phases'][key] = {'status': 'active'}
         self.save()
-        result = await operation()
+        token = current_phase.set(key)
+        try:
+            result = await operation()
+        finally:
+            current_phase.reset(token)
         self.state['phases'][key] = {'status': 'done', 'result': result}
         self.save()
         return result

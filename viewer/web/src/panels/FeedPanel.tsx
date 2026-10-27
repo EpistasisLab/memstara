@@ -29,7 +29,7 @@ function TextRow({message}:{message:AgentMessage}){
       <span className="telemetry-event-meta"><time dateTime={message.at??undefined}>{message.at?new Date(message.at).toLocaleTimeString():'Time unavailable'}</time><span>Read output <ChevronDown size={14}/></span></span>
     </summary>
     <div className="telemetry-event-details min-w-0"><p className="mb-3 text-xs text-ink-soft">Recorded agent text · {message.stage} · {message.loop===null?'Execution-wide':labelReplicate({iteration:message.loop})}. Agent statements do not by themselves confirm successful analysis.</p>
-      <Suspense fallback={<p>Loading output…</p>}><ReportBody origin="mixed" text={message.text}/></Suspense>
+      <Suspense fallback={<p>Loading output…</p>}><ReportBody verbatim origin="mixed" text={message.text}/></Suspense>
       {message.truncated&&<p>Display limited to 50,000 characters.</p>}
     </div>
   </details></li>;

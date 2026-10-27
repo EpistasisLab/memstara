@@ -3,6 +3,16 @@ from math import prod
 import secrets
 
 STAGES = ('hypothesis', 'data', 'ml', 'interpreter', 'report')
+DEFAULT_SKILLS = dict(zip(STAGES, ('hypothesis_general', 'data_manual_split',
+    'ml_default_logistic_regression', 'shared-shap', 'shared-addiction'), strict=True))
+
+
+def execution_label(position, plan=None):
+    """Human-readable identity; never confuse scheduler position with replicate."""
+    if plan:
+        row = loop_flavors(plan, position)
+        return f"Pipeline {row['combination']} · Replicate {row['repetition']}"
+    return f"Pipeline 1 · Replicate {position}"
 
 
 def build_plan(choices, repetitions=1, *, random_start=False, max_loops=None, start_index=None, execution_order=None):
@@ -17,12 +27,14 @@ def build_plan(choices, repetitions=1, *, random_start=False, max_loops=None, st
     if execution_order not in (None, 'all_pipelines_first', 'pipeline_replicates_first'):
         raise ValueError('Unsupported execution order')
     if max_loops is not None and (type(max_loops) is not int or not 1 <= max_loops <= 10000):
-        raise ValueError('Maximum Loops must be an integer from 1 to 10000')
+        raise ValueError('Total runs must be an integer from 1 to 10000')
     resolved = {}
     for stage in STAGES:
         ids = choices[stage]
-        if stage == 'ml' and ids == []:
-            ids = ['ml_default_logistic_regression']
+        if ids == []:
+            ids = [DEFAULT_SKILLS[stage]]
+        if stage == 'data' and isinstance(ids, list) and 'data_manual_split' in ids and len(ids) != 1:
+            raise ValueError('Choose either data skills or a manual split, not both')
         if not isinstance(ids, list) or not ids or not all(isinstance(x, str) for x in ids):
             raise ValueError(f'{stage}: choose at least one skill')
         entries, seen = [], set()
@@ -38,7 +50,7 @@ def build_plan(choices, repetitions=1, *, random_start=False, max_loops=None, st
     count = prod(len(resolved[stage]) for stage in STAGES)
     total = count * repetitions if max_loops is None else max_loops
     if total > 10000:
-        raise ValueError('At most 10000 combination Loops are supported')
+        raise ValueError('At most 10000 total runs are supported')
     plan = {'version': 1, 'stages': list(STAGES), 'skills': resolved,
             'combinations': count, 'repetitions': repetitions, 'total_loops': total,
             'rows': max(len(items) for items in resolved.values())}
@@ -85,7 +97,7 @@ def validate_plan(plan):
 def loop_flavors(plan, loop):
     """Resolve a 1-based Loop without expanding the full Cartesian product in memory."""
     if type(loop) is not int or not 1 <= loop <= plan['total_loops']:
-        raise ValueError('Loop is outside this schedule')
+        raise ValueError('Run position is outside this schedule')
     position = loop - 1
     repetition = position // plan['combinations'] + 1
     offset = position

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useState } from 'react';
 import { Download } from 'lucide-react';
 import { displayText } from '../lib/displayText';
-import { findingHeading, firstFinding } from '../lib/findingHeading';
+import { pipelineReports, pipelineReportMarkdown } from '../lib/pipelineReports';
 import { useViewer } from '../store/viewer';
 import { usePipelines } from '../store/pipelines';
 import { useExecutionContext } from '../components/ExecutionContext';
@@ -27,20 +27,20 @@ export default function ReportPanel() {
   const report = snapshot?.report;
   const [outputKey, setOutputKey] = useState('');
   const outputs = report?.explanation_outputs ?? [];
-  const output = outputs.find(o => `${tag}:${o.loop}:${o.result_id}` === outputKey) ?? outputs[0];
+  const reports = pipelineReports(outputs,snapshot?.results??[],tag??'',snapshot?.run_configuration?.combination_plan,snapshot?.run_configuration?.trials??1);
+  const pipelineReport = reports.find(r=>`${tag}:${r.number}`===outputKey)??reports[0];
+  const recordedReplicates = pipelineReport?new Set(pipelineReport.outputs.map(o=>o.replicate_number??o.loop)).size:0;
   const usage = useTelemetryTotals();
   const execution = usage.data?.executions.find(e => e.run_tag === tag);
-  const heading = tag ? findingHeading(firstFinding(
-    (snapshot?.results ?? []).map(r => ({...r, run_tag: tag})), tag)?.hypothesis) : '';
   const loading = !!requested && requested !== tag;
   const download = () => {
-    if (!output?.text || !tag || loading) return;
+    if (!pipelineReport?.outputs.length || !tag || loading) return;
     const url = URL.createObjectURL(new Blob([
-      output.text,
+      pipelineReportMarkdown(pipelineReport),
     ], {type: 'text/markdown;charset=utf-8'}));
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `${tag}_loop-${output.loop}${output.result_id == null ? "" : `_result-${output.result_id}`}_conclusions.md`;
+    anchor.download = `${tag}_pipeline-${pipelineReport.number}_conclusions.md`;
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
@@ -53,12 +53,12 @@ export default function ReportPanel() {
             {items.map(p => <option key={p.id} value={p.id}>Experiment {p.number} · {p.name}{p.latest ? '' : ' · not started'}</option>)}
           </select>
         </label>
-        {outputs.length > 0 && <label className="analysis-select-label">Explanation
-          <select aria-label="Saved Explanation" value={`${tag}:${output.loop}:${output.result_id}`} onChange={e => setOutputKey(e.target.value)}>
-            {outputs.map(o => <option key={`${o.loop}:${o.result_id}`} value={`${tag}:${o.loop}:${o.result_id}`}>{labelLoop({...o,iteration:o.loop,run_tag:tag})}{o.result_id == null ? '' : ` · Result ${o.result_id}`} · {o.status}</option>)}
+        {reports.length > 0 && <label className="analysis-select-label">Pipeline report
+          <select aria-label="Pipeline report" value={`${tag}:${pipelineReport.number}`} onChange={e=>setOutputKey(e.target.value)}>
+            {reports.map(r=><option key={r.number} value={`${tag}:${r.number}`}>{r.title}</option>)}
           </select>
         </label>}
-        <button type="button" onClick={download} disabled={!output?.text || loading} className="conclusions-download">
+        <button type="button" onClick={download} disabled={!pipelineReport?.outputs.length || loading} className="conclusions-download">
           <Download size={16} aria-hidden="true"/>Download Markdown
         </button>
       </header>
@@ -67,16 +67,20 @@ export default function ReportPanel() {
       {!loading && <>
         <header className="conclusions-heading">
           <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Explanation agent output</p>
-          <h2 className="mt-2 break-words text-xl font-semibold leading-snug">{heading || (tag ? context.name : 'No conclusions yet')}</h2>
-          {heading && <p className="mt-1 text-xs text-ink-faint">Heading from the first saved AI hypothesis · {context.name}</p>}
+          <h2 className="mt-2 break-words text-xl font-semibold leading-snug">{pipelineReport?.title || (tag ? context.name : 'No conclusions yet')}</h2>
+          {pipelineReport && <p className="mt-1 text-xs text-ink-faint">Pipeline title from its first saved AI hypothesis · {context.name}</p>}
           {tag && <p className="mt-2 text-sm text-ink-soft">{report?.status === 'completed' ? 'Completed report' : `Report status: ${report?.status ?? 'not recorded'}`} · {context.startedLabel}</p>}
         </header>
         {report?.error && <p role="status" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{displayText(report.error)}</p>}
-        {output?.text ? <Suspense fallback={<p>Loading report…</p>}>
-          <div data-report-content><ReportBody verbatim text={output.text}/></div>
-        </Suspense> : <p className="py-8 text-sm text-ink-soft">{tag ? 'No Explanation output has been saved for this execution yet.' : 'Choose a pipeline with saved output to read its conclusions.'}</p>}
+        {pipelineReport ? <div data-report-content>
+          <p className="my-3 text-sm text-ink-soft">{recordedReplicates} {recordedReplicates===1?'replicate':'replicates'} with saved explanations{pipelineReport.expected?` / ${pipelineReport.expected} scheduled`:''}. Each replicate retains its own hypothesis and findings.</p>
+          {pipelineReport.outputs.map(o=><section key={`${o.loop}:${o.result_id}`} className="border-t border-paper-line py-5">
+            <h3 className="mb-3 font-semibold">{labelLoop({...o,iteration:o.loop,run_tag:tag})}{o.result_id==null?'':` · Result ${o.result_id}`} · {o.status}</h3>
+            <Suspense fallback={<p>Loading report…</p>}><ReportBody verbatim text={o.text}/></Suspense>
+          </section>)}
+        </div> : <p className="py-8 text-sm text-ink-soft">{tag ? 'No Explanation output has been saved for this execution yet.' : 'Choose a pipeline with saved output to read its conclusions.'}</p>}
         {tag && <details className="analysis-technical-details mt-6">
-          <summary>Report records and supporting evidence</summary>
+          <summary>Execution records and supporting evidence</summary>
           <div className="mt-4 space-y-4 text-sm">
             <p>Execution: <code className="break-all">{tag}</code></p>
             <p>Target: {snapshot?.run_configuration?.y_column ?? 'Not recorded'}</p>

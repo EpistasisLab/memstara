@@ -91,7 +91,12 @@ async def prepare_execution(
         settings = settings.model_copy(update={
             key: value for key, value in args.runtime_timeouts.items()
             if key != 'agent_timeout_seconds'})
-    configure(settings)
+    from memstara.pipeline.pause_runtime import pause_wrapper_settings
+    previous = run_dir / 'config.json'
+    original = (json.loads(previous.read_text())
+                if getattr(args, 'resume', False) and previous.exists() else None)
+    pause_policy = original.get('pause_policy') if original is not None else 'fresh_request_and_ml_restart_v2'
+    configure(pause_wrapper_settings(settings, pause_policy))
     from memstara.pipeline.diagnostics import install
 
     install()
@@ -109,8 +114,12 @@ async def prepare_execution(
 
         verify_materialized(args.research_profile)
         data_preflight(Path(os.environ['MEMSTARA_DATASET_PATH']), args.y_column,
-                       validate_evaluation(json.loads(args.evaluation)), reserve_validation=True,
-                       missing_policy=args.research_profile.get("configuration", {}).get("missing_policy", "reject"))
+                       validate_evaluation(json.loads(args.evaluation)),
+                       reserve_validation=(original.get('partition_policy') != 'two_way_stratified_v1'
+                                           if original is not None else bool(json.loads(
+                                               getattr(args, 'controlled_comparison', '{}') or '{}'))),
+                       missing_policy=args.research_profile.get("configuration", {}).get("missing_policy", "reject"),
+                       require_numeric="predictor_types" not in args.research_profile.get("configuration", {}))
         ensure_matcher(args.research_profile)
     if models:
         from memstara.stage_models import preflight_profiles

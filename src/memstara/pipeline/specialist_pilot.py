@@ -62,10 +62,10 @@ def preflight(config: dict) -> tuple[list[dict], dict]:
     if not set(config['choices']['ml']) <= {
             'ml_logistic_regression', 'ml_xgboost', 'ml_pilot_lr_focus', 'ml_pilot_xgb_focus'}:
         raise ValueError('Select the paired-model ML skills; legacy fixed-policy skills are incompatible')
-    if not set(config['choices']['interpreter']) <= {'shared-anil-shap', 'shared-anil-lime'}:
-        raise ValueError('This pilot requires the current Anil interpretation skills')
-    if not set(config['choices']['report']) <= {'shared-anil-addiction', 'shared-anil-hiv'}:
-        raise ValueError('This pilot requires the current Anil explanation skills')
+    if not set(config['choices']['interpreter']) <= {'shared-shap', 'shared-lime'}:
+        raise ValueError('This pilot requires the current contributed interpretation skills')
+    if not set(config['choices']['report']) <= {'shared-addiction', 'shared-hiv'}:
+        raise ValueError('This pilot requires the current contributed explanation skills')
     for name in config['choices']['hypothesis']:
         if name != 'random_features':
             validate_binding(config.get('hypothesis_knowledge', {}).get(name))
@@ -248,8 +248,8 @@ async def run_study(config: dict, output: Path, *, resume=False, invoke=invoke_m
                 async def final_invoke(profile, system, payload, progress=progress):
                     progress('explanation' if payload.get('expert') else 'interpretation')
                     return await invoke(profile, system, payload)
-                method = condition['interpreter'].removeprefix('shared-anil-')
-                expert = condition['report'].removeprefix('shared-anil-')
+                method = condition['interpreter'].removeprefix('shared-')
+                expert = condition['report'].removeprefix('shared-')
                 await run_final_stages(config, {'scope': scope, 'results': paired, 'hypothesis': hypothesis},
                                        directory / 'final',
                                        invoke=final_invoke, knowledge=knowledge, methods=(method,), experts=(expert,),

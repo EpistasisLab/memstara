@@ -27,7 +27,7 @@ AGENTS = [
 ]
 
 #: Files that are not agents. A fragment has no goal and is never loaded on its own.
-FRAGMENTS = ["board/_claim_preamble", "board/_ml_common"]
+FRAGMENTS = ["board/_claim_preamble", "board/_ml_common", "board/_two_way_data"]
 
 #: Optional local instructions, never a runtime prompt. Fresh clones omit them.
 NOT_A_PROMPT = ["CLAUDE"]

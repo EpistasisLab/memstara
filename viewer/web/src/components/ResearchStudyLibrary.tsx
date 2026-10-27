@@ -21,19 +21,19 @@ export default function ResearchStudyLibrary({studies, selectedId, disabled, onS
   onSelect: (id: string) => void;
   onReview: (id: string) => void;
 }) {
-  return <section aria-label="Saved research inputs" className="space-y-3">
+  return <section aria-label="Saved research inputs" className="research-study-library">
     <div className="flex items-baseline justify-between gap-3">
-      <h4 className="text-sm font-semibold">Your research inputs</h4>
+      <h4 className="text-sm font-semibold">Saved data</h4>
       <span className="text-xs text-slate-500">{studies.length} saved</span>
     </div>
-    {!studies.length && <p className="rounded-xl border border-dashed border-paper-line p-4 text-sm text-slate-500">No saved studies yet. Upload a CSV to get started.</p>}
-    <div className="grid min-w-0 gap-3 md:grid-cols-2">
+    {!studies.length && <p className="rounded-xl border border-dashed border-paper-line p-4 text-sm text-slate-500">No saved data yet. Choose Upload a new CSV above to get started.</p>}
+    <div className="research-study-grid">
       {studies.map(study => {
         const config = study.configuration;
         const selected = selectedId === study.id;
         const ready = study.input_checks_passed;
         const proposal = config.data_mode === 'proposal';
-        return <article key={study.id} aria-label={config.name} className={`min-w-0 rounded-xl border p-4 ${selected ? 'border-sky-500 bg-sky-50/50 dark:bg-sky-950/20' : 'border-paper-line bg-paper'}`}>
+        return <article key={study.id} aria-label={config.name} className={`research-study-card ${selected?'is-selected':''}`} >
           <div className="flex items-start gap-2">
             <Database size={17} className="mt-0.5 shrink-0 text-slate-500" aria-hidden="true"/>
             <h5 className="min-w-0 flex-1 break-words text-sm font-semibold leading-5">{config.name}</h5>
@@ -45,7 +45,7 @@ export default function ResearchStudyLibrary({studies, selectedId, disabled, onS
           <dl className="mt-3 space-y-2 text-xs">
             <div><dt className="text-slate-500">Dataset</dt><dd className="break-words">{proposal ? 'No CSV — proposal only' : filename(config.dataset_path)}</dd></div>
             <div><dt className="text-slate-500">Prediction target</dt><dd className="break-words">{config.target.column || (proposal ? 'Research proposal' : 'Not set')}</dd></div>
-            <div><dt className="text-slate-500">Knowledge</dt><dd className="break-words">{config.knowledge_mode === 'llm_only' ? 'LLM knowledge only' : `OKF · ${filename(config.knowledge_path)}`}</dd></div>
+            <div><dt className="text-slate-500">Knowledge</dt><dd className="break-words">{config.knowledge_mode === 'llm_only' ? 'LLM only' : config.knowledge_path?.includes('/heart-failure/okf')?'Heart failure research library':'Research documents'}</dd></div>
           </dl>
           {!ready && <p className="mt-3 break-words text-xs text-amber-700 dark:text-amber-400">{study.issues?.[0]?.message || 'Open this study to review its data and target settings.'}</p>}
           <details className="mt-3 text-xs">
@@ -63,7 +63,7 @@ export default function ResearchStudyLibrary({studies, selectedId, disabled, onS
             aria-label={`${ready ? 'Use' : 'Review'} ${config.name}`}
             onClick={() => ready ? onSelect(study.id) : onReview(study.id)}
             className={`mt-4 w-full rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${selected && ready ? 'border-sky-600 bg-sky-600 text-white' : 'border-paper-line hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
-            {ready ? selected ? 'Selected' : 'Use this study' : 'Review & complete setup'}
+            {ready ? selected ? 'Selected' : 'Use this data' : 'Review & complete setup'}
           </button>
         </article>;
       })}

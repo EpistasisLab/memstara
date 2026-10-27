@@ -14,6 +14,7 @@ import time
 import uuid
 
 from memstara.pipeline.checkpoint import Checkpoint, atomic_json
+from memstara.combinations import execution_label
 
 STAGES = ("question", "hypothesis", "data", "ml", "interpreter", "report")
 TASKS = {
@@ -264,7 +265,7 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
                 io = root / "proposal_io" / f"loop-{loop + 1:04d}"
                 io.mkdir(parents=True, exist_ok=True)
                 atomic_json(io / f"{stage}.input.json", {"system": system, "payload": payload, "profile": profile})
-                print(f"Loop {loop + 1}: {stage} planning started", flush=True)
+                print(f"{execution_label(loop + 1, state['combination_plan'])}: {stage} planning started", flush=True)
                 ctx = call_context.set((root, identifier, stage))
                 loop_token = call_loop.set(loop + 1)
                 try:
@@ -309,7 +310,9 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
                     atomic_json(io / f"{stage}.output.json", record)
                     save_calls()
                     print(
-                        f"Loop {loop + 1}: {stage} planning completed ({record['duration_seconds']:.2f}s)", flush=True
+                        f"{execution_label(loop + 1, state['combination_plan'])}: {stage} planning completed "
+                        f"({record['duration_seconds']:.2f}s)",
+                        flush=True,
                     )
                     return record
                 except (Exception, asyncio.CancelledError) as error:

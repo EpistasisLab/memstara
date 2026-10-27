@@ -22,7 +22,7 @@ def dataset(tmp_path, monkeypatch):
     return path
 
 
-@pytest.mark.parametrize('engine', ['logistic_regression', 'xgboost'])
+@pytest.mark.parametrize('engine', ['logistic_regression', 'random_forest', 'xgboost'])
 @pytest.mark.parametrize('configured', [False, True])
 def test_each_replicate_classifier_uses_its_split_seed(dataset, engine, configured):
     configuration = {'parameters': {'random_state': 999}, 'scale_numeric': False,

@@ -158,7 +158,7 @@ export default function TaskTab({ taskId: scopedTaskId }: { taskId?: number | nu
         {task.interpretation && (
           <div className="mt-6">
             <h3 className="text-sm font-bold">Interpretation</h3>
-            <Suspense fallback={<p>Loading formatted explanation…</p>}><ReportBody origin="llm" text={task.interpretation} /></Suspense>
+            <Suspense fallback={<p>Loading formatted explanation…</p>}><ReportBody verbatim origin="llm" text={task.interpretation} /></Suspense>
           </div>
         )}
       </section>

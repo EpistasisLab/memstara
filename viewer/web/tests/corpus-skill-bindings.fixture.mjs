@@ -10,8 +10,8 @@ export const corpusSkillBindings={
         "random_features"
       ],
       "report": [
-        "shared-anil-addiction",
-        "shared-anil-hiv"
+        "shared-addiction",
+        "shared-hiv"
       ]
     },
     "heart_failure": {

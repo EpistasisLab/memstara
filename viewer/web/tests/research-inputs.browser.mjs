@@ -8,19 +8,21 @@ try{
   let calls=0;
   await page.route('**/control/research-inputs**',async route=>{
    if(route.request().method()==='GET')return route.fulfill({json:{inputs:[]}});
-   calls++;const configuration=route.request().postDataJSON();
+   calls++;if(route.request().url().endsWith('/check-csv'))return route.fulfill({json:{dataset_path:'/local/example.csv',columns:['target'],rows:10,missing_cells:2,columns_with_missing:{target:2},nonfinite_columns:[],message:'Missing values found.'}});const configuration=route.request().postDataJSON();
    return route.fulfill({json:{configuration,dataset:{rows:10,column_count:6,columns:['target'],missing_cells:2},knowledge:{documents:1,domains:['example']},issues:[{code:'missing_values',message:'Selected columns contain missing values.'}],input_checks_passed:false,execution_ready:false,execution_note:'Input registration only.'}});
   });
   await page.goto((process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:5179')+'/tests/research-inputs.fixture.html');
   await page.getByLabel('Study name',{exact:true}).fill('Example');
+  await page.locator('.research-setup-advanced > summary').click();
+  await page.getByRole('radio',{name:'My research folder',exact:true}).check();
   await page.getByText('Use a server file instead of uploading',{exact:true}).click();
   await page.getByLabel('Dataset CSV path').fill('/local/example.csv');
-  await page.getByLabel('OKF corpus folder').fill('/local/okf');
+  await page.getByLabel('Research document folder path').fill('/local/okf');
   await page.getByRole('button',{name:'Check inputs'}).click();
-  await page.getByText('Resolve input issues before execution',{exact:true}).waitFor();
+  await page.getByText('Missing values found.',{exact:true}).waitFor();
   assert.equal(calls,1);
   await page.getByLabel('Prediction objective and target meaning').fill('Updated objective');
-  assert.equal(await page.getByText('Resolve input issues before execution',{exact:true}).count(),0);
+  assert.equal(await page.getByText('Missing values found.',{exact:true}).count(),1);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
   assert.deepEqual(errors,[]);
   await page.close();
@@ -39,6 +41,7 @@ try{
  assert.equal(selected.playbook_data,'data_training_heavy');
  assert.equal(selected.playbook_explanation,'report_general');
  assert.deepEqual(selected.combination_skills,{});
+ await page.getByText('Change dataset',{exact:false}).click();
  assert.equal(await page.getByRole('button',{name:'Review Incomplete study',exact:true}).count(),1);
  assert.equal(await page.getByRole('button',{name:'Use Incomplete study',exact:true}).count(),0);
  await page.getByRole('article',{name:'Synthetic study',exact:true}).getByText('Study details',{exact:true}).click();
@@ -63,7 +66,7 @@ try{
   });
   await workspace.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Offline UI fixture'}}));
   await workspace.goto(process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:5179');
-  await workspace.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await workspace.getByRole('button',{name:/Add pipeline/i}).click();
+  await workspace.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await workspace.getByRole('button',{name:/Add experiment/i}).click();
   assert.equal(await workspace.getByRole('dialog',{name:'Build pipelines',exact:true}).count(),0);
   assert.equal(await workspace.getByRole('button',{name:'Prepare research inputs',exact:true}).count(),0);
   await workspace.getByRole('dialog',{name:'All Combinations',exact:true}).waitFor();

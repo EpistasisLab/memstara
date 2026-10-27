@@ -142,7 +142,7 @@ def test_data_handoff_blocks_changed_predictors_before_ml(tmp_path, monkeypatch)
 
 
 @pytest.mark.parametrize('standalone', [False, True])
-def test_web_launch_freezes_policy_and_delivers_random_input(monkeypatch, tmp_path, standalone):
+def test_internal_random_compatibility_freezes_policy_and_delivers_input(monkeypatch, tmp_path, standalone):
     pytest.importorskip('motoro')
     from memstara.control import catalog
     from memstara.control.request import build_argv
@@ -150,9 +150,13 @@ def test_web_launch_freezes_policy_and_delivers_random_input(monkeypatch, tmp_pa
     from memstara.pipeline.snapshot import freeze
     from memstara.pipeline import board
     stages = ('hypothesis', 'data', 'ml', 'interpreter', 'report')
-    choices = {s: ['random_features' if s == 'hypothesis' else s] for s in stages}
+    # Internal compatibility remains readable; the separate retired-skill tests
+    # verify that new public requests cannot select random_features.
+    choices = {s: ['random_features' if s == 'hypothesis' else
+                   'data_manual_split' if s == 'data' else s] for s in stages}
     monkeypatch.setattr(catalog, 'resolve', lambda k: {'id': k, 'title': k, 'hash': k,
-                                                     'stage': 'hypothesis' if k == 'random_features' else k})
+                                                     'stage': 'hypothesis' if k == 'random_features' else
+                                                     'data' if k == 'data_manual_split' else k})
     for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
         monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
         monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'test-model')

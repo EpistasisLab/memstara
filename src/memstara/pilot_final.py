@@ -18,8 +18,8 @@ from memstara.control.catalog import resolve
 from memstara.pilot_handoffs import interpretation_input, explanation_input
 from memstara.pilot_knowledge import retrieve, validate_binding
 
-SKILLS = {'shap': 'shared-anil-shap', 'lime': 'shared-anil-lime',
-          'addiction': 'shared-anil-addiction', 'hiv': 'shared-anil-hiv'}
+SKILLS = {'shap': 'shared-shap', 'lime': 'shared-lime',
+          'addiction': 'shared-addiction', 'hiv': 'shared-hiv'}
 
 
 def validate_config(config: dict) -> None:

@@ -11,7 +11,7 @@ import LoopLimitSettings from "../components/LoopLimitSettings";
 import BaselineSettings from '../components/BaselineSettings';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react';
-import { useControl, type RunRequest } from '../store/control';
+import { useControl, DEFAULT_REQUEST, type RunRequest } from '../store/control';
 import { usePipelines } from '../store/pipelines';
 import { newPipelineConfiguration } from '../lib/newPipelineConfiguration';
 const setupStages = ['hypothesis', 'data', 'ml', 'interpreter', 'report'] as const;
@@ -43,14 +43,14 @@ export function CreationWizard() {
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
   const [draft, setDraft] = useState<RunRequest>(() => {
-    const form = newPipelineConfiguration(useControl.getState().form);
+    const form = newPipelineConfiguration(DEFAULT_REQUEST);
     return { ...form, combination_skills: {}, combination_repetitions: 1, combination_execution_order: 'all_pipelines_first', combination_random_start: false, combination_max_loops: null, question: '', hypothesis_agents: 1, interpret_agents: 1,
       trials: 1, waves: 10, continuous: false,
       playbook_hypothesis: form.playbook_hypothesis.split(',')[0],
       playbook_data: form.playbook_data.split(',')[0],
       playbook_ml: form.playbook_ml.split(',')[0],
-      playbook_explanation: "report_general",
-      playbook_interpreter: "shared-anil-shap" };
+      playbook_explanation: "shared-addiction",
+      playbook_interpreter: "shared-shap" };
   });
   const sources = useControl(s => s.skills);
   const [sourceError,setSourceError]=useState('');

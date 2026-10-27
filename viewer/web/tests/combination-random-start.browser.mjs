@@ -29,19 +29,19 @@ try {
   });
   await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Fixture'}}));
   await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
-  await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add pipeline/i}).click();
+  await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add experiment/i}).click();
   const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});await dialog.getByLabel('Deployment target column',{exact:true}).fill('fixture_target');await dialog.getByRole('button',{name:'Choose skills'}).click();
   const labels=['Hypothesis','Data','Machine learning','Interpretation','Explanation'];
   for(const [i,role] of roles.entries()){
    await dialog.getByRole('heading',{name:labels[i]+' skills',exact:true}).waitFor();
    const forward=dialog.getByRole('button',{name:i===4?'Review plan':'Next: '+labels[i+1],exact:true});
-   assert(await forward.isDisabled(),'Empty role must not advance');
+   assert(!(await forward.isDisabled()),'Default role must advance');
    const choices=skills.filter(s=>s.stage===role);
    await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'});
    for(const skill of choices)await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).check();
    assert(!(await forward.isDisabled()),'Selected role must advance');
    for(const skill of choices)await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).uncheck();
-   assert(await forward.isDisabled(),'Removing all choices must disable Next');
+   assert.equal(await forward.isDisabled(),!['ml','hypothesis'].includes(role));
    for(const skill of choices)await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).check();
    if(i<4){
     await forward.click();await dialog.getByRole('heading',{name:labels[i+1]+' skills',exact:true}).waitFor();
@@ -55,11 +55,11 @@ try {
   const maximum=dialog.getByLabel('Replicates per pipeline',{exact:true});assert.equal(await maximum.inputValue(),'1');
   const consent=dialog.getByRole('checkbox',{name:/I reviewed/}),create=dialog.getByRole('button',{name:'Create combination design'});
   for(const invalid of ['0','10001','1.5','']){await maximum.fill(invalid);await consent.check();assert(await create.isDisabled());}
-  await maximum.fill('10');await consent.check();await dialog.getByRole('checkbox',{name:/Random Start/}).check();assert(await create.isDisabled());
-  await consent.check();assert(!(await create.isDisabled()));assert.match(await dialog.innerText(),/240 total replicates/);
+  await maximum.fill('10');await consent.check();await expect(dialog.getByRole('checkbox',{name:/Random Start/})).toHaveCount(0);
+  await consent.check();assert(!(await create.isDisabled()));assert.match(await dialog.innerText(),/240 total runs/);
   assert(await dialog.evaluate(e=>e.scrollWidth<=e.clientWidth+2));await dialog.screenshot({path:`/tmp/random-start-${width}-${theme}.png`});
   await create.click();await dialog.waitFor({state:'hidden'});await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
-  assert.equal(posted.configuration.combination_random_start,true);assert.equal(posted.configuration.combination_max_loops,null);assert.equal(posted.configuration.combination_repetitions,10);assert.equal(posted.configuration.waves,240);assert.equal(posted.configuration.continuous,false);assert.equal(runPosts,0);
+  assert.equal(posted.configuration.combination_random_start,false);assert.equal(posted.configuration.combination_max_loops,null);assert.equal(posted.configuration.combination_repetitions,10);assert.equal(posted.configuration.waves,240);assert.equal(posted.configuration.continuous,false);assert.equal(runPosts,0);
   rows[0].latest={run_tag:'frozen',exit_code:0,configuration:{waves:10}};await page.reload();await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
   const studio=page.getByRole('region',{name:'Combination design',exact:true});await studio.waitFor();
   await page.getByText('Pipeline 23 · Replicate 1 · Latest execution',{exact:true}).waitFor();
@@ -68,6 +68,6 @@ try {
   await expect(studio.locator('.cf-desk.is-selected').filter({hasText:'interpreter flavor 2'})).toHaveCount(1);
   assert.equal(await page.getByRole('button',{name:'Loop explorer',exact:true}).count(),0);
   assert.equal(await studio.getByRole('spinbutton',{name:'Combination Loop',exact:true}).count(),0);assert.deepEqual(errors,[]);assert.equal(runPosts,0);
-  console.log(JSON.stringify({width,theme,limits:'pass',savedRandomStart:'pass',frozenCurrentLoop:'pass',noRunOnCreate:'pass'}));await page.close();
+  console.log(JSON.stringify({width,theme,limits:'pass',randomStartRemoved:'pass',frozenCurrentLoop:'pass',noRunOnCreate:'pass'}));await page.close();
  }
 } finally {await browser.close();}

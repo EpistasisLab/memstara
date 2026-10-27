@@ -28,7 +28,11 @@ def atomic(path, value):
     temporary.replace(path)
 
 
-def supervise(command, *, env, limits, pass_fds=()):
+class FitPaused(Exception):
+    """No complete worker output was accepted; restart only on explicit Resume."""
+
+
+def supervise(command, *, env, limits, pass_fds=(), pause_marker=None, output_path=None):
     """Return only after the whole worker process group has exited or been killed."""
     import psutil
     memory_limit = limits.get('memory_bytes')
@@ -43,6 +47,8 @@ def supervise(command, *, env, limits, pass_fds=()):
     try:
         monitor = psutil.Process(process.pid)
         while process.poll() is None:
+            if pause_marker and pause_marker.exists() and not (output_path and output_path.exists()):
+                raise FitPaused()
             if limits.get('wall_seconds') is not None and time.monotonic() - began > limits['wall_seconds']:
                 raise RuntimeError('Paired ML exceeded its wall-time budget')
             try:
@@ -71,6 +77,14 @@ def supervise(command, *, env, limits, pass_fds=()):
 
 def execute(path, target, evaluation, snapshot, proposal):
     from memstara.paths import DEFAULT_OUTPUT_DIR
+    from memstara.pipeline.paused_recovery import saved_fit, save_fit, fit_path
+    restored = saved_fit(path, snapshot)
+    if restored:
+        if restored['target'] != target or restored['evaluation'] != evaluation:
+            raise ValueError('Paused ML target or evaluation changed')
+        proposal = restored['proposal']
+        snapshot = {**snapshot, **({'_ml_plan_resolution': restored['snapshot']['_ml_plan_resolution']}
+                                  if '_ml_plan_resolution' in restored['snapshot'] else {})}
     limits = snapshot['ml_configuration_policy']
     if exceeds_limit(limits, 'max_csv_bytes', path.stat().st_size):
         raise ValueError('Input exceeds paired ML CSV size budget')
@@ -99,7 +113,8 @@ def execute(path, target, evaluation, snapshot, proposal):
                 raise ValueError('Accepted ML settings/input cannot change after evaluation starts')
             if result_path.exists():
                 return json.loads(result_path.read_text())
-            raise ValueError('Prior ML execution was interrupted; inspect its record before a new run')
+            if not restored:
+                raise ValueError('Prior ML execution was interrupted; inspect its record before a new run')
         atomic(accepted_path, record)
         progress_path = path.with_suffix('.paired-progress.json')
         atomic(progress_path, {'phase': 'starting', 'completed_models': {}})
@@ -114,8 +129,47 @@ def execute(path, target, evaluation, snapshot, proposal):
                 env = {**os.environ, **{name: '1' for name in (
                     'OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS',
                     'NUMEXPR_NUM_THREADS')}}
-                usage = supervise([sys.executable, '-m', 'memstara.paired_ml', str(request_path), str(output_path)],
-                                  env=env, limits=limits, pass_fds=(lock.fileno(),))
+                marker = None
+                if snapshot.get('pause_policy') == 'fresh_request_and_ml_restart_v2' and env.get('MEMSTARA_RUN_CONFIG'):
+                    frozen = Path(env['MEMSTARA_RUN_CONFIG'])
+                    if json.loads(frozen.read_text()).get('run_tag') != snapshot.get('run_tag'):
+                        raise ValueError('ML pause ownership differs from the frozen execution')
+                    marker = frozen.parent / 'pause.request'
+                interruptions = 0
+                if restored and marker:
+                    fit_path(marker.parent, path).unlink(missing_ok=True)
+                    interruptions = 1
+                while True:
+                    try:
+                        if marker and marker.exists():
+                            raise FitPaused()
+                        usage = supervise(
+                            [sys.executable, "-m", "memstara.paired_ml", str(request_path), str(output_path)],
+                            env=env,
+                            limits=limits,
+                            pass_fds=(lock.fileno(),),
+                            **({"pause_marker": marker, "output_path": output_path} if marker else {}),
+                        )
+                        usage['pause_restarts'] = interruptions
+                        break
+                    except FitPaused:
+                        if marker is None:
+                            raise
+                        if output_path.exists():
+                            # Atomic publication may have won the race with termination.
+                            usage = {'pause_restarts': interruptions, 'completed_during_pause': True}
+                            break
+                        interruptions += 1
+                        atomic(progress_path, {'phase': 'paused', 'completed_models': {},
+                                               'restart_on_resume': True, 'pause_restarts': interruptions})
+                        from memstara.pipeline.pause_runtime import wait_for_ml_resume
+                        save_fit(marker.parent, request)
+                        wait_for_ml_resume(marker, lock)
+                        fit_path(marker.parent, path).unlink(missing_ok=True)
+                        if config.identity(path, snapshot, evaluation, accepted) != record:
+                            raise ValueError('ML inputs changed while paused') from None
+                        atomic(progress_path, {'phase': 'restarting', 'completed_models': {},
+                                               'pause_restarts': interruptions})
                 result = json.loads(output_path.read_text())
                 result['ml_resource_usage'] = usage
         except Exception as exc:
@@ -143,7 +197,14 @@ def fit(request):
     evaluation_module.active_plan = lambda: snapshot
     frame = validate_clean_dataset(path, request['target'], allow_missing=proposal['primary_model'] == 'xgboost')
     X = frame.drop(columns=[request['target']])
-    categorical = X.select_dtypes(exclude='number')
+    from memstara.preprocessing_policy import typed_predictors
+
+    declared = (
+        snapshot.get("research_profile", {}).get("configuration", {}).get("categorical_columns", [])
+        if typed_predictors(snapshot)
+        else []
+    )
+    categorical = X[[c for c in X if c in declared or c in X.select_dtypes(exclude='number').columns]]
     width = len(X.columns) - len(categorical.columns) + sum(categorical.nunique(dropna=False))
     limits = snapshot['ml_configuration_policy']
     if (exceeds_limit(limits, 'max_encoded_columns', width)

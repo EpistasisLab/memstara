@@ -466,8 +466,6 @@ async def submit_result(task_id: int, subset_path: str = "",
         })
     if execution_failed and not error:
         return json.dumps({"error": "A confirmed technical failure requires an actual error description."})
-    if limitations.strip():
-        interpretation = interpretation.rstrip() + "\n\nAnalysis limitations:\n" + limitations.strip()
     if isinstance(columns_used, str) or isinstance(columns_missing, str):
         return json.dumps(
             {
@@ -598,6 +596,9 @@ async def submit_result(task_id: int, subset_path: str = "",
                     previous = cur["evaluation"] or {}
                     if isinstance(previous, str):
                         previous = json.loads(previous)
+                    # Preserve separately submitted caveats as metadata, never
+                    # splice program-authored headings into the agent's output.
+                    previous = {**previous, "interpretation_limitations": limitations}
                     identity = cur["claimed_by"] or worker
                     config_path = os.environ.get("MEMSTARA_RUN_CONFIG")
                     config = json.loads(Path(config_path).read_text()) if config_path else {}

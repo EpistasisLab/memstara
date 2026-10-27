@@ -40,11 +40,12 @@ def test_snapshot_freezes_policy_with_run_hash(study,monkeypatch,tmp_path):
     from types import SimpleNamespace
     from memstara.pipeline import snapshot
     dataset,path=study
-    dataset.write_text('Y,LAB__CD4,MED__BIKTARVY,signal\n'+''.join(f'{i%2},{i},{i%2},{i%3}\n' for i in range(40)))
+    dataset.write_text('Y,LAB__CD4,MED__BIKTARVY,signal,extra\n'+
+                       ''.join(f'{i%2},{i},{i%2},{i%3},{i%5}\n' for i in range(40)))
     policy=json.loads(path.read_text());policy['dataset_sha256']=hashlib.sha256(dataset.read_bytes()).hexdigest()
     path.write_text(json.dumps(policy))
     monkeypatch.setenv('MEMSTARA_DATASET_PATH',str(dataset))
-    monkeypatch.setattr(snapshot,'load_prompt',lambda *args:'test prompt')
+    monkeypatch.setattr(snapshot,'load_prompt',lambda *args:{'goal':'test', 'system_prompt':'test prompt'})
     args=SimpleNamespace(evaluation='{}',y_column='Y',baseline_columns='[]',run_tag='fixture',
         question='',hypothesis_agents=1,trials=1,waves=1)
     run_dir=tmp_path/'run';run_dir.mkdir()

@@ -4,8 +4,8 @@
 
 Produce a concise clinician-facing explanation from the perspective of cardiometabolic and renal comorbidity, lifestyle and care context.
 This is a project-authored HeartFailure adaptation of the report structure and
-reasoning rules in Anil's `HIV-Expert-Explanation.md`; it is not an Anil-authored
-or clinically validated HeartFailure skill. The original contributed file is unchanged.
+reasoning rules in the contributed `HIV-Expert-Explanation.md`; this adaptation
+is project-authored and is not a clinically validated HeartFailure skill. The original contributed file is unchanged.
 Use the upstream Interpretation output, the selected research contract and the
 HeartFailure OKF evidence supplied or retrieved by this workflow.
 

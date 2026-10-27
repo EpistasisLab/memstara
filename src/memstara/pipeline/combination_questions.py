@@ -9,7 +9,7 @@ VERSION = 'independent_combination_questions_v1'
 
 
 def enabled(plan):
-    return bool((plan or {}).get('combination_plan')) and (plan or {}).get(
+    return (plan or {}).get(
         'hypothesis_policy', {}).get('combination_questions') == VERSION
 
 

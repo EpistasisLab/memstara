@@ -17,7 +17,7 @@ try {
   if(r.request().method()==='POST')throw Error('Unexpected mutation '+path);
   return r.continue();
  });
- await page.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add pipeline/i}).click();
+ await page.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add experiment/i}).click();
  const d=page.getByRole('dialog',{name:'All Combinations',exact:true});
  await d.getByLabel('Deployment target column',{exact:true}).fill('outcome');
  await d.getByRole('button',{name:'Choose skills'}).click();
@@ -36,6 +36,6 @@ try {
   await d.getByRole('alert').filter({hasText:'Test upload rejected'}).waitFor();
  }
  if(uploads.length!==15||uploads.some(x=>x.name==='bad'))throw Error('Wrong upload validation');
- await d.getByRole('button',{name:'Review plan'}).click();await d.getByLabel('Replicates per pipeline').fill('1');await d.getByText('How execution works',{exact:true}).click();await d.getByText(/The schedule contains 32 total replicates\./).waitFor();
+ await d.getByRole('button',{name:'Review plan'}).click();await d.getByLabel('Replicates per pipeline').fill('1');await d.getByText('How execution works',{exact:true}).click();await d.getByText(/The schedule contains 32 total runs\./).waitFor();
  console.log('All five roles: multiple files selected, invalid extension rejected locally, server failure shown, later successes retained; 32 combinations. No real writes.');
 } finally {await browser.close();}

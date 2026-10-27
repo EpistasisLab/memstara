@@ -22,6 +22,6 @@ export default function CompactActivityRow({event,message}:{event?:FeedEvent;mes
    <span className="compact-activity-state">{failed?'Error':event?'Call recorded':'Output recorded'}</span>
    {failed&&<p className="compact-activity-error">{displayText(message?.text.slice(0,200))}{(message?.text.length??0)>200?'…':''}</p>}
   </summary>
-  {open&&<div className="compact-activity-detail">{event?<><p>Call recorded; completion is not confirmed by this record.</p><dl><dt>Tool</dt><dd>{event.tool}</dd><dt>Service</dt><dd>{displayText(event.server)||'Not recorded'}</dd><dt>Agent</dt><dd>{displayText(event.name)||agent}</dd></dl></>:<><Suspense fallback={<p>Loading output…</p>}><ReportBody origin="mixed" text={message?.text??''}/></Suspense>{message?.truncated&&<p>Saved excerpt; output was truncated.</p>}</>}</div>}
+  {open&&<div className="compact-activity-detail">{event?<><p>Call recorded; completion is not confirmed by this record.</p><dl><dt>Tool</dt><dd>{event.tool}</dd><dt>Service</dt><dd>{displayText(event.server)||'Not recorded'}</dd><dt>Agent</dt><dd>{displayText(event.name)||agent}</dd></dl></>:<><Suspense fallback={<p>Loading output…</p>}><ReportBody verbatim origin="mixed" text={message?.text??''}/></Suspense>{message?.truncated&&<p>Saved excerpt; output was truncated.</p>}</>}</div>}
  </details></li>;
 }

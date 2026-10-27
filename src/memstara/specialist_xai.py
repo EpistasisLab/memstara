@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 VERSION = 'paired_specialist_xai_v1'
-SKILLS = {'shared-anil-shap': 'shap', 'shared-anil-lime': 'lime'}
+SKILLS = {'shared-shap': 'shap', 'shared-lime': 'lime'}
 
 
 def digest(value):
@@ -15,7 +15,7 @@ def digest(value):
 
 
 def freeze(books, prompts):
-    from memstara.control.catalog import resolve, anil_dir
+    from memstara.control.catalog import resolve, specialist_dir
     chosen = [name for name in books.get('interpreter', []) if name in SKILLS]
     if not chosen:
         return None
@@ -25,7 +25,7 @@ def freeze(books, prompts):
         method = SKILLS[name]
         if item.get('stage') != 'interpreter' or f'Feature Attribution ({method.upper()})' not in item['content']:
             raise ValueError(f'{name}: expected the current {method.upper()} Interpretation instructions')
-        raw = (anil_dir() / item['source_file']).read_bytes().decode('utf-8')
+        raw = (specialist_dir() / item['source_file']).read_bytes().decode('utf-8')
         if hashlib.sha256(raw.encode()).hexdigest() != item['source_hash']:
             raise ValueError('Shared skill changed while freezing its source')
         skills[name] = {'method': method, 'source_file': item['source_file'], 'source_text': raw,
@@ -119,13 +119,23 @@ def _lime(model, X, train, explained, background, seed, name, samples):
     features = list(X.columns)
     training = X.iloc[train]
     observed = X.iloc[explained]
-    categorical = [i for i, c in enumerate(features) if c not in X.select_dtypes(include='number').columns]
+    encoded_categories = {
+        c for block, _, columns in model.named_steps["encode"].transformers_ if block == "categorical" for c in columns
+    }
+    categorical = [
+        i
+        for i, c in enumerate(features)
+        if c in encoded_categories or c not in X.select_dtypes(include="number").columns
+    ]
     categories = {i: training.iloc[:, i].drop_duplicates().tolist() for i in categorical}
     # Unseen categories map to a value absent from training; fitted OHE ignores it.
-    unknown = {i: '__MEMSTARA_UNSEEN__' for i in categorical}
+    unknown = {
+        i: (-1.0 if pd.api.types.is_numeric_dtype(training.iloc[:, i]) else "__MEMSTARA_UNSEEN__") for i in categorical
+    }
     for i in categorical:
         while unknown[i] in categories[i]:
-            unknown[i] += '_'
+            value = unknown[i]
+            unknown[i] = value - 1 if isinstance(value, float) else value + '_'
     def encode(frame):
         result = np.empty((len(frame), len(features)), dtype=float)
         for i, feature in enumerate(features):

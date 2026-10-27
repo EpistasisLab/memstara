@@ -77,7 +77,8 @@ def preflight(monkeypatch):
     from memstara import stage_models, research_inputs, evaluation, specialist_explanation
     from memstara.pipeline import diagnostics, runtime, snapshot
     events = []
-    settings = NS(model_copy=lambda **kw: events.append(('settings', kw)) or 'configured')
+    settings = NS()
+    settings.model_copy = lambda **kw: events.append(('settings', kw)) or settings
     monkeypatch.setattr(preparation, 'Settings', lambda: settings)
     monkeypatch.setattr(preparation, 'configure', lambda value: events.append(('configure', value)))
     monkeypatch.setattr(runtime, 'runtime_timeouts', lambda _: {
@@ -105,15 +106,17 @@ def preflight(monkeypatch):
     return events
 
 
-def test_preparation_order_and_reserved_partition_before_configuration_freeze(tmp_path, preflight):
+def test_preparation_checks_full_dataset_and_configures_pause_before_framework(tmp_path, preflight):
     args = arguments(research_profile={'id': 'fixture'})
     books = {'hypothesis': ['fixture']}
     prepared = asyncio.run(preparation.prepare_execution(args, tmp_path, books))
     assert [event[0] for event in preflight] == [
-        'settings', 'configure', 'diagnostics', 'models', 'verify', 'data',
+        'settings', 'settings', 'configure', 'diagnostics', 'models', 'verify', 'data',
         'matcher', 'provider', 'freeze', 'explanation']
     assert preflight[0][1] == {'update': {'llm_call_timeout_seconds': 123}}
-    assert preflight[5][1] == {'reserve_validation': True, 'missing_policy': 'reject'}
+    assert preflight[1][1]['update'] == {key: 2147483647 for key in
+        ('llm_call_timeout_seconds', 'tool_timeout_seconds', 'hook_timeout_seconds')}
+    assert preflight[6][1] == {'reserve_validation': False, 'missing_policy': 'reject', 'require_numeric': True}
     assert prepared.stage_models == args.stage_models
     assert preflight[-1][1]['stage_models'] == prepared.stage_models
     assert prepared.combination_plan is None

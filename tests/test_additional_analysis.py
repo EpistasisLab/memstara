@@ -38,7 +38,7 @@ def test_only_approved_extra_loops_and_saved_settings_unchanged(tmp_path):
 @pytest.mark.parametrize('count', [0, -1, 11, True, 1.5, '5', None])
 def test_invalid_extra_budget_rejected(tmp_path, count):
     w, p = workspace(tmp_path)
-    with pytest.raises(ValueError, match='Additional Loops'):
+    with pytest.raises(ValueError, match='Additional total replicates'):
         w.start(p['id'], lambda *_: pytest.fail('Launched'), mode='additional',
                 additional_loops=count, expected_run_tag='previous')
 
