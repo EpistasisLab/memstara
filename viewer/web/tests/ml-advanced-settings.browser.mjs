@@ -8,7 +8,7 @@ try{
  page=await browser.newPage({viewport:{width:1440,height:1000}});page.setDefaultTimeout(8000);const errors=[];let items=[],starts=0;
  page.on('console',message=>{if(message.type()==='error'&&!message.text().includes('503'))console.error('UI console:',message.text());});
  page.on('pageerror',e=>{errors.push(e.message);console.log('Browser error:',e.message);});
- const catalog=[['hypothesis_general','hypothesis','General hypothesis'],['data_training_heavy','data','Training-heavy'],['ml_logistic_regression','ml','Logistic Regression (LR)'],['ml_xgboost','ml','XGBoost'],['shared-anil-shap','interpreter','SHAP'],['report_general','report','General explanation']].map(([id,stage,title])=>({id,stage,title,hash:id,content:'# Synthetic fixture',description:'Synthetic instructions',source:'Fixture'}));
+ const catalog=[['hypothesis_general','hypothesis','General hypothesis'],['data_training_heavy','data','Training-heavy'],['ml_logistic_regression','ml','Logistic Regression (LR)'],['ml_xgboost','ml','XGBoost'],['shared-shap','interpreter','SHAP'],['report_general','report','General explanation']].map(([id,stage,title])=>({id,stage,title,hash:id,content:'# Synthetic fixture',description:'Synthetic instructions',source:'Fixture'}));
  await page.route('**/control/**',async r=>{
   const path=new URL(r.request().url()).pathname;
   if(path==='/control/playbooks')return r.fulfill({json:{ml_settings:schema,catalog,playbooks:catalog.map(x=>x.id),stages:['hypothesis','data','ml','interpreter','report'],references:[]}});
@@ -27,7 +27,7 @@ try{
  });
  await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Isolated fixture'}}));
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
- await page.getByRole('button',{name:/Add pipeline/i}).click();await openBuildModeFixture(page);
+ await page.getByRole('button',{name:/Add experiment/i}).click();await openBuildModeFixture(page);
  let dialog=page.getByRole('dialog',{name:'Create a pipeline',exact:true});
  await dialog.getByLabel('Deployment target column').fill('Y');await dialog.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
@@ -46,7 +46,7 @@ try{
  await dialog.getByLabel('Logistic Regression (LR) solver',{exact:true}).selectOption(JSON.stringify('liblinear'));
  await dialog.getByLabel('Logistic Regression (LR) prediction threshold',{exact:true}).fill('.6');
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
- for(const role of ['Interpretation','Explanation']){const choice=dialog.getByRole('combobox',{name:role+' skill',exact:true});if(!await choice.inputValue())await choice.selectOption(role==='Interpretation'?'shared-anil-shap':'report_general');await dialog.getByRole('button',{name:'Next',exact:true}).click();}
+ for(const role of ['Interpretation','Explanation']){const choice=dialog.getByRole('combobox',{name:role+' skill',exact:true});if(!await choice.inputValue())await choice.selectOption(role==='Interpretation'?'shared-shap':'report_general');await dialog.getByRole('button',{name:'Next',exact:true}).click();}
  await dialog.getByLabel('Pipeline name',{exact:true}).fill('Advanced LR fixture');await dialog.getByRole('button',{name:'Next',exact:true}).click();await dialog.getByRole('button',{name:'Create pipeline',exact:true}).click();await dialog.waitFor({state:'hidden'});
  assert.equal(items[0].configuration.ml_overrides.models.logistic_regression.parameters.C,.25);
  await page.reload();await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:'Inspect Machine learning',exact:true}).click();
@@ -54,7 +54,7 @@ try{
  assert.equal(await dialog.getByLabel('Logistic Regression (LR) C',{exact:true}).inputValue(),'0.25');
  await dialog.getByLabel('Logistic Regression (LR) C',{exact:true}).fill('.5');await dialog.getByRole('button',{name:'Save settings',exact:true}).click();await dialog.waitFor({state:'hidden'});
  assert.equal(items[0].configuration.ml_overrides.models.logistic_regression.parameters.C,.5);
- await page.getByRole('button',{name:/Add pipeline/i}).click();
+ await page.getByRole('button',{name:/Add experiment/i}).click();
  dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});await dialog.getByRole('button',{name:'Choose skills',exact:true}).click();
  for(const role of ['Hypothesis','Data','Machine learning','Interpretation','Explanation']){
   await dialog.locator('.comb-roles button').filter({hasText:role}).click();await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'});

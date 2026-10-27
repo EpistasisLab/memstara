@@ -10,7 +10,7 @@ from memstara.pipeline import prompts
 
 @pytest.fixture
 def shared(tmp_path, monkeypatch):
-    monkeypatch.setattr(catalog, 'anil_dir', lambda: tmp_path)
+    monkeypatch.setattr(catalog, 'specialist_dir', lambda: tmp_path)
     monkeypatch.setenv('MEMSTARA_USER_SKILLS_DIR', str(tmp_path / 'users'))
     for filename in ('Addiction-Expert-Explanation.md', 'HIV-Expert-Explanation.md'):
         (tmp_path / filename).write_text('# Synthetic shared expert\nExplain measured results.')
@@ -22,9 +22,9 @@ def shared(tmp_path, monkeypatch):
 
 def test_current_domain_explanations_and_general_choice_visible(shared):
     assert {i['id'] for i in catalog.catalog() if i['stage'] == 'report'} == {
-        'shared-anil-addiction', 'shared-anil-hiv', 'report_general',
+        'shared-addiction', 'shared-hiv', 'report_general',
         'report_heart_failure_cardiovascular', 'report_heart_failure_cardiorenal'}
-    for name in ('shared-anil-addiction', 'shared-anil-hiv'):
+    for name in ('shared-addiction', 'shared-hiv'):
         catalog.validate_selection({'playbook_explanation': name})
 
 

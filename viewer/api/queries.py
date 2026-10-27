@@ -117,12 +117,14 @@ WHERE ($1 = '' OR run_tag = $1)
 ORDER BY task_id
 """
 
+# These columns are installed by the board schema migration. Reading them directly
+# avoids serializing large match_trace values on every results poll.
 RESULTS = """
 SELECT result_id, task_id, run_tag, trial, perspective, hypothesis,
        columns_used, columns_missing, feature_importance, okf_concept_ids,
        y_column, auc, model, interpretation, created_at,
-       COALESCE(to_jsonb(memstara_results)->'evaluation', '{}'::jsonb) AS evaluation,
-       COALESCE(to_jsonb(memstara_results)->>'hypothesis_id', '') AS hypothesis_id
+       COALESCE(evaluation, '{}'::jsonb) AS evaluation,
+       COALESCE(hypothesis_id, '') AS hypothesis_id
 FROM memstara_results
 WHERE ($1 = '' OR run_tag = $1)
 ORDER BY result_id
@@ -144,8 +146,8 @@ RESULT_ONE = """
 SELECT result_id, task_id, run_tag, trial, perspective, hypothesis,
        columns, columns_used, columns_missing, feature_importance, okf_concept_ids,
        match_trace, y_column, auc, model, interpretation, created_at,
-       COALESCE(to_jsonb(memstara_results)->'evaluation', '{}'::jsonb) AS evaluation,
-       COALESCE(to_jsonb(memstara_results)->>'hypothesis_id', '') AS hypothesis_id
+       COALESCE(evaluation, '{}'::jsonb) AS evaluation,
+       COALESCE(hypothesis_id, '') AS hypothesis_id
 FROM memstara_results
 WHERE result_id = $1
 """

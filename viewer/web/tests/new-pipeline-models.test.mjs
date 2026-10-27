@@ -37,16 +37,16 @@ test('new drafts use explicit model skills while preserving historical configura
 
 test('new drafts avoid hidden Interpretation choices without editing saved ones',()=>{
  const saved={playbook_interpreter:'interpreter_factual_observations'};
- assert.equal(newPipelineConfiguration(saved).playbook_interpreter,'shared-anil-shap');
+ assert.equal(newPipelineConfiguration(saved).playbook_interpreter,'shared-shap');
  assert.equal(saved.playbook_interpreter,'interpreter_factual_observations');
- assert.equal(newPipelineConfiguration({playbook_interpreter:'shared-anil-lime'}).playbook_interpreter,'shared-anil-lime');
+ assert.equal(newPipelineConfiguration({playbook_interpreter:'shared-lime'}).playbook_interpreter,'shared-lime');
 });
 
 test('new drafts replace disabled Explanation choices without editing saved ones',()=>{
  const saved={playbook_explanation:'shared-ml-results'};
  assert.equal(newPipelineConfiguration(saved).playbook_explanation,'report_general');
  assert.equal(saved.playbook_explanation,'shared-ml-results');
- assert.equal(newPipelineConfiguration({playbook_explanation:'shared-anil-hiv'}).playbook_explanation,'shared-anil-hiv');
+ assert.equal(newPipelineConfiguration({playbook_explanation:'shared-hiv'}).playbook_explanation,'shared-hiv');
 });
 
 test('new drafts avoid disabled hypothesis choices and preserve saved selections',()=>{
@@ -58,10 +58,10 @@ test('new drafts avoid disabled hypothesis choices and preserve saved selections
 
 
 test('new registered-study drafts replace incompatible inherited domain skills',()=>{
- const saved={research_input_id:'heart-failure',playbook_hypothesis:'addiction-psychiatric',playbook_explanation:'shared-anil-hiv'};
+ const saved={research_input_id:'heart-failure',playbook_hypothesis:'addiction-psychiatric',playbook_explanation:'shared-hiv'};
  const draft=newPipelineConfiguration(saved);
  assert.equal(draft.playbook_hypothesis,'hypothesis_general');
  assert.equal(draft.playbook_explanation,'report_general');
  assert.equal(saved.playbook_hypothesis,'addiction-psychiatric');
- assert.equal(saved.playbook_explanation,'shared-anil-hiv');
+ assert.equal(saved.playbook_explanation,'shared-hiv');
 });

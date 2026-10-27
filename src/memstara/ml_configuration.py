@@ -220,6 +220,18 @@ def context(snapshot, evaluation):
         specification['preprocessing_contract'] = ('Require prepared numeric predictors. No automatic encoding or scaling. '
             'Missing values block execution for every classifier; no imputation is permitted.')
         specification['instructions'] = specification['instructions'].replace('parameter, numeric scaling, threshold', 'parameter, threshold') + ' Keep scale_numeric false.'
+    from memstara.missing_values import resolve_policy
+    if resolve_policy(snapshot) == 'impute_train_v1':
+        specification['preprocessing_contract'] = (
+            'User approved imputation: training-only mean for continuous predictors and mode for binary or '
+            'declared categorical predictors, fitted inside each CV fold and applied to test data. '
+            'Never impute before splitting, alter rows or impute target labels. '
+            + ('No automatic encoding or scaling.' if prepared_input else 'Encoding follows the frozen policy.'))
+    from memstara.preprocessing_policy import typed_predictors
+    if typed_predictors(snapshot):
+        specification['preprocessing_contract'] = ('User-approved training-only mean/mode imputation when enabled. '
+            'Use the frozen predictor_types: continuous means, categorical/binary modes. '
+            'Fit categorical encoding inside each training/CV fold; never on test data. No scaling, row removal or target imputation.')
     overrides = validate_overrides(snapshot.get('ml_overrides', {}))
     if prepared_input and any(v.get('scale_numeric') for v in overrides.get('models', {}).values()):
         raise ValueError('Automatic scaling is disabled; remove scale_numeric overrides')

@@ -37,7 +37,7 @@ def test_standalone_catalog_and_preserved_hashes(standalone):
 def test_explicit_missing_directory_does_not_fall_back(standalone, monkeypatch):
     monkeypatch.setenv('MEMSTARA_SPECIALIST_SKILLS_DIR', str(standalone / 'missing'))
     with pytest.raises(FileNotFoundError):
-        catalog.resolve('shared-anil-shap')
+        catalog.resolve('shared-shap')
     monkeypatch.setenv('MEMSTARA_SHARED_SKILLS_DIR', str(standalone / 'missing'))
     assert catalog.reference_knowledge() == []
 
@@ -48,8 +48,8 @@ def test_default_is_internal_even_when_sibling_exists(standalone, monkeypatch):
     local.mkdir()
     (local / 'SHAP-Interpretation.md').write_text('# External content must not win')
     monkeypatch.setattr(paths, 'WORKSPACE_ROOT', standalone)
-    assert catalog.anil_dir() == PACKAGE_ROOT / 'resources/contributed/specialists'
-    assert len(catalog.anil_skills()) == 4
+    assert catalog.specialist_dir() == PACKAGE_ROOT / 'resources/contributed/specialists'
+    assert len(catalog.specialist_skills()) == 4
 
 
 def test_explicit_partial_directory_is_not_mixed_with_bundle(standalone, monkeypatch):
@@ -57,9 +57,9 @@ def test_explicit_partial_directory_is_not_mixed_with_bundle(standalone, monkeyp
     local.mkdir()
     (local / 'SHAP-Interpretation.md').write_text('# Explicit current instructions')
     monkeypatch.setenv('MEMSTARA_SPECIALIST_SKILLS_DIR', str(local))
-    assert len(catalog.anil_skills()) == 1
+    assert len(catalog.specialist_skills()) == 1
     with pytest.raises(FileNotFoundError):
-        catalog.resolve('shared-anil-lime')
+        catalog.resolve('shared-lime')
 
 
 def test_release_content_and_publication_gates(tmp_path):

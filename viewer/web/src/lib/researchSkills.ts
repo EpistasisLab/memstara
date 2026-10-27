@@ -2,7 +2,8 @@ import type {RunRequest} from '../store/control';
 
 type Profile={label:string;hypothesis:string[];report:string[]};
 type Bindings={profiles:Record<string,Profile>;default:string;research:Record<string,string>};
-const general:Profile={label:'General research',hypothesis:['hypothesis_general'],report:['report_general']};
+const explanationSkills=['shared-addiction','shared-hiv','shared-heart-failure-cardiovascular','shared-heart-failure-comorbidity'];
+const general:Profile={label:'General research',hypothesis:['hypothesis_general'],report:explanationSkills};
 let bindings:Bindings={profiles:{general},default:'legacy',research:{}};
 
 /** The server binds actual corpus fingerprints; names/targets are never guessed. */
@@ -19,8 +20,10 @@ export function researchSkillProfile(form:Partial<RunRequest>):Profile {
 }
 export function compatibleResearchSkill(skill:{id:string;stage:string},form:Partial<RunRequest>):boolean {
   const id=skill.id??'';
+  if(skill.stage==='interpreter')return ['shared-shap','shared-lime'].includes(id);
+  if(skill.stage==='report')return explanationSkills.includes(id);
   if(id==='random_features'||id==='heart-failure-all')return false;
-  if(skill.stage!=='hypothesis'&&skill.stage!=='report')return true;
+  if(skill.stage!=='hypothesis')return true;
   if(bindings.default==='legacy'&&!form.research_input_id&&form.knowledge_mode!=='llm_only'&&form.data_mode!=='proposal')return !id.startsWith('heart-failure-');
   const profile=researchSkillProfile(form);
   return profile[skill.stage].includes(id) ||

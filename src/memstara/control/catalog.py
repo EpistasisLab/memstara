@@ -17,28 +17,36 @@ from memstara.pipeline import prompts
 
 ROLES = ('hypothesis', 'data', 'ml', 'interpreter', 'report')
 
+FINAL_STAGE_SKILLS = {
+    'interpreter': ('shared-shap', 'shared-lime'),
+    'report': ('shared-addiction', 'shared-hiv', 'shared-heart-failure-cardiovascular',
+               'shared-heart-failure-comorbidity'),
+}
+
 # Exact current filenames only: no recursive discovery and no archive fallback.
-ANIL_SKILLS = {
-    'shared-anil-shap': ('SHAP-Interpretation.md', 'interpreter', 'SHAP Interpretation'),
-    'shared-anil-lime': ('LIME-Interpretation.md', 'interpreter', 'LIME Interpretation'),
-    'shared-anil-addiction': ('Addiction-Expert-Explanation.md', 'report', 'Addiction Expert Explanation'),
-    'shared-anil-hiv': ('HIV-Expert-Explanation.md', 'report', 'HIV Expert Explanation'),
+SPECIALIST_SKILLS = {
+    'shared-shap': ('SHAP-Interpretation.md', 'interpreter', 'SHAP Interpretation'),
+    'shared-lime': ('LIME-Interpretation.md', 'interpreter', 'LIME Interpretation'),
+    'shared-addiction': ('Addiction-Expert-Explanation.md', 'report', 'Addiction Expert Explanation'),
+    'shared-hiv': ('HIV-Expert-Explanation.md', 'report', 'HIV Expert Explanation'),
+    'shared-heart-failure-cardiovascular': ('Heart-Failure-Cardiovascular-Expert-Explanation.md', 'report', 'Heart Failure — Cardiovascular Explanation'),
+    'shared-heart-failure-comorbidity': ('Heart-Failure-Comorbidity-Expert-Explanation.md', 'report', 'Heart Failure — Comorbidities and Social Context Explanation'),
 }
 
 
-def anil_dir() -> Path:
+def specialist_dir() -> Path:
     configured = os.environ.get('MEMSTARA_SPECIALIST_SKILLS_DIR', '').strip()
     if configured:
         return Path(configured).expanduser()
     return PACKAGE_ROOT / 'resources/contributed/specialists'
 
 
-def anil_skills() -> list[dict]:
-    root = anil_dir().resolve()
+def specialist_skills() -> list[dict]:
+    root = specialist_dir().resolve()
     if 'old' in {part.casefold() for part in root.parts}:
         raise ValueError('Archived skill directories are not allowed')
     items = []
-    for item_id, (filename, stage, title) in ANIL_SKILLS.items():
+    for item_id, (filename, stage, title) in SPECIALIST_SKILLS.items():
         path = root / filename
         if not path.is_file():
             continue
@@ -73,6 +81,15 @@ def document_path(variable: str, filename: str) -> Path | None:
 
 def canonical_name(name: str) -> str:
     """Resolve deployment-owned aliases without changing saved run records."""
+    # Historical shared IDs contained a contributor namespace. New IDs describe
+    # the method/domain only; keep old saved references readable without rewriting them.
+    parts = name.split('-')
+    if len(parts) == 3 and parts[0] == 'shared' and f'shared-{parts[-1]}' in SPECIALIST_SKILLS:
+        name = f'shared-{parts[-1]}'
+    name = {
+        'report_heart_failure_cardiovascular': 'shared-heart-failure-cardiovascular',
+        'report_heart_failure_cardiorenal': 'shared-heart-failure-comorbidity',
+    }.get(name, name)
     path = Path(os.environ.get('MEMSTARA_SKILL_ALIASES_PATH') or
                 (Path(os.environ.get('MEMSTARA_OUTPUT_DIR') or DEFAULT_OUTPUT_DIR) / 'skill_aliases.json'))
     cache = _catalog_snapshot.get()
@@ -124,12 +141,14 @@ def catalog(*, include_hidden: bool = False) -> list[dict]:
 
 
 def _read_catalog(*, include_hidden: bool = False) -> list[dict]:
-    items = anil_skills()
+    items = specialist_skills()
     path = document_path('MEMSTARA_RESULTS_SKILL_PATH', 'ml-results.md')
     if include_hidden and path is not None and path.is_file():
         items.append(_external_entry('shared-ml-results', path, 'report'))
     for path in sorted(prompts.PLAYBOOKS_DIR.glob('*.md')):
         if not include_hidden and path.stem in prompts.HIDDEN_PLAYBOOKS:
+            continue
+        if not include_hidden and path.stem.startswith(('interpreter_', 'report_')):
             continue
         content = prompts._body(path.read_text(encoding='utf-8'))
         stage = ('data' if path.stem.startswith('data_') else 'ml' if path.stem.startswith('ml_') else
@@ -148,6 +167,8 @@ def _read_catalog(*, include_hidden: bool = False) -> list[dict]:
             raise ValueError('Invalid saved user skill record; restore the original '
                              'record or register a new version') from None
         item['stage_label'] = agent_label(item['stage'])
+        if not include_hidden and item['stage'] in FINAL_STAGE_SKILLS:
+            continue
         items.append(item)
     return items
 
@@ -185,9 +206,9 @@ def resolve(name: str) -> dict:
         path = prompts.PLAYBOOKS_DIR / prompts.LEGACY_PLAYBOOKS[name]
         item = _entry(name, prompts._body(path.read_text(encoding='utf-8')),
                       'ml' if name.startswith('ml_') else 'data', 'Legacy compatibility only')
-    if name in ANIL_SKILLS and not item:
+    if name in SPECIALIST_SKILLS and not item:
         raise FileNotFoundError(
-            f'{ANIL_SKILLS[name][0]} is missing from the current shared folder; no archive fallback')
+            f'{SPECIALIST_SKILLS[name][0]} is missing from the current shared folder; no archive fallback')
     return item
 
 
@@ -195,6 +216,8 @@ def register(body: dict) -> dict:
     stage, name, content = body.get('stage'), body.get('name', ''), body.get('content', '')
     if stage not in ROLES:
         raise ValueError('Choose a Hypothesis, ML, Interpreter or Explanation agent skill')
+    if stage in FINAL_STAGE_SKILLS:
+        raise ValueError('Interpretation and Explanation use the supplied skills from the library.')
     if not isinstance(name, str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,60}', name):
         raise ValueError('Use a name of 1–60 letters, numbers, hyphens or underscores')
     if not isinstance(content, str) or not content.strip() or len(content.encode()) > 48_000:
@@ -231,9 +254,15 @@ def register(body: dict) -> dict:
 
 def ensure_explanation_enabled(names) -> None:
     for name in names:
-        if canonical_name(name) in prompts.DISABLED_EXPLANATION_SKILLS:
-            raise ValueError(f'{name}: this Explanation skill is disabled for execution. '
-                             'Select General research explanation, or an explicitly compatible specialist.')
+        if name and canonical_name(name) not in FINAL_STAGE_SKILLS['report']:
+            raise ValueError(f'{name}: this Explanation skill is disabled for new execution. '
+                             'Select an supplied Explanation skill.')
+
+
+def ensure_interpretation_enabled(names) -> None:
+    for name in names:
+        if name and canonical_name(name) not in FINAL_STAGE_SKILLS['interpreter']:
+            raise ValueError(f'{name}: select an supplied SHAP or LIME Interpretation skill.')
 
 
 def ensure_hypothesis_enabled(names) -> None:
@@ -246,6 +275,15 @@ def ensure_hypothesis_enabled(names) -> None:
 
 def validate_new_design(body: dict) -> None:
     """Retired skills remain loadable only through existing saved executions."""
+    from memstara.control.request import normalize_agent_configuration, playbook_field
+    normalized = normalize_agent_configuration(body)
+    for stage, validate in (('interpreter', ensure_interpretation_enabled),
+                            ('report', ensure_explanation_enabled)):
+        selected = str(normalized.get(playbook_field(stage), '')).split(',')
+        combinations = body.get('combination_skills') or {}
+        if stage in combinations:
+            selected = combinations[stage]
+        validate(selected)
     names = str(body.get('playbook_hypothesis', '')).split(',')
     choices = body.get('combination_skills')
     if isinstance(choices, dict) and isinstance(choices.get('hypothesis'), list):
@@ -269,6 +307,8 @@ def validate_selection(body: dict) -> None:
         names = body.get(playbook_field(stage), '').split(',')
         if stage == 'report':
             ensure_explanation_enabled(names)
+        if stage == 'interpreter':
+            ensure_interpretation_enabled(names)
         if stage == 'hypothesis':
             ensure_hypothesis_enabled(names)
         for name in names:

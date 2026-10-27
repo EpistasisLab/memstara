@@ -98,7 +98,10 @@ def execute(path, target, evaluation, snapshot, proposal):
             if json.loads(accepted_path.read_text()) != record:
                 raise ValueError('Accepted ML settings/input cannot change after evaluation starts')
             if result_path.exists():
-                return json.loads(result_path.read_text())
+                result = json.loads(result_path.read_text())
+                from memstara.ml_artifact_recovery import verify_result
+                verify_result(result, root)
+                return result
             raise ValueError('Prior ML execution was interrupted; inspect its record before a new run')
         atomic(accepted_path, record)
         progress_path = path.with_suffix('.paired-progress.json')
@@ -143,7 +146,9 @@ def fit(request):
     evaluation_module.active_plan = lambda: snapshot
     frame = validate_clean_dataset(path, request['target'], allow_missing=proposal['primary_model'] == 'xgboost')
     X = frame.drop(columns=[request['target']])
-    categorical = X.select_dtypes(exclude='number')
+    from memstara.preprocessing_policy import typed_predictors
+    declared = snapshot.get('research_profile', {}).get('configuration', {}).get('categorical_columns', []) if typed_predictors(snapshot) else []
+    categorical = X[[c for c in X if c in declared or c in X.select_dtypes(exclude='number').columns]]
     width = len(X.columns) - len(categorical.columns) + sum(categorical.nunique(dropna=False))
     limits = snapshot['ml_configuration_policy']
     if (exceeds_limit(limits, 'max_encoded_columns', width)

@@ -6,11 +6,11 @@ from memstara.pipeline import prompts
 
 def test_only_current_anil_interpretation_choices_visible(tmp_path, monkeypatch):
     monkeypatch.setenv('MEMSTARA_USER_SKILLS_DIR', str(tmp_path / 'users'))
-    monkeypatch.setattr(catalog, 'anil_dir', lambda: tmp_path)
+    monkeypatch.setattr(catalog, 'specialist_dir', lambda: tmp_path)
     for name in ('SHAP-Interpretation.md', 'LIME-Interpretation.md'):
         (tmp_path / name).write_text('# Synthetic shared skill\nRead both models.')
     assert {x['id'] for x in catalog.catalog() if x['stage'] == 'interpreter'} == {
-        'shared-anil-shap', 'shared-anil-lime'}
+        'shared-shap', 'shared-lime'}
     assert not prompts.HIDDEN_PLAYBOOKS.intersection(prompts.playbook_names())
 
 

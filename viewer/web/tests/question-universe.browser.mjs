@@ -67,7 +67,7 @@ try{
   await page.getByRole('button',{name:'Clear questions',exact:true}).click();
   await expect(page.getByRole('dialog',{name:'Clear Question Universe memory?'})).toBeVisible();
   await page.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(writes,0);
-  await expect(page.locator('.universe-workspace').getByRole('button',{name:'Add pipeline',exact:true})).toHaveCount(0);
+  await expect(page.locator('.universe-workspace').getByRole('button',{name:'Add experiment',exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Pipeline controls',exact:true})).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(page.locator('.live-output-cards')).toHaveCount(0);

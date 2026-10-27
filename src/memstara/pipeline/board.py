@@ -493,7 +493,18 @@ async def _call_agent_uncontrolled(
     from memstara.pipeline.ablation import enabled, filter_tools, INSTRUCTIONS
     plan = active_plan()
     from memstara.research_inputs import instructions as research_instructions
-    prompt += research_instructions((plan or {}).get('research_profile'))
+    skill_authored_stage = stage.split('#', 1)[0] in ('interpret', 'interpreter', 'report')
+    if skill_authored_stage:
+        # Supply input metadata, not a second set of report-writing rules.
+        configuration = ((plan or {}).get('research_profile') or {}).get('configuration')
+        if configuration:
+            prompt += '\n\nResearch input metadata:\n' + json.dumps({
+                key: configuration[key] for key in (
+                    'target', 'data_mode', 'knowledge_mode', 'missing_policy', 'predictor_types'
+                ) if key in configuration
+            }, ensure_ascii=False)
+    else:
+        prompt += research_instructions((plan or {}).get('research_profile'))
     if stage.startswith(("hypothesis", "question")):
         from memstara.pipeline.feature_selection import scoped, hypothesis_tools, instructions as selection_instructions
         wave = max(0, (_CURRENT_LOOP.get() or 1) - 1)
@@ -501,7 +512,7 @@ async def _call_agent_uncontrolled(
         tools = hypothesis_tools(tools, plan, wave)
         plan = scoped(plan, wave)
     tools = filter_tools(tools, plan)
-    if enabled(plan):
+    if enabled(plan) and not skill_authored_stage:
         prompt += '\n' + INSTRUCTIONS
     check_primary_tools(stage, tools)
 
@@ -2529,8 +2540,8 @@ async def main() -> int:
             *( ["--playbook-explanation", "--playbook-report"] if stage_flag == "report"
                else [f"--playbook-{stage_flag}"] ),
             dest="playbook_explanation" if stage_flag == "report" else f"playbook_{stage_flag}",
-            default={"interpreter": "interpreter_factual_observations",
-                     "report": "report_clinical_explanations"}.get(stage_flag, ""),
+            default={"interpreter": "shared-shap",
+                     "report": "shared-addiction"}.get(stage_flag, ""),
             help=f"a behavioural standard for the {public_stage} stage, named without the "
                  f".md — the prompt must carry a {{{{playbook}}}} line to receive it "
                  f"(default: the prompt as written)",
@@ -2549,6 +2560,7 @@ async def main() -> int:
     ap.add_argument("--start-loop", type=int, default=1, help="First ordinal in a new retry attempt")
     ap.add_argument("--retry-source-run", default="", help="Original failed run retained as evidence")
     ap.add_argument("--retry-seed-schedule", default="", help="Recorded seed schedule from the retry source")
+    ap.add_argument("--retry-experiment-policy", default="", help="Original scientific policy for a retry")
     ap.add_argument("--resume", action="store_true", help="Recover this execution from its durable checkpoint")
     args = ap.parse_args()
     if args.start_loop < 1 or (args.start_loop > 1 and not args.retry_source_run):

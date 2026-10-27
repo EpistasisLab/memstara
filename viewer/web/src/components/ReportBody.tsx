@@ -28,12 +28,21 @@ const markdownComponents: Components = {
       a: ({children,href}) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>,
 };
 
+// Layout and link safety only. No renaming, hidden columns, generated badges,
+// fence stripping, image replacement, or extra prose in agent narratives.
+const verbatimPlugins = [remarkGfm];
+const verbatimComponents: Components = {
+  pre: markdownComponents.pre,
+  a: markdownComponents.a,
+  table: ({children}) => <div className="report-table-wrap"><div className="report-table-scroll" role="region" aria-label="Report table" tabIndex={0}><table>{children}</table></div></div>,
+};
+
 /** Markdown is rendered as text elements; model-provided HTML is never evaluated. */
 function ReportBody({text, report = false, origin, analysesPerLoop, compactOrigin = false, verbatim = false}:{text:string; report?: boolean; origin?: ContentOriginKind; analysesPerLoop?: number; compactOrigin?: boolean; verbatim?: boolean}) {
   return <div className="report-markdown">
-    {(origin || report) && <ContentOrigin kind={origin ?? 'mixed'} compact={compactOrigin}/>}
+    {(!verbatim && (origin || report)) && <ContentOrigin kind={origin ?? 'mixed'} compact={compactOrigin}/>}
     {(!verbatim && (report || /^##\s+Ranked hypotheses\s*$/im.test(text))) && <ReportTransparency />}
-    <Markdown remarkPlugins={verbatim ? [remarkGfm] : markdownPlugins} skipHtml components={markdownComponents}>
+    <Markdown remarkPlugins={verbatim ? verbatimPlugins : markdownPlugins} skipHtml={!verbatim} components={verbatim ? verbatimComponents : markdownComponents}>
       {verbatim ? text : report ? reportLoopText(reportMarkdown(text), analysesPerLoop) : reportMarkdown(text)}
     </Markdown>
   </div>;

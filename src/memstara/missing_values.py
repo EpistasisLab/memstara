@@ -41,15 +41,16 @@ def imputation_record(model: Any, policy_name: str, *, fit_scope: str = "trainin
 class TrainingImputer(TransformerMixin, BaseEstimator):
     """Fill continuous values with means and declared categories with modes.
 
-    Text and observed 0/1 values use modes automatically. Numeric category codes
-    other than 0/1 must be declared by the user; cardinality is not a safe proxy
+    Text and 0/1 values use modes automatically. Uploaded binary/category types
+    are supplied by the frozen predictor schema; cardinality is not a safe proxy
     for clinical meaning. Empty training columns fail rather than inventing a
     value or removing a feature. sklearn.clone creates a fresh fit for each CV
     fold and replicate, so neither test nor validation rows determine statistics.
     """
 
-    def __init__(self, categorical_columns=()):
+    def __init__(self, categorical_columns=(), continuous_columns=()):
         self.categorical_columns = categorical_columns
+        self.continuous_columns = continuous_columns
 
     def fit(self, X: pd.DataFrame, y=None):
         self.feature_names_in_ = np.asarray(X.columns, dtype=object)
@@ -65,7 +66,8 @@ class TrainingImputer(TransformerMixin, BaseEstimator):
                 )
             numeric = pd.api.types.is_numeric_dtype(observed)
             binary = numeric and set(observed.unique()).issubset({0, 1})
-            categorical = not numeric or binary or column in self.categorical_columns
+            categorical = (not numeric or column in self.categorical_columns
+                           or (binary and column not in self.continuous_columns))
             strategy = 'most_frequent' if categorical else 'mean'
             value = observed.mode().iloc[0] if categorical else observed.mean()
             self.fill_values_[column] = value.item() if isinstance(value, np.generic) else value

@@ -204,7 +204,8 @@ export interface Result extends ReplicateIdentity {
     question_contract?: QuestionContract;
     hypothesis_policy?: { version?: string; kind?: string; validation_status?: string };
     interpretations_complete?: boolean;
-    interpretations?: { slot: number; worker: string; skill: string; status: string; text: string; error: string }[];
+    interpretation_limitations?: string;
+    interpretations?: { limitations?: string; slot: number; worker: string; skill: string; status: string; text: string; error: string }[];
     interpreter?: { worker: string; skill: string };
     seed?: number; test_size?: number; auc_std?: number;
     config_hash?: string;

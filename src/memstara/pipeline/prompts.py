@@ -204,7 +204,7 @@ def load_prompt(name: str, playbook: str = "") -> dict[str, str]:
                 "ML Results Presenter is an Explanation agent skill. "
                 "Select an ML skill such as ml_logistic_regression for the ML agent."
             )
-        if playbook.startswith("shared-anil-") and item and name != f"board/{item['stage']}":
+        if playbook.startswith("shared-") and item and name != f"board/{item['stage']}":
             raise ValueError(f"{playbook}: skill belongs to {item['stage']}, not {name}")
         if item and item.get("source", "").startswith("Shared document"):
             text = item["content"]

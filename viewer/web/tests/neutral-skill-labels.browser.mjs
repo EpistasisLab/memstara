@@ -14,7 +14,7 @@ try {
       return r.fulfill({json:{}});
     }
     if(u.pathname==='/api/motoro/execution')return r.fulfill({json:{calls:[{run_id:'invocation',stage:'interpreter',loop:1,seq:1,record:{status:'completed'}}],note:'Recorded model usage'}});
-    if(u.pathname==='/api/motoro/run')return r.fulfill({json:{record:{input:{skill:'shared-anil-shap',description:"Anil's instructions"},output:{auc:.731,cost:.11321064},started_at:'2026-10-22T12:00:00Z',completed_at:'2026-10-22T12:01:00Z'}}});
+    if(u.pathname==='/api/motoro/run')return r.fulfill({json:{record:{input:{skill:'shared-shap',description:"Anil's instructions"},output:{auc:.731,cost:.11321064},started_at:'2026-10-22T12:00:00Z',completed_at:'2026-10-22T12:01:00Z'}}});
     if(u.pathname==='/api/developer/steps')return r.fulfill({json:{steps:[],next_offset:null}});
     return r.fulfill({status:503,json:{error:'No server in this fixture'}});
   });
@@ -35,15 +35,15 @@ try {
   }
   await p.getByRole('button',{name:'Edit interpretation',exact:true}).click();
   const editor=p.getByRole('dialog');
-  await editor.getByLabel('Choose a skill').selectOption('shared-anil-lime');
+  await editor.getByLabel('Choose a skill').selectOption('shared-lime');
   await editor.getByText('Read full instructions and source',{exact:true}).click();
   await assertNeutral();
   await editor.getByRole('button',{name:'Save settings',exact:true}).click();
   await expect(editor).toHaveCount(0);
-  assert.equal(writes.length,1);assert.equal(writes[0].configuration.playbook_interpreter,'shared-anil-lime');
+  assert.equal(writes.length,1);assert.equal(writes[0].configuration.playbook_interpreter,'shared-lime');
   const after=await p.evaluate(()=>window.originalFixture());
   assert.deepEqual(after.catalog,before.catalog,'Rendering must not mutate original skill text or hashes');
-  assert.equal(after.configuration.playbook_interpreter,'shared-anil-lime');
+  assert.equal(after.configuration.playbook_interpreter,'shared-lime');
   for(const view of ['Results','Activity','Records']){
     await p.getByRole('navigation',{name:'Fixture views'}).getByRole('button',{name:view,exact:true}).click();
     if(view==='Results')await p.getByRole('article',{name:'Selected analysis evidence'}).waitFor();

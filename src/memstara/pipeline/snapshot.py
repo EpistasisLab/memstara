@@ -12,7 +12,7 @@ from memstara.pipeline.prompts import load_prompt
 
 def freeze(args, run_dir: Path, books: dict) -> dict:
     os.environ.pop("MEMSTARA_RUN_CONFIG", None)
-    from memstara.preprocessing_policy import VERSION, analysis_ready
+    from memstara.preprocessing_policy import VERSION, TYPED, requires_numeric
     previous = None
     if getattr(args, 'resume', False) and (run_dir / 'config.json').exists():
         previous = json.loads((run_dir / 'config.json').read_text())
@@ -21,11 +21,12 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     # original partition contract. New ordinary MVP runs use the entire cohort.
     two_way = (previous.get('partition_policy') == TWO_WAY_VERSION if previous is not None
                else not bool(json.loads(getattr(args, 'controlled_comparison', '{}') or '{}')))
-    prepared_input = analysis_ready(previous)
     research_config = (getattr(args, "research_profile", None) or {}).get("configuration", {})
+    preprocessing = previous.get('preprocessing_policy', 'legacy_encoding_v1') if previous is not None else TYPED if 'predictor_types' in research_config else VERSION
+    prepared_input = requires_numeric({'preprocessing_policy': preprocessing})
     missing_policy = research_config.get("missing_policy", "reject")
-    if missing_policy != "reject":
-        raise ValueError("Imputation is disabled. Correct the CSV and use missing_policy=reject.")
+    if missing_policy not in ("reject", "impute_train_v1"):
+        raise ValueError("Unsupported missing-value policy")
     combination_plan = json.loads(getattr(args, "combination_plan", "") or "null")
     if combination_plan:
         books = {stage: [s['id'] for s in entries] for stage, entries in combination_plan['skills'].items()}
@@ -48,7 +49,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     from memstara.control.catalog import resolve
     ml_books = books.get("ml") or []
     skill_policy = resolve(ml_books[0]).get("evaluation", {}) if ml_books else {}
-    # Skills supply model defaults; missing values are rejected for every model.
+    # Skills supply model defaults; registered consent controls imputation.
     evaluation = validate({**skill_policy, **json.loads(args.evaluation)})
     allow_missing = False
     if not getattr(args, "report_only", False):
@@ -79,8 +80,9 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     ablate_okf = bool(getattr(args, "ablate_okf", False))
     if ablate_okf:
         from memstara.pipeline.ablation import INSTRUCTIONS
-        for prompt in resolved.values():
-            prompt['system_prompt'] = INSTRUCTIONS + '\n\n' + prompt['system_prompt']
+        for key, prompt in resolved.items():
+            if not key.startswith(('board/interpreter:', 'board/report:')):
+                prompt['system_prompt'] = INSTRUCTIONS + '\n\n' + prompt['system_prompt']
     digest = hashlib.sha256()
     with dataset.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -88,7 +90,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     from memstara.pipeline.feature_context import freeze_feature_context
     from memstara.stage_models import for_stage
     state = {
-        "preprocessing_policy": VERSION,
+        "preprocessing_policy": preprocessing,
         "classifier_seed_policy": "split_seed_v1",
         "pause_policy": "fresh_model_request_v1",
         "schema_version": 1,
@@ -130,12 +132,12 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         "evaluation": evaluation,
         "comparison_policy": comparison_policy,
         "input_contract": "clean single dataset; column selection only; fixed binary target",
-        "missing_value_policy": "reject",
+        "missing_value_policy": missing_policy,
         "explainability_review": "Review required; provisional specification",
         "dataset_sha256": digest.hexdigest(),
         **({"feature_context": freeze_feature_context(
             dataset, args.y_column,
-            require_complete=True)}
+            require_complete=True, missing_policy=missing_policy, require_numeric=prepared_input)}
            if not getattr(args, "report_only", False) else {}),
         "knowledge_path": None if ablate_okf else os.environ.get("AGENTIC_OKF_BUNDLE_DIR"),
         "trials": args.trials,
@@ -194,7 +196,17 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
             from memstara.ml_configuration import policy
             state.setdefault("ml_configuration_policy", policy())
     from memstara.specialist_explanation import freeze as freeze_explanation
-    explanation = None if ablate_okf else freeze_explanation(books, resolved)
+    from memstara.corpus_skills import corpus_profile
+    # A specialist's writing skill must not switch a Heart Failure/general
+    # dataset to an unrelated expert corpus. Explicit source bindings remain opt-in.
+    has_expert_sources = bool(os.environ.get('MEMSTARA_EXPLANATION_SOURCES')
+                              or os.environ.get('MEMSTARA_EXPLANATION_SOURCES_JSON'))
+    scoped_expert = has_expert_sources or corpus_profile(getattr(args, 'research_profile', None)) == 'hiv'
+    from memstara.specialist_explanation import SKILLS as bound_expert_skills
+    # A mixed perspective plan uses the same per-result handoff for every report;
+    # it must not force unrelated perspectives into a specialty database binding.
+    bound_only = bool(books.get('report')) and set(books['report']).issubset(bound_expert_skills)
+    explanation = freeze_explanation(books, resolved) if not ablate_okf and scoped_expert and bound_only else None
     if explanation:
         state["specialist_explanation_policy"] = explanation
     from memstara.controlled_comparison import freeze as freeze_controls
@@ -234,6 +246,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
                 state[key] = original[key]
             else:
                 state.pop(key, None)
+    from memstara.pipeline.experiment_policy import freeze as freeze_experiment
+    freeze_experiment(state, args, previous)
     from memstara.seed_schedule import freeze as freeze_seeds
     freeze_seeds(state, args, previous)
     if state.get('seed_schedule') and not getattr(args, 'report_only', False):

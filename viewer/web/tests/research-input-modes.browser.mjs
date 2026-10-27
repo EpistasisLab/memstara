@@ -17,12 +17,13 @@ try {
     knowledge:{documents:knowledge==='okf'?1:0,domains:[]}}});
   });
   await page.goto((process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:5179')+'/tests/research-inputs.fixture.html');
-  await page.getByLabel('Knowledge mode',{exact:true}).selectOption(knowledge);
+  await page.getByRole('radio',{name:knowledge==='okf'?'My research folder':'LLM only',exact:true}).check();
+  await page.locator('.research-setup-advanced > summary').click();
   await page.getByLabel('Data mode',{exact:true}).selectOption(data);
   assert.equal(await page.getByLabel('Dataset CSV path',{exact:true}).count(),data==='dataset'?1:0);
-  assert.equal(await page.getByLabel('OKF corpus folder',{exact:true}).count(),knowledge==='okf'?1:0);
+  assert.equal(await page.getByLabel('Research document folder path',{exact:true}).count(),knowledge==='okf'?1:0);
   await page.getByLabel('Study name',{exact:true}).fill('Synthetic mode matrix');
-  await page.getByLabel('Prediction objective and target meaning',{exact:true}).fill('Predict a synthetic future event');
+
   if(data==='dataset') {
    await page.getByText('Use a server file instead of uploading',{exact:true}).click();
    await page.getByLabel('Dataset CSV path',{exact:true}).fill('/synthetic/data.csv');
@@ -30,9 +31,11 @@ try {
    await page.getByLabel('Positive-class value (exact CSV value)',{exact:true}).fill('yes');
    await page.getByLabel('Negative-class value (exact CSV value)',{exact:true}).fill('no');
   } else await page.getByText('Without a dataset, this creates an analysis plan, not measured results.',{exact:false}).waitFor();
-  if(knowledge==='okf') await page.getByLabel('OKF corpus folder',{exact:true}).fill('/synthetic/okf');
-  await page.getByRole('button',{name:'Check inputs',exact:true}).click();
+  await page.getByLabel('Prediction objective and target meaning',{exact:true}).fill('Predict a synthetic future event');
+  if(knowledge==='okf') await page.getByLabel('Research document folder path',{exact:true}).fill('/synthetic/okf');
+  await page.getByRole('button',{name:'Check & use this data',exact:true}).click();
   await page.getByText('Inputs are ready to use',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Got it',exact:true}).click();
   assert.equal(requests.length,1);
   assert.equal(requests[0].knowledge_mode,knowledge);
   assert.equal(requests[0].data_mode,data);

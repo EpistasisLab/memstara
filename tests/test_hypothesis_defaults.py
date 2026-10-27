@@ -16,7 +16,7 @@ OLD = 'heart-failure-all'
 
 def choices(hypothesis):
     return {'hypothesis': hypothesis, 'data': ['data_training_heavy'],
-            'ml': [], 'interpreter': ['shared-anil-shap'], 'report': ['report_general']}
+            'ml': [], 'interpreter': ['shared-shap'], 'report': ['report_general']}
 
 
 @pytest.mark.parametrize('scope,expected', [('heart_failure',NEW),('hiv','addiction-substance-use'),('general','hypothesis_general')])

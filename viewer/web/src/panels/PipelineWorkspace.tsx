@@ -256,7 +256,7 @@ export default function PipelineWorkspace(){
     <div className="pipeline-global-actions" role="group" aria-label="Controls for all pipelines">
       <span className="pipeline-running-count" data-help="Running pipelines" data-help-description="Number of pipelines currently executing. Paused pipelines are excluded; this is not the number of Replicates or combinations." tabIndex={0} title="Pipelines currently executing; paused pipelines are excluded"><Activity size={13}/>{items.filter(p=>floorExecutionState(p.running).live).length} running</span>
       <MasterStop/>
-      <button className="pipeline-add-primary" data-help="Add pipeline" data-help-description="Open the setup wizard to choose knowledge sources, agent skills, execution limits and a pipeline name. Creating a pipeline does not start it." disabled={!loaded||busy} title="Create a pipeline and choose its sources, agents and skills" onClick={()=>void add()}><Plus size={17}/><span>Add pipeline</span></button>
+      <button className="pipeline-add-primary" data-help="Add experiment" data-help-description="Open the setup wizard to choose knowledge sources, agent skills, execution limits and a pipeline name. Creating a pipeline does not start it." disabled={!loaded||busy} title="Create an experiment and choose its sources, agents and skills" onClick={()=>void add()}><Plus size={17}/><span>Add experiment</span></button>
     </div>
   </div>;
   return <div className={`floor-observatory flex h-full min-h-0 flex-col overflow-hidden bg-paper ${motion?"":"floor-still"} ${expanded?"fixed inset-3 z-50 rounded-xl border border-paper-line shadow-xl":""}`}>

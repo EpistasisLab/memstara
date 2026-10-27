@@ -13,13 +13,15 @@ def row(trial=12):
             'evaluation': {'auc': .7, 'predictions': [0] * 1000000}}
 
 
-def test_projection_excludes_large_raw_payload_and_labels_omissions():
+def test_projection_preserves_complete_interpretation_and_excludes_raw_arrays():
     original = row()
     original['interpretation'] = 'a' * 20000
     projected = project(original)
-    assert len(json.dumps(projected)) < 18000
+    assert projected['interpretation'] == original['interpretation']
+    assert len(json.dumps(projected)) < 22000
     assert projected['scalar_evaluation']['auc'] == .7
-    assert projected['evidence_scope']['omitted_text'][0]['original_characters'] == 20000
+    assert projected['evidence_scope']['omitted_text'] == []
+    assert 'predictions' not in projected['scalar_evaluation']
     assert len(original['evaluation']['predictions']) == 1000000
 
 
@@ -69,3 +71,23 @@ def test_final_comparison_cannot_hide_missing_or_failed_explanation(tmp_path, ou
     assert entry['status'] == 'failed'
     assert entry['missing_result_ids'] == [7]
     invoke.assert_not_awaited()
+
+
+def test_legacy_fanout_handoff_uses_every_original_without_generated_headings(tmp_path):
+    original = row()
+    original['interpretation'] = '## Interpreter 1 — generated wrapper\nChanged aggregate'
+    texts = ['  # shared-shap\n\n| Confidence | Robustness |\n|---|---|\n| yes | limited |\n', '```markdown\nOriginal LIME\n```\n']
+    original['evaluation']['interpretations'] = [
+        {'slot': slot, 'skill': skill, 'status': 'done', 'text': text, 'limitations': 'caveat'}
+        for slot, skill, text in zip((1, 2), ('shared-shap', 'shared-lime'), texts)]
+    output = '  # shared-hiv\n\nRetrieval evidence is cited as [database_id:document_id].\n'
+    invoke = AsyncMock(return_value=(output, {'status': 'completed'}))
+    text, _ = asyncio.run(execute({'run_tag': 'test'}, 13, tmp_path, ('agent',),
+        {'registry': None}, invoke, AsyncMock(return_value={'results': [original]})))
+    payload = json.loads(invoke.call_args.args[1].split('\n', 1)[1])
+    assert payload['interpretation'] == '\n\n'.join(texts)
+    assert [item['text'] for item in payload['interpretations']] == texts
+    assert payload['interpretations'][0]['limitations'] == 'caveat'
+    assert text == output
+    saved = json.loads((tmp_path / 'report_io/loop-13-result-7-output.json').read_text())
+    assert saved['output'] == output

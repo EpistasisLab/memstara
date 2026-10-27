@@ -466,8 +466,6 @@ async def submit_result(task_id: int, subset_path: str = "",
         })
     if execution_failed and not error:
         return json.dumps({"error": "A confirmed technical failure requires an actual error description."})
-    if limitations.strip():
-        interpretation = interpretation.rstrip() + "\n\nAnalysis limitations:\n" + limitations.strip()
     if isinstance(columns_used, str) or isinstance(columns_missing, str):
         return json.dumps(
             {
@@ -598,6 +596,9 @@ async def submit_result(task_id: int, subset_path: str = "",
                     previous = cur["evaluation"] or {}
                     if isinstance(previous, str):
                         previous = json.loads(previous)
+                    # Preserve separately submitted caveats as metadata, never
+                    # splice program-authored headings into the agent's output.
+                    previous = {**previous, "interpretation_limitations": limitations}
                     identity = cur["claimed_by"] or worker
                     config_path = os.environ.get("MEMSTARA_RUN_CONFIG")
                     config = json.loads(Path(config_path).read_text()) if config_path else {}
@@ -1009,6 +1010,12 @@ async def read_question_catalog(limit: int = 200) -> str:
     """
     from memstara.evaluation import active_plan
     plan = active_plan() or {}
+    from memstara.pipeline.experiment_policy import enabled as independent_replicates
+    if independent_replicates(plan):
+        # This tool has no trusted replicate argument. Do not expose other
+        # replicates' questions; propose_questions checks local duplicates in DB.
+        return json.dumps({'duplicate_scope': 'current_replicate', 'questions': [],
+                           'note': 'Submit grounded questions; local duplicates are checked on submission.'})
     if plan.get("hypothesis_policy", {}).get("version") not in ("knowledge_only_v1", "iterative_discovery_v1"):
         return json.dumps({"error": "A new knowledge-only run is required", "questions": []})
     try:

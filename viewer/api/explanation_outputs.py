@@ -15,7 +15,7 @@ def read(path, root):
         return None
 
 
-def saved_outputs(directory, tag):
+def _read_saved_outputs(directory, tag):
     outputs = []
     root = directory / 'report_io'
     for path in root.glob('loop-*-result-*-output.json'):
@@ -111,3 +111,31 @@ def trace_output(path, modified, size, expected_hash, run_id, loop):
     except (ValueError, AttributeError):
         return None
     return None
+
+
+@lru_cache(maxsize=128)
+def _outputs_at_version(directory, tag, signatures):
+    # Cache only verified narrative summaries, never prompts or tool histories.
+    return _read_saved_outputs(Path(directory), tag)
+
+
+def saved_outputs(directory, tag):
+    """Reuse verified narratives only while every supporting file is unchanged."""
+    paths = [directory / 'execution.json']
+    for subdir in ('report_io', 'explanation_io'):
+        paths.extend((directory / subdir).glob('*.json'))
+    manifest = read(directory / 'execution.json', directory)
+    for call in (manifest.get('calls', []) if isinstance(manifest, dict) else []):
+        if call.get('stage') == 'report':
+            name = (call.get('step_evidence') or {}).get('path')
+            if name:
+                paths.append(directory / name)
+    signatures = []
+    for path in sorted(set(paths), key=str):
+        try:
+            stat = path.stat()
+            signatures.append((str(path), str(path.resolve()), path.is_symlink(),
+                               stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size, stat.st_ino))
+        except OSError:
+            signatures.append((str(path), None))
+    return list(_outputs_at_version(str(directory), tag, tuple(signatures)))

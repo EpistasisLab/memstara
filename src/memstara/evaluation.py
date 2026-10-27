@@ -104,6 +104,15 @@ def validate_clean_dataset(path: Path, target: str, *, allow_missing: bool = Fal
             raise DataQualityError('Dataset columns must have non-empty, unique names.')
         from memstara.research_inputs import MISSING
         df = pd.read_csv(path, na_values=list(MISSING))
+        df = df.replace(r'^\s*$', float('nan'), regex=True)
+        for column in df:
+            if not pd.api.types.is_numeric_dtype(df[column]):
+                df[column] = df[column].map(lambda value: float('nan')
+                    if isinstance(value, str) and value.strip().lower() in MISSING else value)
+                try:
+                    df[column] = pd.to_numeric(df[column])
+                except (ValueError, TypeError):
+                    pass
     except (OSError, UnicodeError, pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
         raise DataQualityError('Cannot read the configured dataset as CSV. Check the file and its format.') from exc
     if target not in df:
@@ -115,16 +124,22 @@ def validate_clean_dataset(path: Path, target: str, *, allow_missing: bool = Fal
     if len(df.columns) < 2:
         raise DataQualityError('No predictor features are available')
     missing = df.drop(columns=[target]).isna()
-    if missing.any().any():
+    from memstara.missing_values import resolve_policy
+    missing_policy = missing_policy or resolve_policy()
+    if missing_policy not in ("reject", "native_xgboost", "impute_train_v1"):
+        raise DataQualityError("Unsupported missing-value policy")
+    if missing.all().any():
+        raise DataQualityError("A predictor has no observed values; exclude it or supply observed data")
+    if missing.any().any() and missing_policy != "impute_train_v1":
         raise DataQualityError(
             f'AI-ready input required: {int(missing.sum().sum()):,} missing predictor values '
             f'across {int(missing.any().sum()):,} columns. '
             'The current policy rejects missing values and does not clean or impute data. '
             'Correct the CSV and upload it again before starting; '
             'no values or rows were changed.')
-    from memstara.preprocessing_policy import analysis_ready
+    from memstara.preprocessing_policy import requires_numeric
     if require_numeric is None:
-        require_numeric = analysis_ready()
+        require_numeric = requires_numeric()
     if require_numeric:
         unsupported = [c for c in df if c != target and not pd.api.types.is_numeric_dtype(df[c])]
         if unsupported:
@@ -201,7 +216,7 @@ def preflight(path: Path, target: str, plan: dict, *, reserve_validation: bool =
 
 def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=None, explain=True,
           persist=True, partition=None, configuration=None, xai_request=None, missing_policy=None,
-          imputation_categories=None, preprocessing_policy=None, seed_policy=None) -> dict:
+          imputation_categories=None, preprocessing_policy=None, seed_policy=None, predictor_types=None) -> dict:
     import numpy as np
     import sklearn
     from sklearn.metrics import roc_auc_score, average_precision_score, balanced_accuracy_score, confusion_matrix
@@ -212,15 +227,20 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
 
     from memstara.missing_values import resolve_policy, TrainingImputer, imputation_record
     missing_policy = missing_policy or resolve_policy()
-    if missing_policy not in ("reject", "native_xgboost"):
-        raise DataQualityError("Imputation is disabled. Supply a complete CSV and select reject missing values.")
-    use_imputation = False
+    if missing_policy not in ("reject", "native_xgboost", "impute_train_v1"):
+        raise DataQualityError("Unsupported missing-value policy")
+    use_imputation = missing_policy == "impute_train_v1"
+    research = (active_plan() or {}).get("research_profile", {}).get("configuration", {})
+    if predictor_types is None:
+        predictor_types = research.get("predictor_types", {})
     if imputation_categories is None:
-        research = (active_plan() or {}).get("research_profile", {}).get("configuration", {})
         imputation_categories = research.get("categorical_columns", [])
-    from memstara.preprocessing_policy import analysis_ready, resolve as preprocessing_version
+    from memstara.preprocessing_policy import analysis_ready, typed_predictors, resolve as preprocessing_version
     policy_snapshot = {'preprocessing_policy': preprocessing_policy} if preprocessing_policy else None
     prepared_input = analysis_ready(policy_snapshot)
+    typed_input = typed_predictors(policy_snapshot)
+    continuous_columns = [c for c, kind in predictor_types.items() if kind == "continuous"]
+    imputation_categories = sorted(set(imputation_categories) | {c for c, kind in predictor_types.items() if kind == "categorical"})
     seed_policy = seed_policy or classifier_seed_policy()
     if seed_policy not in (CLASSIFIER_SEED_POLICY, LEGACY_CLASSIFIER_SEED_POLICY):
         raise DataQualityError("Unsupported classifier seed policy")
@@ -236,7 +256,7 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
             raise DataQualityError('Iterative discovery requires a reserved validation partition')
     plan = validate(plan)
     df = validate_clean_dataset(path, target, allow_missing=plan['engine'] == 'xgboost',
-                                missing_policy=missing_policy, require_numeric=prepared_input)
+                                missing_policy=missing_policy, require_numeric=prepared_input and not typed_input)
     X, y = df.drop(columns=[target]), df[target]
     if predictors is not None:
         if target in predictors or any(c not in X for c in predictors):
@@ -254,7 +274,8 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
         warnings.append('Rare positive or negative class: inspect average precision and class counts; '
                         'AUC alone is insufficient.')
     numeric = X.select_dtypes(include='number').columns.tolist()
-    categorical = [c for c in X if c not in numeric]
+    categorical = [c for c in X if c not in numeric or (typed_input and c in imputation_categories)]
+    numeric = [c for c in numeric if c not in categorical]
     missing_cells = int(X.isna().sum().sum())
     if missing_cells and not use_imputation:
         warnings.append('Missing numeric predictors are retained as NaN for XGBoost tree routing; '
@@ -270,9 +291,9 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     replicate_seeds = [seed for seed, _, _ in splits]
     for seed, train, test in splits:
         pre = ColumnTransformer([('numeric', 'passthrough', list(X.columns))],
-                                verbose_feature_names_out=False) if prepared_input else ColumnTransformer([
-            ('numeric', (StandardScaler() if configuration['scale_numeric'] else 'passthrough') if configuration else
-             ('passthrough' if plan['engine'] == 'xgboost' else StandardScaler()), numeric),
+                                verbose_feature_names_out=False) if prepared_input and not typed_input else ColumnTransformer([
+            ('numeric', 'passthrough' if typed_input else ((StandardScaler() if configuration['scale_numeric'] else 'passthrough') if configuration else
+             ('passthrough' if plan['engine'] == 'xgboost' else StandardScaler())), numeric),
             ('categorical', OneHotEncoder(handle_unknown='ignore', sparse_output=False), categorical),
         ], verbose_feature_names_out=False)
         best, best_cv, best_params, selected_trial = None, float('-inf'), None, 0
@@ -301,7 +322,7 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                 model.set_params(random_state=seed)
             steps = []
             if use_imputation:
-                steps.append(('impute', TrainingImputer(categorical_columns=tuple(imputation_categories))))
+                steps.append(('impute', TrainingImputer(categorical_columns=tuple(imputation_categories), continuous_columns=tuple(continuous_columns))))
             steps.extend([('encode', pre), ('model', model)])
             pipe = Pipeline(steps)
             cv_scores = None
@@ -383,7 +404,8 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
               'test_size': plan['test_size'], 'n_train': len(train), 'n_test': len(test),
               'data_quality': {'missing_predictor_cells': missing_cells,
                                'imputation_categories': list(imputation_categories),
-                               'missing_value_policy': 'reject',
+                               'predictor_types': dict(predictor_types),
+                               'missing_value_policy': missing_policy,
                                'warnings': list(dict.fromkeys(warnings)),
                                'preprocessing': ('User-approved training-only imputation. '
                                                  if use_imputation else 'No cleaning or imputation. ') +
@@ -412,6 +434,9 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
         result['data_quality']['preprocessing'] = (
             'Numeric predictors unchanged: no encoding, scaling, row removal or resampling. '
             + ('User-approved training-only imputation.' if use_imputation else 'No imputation.'))
+    if typed_input:
+        result['data_quality']['preprocessing'] = ('Numeric measurements unchanged; categorical encoding fitted on training folds only. '
+            + ('User-approved training-only mean/mode imputation.' if use_imputation else 'No imputation.'))
     if path.read_bytes() != source_bytes:
         raise DataQualityError('Input changed during evaluation; results cannot be reproduced.')
     if persist:

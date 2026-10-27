@@ -160,6 +160,54 @@ def test_ml_agent_random_states_are_editable_and_recorded(experiment):
     assert record['setting_sources']['models']['xgboost']['parameters']['random_state'] == 'agent'
 
 
+@pytest.mark.parametrize('engine', ['logistic_regression', 'xgboost'])
+def test_process_loss_after_fit_reuses_model_without_training(experiment, engine):
+    """Kill the tool owner after durable ML completion, before returning to its agent."""
+    import subprocess
+    path, snapshot, effective, _ = experiment
+    snapshot['books']['ml'] = ['ml_' + engine]
+    snapshot['classifier_seed_policy'] = 'split_seed_v1'
+    proposal = config.context(snapshot, effective)['proposal_template']
+    proposal['rationale'] = 'Process-loss verification using a predeclared model'
+    if engine == 'xgboost':
+        proposal['models'][engine]['parameters'].update(n_estimators=10, max_depth=2)
+    request = path.parent / 'recovery-request.json'
+    request.write_text(json.dumps({'path': str(path), 'snapshot': snapshot,
+                                   'effective': effective, 'proposal': proposal}))
+    script = '''
+import json, os, sys
+from pathlib import Path
+from memstara import paired_ml
+request = json.loads(Path(sys.argv[1]).read_text())
+if sys.argv[2] == 'reuse':
+    def forbidden(*args, **kwargs):
+        raise AssertionError('A committed model must never be trained again on recovery')
+    paired_ml.supervise = forbidden
+result = paired_ml.execute(Path(request['path']), 'Y', request['effective'],
+                           request['snapshot'], request['proposal'])
+assert not result.get('error'), result
+if sys.argv[2] == 'die':
+    os._exit(137)
+print(json.dumps(result))
+'''
+    env = {**os.environ, 'MEMSTARA_CONFIG_MODE': 'environment',
+           **{key: '1' for key in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS')}}
+    first = subprocess.run([sys.executable, '-c', script, str(request), 'die'],
+                           env=env, capture_output=True, text=True, timeout=90)
+    assert first.returncode == 137, first.stderr
+    saved = json.loads(path.with_suffix('.paired-evaluation.json').read_text())
+    bundle = Path(saved['evaluation']['reproducibility']['bundle_path'])
+    before = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in bundle.iterdir() if p.is_file()}
+    second = subprocess.run([sys.executable, '-c', script, str(request), 'reuse'],
+                            env=env, capture_output=True, text=True, timeout=30)
+    assert second.returncode == 0, second.stderr
+    assert json.loads(second.stdout) == saved
+    assert before == {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                      for p in bundle.iterdir() if p.is_file()}
+    replica = saved['evaluation']['replicates'][0]
+    assert replica['seed'] == effective['seed']
+
+
 @pytest.mark.parametrize('change', ['threads','trees','depth','gpu','unknown','missing','solver','bool','nan','seed'])
 def test_invalid_plans_never_start(experiment,change):
     path,snapshot,evaluation_plan,proposal=experiment

@@ -114,8 +114,8 @@ export const DEFAULT_REQUEST: RunRequest = {
   playbook_hypothesis: "hypothesis_general",
   playbook_data: "",
   playbook_ml: "ml_logistic_regression",
-  playbook_interpreter: "shared-anil-shap",
-  playbook_explanation: "report_general",
+  playbook_interpreter: "shared-shap",
+  playbook_explanation: "shared-addiction",
 };
 
 interface ControlState {

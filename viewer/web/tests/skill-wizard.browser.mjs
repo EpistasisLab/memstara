@@ -19,7 +19,7 @@ if(path.startsWith('/control/skill-drafts/')&&n===3&&!transient){transient=true;
 if(path.startsWith('/control/skill-drafts/'))return r.fulfill({json:failure?{status:'failed',error:'Test failure'}:{status:'ready',content:'# Draft '+n,model:'chosen-model',provider:'openai'}});
 if(path==='/control/playbooks'){if(r.request().method()==='GET')return r.fulfill({json:{catalog,playbooks:catalog.map(s=>s.id),stages:roles,references:[]}});const q=r.request().postDataJSON();saves.push(q);const s={...q,id:'saved-'+saves.length,title:q.name,hash:String(saves.length),source:'User'};catalog.push(s);return r.fulfill({json:s});}
 if(r.request().method()==='POST')throw Error('Unexpected write '+path);return r.fulfill({json:{}});});
-await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await p.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await p.getByRole('button',{name:/Add pipeline/i}).click();await openBuildModeFixture(p,mode);
+await p.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await p.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await p.getByRole('button',{name:/Add experiment/i}).click();await openBuildModeFixture(p,mode);
 const d=p.getByRole('dialog',{name:mode==='Selected Pipelines'?'Create a pipeline':'All Combinations',exact:true});
 await d.getByLabel('Deployment target column',{exact:true}).fill('fixture_target');
 if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();await d.getByRole('button',{name:'Next',exact:true}).click();}else {await d.getByRole('button',{name:'Choose skills'}).click();await d.getByRole('button',{name:/^Create with AI/}).click();}

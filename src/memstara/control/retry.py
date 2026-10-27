@@ -55,6 +55,9 @@ def configuration_for_retry(record, configuration, pipeline_id):
             except ValueError as exc:
                 raise ValueError(f'Invalid saved {key} for retry') from exc
     result.update(waves=end, continuous=False, _retry_from_loop=loop, _retry_source_run=tag)
+    result['_retry_experiment_policy'] = {key: copy.deepcopy(frozen[key]) for key in
+                                          ('experiment_policy', 'hypothesis_policy', 'dataset_sha256', 'y_column')
+                                          if key in frozen}
     plan = frozen.get('combination_plan')
     if plan:
         from memstara.combinations import validate_plan

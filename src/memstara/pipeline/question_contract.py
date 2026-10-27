@@ -130,6 +130,10 @@ def make_contract(item, plan):
             "kind": "evidence_informed_refinement" if parents else "primary_knowledge_driven",
             "learning_goal": goal if parents else "",
         }
+    else:
+        from memstara.pipeline.experiment_policy import enabled as independent_replicates
+        if independent_replicates(plan) and (item.get('parent_task_ids') or item.get('learning_goal')):
+            raise ValueError('Independent replicates cannot use prior task outcomes or refinement lineage')
     if lineage.get("parent_task_ids"):
         rationale = item.get("rationale")
         if not isinstance(rationale, str) or not rationale.strip() or len(rationale) > 4000:

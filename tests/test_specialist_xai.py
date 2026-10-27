@@ -18,9 +18,9 @@ def skills(tmp_path, monkeypatch):
     root = tmp_path/'shared'
     root.mkdir()
     (root/'old').mkdir()
-    monkeypatch.setattr(catalog,'anil_dir',lambda:root)
+    monkeypatch.setattr(catalog,'specialist_dir',lambda:root)
     for name, method in xai.SKILLS.items():
-        filename = catalog.ANIL_SKILLS[name][0]
+        filename = catalog.SPECIALIST_SKILLS[name][0]
         (root/filename).write_text(f'# Interpretation Skill\n## Feature Attribution ({method.upper()})\nSynthetic instructions')
         (root/'old'/filename).write_text('ARCHIVED MUST NEVER LOAD')
     return root

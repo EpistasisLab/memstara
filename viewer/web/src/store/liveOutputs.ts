@@ -22,6 +22,7 @@ export const useLiveOutputs=create<{
     busy=true;
     try{
       const response=await fetch(`/api/discovery/live?run_tags=${encodeURIComponent(tags)}`,{signal:AbortSignal.timeout(5500)});
+      if(response.status===202){set({error:null});return;}
       if(!response.ok)throw Error('Live output updates are unavailable. Previously received records are retained.');
       const body=await response.json() as Payload;
       const nowTags=usePipelines.getState().items.map(p=>(p.running??p.latest)?.run_tag).filter(Boolean).sort().join(',');

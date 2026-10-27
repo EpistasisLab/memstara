@@ -3,7 +3,8 @@ import asyncio
 from typing import Any
 
 from fastapi import HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from fastapi.encoders import jsonable_encoder
 import hashlib
 import json
 from db import pools
@@ -96,7 +97,7 @@ async def live_outputs(tags: list[str]) -> dict[str, Any]:
                                    .replace('ORDER BY result_id', 'ORDER BY result_id DESC LIMIT 200'), tags)
         return questions, tasks, results
     try:
-        async with asyncio.timeout(4):
+        async with asyncio.timeout(30):
             rows = await pools.guarded('memstara', read, None)
             if rows is None:
                 raise HTTPException(503, 'Live outputs are temporarily unavailable.')
@@ -162,6 +163,57 @@ async def live_outputs(tags: list[str]) -> dict[str, Any]:
     # The cap is explicit; browsing archives remains available through the question bank.
     return dict(events=events, questions=questions, results=results, reports=reports,
                 generated_at=datetime.now(timezone.utc).isoformat(), record_limit=200)
+
+
+_live_reads: dict[tuple[str, ...], asyncio.Task] = {}
+_live_ready: dict[tuple[str, ...], float] = {}
+LIVE_WAIT_SECONDS = 0.75
+
+
+async def _prepare_live_response(tags):
+    data = await live_outputs(tags)
+    # Encode the snapshot once off the event loop, rather than recursively copying
+    # large evaluation trees through FastAPI for every waiting client.
+    return await asyncio.to_thread(json.dumps, data, default=jsonable_encoder,
+                                   ensure_ascii=False, allow_nan=False, separators=(',', ':'))
+
+
+async def live_outputs_response(tags: list[str]):
+    """Coalesce expensive archive reads; polling never restarts unfinished work."""
+    key = tuple(sorted(set(tags)))
+    task = _live_reads.get(key)
+    if task is not None and task.done() and asyncio.get_running_loop().time() - _live_ready.get(key, 0) > 2:
+        if not task.cancelled():
+            task.exception()
+        _live_reads.pop(key, None)
+        _live_ready.pop(key, None)
+        task = None
+    if task is not None and task.cancelled():
+        _live_reads.pop(key, None)
+        task = None
+    if task is None:
+        for old_key, old_task in list(_live_reads.items()):
+            if len(_live_reads) >= 8 and old_task.done():
+                if not old_task.cancelled():
+                    old_task.exception()
+                del _live_reads[old_key]
+                _live_ready.pop(old_key, None)
+        if len(_live_reads) >= 8:
+            return JSONResponse(status_code=202, content={'status': 'loading', 'retry_after_ms': 1000})
+        task = asyncio.create_task(_prepare_live_response(list(key)))
+        _live_reads[key] = task
+        task.add_done_callback(lambda completed: _live_ready.__setitem__(key, asyncio.get_running_loop().time()) if _live_reads.get(key) is completed else None)
+    done, _ = await asyncio.wait({task}, timeout=LIVE_WAIT_SECONDS)
+    if not done:
+        return JSONResponse(status_code=202, content={'status': 'loading', 'retry_after_ms': 1000})
+    try:
+        payload = task.result()
+    except BaseException:
+        if _live_reads.get(key) is task:
+            _live_reads.pop(key, None)
+            _live_ready.pop(key, None)
+        raise
+    return Response(content=payload, media_type='application/json')
 
 
 async def novelty_ranking(offset: int = 0, run_tag: str = '', source: str = 'all') -> dict[str, Any]:

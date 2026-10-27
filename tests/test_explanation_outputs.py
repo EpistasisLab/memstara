@@ -66,3 +66,24 @@ def test_legacy_trace_final_output_is_exact_without_exposing_prompt(tmp_path):
     assert saved_outputs(tmp_path, 'a') == [{'loop': 1, 'result_id': None, 'text': text, 'status': 'completed'}]
     trace.write_text('{}')
     assert saved_outputs(tmp_path, 'a') == []
+
+
+def test_verified_summary_cache_invalidates_changed_and_removed_evidence(tmp_path, monkeypatch):
+    import explanation_outputs as module
+    source = tmp_path / 'report_io/loop-1-result-2-input.json'
+    output = source.with_name('loop-1-result-2-output.json')
+    write(source, {'run_tag': 'a', 'loop': 1, 'result_id': 2, 'sha256': 'hash'})
+    write(output, {'input_sha256': 'hash', 'output': 'First', 'execution': {'status': 'completed'}})
+    original = module._read_saved_outputs
+    calls = []
+    def read(directory, tag):
+        calls.append(tag)
+        return original(directory, tag)
+    monkeypatch.setattr(module, '_read_saved_outputs', read)
+    assert saved_outputs(tmp_path, 'a')[0]['text'] == 'First'
+    assert saved_outputs(tmp_path, 'a')[0]['text'] == 'First'
+    assert calls == ['a']
+    write(output, {'input_sha256': 'hash', 'output': 'Updated output'})
+    assert saved_outputs(tmp_path, 'a')[0]['text'] == 'Updated output'
+    source.unlink()
+    assert saved_outputs(tmp_path, 'a') == []

@@ -161,3 +161,21 @@ def test_explanation_recovery_is_bound_to_selected_run(tmp_path, monkeypatch):
     report = run_artifacts.lookup('selected')['report']
     assert report['text'] == ''
     assert report['explanation_outputs'][0]['text'] == 'Recovered narrative'
+
+
+def test_config_cache_reuses_only_unchanged_files(tmp_path, monkeypatch):
+    path = tmp_path / 'config.json'
+    path.write_text('{"run_tag":"a"}')
+    original = run_artifacts.read_json
+    reads = []
+    def read(p):
+        reads.append(p)
+        return original(p)
+    monkeypatch.setattr(run_artifacts, 'read_json', read)
+    assert run_artifacts.read_config(path) == {'run_tag': 'a'}
+    assert run_artifacts.read_config(path) == {'run_tag': 'a'}
+    assert len(reads) == 1
+    path.write_text('{"run_tag":"changed"}')
+    assert run_artifacts.read_config(path) == {'run_tag': 'changed'}
+    path.unlink()
+    assert run_artifacts.read_config(path) is None

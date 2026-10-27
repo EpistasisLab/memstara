@@ -96,8 +96,6 @@ def test_four_modes_reach_control_launch_with_saved_inputs_and_no_server_environ
 
 TARGET_ERRORS = [
     ('column', 'absent_target', 'target_column'),
-    ('description', '', 'target_description'),
-    ('prediction_time', '', 'target_prediction_time'),
     ('positive_label', '', 'target_positive_label'),
     ('negative_label', '', 'target_negative_label'),
     ('positive_label', 'no_event', 'target_mapping'),

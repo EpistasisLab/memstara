@@ -25,7 +25,7 @@ def prepare(configuration):
     selection = {
         "playbook_hypothesis": skills["hypothesis"],
         "playbook_data": "data_training_heavy", "playbook_ml": "ml_logistic_regression",
-        "playbook_interpreter": "shared-anil-shap", "playbook_report": skills["report"],
+        "playbook_interpreter": "shared-shap", "playbook_report": skills["report"],
     }
     catalog.validate_selection(selection)
     record = research_inputs.register(configuration)

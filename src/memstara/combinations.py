@@ -21,8 +21,12 @@ def build_plan(choices, repetitions=1, *, random_start=False, max_loops=None, st
     resolved = {}
     for stage in STAGES:
         ids = choices[stage]
-        if stage == 'ml' and ids == []:
-            ids = ['ml_default_logistic_regression']
+        defaults = {'data': 'data_manual_split', 'ml': 'ml_default_logistic_regression',
+                    'interpreter': 'shared-shap', 'report': 'shared-addiction'}
+        if ids == [] and stage in defaults:
+            ids = [defaults[stage]]
+        if stage == 'data' and isinstance(ids, list) and 'data_manual_split' in ids and len(ids) != 1:
+            raise ValueError('Choose either data skills or a manual split, not both')
         if not isinstance(ids, list) or not ids or not all(isinstance(x, str) for x in ids):
             raise ValueError(f'{stage}: choose at least one skill')
         entries, seen = [], set()

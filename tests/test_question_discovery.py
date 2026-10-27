@@ -65,6 +65,23 @@ class DiscoveryTests(unittest.TestCase):
 
 
 class LiveOutputsTests(unittest.TestCase):
+    def test_live_result_query_reads_migrated_columns_without_serializing_trace(self):
+        conn = AsyncMock()
+        conn.fetch.return_value = []
+        async def guarded(store, callback, fallback): return await callback(conn)
+        with patch.object(discovery.pools, 'guarded', guarded), patch.object(discovery.run_artifacts, 'lookup', return_value={}):
+            result = asyncio.run(discovery.live_outputs(['run-a', 'run-b']))
+        sql, tags = conn.fetch.call_args_list[2].args
+        self.assertEqual(tags, ['run-a', 'run-b'])
+        self.assertIn('WHERE run_tag = ANY($1::text[])', sql)
+        self.assertIn('ORDER BY result_id DESC LIMIT 200', sql)
+        self.assertIn("COALESCE(evaluation, '{}'::jsonb)", sql)
+        self.assertIn("COALESCE(hypothesis_id, '')", sql)
+        self.assertNotIn('to_jsonb(memstara_results)', sql)
+        self.assertNotIn('match_trace', sql)
+        self.assertEqual(result['record_limit'], 200)
+        self.assertEqual(result['results'], [])
+
     def test_task_timestamp_changes_do_not_invent_new_agent_outputs(self):
         from datetime import timedelta
         conn = AsyncMock()
@@ -172,7 +189,8 @@ class WorkspaceRunCountTests(unittest.TestCase):
     def test_five_live_executions_are_accepted(self):
         import main
         with patch.object(discovery, 'live_outputs', AsyncMock(return_value={'events': []})) as live:
-            self.assertEqual(asyncio.run(main.discovery_live('a,b,c,d,e')), {'events': []})
+            import json
+            self.assertEqual(json.loads(asyncio.run(main.discovery_live('a,b,c,d,e')).body), {'events': []})
             live.assert_awaited_once_with(['a', 'b', 'c', 'd', 'e'])
 
     def test_five_result_executions_are_accepted_without_losing_scope(self):
@@ -185,3 +203,41 @@ class WorkspaceRunCountTests(unittest.TestCase):
         ):
             self.assertEqual(asyncio.run(main.pipeline_results('a,b,c,d,e')), {'results': [], 'failures': []})
             self.assertEqual([call.args[0] for call in results.call_args_list], ['a', 'b', 'c', 'd', 'e'])
+
+
+class LiveOutputProgressTests(unittest.TestCase):
+    def test_slow_archive_read_is_shared_and_returns_preparation_then_complete(self):
+        async def scenario():
+            discovery._live_reads.clear()
+            release = asyncio.Event()
+            calls = []
+            async def read(tags):
+                calls.append(tags)
+                await release.wait()
+                return {'results': [{'result_id': 42}]}
+            with patch.object(discovery, 'live_outputs', read), patch.object(discovery, 'LIVE_WAIT_SECONDS', .001):
+                first = await discovery.live_outputs_response(['b', 'a'])
+                second = await discovery.live_outputs_response(['a', 'b'])
+                self.assertEqual(first.status_code, 202)
+                self.assertEqual(second.status_code, 202)
+                self.assertEqual(calls, [['a', 'b']])
+                release.set()
+                result = await discovery.live_outputs_response(['a', 'b'])
+                import json
+                self.assertEqual(json.loads(result.body), {'results': [{'result_id': 42}]})
+                again = await discovery.live_outputs_response(['a', 'b'])
+                self.assertEqual(json.loads(again.body), {'results': [{'result_id': 42}]})
+                self.assertEqual(len(calls), 1)
+                discovery._live_reads.clear()
+        asyncio.run(scenario())
+
+    def test_background_failure_remains_an_error_not_an_empty_success(self):
+        async def scenario():
+            discovery._live_reads.clear()
+            async def fail(tags):
+                raise HTTPException(503, 'Source unavailable')
+            with patch.object(discovery, 'live_outputs', fail):
+                with self.assertRaises(HTTPException):
+                    await discovery.live_outputs_response(['a'])
+                self.assertEqual(discovery._live_reads, {})
+        asyncio.run(scenario())

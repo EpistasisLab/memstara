@@ -1,0 +1,17 @@
+[
+  {
+    "pattern": "\\ban Anil-authored\\b",
+    "flags": "gi",
+    "replacement": "a contributor-authored"
+  },
+  {
+    "pattern": "(?<![\\p{L}\\p{N}])(?:anil|phil)[-_]shared(?![\\p{L}\\p{N}])",
+    "flags": "giu",
+    "replacement": "contributed-resources"
+  },
+  {
+    "pattern": "(?<![\\p{L}\\p{N}])(?:anil(?:\\s+saini)?|phil(?:\\s+freda)?|jason(?:\\s+moore)?|hyunjun(?:\\s+choi|a)?|choih2|junchoi)(?![\\p{L}\\p{N}])",
+    "flags": "giu",
+    "replacement": "contributor"
+  }
+]

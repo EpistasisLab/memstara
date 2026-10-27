@@ -211,8 +211,8 @@ class PipelineWorkspace:
             raise ValueError("Invalid pipeline configuration fields")
         config = {
             **copy.deepcopy(DEFAULTS),
-            "playbook_interpreter": "interpreter_factual_observations",
-            "playbook_explanation": "report_clinical_explanations",
+            "playbook_interpreter": "shared-shap",
+            "playbook_explanation": "shared-addiction",
             **value,
             "hypothesis_agents": 1,
             "interpret_agents": 1,

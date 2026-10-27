@@ -280,7 +280,7 @@ def test_empty_ml_selection_freezes_default_and_survives_launch(monkeypatch):
         monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
         monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'test-model')
     choices = {'hypothesis': ['hypothesis_general'], 'data': ['data_training_heavy'],
-               'ml': [], 'interpreter': ['shared-anil-shap'], 'report': ['report_general']}
+               'ml': [], 'interpreter': ['shared-shap'], 'report': ['report_general']}
     plan = build_plan(choices, 2, execution_order='all_pipelines_first')
     assert plan['combinations'] == 1 and plan['total_loops'] == 2
     assert plan['skills']['ml'][0]['id'] == 'ml_default_logistic_regression'

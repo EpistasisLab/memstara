@@ -298,10 +298,14 @@ def test_report_only_snapshot_does_not_relabel_legacy_generation(clean_data, tmp
 
 
 @pytest.mark.parametrize('stage', ['hypothesis', 'ml', 'interpreter', 'report'])
-def test_custom_markdown_reaches_each_configurable_agent(stage, tmp_path, monkeypatch):
+def test_custom_markdown_respects_configurable_and_supplied_only_roles(stage, tmp_path, monkeypatch):
     monkeypatch.delenv('MEMSTARA_USER_SKILLS_DIR', raising=False)
     monkeypatch.setenv('MEMSTARA_OUTPUT_DIR', str(tmp_path))
     instructions = f'# Custom {stage}\nExplicit user instructions for the {stage} role.'
+    if stage in ('interpreter', 'report'):
+        with pytest.raises(ValueError, match='supplied skills'):
+            catalog.register({'stage': stage, 'name': 'uploaded-skill', 'content': instructions})
+        return
     item = catalog.register({'stage': stage, 'name': 'uploaded-skill', 'content': instructions})
     assert catalog.resolve(item['id'])['content'] == instructions
     catalog.validate_selection({f'playbook_{stage}': item['id']})

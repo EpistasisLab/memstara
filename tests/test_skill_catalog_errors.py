@@ -8,7 +8,7 @@ from memstara.control import catalog
 
 @pytest.mark.parametrize('text', ['{', '[]', 'null', '{}', '{"stage":"unknown"}'])
 def test_invalid_saved_skill_is_rejected_without_rewriting(tmp_path, monkeypatch, text):
-    monkeypatch.setattr(catalog, 'anil_skills', lambda: [])
+    monkeypatch.setattr(catalog, 'specialist_skills', lambda: [])
     monkeypatch.setattr(catalog, 'document_path', lambda *args: None)
     monkeypatch.setattr(catalog, 'user_dir', lambda: tmp_path)
     path = tmp_path / 'broken.json'

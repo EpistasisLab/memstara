@@ -7,6 +7,9 @@ VERSION = 'iterative_discovery_v1'
 
 
 def enabled(plan):
+    from memstara.pipeline.experiment_policy import enabled as independent_replicates
+    if independent_replicates(plan):
+        return False
     return (plan or {}).get('hypothesis_policy', {}).get('version') == VERSION
 
 
@@ -54,6 +57,9 @@ def save_feedback(context):
 
 
 def read_feedback(plan, wave):
+    from memstara.pipeline.experiment_policy import enabled as independent_replicates
+    if independent_replicates(plan):
+        raise ValueError('Prior replicate outcomes are unavailable under the independent experiment policy')
     try:
         context = json.loads(feedback_path(wave).read_text())
     except (OSError, ValueError) as exc:

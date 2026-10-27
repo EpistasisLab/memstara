@@ -38,13 +38,15 @@ def experiment(order):
                     else [{'id': s}] for s in stages}}}
 
 
-def test_shared_schedule_freezes_once_and_replays_both_orders(monkeypatch):
+def test_independent_seeds_freeze_once_and_replay_both_orders(monkeypatch):
     from memstara.seed_schedule import freeze, task_seed
     from memstara.combinations import loop_flavors
     first = experiment('all_pipelines_first')
     args = SimpleNamespace(continuous=False)
     freeze(first, args)
-    assert first['seed_schedule']['policy'] == 'shared_replicates'
+    assert first['seed_schedule']['policy'] == 'execution_sequence_v1'
+    assert [task_seed(first, i) for i in range(6)] == list(range(42, 48))
+    assert len({s for row in first['seed_schedule']['seeds'] for s in row}) == 6
     original = json.loads(json.dumps(first))
     def no_redraw(*args, **kwargs):
         pytest.fail('Seeds were redrawn during resume/retry')
@@ -60,7 +62,7 @@ def test_shared_schedule_freezes_once_and_replays_both_orders(monkeypatch):
     for state in (original, resumed, retry):
         for trial in range(6):
             identity = loop_flavors(state['combination_plan'], trial + 1)
-            assert task_seed(state, trial) == original['seed_schedule']['seeds'][0][identity['repetition'] - 1]
+            assert task_seed(state, trial) == original['seed_schedule']['seeds'][identity['combination'] - 1][identity['repetition'] - 1]
 
 
 @pytest.mark.parametrize('field,value', [('dataset_sha256', 'changed'), ('y_column', 'changed'),
@@ -94,7 +96,7 @@ def test_ordinary_run_preallocates_all_trials_and_rejects_unbounded_schedule():
     with pytest.raises(ValueError, match='finite'):
         freeze(state, SimpleNamespace(continuous=True))
     freeze(state, SimpleNamespace())
-    assert len({task_seed(state, n) for n in range(6)}) == 6
+    assert [task_seed(state, n) for n in range(6)] == [42] * 6
 
 
 def test_shared_seed_produces_same_rows_only_for_same_split_contract(monkeypatch):
@@ -117,3 +119,38 @@ def test_shared_seed_produces_same_rows_only_for_same_split_contract(monkeypatch
     assert not np.array_equal(seen[0], seen[1])
     balanced = evaluation.validate({'seed': seed_for(schedule, 1, 1), 'test_size': .5})
     assert len(evaluation.evaluation_splits(labels, balanced)[0][2]) != len(seen[0])
+
+
+@pytest.mark.parametrize('order', ['all_pipelines_first', 'pipeline_replicates_first'])
+@pytest.mark.parametrize('manual', [True, False])
+def test_data_settings_seed_modes_follow_scheduled_runs(order, manual):
+    from memstara.seed_schedule import freeze, task_seed, FIXED, INCREMENTING
+    original = experiment(order)
+    original['evaluation'] = {'seed': 708}
+    original['combination_plan']['skills']['data'] = [{'id': 'data_manual_split' if manual else 'data_training_heavy'}]
+    freeze(original, SimpleNamespace())
+    assert original['seed_schedule']['policy'] == (FIXED if manual else INCREMENTING)
+    assert [task_seed(original, n) for n in range(6)] == ([708] * 6 if manual else list(range(708, 714)))
+    for retry in (False, True):
+        restored = json.loads(json.dumps(original))
+        restored.pop('seed_schedule'); restored.pop('seed_policy')
+        args = SimpleNamespace(retry_source_run='original', retry_seed_schedule=json.dumps({
+            k: original[k] for k in ('seed_schedule', 'dataset_sha256', 'y_column')})) if retry else SimpleNamespace()
+        freeze(restored, args, None if retry else original)
+        assert restored['seed_schedule'] == original['seed_schedule']
+    original['seed_schedule']['seeds'][0][1] += 1
+    with pytest.raises(ValueError, match='frozen Data settings'):
+        seed_for(original['seed_schedule'], 1, 1)
+
+
+def test_sequence_bounds_and_rotated_extended_schedules():
+    from memstara.seed_schedule import mode_schedule, freeze, task_seed
+    assert mode_schedule(2, 3, 2147483647, manual=True)['seeds'] == [[2147483647] * 3] * 2
+    with pytest.raises(ValueError, match='range'):
+        mode_schedule(2, 3, 2147483643, manual=False)
+    for order in ('all_pipelines_first', 'pipeline_replicates_first'):
+        for loops in (1, 3, 7, 11):
+            state = experiment(order)
+            state['combination_plan'].update(start_index=1, total_loops=loops)
+            freeze(state, SimpleNamespace())
+            assert [task_seed(state, n) for n in range(loops)] == list(range(42, 42+loops))

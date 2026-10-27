@@ -119,3 +119,23 @@ def test_motoro_span_uses_observed_timestamps_not_sum_or_local_clock():
     assert recorded_span(calls, rows)['duration_status'] == 'recorded'
     assert recorded_span(calls, [])['seconds'] is None
     assert recorded_span(calls, rows[:1])['duration_status'] == 'partial'
+
+
+def test_final_stage_conversation_does_not_truncate_agent_outputs(monkeypatch):
+    import asyncio
+    import json
+    from unittest.mock import AsyncMock
+    import conversation
+    run_id = '33333333-3333-3333-3333-333333333333'
+    raw = '  Original output ' + 'x' * 60000 + '\nLast paragraph.\n'
+    for stage in ('interpreter', 'report'):
+        monkeypatch.setattr(conversation.run_artifacts, 'lookup', lambda tag: {
+            'calls': [{'run_id': run_id, 'stage': stage, 'loop': 1}]})
+        conn = AsyncMock()
+        conn.fetch.return_value = [{'id': run_id, 'run_id': run_id, 'started_at': None,
+            'output': json.dumps({'final_answer': raw})}]
+        async def guarded(name, read, fallback): return await read(conn)
+        monkeypatch.setattr(conversation.pools, 'guarded', guarded)
+        result = asyncio.run(conversation._conversation('verbatim-' + stage, 1))
+        assert result['messages'][0]['text'] == raw
+        assert result['messages'][0]['truncated'] is False

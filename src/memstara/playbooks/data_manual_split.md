@@ -1,0 +1,3 @@
+# Manual train/test split
+
+Use the user's saved test fraction and the server-recorded seed for this execution. Submit the server's required_data_plan exactly. Keep all rows and the exact selected predictors. Split the full dataset into training and test rows only; do not create a reserve or change the split settings. For new manual-split experiments, every pipeline and replicate uses the same fixed seed; never increment it. Historical experiments retain their saved seed schedule. Use that same seed for the data split and model random_state; retries retain it. Missing-value statistics must be fitted on training rows only.

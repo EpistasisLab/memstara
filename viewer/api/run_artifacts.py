@@ -3,6 +3,7 @@ import json
 import os
 import time
 import threading
+from functools import lru_cache
 try:
     from .explanation_outputs import saved_outputs
     from .schedule_identity import identity
@@ -36,7 +37,7 @@ def _refresh_index():
     index: dict[str, dict] = {}
     _matches.clear()
     for directory in directories:
-        config = read_json(directory / "config.json")
+        config = read_config(directory / "config.json")
         if isinstance(config, dict) and config.get("run_tag"):
             _matches.setdefault(config['run_tag'], []).append((directory, config))
     for tag, matches in _matches.items():
@@ -45,6 +46,20 @@ def _refresh_index():
     _config_index = index
     _indexed_root = ROOT
     _index_expires = time.monotonic() + 2.0
+
+
+@lru_cache(maxsize=1024)
+def _config_at_version(path, modified, size, inode):
+    return read_json(Path(path))
+
+
+def read_config(path):
+    """Reuse unchanged configuration JSON; new versions and missing files stay visible."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return _config_at_version(str(path), stat.st_mtime_ns, stat.st_size, stat.st_ino)
 
 
 def config_for(tag):

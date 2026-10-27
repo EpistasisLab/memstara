@@ -63,11 +63,12 @@ async def aggregate(conn, source_id):
         branch = metadata(row['evaluation'])['interpretation_branch']
         items.append({**branch, 'task_id': row['task_id'], 'status': row['status'],
                       'text': row['interpretation'], 'error': row['error'],
+                      'limitations': metadata(row['evaluation']).get('interpretation_limitations', ''),
                       'specialist': metadata(row['evaluation']).get('specialist_interpretation')})
-    combined = '\n\n'.join(
-        f"## Interpreter {item['slot']} — {item['skill'] or 'default'} [{item['status']}]\n\n"
-        + (item['text'] if item['status'] == 'done' else 'This interpretation is not available.')
-        for item in items)
+    # Metadata and availability belong outside the agent-authored narrative.
+    # Keep every branch separately in `interpretations`; this legacy text field
+    # concatenates completed originals without inserting titles or placeholders.
+    combined = '\n\n'.join(item['text'] for item in items if item['status'] == 'done')
     summary = {'interpreter': None, 'interpretations': items, 'interpretation_mode': 'all_per_hypothesis',
                'interpretations_complete': all(i['status'] == 'done' for i in items)}
     # The source-task lock serializes concurrent completions. Update in place so

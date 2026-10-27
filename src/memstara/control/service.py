@@ -706,6 +706,16 @@ class Handler(BaseHTTPRequestHandler):
             self._send(410, {"error": "Manual execution pricing is retired. Motoro owns cost estimation."})
             return
 
+        if path == "/control/research-inputs/check-csv":
+            from memstara.dataset_upload import check_csv
+            try:
+                self._send(200, check_csv(body))
+            except ValueError as exc:
+                self._send(400, {"error": str(exc)})
+            except OSError:
+                self._send(400, {"error": "CSV file is unavailable or cannot be read"})
+            return
+
         if path == "/control/research-inputs/upload":
             from memstara.dataset_upload import upload
             try:
@@ -921,11 +931,13 @@ class Handler(BaseHTTPRequestHandler):
                 plan = validate({**policy, **body.get("evaluation", {})})
                 input_policy = (research or {}).get('configuration', {}).get('missing_policy', 'reject')
                 preflight(Path(dataset), argv[argv.index("--y-column") + 1], plan,
-                          reserve_validation=True, missing_policy=input_policy)
+                          reserve_validation=True, missing_policy=input_policy,
+                          require_numeric='predictor_types' not in (research or {}).get('configuration', {}))
                 if body.get("combination_skills"):
                     from memstara.pipeline.feature_context import freeze_feature_context
                     freeze_feature_context(Path(dataset), argv[argv.index("--y-column") + 1],
-                                           require_complete=input_policy != "impute_train_v1")
+                                           require_complete=input_policy != "impute_train_v1",
+                                           require_numeric='predictor_types' not in (research or {}).get('configuration', {}))
                 from memstara.comparisons import validate_baseline
                 validate_baseline(body.get("baseline_columns", []), argv[argv.index("--y-column") + 1], Path(dataset))
         except ValueError as e:

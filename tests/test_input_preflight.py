@@ -57,23 +57,23 @@ def test_invalid_input_does_not_create_a_run_or_spawn_process(tmp_path, monkeypa
     assert responses[0][1]['error'].startswith('Run not started.')
 
 
-def test_native_xgboost_missing_values_survive_fit_cv_and_shap(tmp_path):
+def test_consented_xgboost_imputation_survives_fit_cv_and_shap(tmp_path):
     import json
     import numpy as np
     from memstara.evaluation import score
     rng = np.random.default_rng(5)
-    frame = pd.DataFrame({'x': rng.normal(size=100), 'kind': ['a', 'b'] * 50,
-                          'empty': np.nan, 'outcome': [0, 1] * 50})
+    frame = pd.DataFrame({'x': rng.normal(size=100), 'kind': [0, 1] * 50,
+                          'continuous': rng.normal(size=100), 'outcome': [0, 1] * 50})
     frame.loc[::3, 'x'] = np.nan
     frame.loc[::4, 'kind'] = np.nan
     path = tmp_path / 'data.csv'
     frame.to_csv(path, index=False)
     original = path.read_bytes()
-    preflight(path, 'outcome', {'engine': 'xgboost'})
-    result = score(path, 'outcome', {'engine': 'xgboost', 'folds': 2, 'search_trials': 2, 'replicates': 2})
+    preflight(path, 'outcome', {'engine': 'xgboost'}, missing_policy='impute_train_v1')
+    result = score(path, 'outcome', {'engine': 'xgboost', 'folds': 2, 'search_trials': 2, 'replicates': 2}, missing_policy='impute_train_v1')
     assert path.read_bytes() == original
     assert result['data_quality']['missing_predictor_cells'] == int(frame.drop(columns='outcome').isna().sum().sum())
-    assert result['data_quality']['missing_value_policy'] == 'native_xgboost'
+    assert result['data_quality']['missing_value_policy'] == 'impute_train_v1'
     assert result['explanation']['shap']['method'] == 'XGBoost TreeSHAP'
     assert all(r['n_train'] + r['n_test'] == len(frame) for r in result['evaluation']['replicates'])
     json.dumps(result, allow_nan=False)

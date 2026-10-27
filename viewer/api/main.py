@@ -315,11 +315,11 @@ async def discovery_report(run_tag: str = Query(min_length=1, max_length=200)):
 
 @app.get("/api/discovery/live")
 async def discovery_live(run_tags: str = Query(min_length=1, max_length=6000)):
-    from discovery import live_outputs
+    from discovery import live_outputs_response
     tags = list(dict.fromkeys(run_tags.split(',')))
     if any(not tag.strip() for tag in tags):
         raise HTTPException(400, 'Pipeline execution IDs must not be empty.')
-    return await live_outputs(tags)
+    return await live_outputs_response(tags)
 
 
 @app.get("/api/workspace-cost")

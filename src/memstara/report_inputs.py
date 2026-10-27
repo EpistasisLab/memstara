@@ -12,7 +12,10 @@ def project(row):
             'y_column', 'columns_used', 'feature_importance', 'hypothesis', 'interpretation')
     result = {key: row.get(key) for key in keys}
     omitted = []
-    for key in ('hypothesis', 'interpretation'):
+    # The Interpretation skill's full output is the Explanation agent's input.
+    # Bound auxiliary text only; oversized reports are rejected by execute's
+    # request budget rather than silently losing the end of the interpretation.
+    for key in ('hypothesis',):
         value = str(result.get(key) or '')
         if len(value) > 16000:
             omitted.append({'field': key, 'original_characters': len(value), 'included_characters': 16000})
@@ -20,13 +23,23 @@ def project(row):
     evaluation = row.get('evaluation') or {}
     if isinstance(evaluation, str):
         evaluation = json.loads(evaluation)
+    branches = evaluation.get('interpretations')
+    if branches:
+        # Historic aggregate text may contain generated headings. Forward saved
+        # branch originals instead, retaining every selected skill's output.
+        result['interpretations'] = [
+            {key: item.get(key) for key in ('slot', 'worker', 'skill', 'status', 'text', 'limitations')}
+            for item in branches]
+        result['interpretation'] = '\n\n'.join(
+            item['text'] for item in branches if item.get('status') == 'done')
+    if evaluation.get('interpretation_limitations'):
+        result['interpretation_limitations'] = evaluation['interpretation_limitations']
     result['scalar_evaluation'] = {k: v for k, v in evaluation.items()
                                    if isinstance(v, (int, float, bool)) or v is None}
     result['evidence_scope'] = {
         'omitted_text': omitted,
         'excluded': ['raw evaluation arrays', 'serialized model artifacts', 'per-row predictions'],
-        'full_result_id': row.get('result_id'),
-        'instruction': 'Do not infer findings from excluded or omitted evidence.'}
+        'full_result_id': row.get('result_id')}
     return result
 
 
@@ -83,10 +96,7 @@ async def execute(plan, loop, run_dir, args, kwargs, invoke, read):
     outputs = []
     entry = {}
     for row, record in zip(rows, records, strict=True):
-        prompt = ('Write the explanation for this result only. This supplied evidence replaces the '
-                  'general read_results instruction. Do not retrieve or summarize other loops. '
-                  'Preserve measured numbers and limitations. Never invent missing evidence. '
-                  'The full raw evaluation remains stored; excluded details are not evidence you have read.\n'
+        prompt = ('Input for the selected Explanation skill:\n'
                   + json.dumps(record, ensure_ascii=False))
         # Explicit bytes budget bounds even highly token-dense Unicode before a paid call.
         if len(prompt.encode('utf-8')) > 120000:

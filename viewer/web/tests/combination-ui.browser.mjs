@@ -21,11 +21,11 @@ try{
   return r.continue();
  });
  await page.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');
- await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add pipeline/i}).click();
+ await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add experiment/i}).click();
  await openBuildModeFixture(page);
  await page.getByRole('combobox',{name:'Knowledge sources'}).waitFor();
  await page.getByRole('button',{name:'Cancel',exact:true}).click();
- await page.getByRole('button',{name:/Add pipeline/i}).click();
+ await page.getByRole('button',{name:/Add experiment/i}).click();
 
  const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});
  const budget=dialog.getByRole('status',{name:'Pipeline replicate summary'});await expect(budget).toHaveCount(0);

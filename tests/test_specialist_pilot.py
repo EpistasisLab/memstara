@@ -19,8 +19,8 @@ def study(tmp_path, monkeypatch):
     dataset = tmp_path / 'fixture.csv'
     frame.to_csv(dataset, index=False)
     def resolve(name):
-        stage = ('interpreter' if name in ('shared-anil-shap', 'shared-anil-lime') else
-                 'report' if name in ('shared-anil-addiction', 'shared-anil-hiv') else
+        stage = ('interpreter' if name in ('shared-shap', 'shared-lime') else
+                 'report' if name in ('shared-addiction', 'shared-hiv') else
                  'data' if name.startswith('data_') else 'ml' if name.startswith('ml_') else 'hypothesis')
         return {'id': name, 'stage': stage, 'source_hash': name, 'hash': name, 'title': name, 'content': name}
     monkeypatch.setattr(pilot, 'resolve', resolve)
@@ -30,8 +30,8 @@ def study(tmp_path, monkeypatch):
     config = {'run_id': 'fixture', 'seed': 42, 'repetitions': 1, 'expected_combinations': 1,
               'dataset': str(dataset), 'target': 'outcome', 'outcome_description': 'Synthetic binary outcome',
               'choices': {'hypothesis': ['random_features'], 'data': ['data_training_heavy'],
-                          'ml': ['ml_pilot_lr_focus'], 'interpreter': ['shared-anil-shap'],
-                          'report': ['shared-anil-hiv']},
+                          'ml': ['ml_pilot_lr_focus'], 'interpreter': ['shared-shap'],
+                          'report': ['shared-hiv']},
               'models': {'qwen': {'provider': 'local', 'model': 'qwen-fixture'},
                          'sonnet': {'provider': 'anthropic', 'model': 'sonnet-fixture'}},
               'knowledge': {name: binding(name) for name in ('addiction', 'hiv')},
@@ -114,8 +114,8 @@ def test_full_cartesian_schedule_runs_each_condition_once_with_mocked_services(s
     config['choices']['hypothesis'] = ['guided-a', 'guided-b', 'guided-c', 'random_features']
     config['choices']['data'] += ['data_balanced_stratified']
     config['choices']['ml'] += ['ml_pilot_xgb_focus']
-    config['choices']['interpreter'] += ['shared-anil-lime']
-    config['choices']['report'] += ['shared-anil-addiction']
+    config['choices']['interpreter'] += ['shared-lime']
+    config['choices']['report'] += ['shared-addiction']
     config['hypothesis_knowledge'] = {name: config['knowledge']['hiv'] for name in
                                     config['choices']['hypothesis'] if name != 'random_features'}
     invoke = AsyncMock(side_effect=response)

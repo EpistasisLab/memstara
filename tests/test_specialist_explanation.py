@@ -98,12 +98,12 @@ def frozen(sources, tmp_path, monkeypatch):
     root = tmp_path / "skills"
     root.mkdir()
     (root / "old").mkdir()
-    monkeypatch.setattr(catalog, "anil_dir", lambda: root)
+    monkeypatch.setattr(catalog, "specialist_dir", lambda: root)
     for name, title in [
         ("addiction", "Addiction, Psychiatry, and Social Determinants of Health"),
         ("hiv", "HIV and Sexual Health"),
     ]:
-        filename = catalog.ANIL_SKILLS["shared-anil-" + name][0]
+        filename = catalog.SPECIALIST_SKILLS["shared-" + name][0]
         (root / filename).write_text("# " + title + " Explanation Skill\nSynthetic instructions")
         (root / "old" / filename).write_text("ARCHIVE")
     books = {"report": list(explanation.SKILLS), "interpreter": list(xai.SKILLS)}
@@ -112,7 +112,7 @@ def frozen(sources, tmp_path, monkeypatch):
     return {
         "run_tag": "fixture",
         "config_hash": "config",
-        "books": {"report": ["shared-anil-addiction"]},
+        "books": {"report": ["shared-addiction"]},
         "specialist_explanation_policy": policy,
     }
 
@@ -126,8 +126,8 @@ def test_freeze_current_files_and_required_bindings(frozen, sources, monkeypatch
     binding = dict(sources["hiv"])
     monkeypatch.setattr(okf_expert, "freeze", lambda expert: binding)
     policy = explanation.freeze(
-        {"report": ["shared-anil-hiv"], "interpreter": list(xai.SKILLS)},
-        {"board/report:shared-anil-hiv": {"system_prompt": "frozen hiv"}},
+        {"report": ["shared-hiv"], "interpreter": list(xai.SKILLS)},
+        {"board/report:shared-hiv": {"system_prompt": "frozen hiv"}},
     )
     assert policy["bindings"]["hiv"] == binding
 
@@ -147,7 +147,7 @@ def result(frozen, tmp_path, monkeypatch):
         "trial": 0,
         "models": models,
         "method": "shap",
-        "skill": "shared-anil-shap",
+        "skill": "shared-shap",
     }
     monkeypatch.setattr(xai, "handoff", lambda *args: value)
     receipt = explanation.write_record(
@@ -181,7 +181,7 @@ def result(frozen, tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("expert", ["addiction", "hiv"])
 def test_prepare_actual_interpretation_and_expert_evidence(frozen, result, tmp_path, expert):
-    frozen["books"]["report"] = ["shared-anil-" + expert]
+    frozen["books"]["report"] = ["shared-" + expert]
     prepared = asyncio.run(explanation.prepare(frozen, [result], 1, tmp_path / "run" / "explanation_io"))
     assert prepared["payload"]["expert"] == expert
     row = prepared["payload"]["results"][0]
@@ -244,9 +244,10 @@ def test_execution_tools_removed_and_output_saved(frozen, result, tmp_path):
     assert (tmp_path / "run" / "explanation_io" / "loop-1.json").is_file()
     frozen["combination_plan"] = {"total_loops": 1}
     combined, entry = explanation.assemble(frozen, tmp_path / "run" / "explanation_io")
-    assert text in combined and entry["status"] == "completed"
+    assert text == combined and entry["status"] == "completed"
     frozen["combination_plan"]["total_loops"] = 2
-    _, entry = explanation.assemble(frozen, tmp_path / "run" / "explanation_io")
+    partial, entry = explanation.assemble(frozen, tmp_path / "run" / "explanation_io")
+    assert partial == text
     assert entry["status"] == "failed" and entry["specialist_explanation"]["missing_loops"] == [2]
 
 
@@ -352,7 +353,7 @@ def test_real_saved_models_to_both_experts(specification, frozen, tmp_path):  # 
         "evaluation": {**measured, "interpretations_complete": True, "interpretations": items},
     }
     for expert in ("addiction", "hiv"):
-        snapshot["books"]["report"] = ["shared-anil-" + expert]
+        snapshot["books"]["report"] = ["shared-" + expert]
         prepared = asyncio.run(explanation.prepare(snapshot, [row], 1, tmp_path / "real-run" / "explanation_io"))
         assert {i["method"] for i in prepared["payload"]["results"][0]["interpretations"]} == {"shap", "lime"}
         assert prepared["payload"]["results"][0]["knowledge"]["database_id"] == expert + "-fixture"
@@ -391,11 +392,11 @@ def test_invented_citation_is_recorded_as_warning_without_failing(frozen, result
     assert audit["unsupported_citations"] == ["[invented:source]"]
 
 
-def test_literal_citation_template_boilerplate_is_removed_and_audited(frozen, result, tmp_path):
+def test_literal_citation_template_is_preserved_and_audited(frozen, result, tmp_path):
     prepared = asyncio.run(explanation.prepare(frozen, [result], 1, tmp_path / "run" / "explanation_io"))
     raw = "Summary. Retrieval evidence is cited as [database_id:document_id].\nEvidence [addiction-fixture:a]"
     normalized, changes = explanation.normalize_report_output(raw)
-    assert "[database_id:document_id]" not in normalized
+    assert normalized == raw and changes == []
     assert "Evidence [addiction-fixture:a]" in normalized
     entry = explanation.finish(
         prepared, normalized, {"status": "completed"}, tmp_path / "run" / "explanation_io",
@@ -403,7 +404,8 @@ def test_literal_citation_template_boilerplate_is_removed_and_audited(frozen, re
     )
     saved = explanation.read_receipt(entry["specialist_explanation"]["output"])
     assert saved["output"] == normalized
-    assert saved["output_normalization"] == ["removed_literal_citation_template_sentence"]
+    assert saved["output_normalization"] == []
+    assert "[database_id:document_id]" in saved["citation_audit"]["unsupported_citations"]
 
 
 def test_unrecognized_placeholder_citation_is_recorded_not_fatal(frozen, result, tmp_path):

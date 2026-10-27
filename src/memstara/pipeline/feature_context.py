@@ -7,7 +7,7 @@ from pathlib import Path
 from memstara.matcher.catalog import build_catalog
 
 
-def freeze_feature_context(dataset: Path, target: str, *, require_complete: bool = False) -> dict:
+def freeze_feature_context(dataset: Path, target: str, *, require_complete: bool = False, missing_policy=None, require_numeric=None) -> dict:
     """Expose label meanings and eligibility metadata, never patient values or outcomes."""
     with dataset.open(newline="", encoding="utf-8-sig") as stream:
         columns = next(csv.reader(stream), [])
@@ -18,13 +18,14 @@ def freeze_feature_context(dataset: Path, target: str, *, require_complete: bool
     if require_complete:
         from memstara.evaluation import validate_clean_dataset
 
-        frame = validate_clean_dataset(dataset, target, allow_missing=True)
-        excluded = [entry.feature_name for entry in entries if frame[entry.feature_name].isna().any()]
+        frame = validate_clean_dataset(dataset, target, missing_policy=missing_policy, require_numeric=require_numeric)
+        excluded = [entry.feature_name for entry in entries if frame[entry.feature_name].isna().any() and missing_policy != "impute_train_v1"]
         excluded_set = set(excluded)
         entries = [entry for entry in entries if entry.feature_name not in excluded_set]
         eligibility = {
             "version": "complete_predictors_v1",
-            "rule": "No missing values in eligible predictors; required for Logistic Regression without imputation",
+            "rule": ("User-approved training-only imputation" if missing_policy == "impute_train_v1"
+                     else "Complete predictors required without imputation"),
             "excluded_columns": excluded,
             "excluded_count": len(excluded),
             "eligible_count": len(entries),
