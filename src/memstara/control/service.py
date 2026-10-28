@@ -554,13 +554,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/control/model-defaults":
-            from memstara.model_defaults import public_defaults
-            try:
-                from memstara.control.model_policy import defaults_view
-                self._send(200, defaults_view(public_defaults()))
-            except ValueError:
-                self._send(200, defaults_view({'source': 'project_env', 'profiles': [],
-                                             'restart_required_after_edit': True}))
+            from memstara.model_defaults import experiment_defaults
+            self._send(200, experiment_defaults())
             return
 
         if path == "/control/model-catalog":
@@ -765,7 +760,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 from memstara.control.model_policy import require_provider
                 require_provider(body.get('provider'))
-                self._send(201, {"connection": check_and_save(body)})
+                self._send(201, {"connection": check_and_save(body, make_default=True)})
             except ValueError as exc:
                 self._send(400, {"error": str(exc)})
             except Exception:

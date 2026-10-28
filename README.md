@@ -72,10 +72,17 @@ replace an existing installation's `.env` with another checkout's settings.
 3. Select **Check & use model** to verify and save the connection. This makes a
    small test request that your provider may charge for.
 
-The checked GUI configuration applies to **all agents in that experiment**.
-It does not overwrite `.env` or require a server restart. To use the server's
-per-agent defaults instead, select **Use current model**. Installation settings,
-such as the web port, remain in `.env`.
+After **Check & use model** succeeds, **Use current model** is selected automatically.
+That checked connection becomes the default for new experiments in this installation,
+including after reopening the wizard, refreshing the page or restarting containers
+with the same saved outputs. It applies to **all agents in each new experiment**.
+Reusing it does not make another connection-check request.
+
+Before a GUI connection is saved, **Use current model** uses the server's per-agent
+`.env` defaults. Once saved, the GUI connection takes priority; **Set up a model**
+lets you check a replacement. Failed checks leave the previous default intact.
+This does not overwrite `.env`, require a restart or change existing experiments.
+Installation settings, such as the web port, remain in `.env`.
 
 ### 3. Start
 
@@ -93,13 +100,14 @@ After the ready message, you can close the terminal.
 |---|---|
 | `.env` | LLM provider, credentials, common model, optional per-agent model overrides and web port |
 | **Add experiment → AI model** | Use server defaults or check an Azure Foundry model connection for all agents in this experiment |
-| **Add pipeline → Register or revise research inputs** | Your CSV, OKF corpus, prediction target and label mapping |
-| **Add pipeline** | Research input, agent skills, replicates per pipeline and experiment name |
+| **Add experiment → Upload a new CSV** | Your CSV, binary prediction target, missing-value consent and knowledge source; label mapping is automatic |
+| **Add experiment → Use saved data** | Included Heart Failure demonstration or previously registered data |
+| **Add experiment → Choose skills → Review & create** | Agent skills, data split settings, replicates, execution order and experiment name |
 
 For the included example:
 
-1. Open **Experiments → Add pipeline**.
-2. In **Research inputs**, select **Heart failure complete-case software demonstration** and review its target.
+1. Open **Experiments → Add experiment**. Review the **AI model** settings, or set up and check an Azure Foundry connection if needed.
+2. In **Research inputs → Use saved data**, select **Heart failure complete-case software demonstration** and review its target.
 3. In **Agent skills**, each stage starts with one compatible skill selected. Keep these defaults and select **Next**, or change the selections. The HeartFailure example defaults to hypotheses across all knowledge categories, Training-heavy data, Logistic Regression, SHAP Interpretation and cardiovascular Explanation. Clearing all hypothesis selections uses the compatible default shown in review. If you deselect all ML skills, the server runs scikit-learn default Logistic Regression without LLM parameter tuning.
 4. In **Review & create**, set a name and **1 replicate per pipeline** for a first experiment, review the execution order and confirm it. Execution starts at Pipeline 1.
 5. Select **Create pipeline**, then **Run** on that pipeline's card. Creating a pipeline does not start it.
@@ -119,14 +127,17 @@ validated clinical prediction tool.
 ## Read activity and results
 
 - **Experiments:** create and run pipelines, follow agents and open the live log.
-- **Results:** read the recorded interpretation; expand **Model performance and technical details** for AUC, charts and settings. **Compare recorded analyses** opens the comparison tools. A **New** badge marks unread results.
-- **Conclusions:** select a pipeline, read its saved Explanation agent output and download Markdown.
-- **Usage:** inspect execution usage and Motoro-provided cost estimates. These are estimates, not actual billed charges; unavailable prices remain unknown.
+- **Results:** open a Pipeline/Replicate tile to read its saved Interpretation agent output. The text is rendered from the recorded output without rewriting it; tile metadata includes recorded target, predictors, model and Test AUROC when available.
+- **Conclusions:** open a Pipeline/Replicate tile to read its saved Explanation agent output and download Markdown.
+- **Usage:** open a Pipeline/Replicate tile for recorded usage and Motoro-provided cost estimates. These are estimates, not actual billed charges; unavailable prices remain unknown.
+
+These views show completed outputs/replicates. A **New** badge marks unread
+output in Results, Conclusions and Usage.
 
 These four views appear in this order in Control. A selected execution that completes
 while you watch Experiments opens Results automatically (Conclusions for proposal-only
-runs). Opening saved history does not redirect you. Descriptive headings quote saved
-AI hypotheses; your pipeline names and records are retained.
+runs). Opening saved history does not redirect you. Output navigation identifies
+the pipeline and replicate; your experiment names and saved records are retained.
 
 Results and reports appear as they are recorded. An empty view before an execution
 has produced output is expected. Both open in the main workspace; choose **Experiments**

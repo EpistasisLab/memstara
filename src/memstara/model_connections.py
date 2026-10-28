@@ -135,6 +135,24 @@ def public(record):
                if 'settings' in data else {})}
 
 
+def current_default():
+    """Read the last checked GUI choice without probing or exposing credentials."""
+    path = _directory() / 'default.json'
+    try:
+        value = json.loads(path.read_text())
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        raise ValueError('Saved current model is unavailable. Set up and check a model again.') from None
+    try:
+        record = load(value['connection_id'])
+        from memstara.control.model_policy import require_provider
+        require_provider(record['connection']['provider'])
+        return public(record)
+    except (ValueError, TypeError, KeyError):
+        raise ValueError('Saved current model is unavailable. Set up and check a model again.') from None
+
+
 def profiles(data):
     from memstara.stage_models import AGENT_ROLES
     profile = {'provider': data['provider'], 'model': data['model']}
@@ -202,8 +220,11 @@ def probe(data):
         raise ValueError(messages.get(code[0], 'Connection check failed. Check the provider, model and credentials.'))
 
 
-def check_and_save(value):
+def check_and_save(value, *, make_default=False):
     data = validate(value)
+    if make_default:
+        from memstara.control.model_policy import require_provider
+        require_provider(data['provider'])
     # Verify storage before billing a model probe; write no unverified connection.
     cipher = _cipher()
     probe(data)
@@ -212,4 +233,9 @@ def check_and_save(value):
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, 'wb') as stream:
         stream.write(cipher.encrypt(json.dumps(record).encode()))
+        stream.flush()
+        os.fsync(stream.fileno())
+    if make_default:
+        from memstara.pipeline.checkpoint import atomic_json
+        atomic_json(_directory() / 'default.json', {'connection_id': record['id']})
     return public(record)

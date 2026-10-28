@@ -49,10 +49,11 @@ installs a process-local pricing compatibility adapter. This does not edit Motor
 source or its pricing database. Unknown deployment prices remain unavailable; a zero
 cost field without supported pricing must not be interpreted as free execution.
 
-The web container normally serves port 8070. `/control/` is proxied to the host control
-service, and `/api/` to the observation API. The control service can launch processes;
-it is not a read-only service. Database connection setup and local access boundaries
-are described in the viewer README.
+The root `./start.sh` installation exposes web port 5173 by default (configurable
+with `MEMSTARA_WEB_PORT`). `/control/` and `/api/` are proxied to private containers.
+The optional legacy viewer-only Compose setup proxies to host services and uses a
+different port arrangement; see the viewer README. The control service can launch
+processes; it is not a read-only service.
 
 ## Environment and configuration precedence
 
@@ -63,7 +64,8 @@ file does not replace settings already loaded into a running process.
 
 | Setting | Purpose |
 |---|---|
-| `MEMSTARA_<AGENT>_PROVIDER`, `MEMSTARA_<AGENT>_MODEL` | Required per-agent assignment |
+| `MEMSTARA_LLM_PROVIDER`, `MEMSTARA_LLM_MODEL`, `MEMSTARA_LLM_API_BASE` | Common server model defaults |
+| `MEMSTARA_<AGENT>_PROVIDER`, `MEMSTARA_<AGENT>_MODEL` | Optional per-agent overrides of common defaults |
 | `MEMSTARA_<AGENT>_API_BASE` | Agent endpoint; required for Foundry/local |
 | `MEMSTARA_AZURE_FOUNDRY_API_KEY`, `MEMSTARA_OPENAI_API_KEY`, `MEMSTARA_ANTHROPIC_API_KEY`, `MEMSTARA_OPENROUTER_API_KEY` | Provider credentials; never choose a model |
 | `ANTHROPIC_API_KEY` | Native Anthropic credential |
@@ -87,18 +89,31 @@ fallback or automatic model JSON loading is used. Explicit
 resolves paths relative to the selected file, independently of the launch directory.
 `MEMSTARA_ENV_FILE` can select a different project file. Restart after edits.
 
-No common model default is used. `MEMSTARA_QUESTION_*`,
+`MEMSTARA_LLM_*` provides common defaults. Nonempty `MEMSTARA_QUESTION_*`,
 `MEMSTARA_HYPOTHESIS_*`, `MEMSTARA_DATA_*`, `MEMSTARA_ML_*`,
-`MEMSTARA_INTERPRETATION_*` and `MEMSTARA_EXPLANATION_*` configure individual agents. See `.env.example`
-for supported fields. `python -m memstara.local_setup check` performs static checks,
-not network, database or inference validation.
+`MEMSTARA_INTERPRETATION_*` and `MEMSTARA_EXPLANATION_*` override individual fields.
+Model/endpoint/generation defaults are inherited only within the same provider.
+See `.env.example` for supported fields. `python -m memstara.local_setup check`
+performs static execution-configuration checks, not network, database or inference
+validation. Docker startup uses a separate check that permits missing model settings
+so users can configure the model in the GUI afterward.
 
-Design creation and saving do not require model connectivity. Execution does:
-new launches resolve project settings and freeze them. A legacy nonempty
+The browser offers **Use current model** for the last successfully checked GUI
+connection, or complete server defaults if none has been saved. **Set up a model**
+checks a replacement. When defaults are
+incomplete, GUI setup is required to continue. **Check & use model** makes a small,
+potentially charged provider request and saves the checked connection separately
+from `.env`. That connection applies to all agents and becomes the default for new
+experiment wizards in this installation. `outputs/private-model-connections/default.json`
+stores only its opaque ID; credentials remain in the encrypted connection record.
+Reopening the wizard reads the saved record without another provider probe.
+Failed checks preserve the previous default. Missing/corrupt saved records require
+setup instead of silently selecting a different server model.
+
+New launches freeze their resolved model assignments. A legacy nonempty
 `stage_models` different from project defaults must be reviewed and explicitly
-cleared through the configuration API before a new launch. Historical recovery
-continues using its frozen assignment. Configure model fields directly in `.env`.
-Never place credentials in profiles or research definitions.
+cleared before launching with server defaults. Historical recovery continues using
+its frozen assignment. Never place credentials in profiles or research definitions.
 
 Storage initialization and local provisioning validate the Memstara/Motoro database
 separation before launching migrations or Docker. New web executions also apply
@@ -127,10 +142,16 @@ New executions contain six independent profiles:
 | `explanation` | `MEMSTARA_EXPLANATION_` | `report` workers |
 
 Each accepts `PROVIDER`, `MODEL`, `API_BASE`, `TEMPERATURE`, `MAX_TOKENS` and
-`EFFORT`. PROVIDER and MODEL are required for every agent; Foundry/local also
-require API_BASE. Empty generation fields use the model runtime defaults.
-Configure matching provider credentials separately. Settings apply to new executions after
-restart, not to an existing execution's frozen snapshot.
+`EFFORT`. The resolved assignment needs a provider/model and, for Foundry/local,
+an endpoint; these can come from common defaults rather than six repeated entries.
+Empty generation overrides inherit common settings within the same provider, then
+use runtime defaults if still unset. Configure credentials separately. `.env`
+changes apply after restart; GUI connection changes do not need a restart. Neither
+rewrites an existing execution's frozen snapshot.
+
+**New web experiments and model setup allow Azure Foundry only.** Other provider
+implementations remain in the runtime for native/compatibility paths, but their
+presence in a validator or `.env.example` does not make them web UI options.
 
 Question writing shares the hypothesis worker's instructions and tools, but its
 run receives the frozen question profile before calling Motoro. The complete
@@ -144,12 +165,14 @@ rewrite those artifacts. New `.env` files must remove `MEMSTARA_NON_EXPLANATION_
 replace them with explicit individual assignments.
 Mixed or incomplete profile formats are rejected.
 
-Example for one agent (repeat for all six; see `.env.example`):
+Example common model and optional Explanation override (see `.env.example`):
 
 ```dotenv
-MEMSTARA_EXPLANATION_PROVIDER=azure_foundry
+MEMSTARA_LLM_PROVIDER=azure_foundry
+MEMSTARA_LLM_MODEL=YOUR_COMMON_DEPLOYMENT
+MEMSTARA_LLM_API_BASE=https://YOUR_RESOURCE.services.ai.azure.com
+MEMSTARA_AZURE_FOUNDRY_API_KEY=YOUR_API_KEY
 MEMSTARA_EXPLANATION_MODEL=YOUR_EXPLANATION_DEPLOYMENT
-MEMSTARA_EXPLANATION_API_BASE=https://YOUR_RESOURCE.services.ai.azure.com
 ```
 
 `model` is the actual deployment identifier. A model catalog entry is not proof that
@@ -159,7 +182,8 @@ Anthropic Messages route. Do not send that model to an OpenAI Chat Completions U
 merely because the resource also exposes an OpenAI-compatible endpoint.
 
 Allowed profile fields are `provider`, `model`, `api_base`, `temperature`,
-`max_tokens`, and `effort`. Endpoints must use HTTPS without embedded credentials,
+`max_tokens`, `effort` and validated `resolved_capabilities` metadata. Azure
+endpoints must use HTTPS without embedded credentials,
 query parameters, or fragments. The validator checks nonempty deployment names and basic ranges;
 it does not prove a deployment supports every generation parameter. Omit unsupported
 sampling controls and verify the actual provider request.
@@ -169,11 +193,13 @@ apply reasoning settings. A profile's `max_tokens` is therefore not necessarily 
 final request limit. See [runtime.py](src/memstara/pipeline/runtime.py),
 [llm.py](src/memstara/pipeline/llm.py), and recorded provider diagnostics.
 
-There is currently no dedicated per-stage model editor in the browser. Switching
-Explanation to another supported model only requires editing the `explanation_agent` profile. Assigning a different model to ML alone requires changing
-[stage_models.py](src/memstara/stage_models.py), its validation and routing tests, and
-any configuration consumers. Renaming a profile key or editing `.env` alone is not
-sufficient. Do not silently substitute a model when a deployment fails.
+The browser's checked connection uses one model for all six roles and takes
+precedence over `.env` in new wizards. Before a GUI default is saved, per-agent
+`.env` overrides such as `MEMSTARA_ML_MODEL` or `MEMSTARA_EXPLANATION_MODEL` are
+used by **Use current model** after restart. No source-code change is needed.
+`MEMSTARA_ML_MODEL` selects the ML agent's LLM, not its trained
+Logistic Regression/XGBoost estimator. Do not silently substitute a model when a
+deployment fails.
 
 ## Change a saved pipeline through the API
 
@@ -443,25 +469,23 @@ validate the requested route end to end. A model-list response is insufficient.
 | Interpretation | Selected SHAP or LIME skill, selected model's measured evidence | Single-model handoff, XAI artifacts, input/output receipts |
 | Explanation | Interpretation outputs and scoped knowledge retrieval | Retrieval receipts, supplied document identities, actual model record and report |
 
-All Combinations freezes a 4–20 original-predictor policy. `random_features` selects
-within the same bounds using recorded sampling state; target columns are excluded.
-For new combination runs, Guided and Random share a complete-predictor candidate
-pool compatible with either selected model. Missing-value columns are excluded before
-question generation; no patient rows or values are changed or imputed. Eligibility
-checks use input completeness, not outcome associations or model scores. The frozen
-context records excluded columns/counts, the eligibility policy and the candidate
-pool hash. Fewer than four complete predictors blocks launch before paid model calls.
-The model-specific ML validator remains enabled as a final integrity check.
-This changes new-run candidate eligibility; historical samples and results are not
-rewritten. Standalone XGBoost retains its native missing-value support.
+All Combinations freezes a 4–20 original-predictor policy; target columns are
+excluded. `random_features` is unavailable for new MVP designs. Registered inputs
+with `missing_policy: "reject"` must have complete eligible predictors. With
+`impute_train_v1` consent, incomplete predictors can remain eligible and ML fits
+training-only mean/mode replacement values. Upload, registration and Data extraction
+do not perform that imputation. Eligibility does not select predictors using outcome
+associations or model scores. Fewer than four eligible predictors blocks launch.
+Historical frozen policies remain readable; they do not define the new-upload behavior.
 An extracted CSV includes the target for learning, but that target must never be in
 the fitted predictor list. Use recorded model inputs to verify this distinction.
 
-`data_training_heavy` allows an evaluation fraction of 0.1–0.3 of the exploration
-population. `data_balanced_stratified` fixes it at 0.5. Both require stratification.
-Here "balanced" means equal train/evaluation sizes, not class oversampling. A separate
-validation reserve is removed before this allocation. Counts, indices and seeds are
-saved for the selected model's partition.
+For new two-way designs, `data_training_heavy` uses train/test 70/30 and
+`data_balanced_stratified` uses 50/50, with stratification. Here "balanced" means
+equal train/test sizes, not class oversampling. **Set the split myself** provides
+the manual alternative. New two-way designs do not remove a separate reserve;
+historical/controlled-comparison policies retain their recorded contracts. Counts,
+indices and seeds are saved for the selected model's partition.
 
 These are the two built-in selectable Data skills. Exact feature extraction,
 target preservation, missing-column reporting and the saved handoff to ML are
@@ -1087,21 +1111,25 @@ separately from any reserved validation evaluation.
 
 ## Research input preparation (issue #166)
 
-The local **Floor plan → Prepare research inputs** screen can inspect and
-register selected CSV/OKF inputs and a user-defined target or research objective.
-Paths refer to the server's local filesystem; this is not browser file upload or
-remote file fetching. The source CSV and original knowledge/skill files remain
-unchanged. Current CSV inspection is limited to 100 MiB and returns schema and
-aggregate diagnostics, never dataset rows.
+**Experiments → Add experiment → Upload a new CSV** accepts a UTF-8 file up to
+5 MiB, checks it and lets the user select a binary outcome, missing-value consent
+and knowledge source. OKF paths refer to the control service's filesystem; Docker
+users need container-visible paths such as `/app/user-inputs/my-study/okf`.
+Local-file inspection/JSON registration supports CSVs up to 100 MiB. Original
+inputs/skills remain unchanged. Upload inspection returns schema and aggregate
+diagnostics, not dataset rows or fitted imputation statistics.
 
 The control API exposes:
 
 - `GET /control/research-inputs`: list saved preparation records.
+- `POST /control/research-inputs/upload`: validate a filename/base64 UTF-8 CSV,
+  persist its original bytes and return its server path and column metadata.
 - `POST /control/research-inputs/inspect`: inspect without saving a record.
 - `POST /control/research-inputs/register`: inspect and save a new immutable record.
 
-POST bodies accept `name`, `knowledge_mode`, `data_mode`, `dataset_path`,
-`knowledge_path`, `target`, `excluded_columns` and `missing_policy`.
+Inspection/registration bodies accept `name`, `knowledge_mode`, `data_mode`,
+`dataset_path`, `knowledge_path`, `target`, `excluded_columns`, `missing_policy`,
+`categorical_columns` and `predictor_types`.
 `knowledge_mode` is `okf` (default) or `llm_only`; `data_mode` is `dataset`
 (default) or `proposal`. All four combinations are supported. Only selected
 sources are required and inspected; a missing selected source fails validation.
@@ -1111,21 +1139,32 @@ planning stages without fitting models or creating measured metrics. See the
 [input-mode walkthrough](examples/research-inputs/README.md#choose-the-input-mode)
 for a complete no-source configuration and the output distinctions.
 
-The target object accepts `column`,
-`description`, `positive_label`, `negative_label`, `prediction_time` and optional
-`horizon`; all are strings. Missing target definitions produce actionable issues.
-`excluded_columns` is a list of exact column names. Only `missing_policy: "reject"`
-is currently supported: inspection does not impute values or delete rows.
+The target object accepts `column`, `description`, `positive_label`,
+`negative_label`, `prediction_time` and `horizon`; all are strings. Dataset JSON
+requires the column and label mapping. Description is generated when omitted;
+timing/horizon are optional and are not inferred. The browser assigns sorted label
+strings automatically (first negative, second positive), without determining their
+clinical meaning. Proposal mode requires a description instead of observed labels.
+
+`excluded_columns` is a list of exact column names. Missing predictors are rejected
+by default, or accepted with `missing_policy: "impute_train_v1"` consent. ML then
+fits means for continuous and modes for categorical/binary predictors within each
+training partition/CV fold. Inspection itself never imputes or deletes rows.
+Missing targets, empty predictors and non-finite values remain invalid.
+The UI generates `predictor_types` automatically and has no type/exclusion editor;
+use explicit JSON types for ambiguous numeric category codes. See the
+[input guide](examples/research-inputs/README.md#source-preservation-and-dataset-requirements).
 
 Records are saved under `outputs/research_inputs/` unless
 `MEMSTARA_RESEARCH_INPUTS_DIR` is explicitly configured. Each record retains the
 source hashes, target definition, exclusions, inspection timestamp and diagnostics.
-Loading a saved record into the screen requires inspection again to validate the
-current files. These records are local and must not be published as public examples.
+Edited settings are checked and saved as a new record. Launch revalidates current
+source hashes. These records are local and must not be published as public examples.
 
 Saving does not start an experiment or change an existing pipeline. Select the
-saved version in pipeline creation (including All Combinations), or in an existing
-pipeline's **Data & target** settings. The request field is `research_input_id`;
+saved version in **Add experiment → Use saved data**. The wizard's **Edit data &
+target** saves a new research version; it does not rewrite previously created
+experiments. The request field is `research_input_id`;
 the CLI equivalent is `--research-input-id`. The record's target overrides stale
 browser target settings. `input_checks_passed` is an input inspection result;
 `execution_ready` stays false because registration does not verify deployment,
@@ -1146,10 +1185,12 @@ instead of following edited source files. A new execution requires a newly saved
 version if sources changed. Run-scoped question-bank reads retain their existing
 isolation. Do not edit generated research files.
 
-Generic profiles accept `hypothesis_research`, `random_features` or reviewed custom
-Hypothesis skills. Legacy corpus-specific Hypothesis defaults and unbound
-Addiction/HIV Explanation specialists are rejected rather than silently reused.
-Anil/Phil originals are not modified. Review other custom skills for compatibility.
+Hypothesis choices are validated against the selected corpus, with general/custom
+research choices supported. Random-feature hypotheses are disabled for new designs.
+Explanation offers the four supplied Addiction, HIV, Heart Failure cardiovascular
+and Heart Failure comorbidity skills independently of corpus; users must assess
+their suitability. Contributed originals are not modified. Custom Interpretation
+and Explanation registration is disabled.
 
 See [the synthetic walkthrough](examples/research-inputs/README.md) for a complete
 input example and commands. It contains generated numbers and invented educational
@@ -1161,35 +1202,33 @@ from the offline input/dispatch/cache tests.
 ### Interpretation menu visibility
 
 The six project-default `interpreter_*` playbooks are temporarily hidden by
-`HIDDEN_PLAYBOOKS` in `pipeline/prompts.py`. The menu retains the current Anil
+`HIDDEN_PLAYBOOKS` in `pipeline/prompts.py`. The menu retains the supplied
 SHAP and LIME skills. Hidden files remain unchanged and resolve for saved
 configurations; frozen execution prompts are not rewritten. New UI drafts use
 SHAP when inheriting a hidden default. This visibility change does not alter
-Anil/Phil source documents or merge their instructions.
+contributed source documents or merge their instructions.
 
 
 ### Explanation execution choices
 
-Only the current Anil Addiction and HIV expert choices are offered from the
-existing built-in Explanation catalog. The nine alternative reporting skills in
+The supplied Addiction, HIV, Heart Failure cardiovascular and Heart Failure
+comorbidity choices are offered from the Explanation catalog. Alternative reporting skills in
 `DISABLED_EXPLANATION_SKILLS` are hidden and rejected at control validation and
 the board execution entrypoint, including proposal and combination runs. Their
 original files and historical prompt loading remain available for inspection.
 A saved design containing a disabled choice must select an enabled expert before
-starting again. New UI drafts use Addiction when inheriting a disabled choice.
+starting again. New UI defaults follow the selected corpus profile.
 The current shared expert files are required; there is no fallback to a disabled
-reporting skill. This change does not rewrite Anil/Phil source documents.
+reporting skill. This does not rewrite contributed source documents.
 
 
 ### Hypothesis experiment choices
 
-The current built-in menu retains addiction-psychiatric, addiction-sdoh,
-addiction-substance-use and random_features. Eight other choices listed in
-`DISABLED_HYPOTHESIS_SKILLS` are hidden and rejected before board execution,
-including combination runs. Files and historical prompt loading remain intact.
-New UI drafts inheriting a disabled choice use addiction-psychiatric; review its
-domain compatibility with the selected research inputs before starting. Existing
-run configurations are not rewritten.
+The built-in menu follows the selected corpus: Heart Failure, HIV/Addiction or
+general research. Random-feature hypotheses and disabled legacy choices are
+unavailable for new designs. Files and historical prompt loading remain intact.
+Review custom Hypothesis skills for compatibility with the selected inputs;
+existing run configurations are not rewritten.
 
 
 ## Portable contributed documents

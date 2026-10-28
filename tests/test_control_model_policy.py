@@ -37,7 +37,7 @@ def test_azure_connection_is_checked_normally(monkeypatch):
     body = {'provider': 'azure_foundry', 'model': 'deployment'}
     request = handler('/control/model-connections/check', body)
     request.do_POST()
-    check.assert_called_once_with(body)
+    check.assert_called_once_with(body, make_default=True)
     assert request._send.call_args.args == (201, {'connection': {'id': 'checked'}})
 
 

@@ -428,12 +428,14 @@ def test_control_launch_uses_selected_inputs_without_changing_server_environment
     record = register(sample)
     monkeypatch.setenv('MEMSTARA_DATASET_PATH', str(tmp_path / 'unrelated-missing.csv'))
     for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
-        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'azure_foundry')
         monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'test-model')
+        monkeypatch.setenv(f'MEMSTARA_{role}_API_BASE', 'https://fixture.services.ai.azure.com')
     monkeypatch.setenv('MEMSTARA_DATABASE_URL', 'postgresql://test:secret@localhost:15501/board')
     monkeypatch.setenv('MOTORO_DATABASE_URL', 'postgresql://test:secret@localhost:15502/runtime')
     monkeypatch.setenv('MOTORO_REDIS_URL', 'redis://localhost:16380/0')
-    monkeypatch.setenv('OPENAI_API_KEY', 'fixture-key')
+    monkeypatch.setenv('MEMSTARA_AZURE_FOUNDRY_API_KEY', 'fixture-key')
+    monkeypatch.setenv('ANTHROPIC_FOUNDRY_API_KEY', 'fixture-key')
     monkeypatch.setattr(stage_models, 'resolve_run_profiles', lambda _: {})
     scopes, launches, responses = [], [], []
     def skills(root=None):
@@ -446,7 +448,7 @@ def test_control_launch_uses_selected_inputs_without_changing_server_environment
     handler._send = lambda status, payload: responses.append((status, payload))
     before = dict(os.environ)
     handler._launch({'research_input_id':record['id'], 'y_column':'stale'}, manager)
-    assert responses[0][0] == 201
+    assert responses[0][0] == 201, responses
     assert len(launches) == 1
     argv = launches[0]
     assert argv[argv.index('--y-column') + 1] == 'outcome'

@@ -27,8 +27,10 @@ The clinical outcome window and predictor timing have not been independently
 validated. This is a software demonstration, not validated prospective prediction.
 
 For the Docker installation, `./start.sh` automatically prepares and registers the
-complete-case demonstration. Select it in Floor plan → Add pipeline. No manual
-preparation commands are needed.
+complete-case demonstration. Open **Experiments → Add experiment → Use saved data**
+and select **Heart failure complete-case software demonstration**. No manual
+preparation commands are needed. Model credentials may be supplied later through
+**AI model → Set up a model**; startup and data registration do not call the LLM.
 
 For optional native development, from the repository root after configuring the
 runtime described in [the developer guide](../../DEVELOPER_GUIDE.md):
@@ -48,12 +50,26 @@ The preparation script uses eight fixed predictors: `age_years`, `sex`,
 `bronchial_asthma_history`. Complete-case selection retains 1,671 rows and excludes
 29; no imputation is performed. Selection can bias the demonstration population.
 
+This is the bundled demo's explicit preparation policy. It is separate from
+**Upload a new CSV → Fill missing values for me**, which preserves rows and fits
+mean/mode imputation inside ML training after the split. Uploading the original
+1,700-row CSV does not automatically select these eight predictors or apply the
+demo's complete-case filtering. See [the CSV input guide](../research-inputs/README.md)
+for upload validation and imputation limits.
+
 It writes the derived `dataset.csv`, executable input contract `research.json`,
 and provenance record `preparation.json` under the destination. The contract uses
 absolute paths resolved on the installing machine. An existing destination is
 rejected to preserve previous evidence; choose a new path for another preparation.
 
-See [the root README](../../README.md#run-a-pipeline) for starting a pipeline in
+Docker startup uses `outputs/bundled-research/heart-failure-v1-<source-hash>/`
+and reuses unchanged prepared data and registrations on subsequent starts.
+Its `research.json` uses a relative `dataset.csv` path, resolved against the
+manifest directory by the startup registrar. The optional native preparation
+command above writes absolute paths instead. These local outputs persist across
+container recreation; reinstalling containers alone does not clear them.
+
+See [the root README](../../README.md#configure-and-run-a-pipeline) for starting a pipeline in
 the browser. Preparation alone does not make model calls or establish
 pipeline completion. The generated contract is not committed because its paths
 belong to the user's installation. Keep private credentials out of this directory.

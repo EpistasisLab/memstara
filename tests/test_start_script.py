@@ -44,13 +44,13 @@ def run(tmp_path, environment):
                           env=environment, capture_output=True, text=True)
 
 
-def test_missing_env_creates_private_template_and_never_starts(tmp_path):
+def test_missing_env_creates_private_template_and_starts_for_gui_setup(tmp_path):
     environment = launcher(tmp_path, env=False)
     result = run(tmp_path, environment)
-    assert result.returncode == 1
+    assert result.returncode == 0
     assert (tmp_path / '.env').stat().st_mode & 0o777 == 0o600
-    assert not (tmp_path / 'calls').exists()
-    assert 'Edit the model deployment' in result.stdout
+    assert 'compose up -d --no-build --force-recreate' in (tmp_path / 'calls').read_text()
+    assert 'No experiment or paid model request was started.' in result.stdout
 
 
 def test_start_preserves_env_and_checks_proxy_before_reporting_url(tmp_path):

@@ -4,7 +4,7 @@ import {stageModelRows} from '../lib/stageModels';
 import './experiment-model-settings.css';
 
 export const ExperimentModelContext = createContext<string | undefined>(undefined);
-export type ModelConnection = {id: string; provider: string; model: string; api_base: string; region: string; checked_at: string};
+export type ModelConnection = {id: string; provider: string; model: string; api_base: string; region: string; checked_at: string; settings?: Partial<GenerationSettings>};
 const providers = {openai: 'OpenAI', anthropic: 'Anthropic', azure_foundry: 'Azure Foundry', openrouter: 'OpenRouter', local: 'Local / self-hosted', bedrock: 'Amazon Bedrock'};
 type Provider = keyof typeof providers;
 type Capabilities = {supports_temperature: boolean | null; supports_effort: boolean | null; effort_levels: string[] | null; default_effort: string | null; default_temperature?: number | null; temperature_effort_levels?: string[] | null};
@@ -25,8 +25,15 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
   const [configured, setConfigured] = useState<ConfiguredProfile[]>([]);
   const [currentAllowed, setCurrentAllowed] = useState<boolean | undefined>();
   const [setupRequired, setSetupRequired] = useState(false);
-  const providerNotice = setupRequired ? 'Set up an Azure Foundry model to continue. Server model defaults are not ready.' : 'Only Azure Foundry is available. Set up an Azure Foundry model to continue.';
-  useEffect(() => {if (mode === 'current' && currentAllowed !== undefined) onValidityChange(currentAllowed ? '' : providerNotice);}, [mode, currentAllowed, onValidityChange]);
+  const [currentConnection, setCurrentConnection] = useState<ModelConnection | null>(null);
+  const [defaultsPending, setDefaultsPending] = useState(true);
+  const [currentError, setCurrentError] = useState('');
+  const selectionTouched = useRef(false);
+  const checkedHere = useRef(false);
+  const providerNotice = currentError || (setupRequired ? 'Set up an Azure Foundry model to continue. Server model defaults are not ready.' : 'Only Azure Foundry is available. Set up an Azure Foundry model to continue.');
+  useEffect(() => {
+    if (mode === 'current') onValidityChange(defaultsPending ? 'Loading current model…' : currentAllowed === false ? providerNotice : '');
+  }, [mode, defaultsPending, currentAllowed, providerNotice, onValidityChange]);
   const [defaultRole, setDefaultRole] = useState('');
   const [useServerKey, setUseServerKey] = useState(false);
   const formTouched = useRef(false);
@@ -34,7 +41,6 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
   const [showKey, setShowKey] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [saved, setSaved] = useState<ModelConnection | null>(null);
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const [catalogError, setCatalogError] = useState('');
   const [catalogAttempt, setCatalogAttempt] = useState(0);
@@ -62,13 +68,31 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
     const controller = new AbortController();
     void fetch('/control/model-defaults', {signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)])})
       .then(async response => {if (!response.ok) throw Error(); return response.json();})
-      .then(body => {if (!controller.signal.aborted && Array.isArray(body.profiles)) {
-        setConfigured(body.profiles.filter((profile: ConfiguredProfile) => profile.provider === 'azure_foundry'));
-        setCurrentAllowed(body.current_allowed ?? (body.profiles.length > 0 && body.profiles.every((profile: ConfiguredProfile) => profile.provider === 'azure_foundry')));
-        setSetupRequired(body.setup_required === true);
-        if (body.setup_required && !formTouched.current) choose('custom');
-      }})
-      .catch(() => {}); // Existing server defaults still work if their detailed preview is unavailable.
+      .then(body => {
+        if (controller.signal.aborted || checkedHere.current) return;
+        const connection: ModelConnection | null = body.connection ?? null;
+        if (connection && (!/^[a-f0-9]{32}$/.test(connection.id) || connection.provider !== 'azure_foundry' || !connection.model)) throw Error();
+        if (Array.isArray(body.profiles)) {
+          setConfigured(body.profiles.filter((profile: ConfiguredProfile) => profile.provider === 'azure_foundry'));
+          setCurrentAllowed(body.current_allowed ?? (body.profiles.length > 0 && body.profiles.every((profile: ConfiguredProfile) => profile.provider === 'azure_foundry')));
+          setSetupRequired(body.setup_required === true);
+        }
+        setCurrentConnection(connection); setCurrentError(body.current_error || '');
+        if (!selectionTouched.current && !formTouched.current) {
+          onChange(connection);
+          if (body.setup_required) {
+            setMode('custom'); onValidityChange('Enter your model connection and select Check & use model.');
+          }
+        }
+      })
+      .catch(() => {
+        if (controller.signal.aborted || checkedHere.current) return;
+        setCurrentAllowed(false); setSetupRequired(true);
+        setCurrentError('Current model could not be loaded. Reopen Add experiment to retry, or set up a model.');
+        if (!selectionTouched.current && !formTouched.current) {
+          setMode('custom'); onValidityChange('Set up and check a model to continue.');
+        }
+      }).finally(() => {if (!controller.signal.aborted) setDefaultsPending(false);});
     return () => controller.abort();
   }, []);
 
@@ -154,12 +178,14 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
   function invalidate() {
     formTouched.current = true;
     request.current?.abort(); request.current = null;
-    setBusy(false); setSaved(null); setError(''); onChange(null);
+    setBusy(false); setError(''); onChange(null);
     onValidityChange('Check your model connection to continue.');
   }
   function choose(next: 'current' | 'custom') {
+    selectionTouched.current = true;
     invalidate(); stopListing(); setListed([]); setSelection(''); setCaps(null); setMode(next); setShowKey(false); setForm(emptyForm); setDefaultRole(''); setUseServerKey(false); formTouched.current = false;
-    onValidityChange(next === 'current' ? currentAllowed === false ? providerNotice : '' : 'Enter your model connection and select Check & use model.');
+    if (next === 'current') onChange(currentConnection);
+    onValidityChange(next === 'current' ? defaultsPending ? 'Loading current model…' : currentAllowed === false ? providerNotice : '' : 'Enter your model connection and select Check & use model.');
   }
   function field(key: keyof typeof emptyForm, value: string) {
     invalidate(); stopListing(); if (['api_base', 'region', 'auth_type'].includes(key)) setUseServerKey(false); if (key === 'model' && !selected) setCaps(null); setForm(previous => ({...previous, [key]: value}));
@@ -186,7 +212,10 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
       const connection: ModelConnection = body.connection;
       if (!connection?.id || connection.provider !== form.provider || connection.model !== form.model.trim()) throw Error('Unexpected connection response. Try again.');
       if (request.current !== controller) return;
-      setSaved(connection); setShowKey(false);
+      selectionTouched.current = true;
+      checkedHere.current = true; setDefaultsPending(false);
+      setCurrentConnection(connection); setCurrentAllowed(true); setSetupRequired(false);
+      setCurrentError(''); setMode('current'); setShowKey(false);
       setForm(previous => ({...previous, api_key: '', secret_access_key: '', access_key_id: '', session_token: ''}));
       onChange(connection); onValidityChange('');
     } catch (reason) {
@@ -200,14 +229,23 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
     <header className="experiment-model-heading"><span className="experiment-model-icon"><Cpu size={21} aria-hidden="true"/></span>
       <div><h4 id="experiment-model-heading">AI model</h4><p>Use an Azure Foundry model for your agents.</p></div>
     </header>
-    {setupRequired && mode === 'custom' && !saved && <p className="experiment-model-notice" role="status">No server model is ready. Enter your Azure connection below; you do not need to edit .env or restart the app.</p>}
+    {setupRequired && mode === 'custom' && <p className="experiment-model-notice" role="status">{currentError || 'No server model is ready. Enter your Azure connection below; you do not need to edit .env or restart the app.'}</p>}
     <fieldset className="experiment-model-modes"><legend className="sr-only">Model connection</legend>
-      <label className={mode === 'current' ? 'is-selected' : ''}><input type="radio" name="experiment-model-mode" disabled={currentAllowed === false} checked={mode === 'current'} onChange={() => choose('current')}/><span><strong>Use current model</strong><small>Use the defaults configured for each agent.</small></span>{mode === 'current' && <Check size={17} aria-hidden="true"/>}</label>
+      <label className={mode === 'current' ? 'is-selected' : ''}><input type="radio" name="experiment-model-mode" disabled={defaultsPending || currentAllowed === false} checked={mode === 'current'} onChange={() => choose('current')}/><span><strong>Use current model</strong><small>{currentConnection ? 'Use your saved model for all agents.' : 'Use the defaults configured for each agent.'}</small></span>{mode === 'current' && <Check size={17} aria-hidden="true"/>}</label>
       <label className={mode === 'custom' ? 'is-selected' : ''}><input type="radio" name="experiment-model-mode" checked={mode === 'custom'} onChange={() => choose('custom')}/><span><strong>Set up a model</strong><small>Start from your defaults or use another model.</small></span>{mode === 'custom' && <Check size={17} aria-hidden="true"/>}</label>
     </fieldset>
-    {mode === 'current' && currentAllowed === false && <p className="experiment-model-notice" role="alert">{providerNotice} The server defaults include an unavailable provider.</p>}
+    {mode === 'current' && currentAllowed === false && <p className="experiment-model-notice" role="alert">{providerNotice}</p>}
     {mode === 'current' ? <div className="experiment-model-current" role="status">
-      {configured.length ? <>
+      {defaultsPending ? <p>Loading current model…</p> : currentConnection ? <>
+        <div className="experiment-model-ready"><Check size={20} aria-hidden="true"/><div><strong>Model ready</strong><p>{providers[currentConnection.provider as Provider]} · {currentConnection.model}</p><small>All agents · Automatically selected for new experiments.</small></div><button type="button" onClick={() => choose('custom')}>Change</button></div>
+        <details><summary>Connection & settings</summary><dl>
+          <div><dt>Endpoint</dt><dd className="break-words">{currentConnection.api_base}</dd></div>
+          <div><dt>Credentials</dt><dd>Saved on the server</dd></div>
+          <div><dt>Temperature</dt><dd>{currentConnection.settings?.temperature ?? 'Automatic'}</dd></div>
+          <div><dt>Reasoning effort</dt><dd>{currentConnection.settings?.effort ?? 'Automatic'}</dd></div>
+          <div><dt>Maximum output tokens</dt><dd>{currentConnection.settings?.max_tokens ?? 'Automatic'}</dd></div>
+        </dl></details>
+      </> : configured.length ? <>
         <p className="experiment-default-source">Loaded from this server’s .env configuration.</p>
         {configured.map(profile => <article className="experiment-default-card" key={profile.role}>
           <strong>{providers[profile.provider]} · {profile.model}</strong><p>{profileRoles(profile)}</p>
@@ -221,9 +259,6 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
           </dl></details>
         </article>)}
       </> : current.length ? current.map(label => <p key={label}>{label}</p>) : <p>{loaded ? 'Current model details are unavailable.' : 'Loading current model…'}</p>}
-    </div> : saved ? <div className="experiment-model-ready" role="status">
-      <Check size={20} aria-hidden="true"/><div><strong>Model ready</strong><p>{providers[saved.provider as Provider]} · {saved.model}</p><small>Used by all agents in this experiment.</small></div>
-      <button type="button" onClick={() => {invalidate(); setForm(previous => ({...previous, api_key: ''}));}}>Change</button>
     </div> : <div className="experiment-model-form">
       {configured.length > 0 && <div className="experiment-default-prefill">
         {configured.length > 1 && <label htmlFor="experiment-default-profile">Start from a configured model<select id="experiment-default-profile" value={defaultRole} disabled={!catalog} onChange={e => {const profile = configured.find(row => row.role === e.target.value); if (profile) applyConfiguredProfile(profile);}}><option value="" disabled>Choose a configured model</option>{configured.map(profile => <option key={profile.role} value={profile.role}>{profileRoles(profile)} · {profile.model}</option>)}</select><small>Example: choose the Explanation model to copy its connection settings.</small></label>}
@@ -270,7 +305,7 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
         </div>
       </details>}
       {error && <p className="experiment-model-error" role="alert">{error}</p>}
-      <div className="experiment-model-check"><button className="comb-primary" type="button" disabled={!valid || busy} onClick={() => void check()}>{busy && <LoaderCircle size={16} className="animate-spin" aria-hidden="true"/>}{busy ? 'Checking…' : 'Check & use model'}</button><p>Makes a small test request. Your provider may charge for it.</p></div>
+      <div className="experiment-model-check"><button className="comb-primary" type="button" disabled={!valid || busy} onClick={() => void check()}>{busy && <LoaderCircle size={16} className="animate-spin" aria-hidden="true"/>}{busy ? 'Checking…' : 'Check & use model'}</button><p>Saves this as your current model for new experiments after a small test request. Your provider may charge for it.</p></div>
     </div>}
   </section>;
 }

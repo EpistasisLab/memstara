@@ -64,6 +64,27 @@ def public_defaults():
     return {'source': 'project_env', 'restart_required_after_edit': True, 'profiles': groups}
 
 
+def experiment_defaults():
+    """A checked GUI choice takes precedence for new experiment wizards only."""
+    from memstara.control.model_policy import defaults_view
+    from memstara.model_connections import current_default
+    try:
+        body = defaults_view(public_defaults())
+    except ValueError:
+        body = defaults_view({'source': 'project_env', 'profiles': [],
+                              'restart_required_after_edit': True})
+    try:
+        connection = current_default()
+    except (ValueError, OSError):
+        # Do not silently switch to another model if a remembered record is lost.
+        return {**body, 'current_allowed': False, 'setup_required': True,
+                'current_error': 'Saved current model is unavailable. Set up and check a model again.'}
+    if connection:
+        return {**body, 'source': 'saved_connection', 'connection': connection,
+                'current_allowed': True, 'setup_required': False}
+    return body
+
+
 def resolve_credentials(value):
     """Never send a deployment-owned credential to an edited provider or endpoint."""
     if not isinstance(value, dict) or 'default_role' not in value:

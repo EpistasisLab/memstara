@@ -8,17 +8,27 @@ see [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
 
 ## 1. Install and configure the runtime
 
-Install Git, uv, Python 3.12 or 3.13, and Docker with Compose. Obtain credentials
-for your own model deployment. Follow [README installation steps 1–2](README.md#get-started)
-to clone, select a revision, run `uv sync --frozen --extra dev --extra runtime`,
-activate the environment, and provision the two databases and Redis.
-Do not point the two database URLs at the same database. Motoro requires pgvector.
+For the normal Docker installation, follow [README steps 1–3](README.md#get-started).
+Git and Docker with Compose are sufficient; `./start.sh` installs the application,
+provisions its databases/Redis and registers the Heart Failure demonstration.
+You may leave LLM credentials blank and configure Azure Foundry later in
+**Add experiment → AI model → Set up a model**. A usable model is required before
+continuing with an experiment. Other providers are not available for new web executions.
 
-Copy `.env.example` to `.env` only in a new checkout. Replace placeholder paths
-and supply your own provider credentials. Configure the deployment and optional
-`non_explanation_agents` / `explanation_agent` profiles using the
-[model configuration guide](DEVELOPER_GUIDE.md#model-profiles-and-their-limits).
-No example credentials authorize a model call. Keep secrets out of Git.
+The Python commands below are an **optional native tutorial**, not additional
+Docker installation steps. For that path, install uv and Python 3.12 or 3.13:
+
+```sh
+uv sync --frozen --extra dev --extra runtime
+source .venv/bin/activate
+```
+
+Copy `.env.example` to `.env` only in a new checkout. For native execution, configure
+model defaults using `MEMSTARA_LLM_*` and optional per-agent overrides, plus two
+separate PostgreSQL databases and Redis. Motoro requires pgvector. Native viewer
+setup also needs read-only database credentials; see the
+[viewer guide](viewer/README.md) and [model configuration guide](DEVELOPER_GUIDE.md#model-profiles-and-their-limits).
+Do not reuse the historical two-group profile keys for new setup. Keep secrets out of Git.
 
 Run all following commands from the checkout root with the environment activated.
 Relative research paths are resolved against the process working directory, not
@@ -43,7 +53,7 @@ python scripts/prepare_research_tutorial.py examples/research-inputs/research.js
 Inspection should return `input_checks_passed: true`. The preparation script saves
 a research version and one custom Hypothesis skill, selects a supplied Explanation
 skill, validates that selection, and prints the
-one-Loop `next_command`. It never executes that command. `execution_ready: false`
+one-replicate `next_command`. It never executes that command. `execution_ready: false`
 means runtime services, embeddings and model availability were not validated by
 this offline step. It is not a failed experiment.
 
@@ -60,11 +70,14 @@ embedding operations may incur costs or download model files. A selected researc
 profile prepares a separate analysis copy and matcher; do not build a cache for an
 unrelated legacy cohort. The initial preparation may be slower than subsequent runs.
 
-For the browser, follow [the viewer setup](viewer/README.md) and README step 7.
-Keep the host control service running, then open the configured web port (default `http://localhost:5173`).
-Choose the returned research version in Add pipeline and the returned custom skill
-IDs, training-heavy Data, LR ML, SHAP Interpretation, and one Loop. Start only once;
-do not also execute the CLI command for the same intended test.
+For a native browser workflow, follow [the viewer setup](viewer/README.md).
+Keep that installation's control service running, then open its configured web port.
+In **Add experiment → Use saved data**, choose the registered research version,
+then the returned custom skill IDs, training-heavy Data, LR ML, SHAP Interpretation
+and one replicate. Start only once; do not also execute the CLI command for the
+same intended test. Native and Docker installations have separate registries unless
+explicitly configured to share them. Docker users can register the synthetic example
+with the [container command in the input guide](examples/research-inputs/README.md#register-the-supplied-synthetic-example).
 
 Look for terminal `completed` status and saved results from every required stage,
 including the final Explanation. Inspect the run under `outputs/runs/` for
@@ -77,23 +90,34 @@ unavailable even when model usage is recorded.
 ## 4. Replace the example with your own study
 
 Copy `research.json` to an ignored local location such as `outputs/my-study.json`.
-Keep the original examples unchanged. Set these fields explicitly:
+Keep the original examples unchanged. For CLI/JSON registration, use these fields:
 
 | Field | What to supply |
 |---|---|
+| `name` | Required study name |
 | `dataset_path` | Absolute path to an analysis-ready CSV |
-| `knowledge_path` | Absolute path to the OKF directory containing `index.md` |
+| `knowledge_path` | Accessible OKF folder containing `index.md`; omitted for `llm_only` |
 | `target.column` | Exact binary outcome column name |
-| `target.description` | What is predicted, for whom, and how the outcome is defined |
-| `target.positive_label`, `target.negative_label` | The two actual label values; never inferred from their order |
-| `target.prediction_time`, `target.horizon` | When predictors are available and how far ahead the outcome is assessed |
+| `target.description` | Optional in dataset mode; generated from the mapping when omitted. Required for proposal mode |
+| `target.positive_label`, `target.negative_label` | Required exact values in dataset JSON; the upload UI instead assigns sorted labels automatically |
+| `target.prediction_time`, `target.horizon` | Optional timing details; unspecified timing is not inferred |
 | `excluded_columns` | Identifiers, post-outcome measurements and other prohibited predictors |
-| `missing_policy` | `reject`; clean or impute explicitly outside this input workflow |
+| `missing_policy` | `reject` (default), or explicit consent with `impute_train_v1` |
+| `predictor_types` | Optional map of predictor names to `continuous` or `categorical`; use it for text categories and ambiguous numeric codes |
 
-Provide at least four eligible predictors. Current support is one CSV (up to
-100 MiB) and a binary target, not multiclass or arbitrary raw documents. Prevent
-leakage by excluding information unavailable at prediction time. The tool cannot
-infer the clinical timing of every column for you.
+Provide at least four eligible predictors. Current support is one CSV and a binary
+target: **5 MiB for browser uploads, 100 MiB for local-file inspection/registration**.
+Multiclass is not supported here. With imputation consent, the ML pipeline fits
+continuous means and categorical/binary modes on training data only, separately
+inside each training CV fold when applicable. Upload/registration does not fill gaps.
+Missing targets and entirely empty predictors are rejected. See the
+[input guide](examples/research-inputs/README.md#source-preservation-and-dataset-requirements)
+for automatic type-detection limits and categorical encoding.
+
+The browser has no exclusion/type editor: prepare an upload copy without unwanted
+columns, or register JSON with explicit exclusions/types. Prevent leakage by
+excluding information unavailable at prediction time. The tool cannot infer the
+clinical timing of every column for you.
 
 For a new corpus, use the included OKF layout as a structural example: a root
 `index.md`, domain directories and Markdown documents. Replace invented content
@@ -116,7 +140,8 @@ silently switched. Re-register when the files or target semantics change.
 | OKF only | `proposal`, `okf` | Research plan; no measured model performance |
 | Neither | `proposal`, `llm_only` | Research plan based on unverified model knowledge |
 
-Use `data_mode` and `knowledge_mode` in the JSON. Always give a target description.
+Use `data_mode` and `knowledge_mode` in the JSON. A target description is required
+for proposal mode and optional for dataset mode. The new-CSV form has no proposal-mode switch.
 A missing file is an input error, not consent to change modes. See the
 [detailed input walkthrough](examples/research-inputs/README.md#choose-the-input-mode).
 
@@ -150,7 +175,8 @@ paths. Historical runs and checkpoints are not rewritten.
 ## HeartFailure installation acceptance
 
 The clone includes the supplied CSV and complete OKF in `examples/heart-failure/`.
-Prepare a separate, explicitly filtered demonstration:
+Docker startup prepares and registers the complete-case example automatically.
+The following separate preparation is for the optional native tutorial:
 
 ```sh
 python scripts/prepare_heart_failure_demo.py \
@@ -170,7 +196,8 @@ selection can bias the sample, and the supplied endpoint's prediction horizon an
 ascertainment timing require review. Do not claim prospective performance.
 
 In an independent checkout, configure its own `.env`. Adjacent Motoro files and
-exported operational settings are not fallback sources. Provide model credentials,
-two separate database URLs and Redis URL. Use separate database instances/volumes
-and output/cache directories for acceptance. Follow README steps 2–3 and 7; the
-`memstara.local_setup` commands use the ports from this file.
+exported operational settings are not fallback sources. Docker startup provisions
+database settings automatically; native execution requires explicit database/Redis
+settings. Use separate instances/volumes and output/cache directories for acceptance.
+Follow [README steps 2–3](README.md#2-configure-env) for Docker setup; native
+`memstara.local_setup` commands use the ports from the selected project settings.
