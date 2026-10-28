@@ -68,6 +68,7 @@ export type EvaluationPlan = { engine: string; seed: number; test_size: number; 
 export type SkillInfo = { evaluation?: Partial<EvaluationPlan>; id: string; title: string; stage: PlaybookStage; description: string; content: string; hash: string; source: string };
 export type RunRequest = {
   research_input_id?: string;
+  model_connection_id?: string;
   knowledge_mode?: 'okf'|'llm_only';
   data_mode?: 'dataset'|'proposal';
   research_objective?: string;
@@ -99,6 +100,7 @@ export type RunRequest = {
 
 /** New drafts have no disease-specific target. Select a research contract before execution. */
 export const DEFAULT_REQUEST: RunRequest = {
+  model_connection_id: '',
   baseline_columns: [],
   question: "",
   evaluation: { engine: "xgboost", seed: 42, test_size: .25, folds: 0, replicates: 1, search_trials: 1 },

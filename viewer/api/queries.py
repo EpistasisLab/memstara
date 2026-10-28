@@ -171,7 +171,8 @@ SELECT a.name,
        coalesce(sum((r.token_usage->>'prompt_tokens')::bigint), 0)   AS prompt_tokens,
        coalesce(sum((r.token_usage->>'completion_tokens')::bigint), 0) AS completion_tokens,
        coalesce(sum(r.cost_estimate), 0)                             AS cost,
-       avg((r.pattern_overrides->'reason_act_state'->>'iterations')::float) AS avg_iterations,
+       avg(coalesce(r.run_metadata->'reason_act_state'->>'iterations',
+                    r.pattern_overrides->'reason_act_state'->>'iterations')::float) AS avg_iterations,
        max(r.created_at)                                             AS last_run_at
 FROM agents a
 LEFT JOIN agent_runs r ON r.agent_id = a.id

@@ -1,0 +1,42 @@
+.experiment-model-settings{min-width:0;margin-bottom:1.5rem;border:1px solid rgb(var(--line));border-radius:16px;background:rgb(var(--panel));padding:1.25rem;color:rgb(var(--ink));overflow-wrap:anywhere}
+.experiment-model-heading{display:flex;align-items:center;gap:.75rem;margin-bottom:1.1rem}
+.experiment-model-heading h4{margin:0;font-size:1rem;font-weight:700}
+.experiment-model-heading p{margin:.25rem 0 0;font-size:.875rem;color:rgb(var(--ink-soft));line-height:1.5}
+.experiment-model-icon{display:grid;place-items:center;flex-shrink:0;width:42px;height:42px;border-radius:12px;background:rgb(var(--accent)/.09);color:rgb(var(--accent))}
+.experiment-model-modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;margin:0;border:0;padding:0}
+.experiment-model-modes>label{display:flex;align-items:center;gap:.65rem;min-width:0;cursor:pointer;border:1px solid rgb(var(--line));border-radius:10px;padding:.85rem;background:rgb(var(--panel))}
+.experiment-model-modes>label.is-selected{border-color:rgb(var(--accent));background:rgb(var(--accent)/.05);box-shadow:0 0 0 1px rgb(var(--accent)/.12)}
+.experiment-model-modes input{flex-shrink:0;width:16px;height:16px;accent-color:rgb(var(--accent))}
+.experiment-model-modes span{flex:1;min-width:0}.experiment-model-modes strong{display:block;font-size:.875rem}.experiment-model-modes small{display:block;margin-top:.25rem;color:rgb(var(--ink-soft));font-size:.75rem;line-height:1.5}.experiment-model-modes svg{flex-shrink:0;color:rgb(var(--accent))}
+.experiment-model-current{padding:.8rem 0 0;font-size:.8rem;color:rgb(var(--ink-soft));line-height:1.6}.experiment-model-current p{margin:0}
+.experiment-model-form{display:grid;gap:1rem;margin-top:1.25rem;border-top:1px solid rgb(var(--line));padding-top:1.25rem}
+.experiment-model-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
+.experiment-model-form label{display:block;min-width:0;font-size:.8rem;font-weight:650;line-height:1.5}
+.experiment-model-form input,.experiment-model-form select{display:block;width:100%;min-width:0;box-sizing:border-box;margin-top:.4rem;min-height:44px;border:1px solid rgb(var(--line));border-radius:8px;padding:.65rem .75rem;background:rgb(var(--panel));color:rgb(var(--ink));font-size:.875rem;font-weight:400}
+.experiment-model-form input:focus-visible,.experiment-model-form select:focus-visible{outline:2px solid rgb(var(--accent));outline-offset:2px}
+.experiment-model-form small{display:block;margin-top:.4rem;font-size:.75rem;font-weight:400;line-height:1.5;color:rgb(var(--ink-soft))}
+.experiment-model-select{position:relative}.experiment-model-select select{appearance:none;padding-right:2.25rem}.experiment-model-select svg{position:absolute;right:.75rem;top:50%;transform:translateY(-50%);pointer-events:none}
+.experiment-model-secret{display:flex;align-items:center;position:relative}.experiment-model-secret input{padding-right:3rem}.experiment-model-secret button{display:grid;place-items:center;position:absolute;right:2px;bottom:2px;width:42px;height:40px;border:0;background:transparent;color:rgb(var(--ink-soft));border-radius:6px}
+.experiment-model-optional{font-size:.75rem;font-weight:400;color:rgb(var(--ink-soft));margin-left:.25rem}
+.experiment-model-check{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:.25rem}.experiment-model-check button{display:flex;align-items:center;justify-content:center;gap:.5rem;min-height:44px}.experiment-model-check p{flex:1;min-width:150px;margin:0;font-size:.75rem;line-height:1.5;color:rgb(var(--ink-soft))}
+.experiment-model-ready{display:flex;align-items:flex-start;gap:.75rem;margin-top:1rem;padding:1rem;border:1px solid rgb(var(--accent)/.3);border-radius:10px;background:rgb(var(--accent)/.05)}
+.experiment-model-ready>svg{flex-shrink:0;color:rgb(var(--accent))}.experiment-model-ready>div{flex:1;min-width:0}.experiment-model-ready strong{font-size:.875rem}.experiment-model-ready p{margin:.3rem 0;font-size:.875rem}.experiment-model-ready small{font-size:.75rem;color:rgb(var(--ink-soft))}.experiment-model-ready button{font-size:.8rem;text-decoration:underline;text-underline-offset:3px;border:0;background:transparent;color:rgb(var(--accent));min-height:32px}
+.experiment-model-error{margin:0;padding:.75rem;border:1px solid #f59e0b;border-radius:8px;background:#fffbeb;color:#92400e;font-size:.8rem;line-height:1.5}
+@media(max-width:600px){.experiment-model-settings{padding:1rem}.experiment-model-modes,.experiment-model-grid{grid-template-columns:minmax(0,1fr)}.experiment-model-check{align-items:stretch;flex-direction:column;gap:.5rem}.experiment-model-check button{width:100%}.experiment-model-ready{flex-wrap:wrap}}
+/* Keep the modal's generic form rules from changing this compact layout. */
+.experiment-model-settings .experiment-model-heading{padding:0;border:0;margin:0 0 1rem}
+.experiment-model-settings .experiment-model-modes>label{display:flex;flex-direction:row;align-items:center;margin:0;gap:.65rem}
+.experiment-model-settings .experiment-model-modes input{margin:0;width:16px;height:16px;min-height:0}
+.experiment-model-settings .experiment-model-form label{display:block;margin:0}
+.experiment-model-settings .experiment-model-check button{padding:.65rem 1rem;border:1px solid transparent;border-radius:9px;font-size:.875rem;font-weight:600}
+
+.experiment-model-listing{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}
+.experiment-model-listing p,.experiment-model-notice,.experiment-model-advanced-body>p{margin:0;font-size:.75rem;line-height:1.6;color:rgb(var(--ink-soft))}
+.experiment-model-listing p{flex:1;min-width:140px}
+.experiment-model-listing button,.experiment-model-notice button,.experiment-model-advanced-body>button{border:1px solid rgb(var(--line));border-radius:8px;padding:.55rem .75rem;background:rgb(var(--panel));color:rgb(var(--ink));font-size:.8rem;min-height:40px}
+.experiment-model-form button:disabled{opacity:.5;cursor:not-allowed}
+.experiment-model-advanced{border:1px solid rgb(var(--line));border-radius:10px;min-width:0}
+.experiment-model-advanced summary{cursor:pointer;padding:.85rem;font-size:.85rem;font-weight:650}
+.experiment-model-advanced summary span{display:block;margin:.25rem 0 0 1rem;color:rgb(var(--ink-soft));font-size:.75rem;font-weight:400}
+.experiment-model-advanced-body{display:grid;gap:1rem;padding:0 .85rem .85rem}
+.experiment-model-advanced-body>button{justify-self:start}

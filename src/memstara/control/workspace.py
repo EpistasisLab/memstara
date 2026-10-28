@@ -234,6 +234,15 @@ class PipelineWorkspace:
             raise ValueError('Proposal mode requires a research objective')
         from memstara.stage_models import validate_profiles
         # Design persistence validates supplied identities but does not require a live deployment.
+        connection_id = config.get('model_connection_id', '')
+        if not isinstance(connection_id, str):
+            raise ValueError('Invalid model connection ID')
+        if connection_id:
+            from memstara.model_connections import load, profiles
+            connection_profiles = profiles(load(connection_id)['connection'])
+            if config.get('stage_models') and config['stage_models'] != connection_profiles:
+                raise ValueError('Model settings differ from the checked connection')
+            config['stage_models'] = connection_profiles
         if config.get('stage_models') != {}:
             config['stage_models'] = validate_profiles(config['stage_models'])
         from memstara.control.request import _MAX_WAVES

@@ -266,11 +266,13 @@ class _Runs:
             if self.pipeline_id:
                 argv = [*argv, "--pipeline-id", self.pipeline_id]
             log = (run_dir / "control.log").open("wb")
+            from memstara.model_connections import execution_environment
+            connection_id = argv[argv.index('--model-connection-id') + 1] if '--model-connection-id' in argv else ''
             popen = subprocess.Popen(
                 [sys.executable, "-u", "-m", "memstara.pipeline.board",
                  "--run-tag", run_tag, "--run-dir", str(run_dir), *argv],
                 cwd=REPO_ROOT,
-                env={**os.environ, "MEMSTARA_CONFIG_MODE": "environment"},
+                env=execution_environment(connection_id),
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL,
@@ -320,11 +322,13 @@ class _Runs:
         if saved.get("run_tag") != run_tag or (saved.get("pipeline_id") or None) != self.pipeline_id:
             raise RuntimeError("Checkpoint ownership does not match this pipeline")
         (root / "pause.request").touch()
+        from memstara.model_connections import execution_environment
+        child_env = execution_environment(saved.get('model_connection_id', ''))
         with (root / "control.log").open("ab") as log:
             popen = subprocess.Popen(
                 [sys.executable, "-u", "-m", "memstara.pipeline.board", "--resume",
                  "--run-tag", run_tag, "--run-dir", str(root)], cwd=REPO_ROOT,
-                env={**os.environ, "MEMSTARA_CONFIG_MODE": "environment"},
+                env=child_env,
                 stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
         self._live = {k: v for k, v in record.items()
                       if k not in ("exit_code", "ended", "recoverable", "recovery_blocked")}
@@ -549,6 +553,28 @@ class Handler(BaseHTTPRequestHandler):
                              "note": "Motoro owns execution cost estimates. Local rates are not applied."})
             return
 
+        if path == "/control/model-catalog":
+            from memstara.model_catalog import catalog
+            try:
+                self._send(200, catalog())
+            except Exception:
+                self._send(503, {"error": "Motoro model options are unavailable. Please retry."})
+            return
+
+        if path == "/control/model-capabilities":
+            from memstara.model_catalog import capabilities
+            query = parse_qs(urlsplit(self.path).query)
+            try:
+                provider = query.get('provider', [''])[0]
+                model = query.get('model', [''])[0]
+                from memstara.model_connections import PROVIDERS
+                if provider not in PROVIDERS or len(model) > 200:
+                    raise ValueError('Choose a provider and model')
+                self._send(200, {"capabilities": capabilities(provider, model), "source": "motoro"})
+            except ValueError as exc:
+                self._send(400, {"error": str(exc)})
+            return
+
         if path == "/control/research-inputs":
             from memstara.research_inputs import list_inputs
             from memstara.corpus_skills import corpus_profile
@@ -706,6 +732,26 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/control/pricing":
             self._send(410, {"error": "Manual execution pricing is retired. Motoro owns cost estimation."})
+            return
+
+        if path == "/control/model-connections/models":
+            from memstara.model_catalog import list_provider_models
+            try:
+                self._send(200, list_provider_models(body))
+            except ValueError as exc:
+                self._send(400, {"error": str(exc)})
+            except Exception:
+                self._send(503, {"error": "Model list unavailable. You can still enter a model ID."})
+            return
+
+        if path == "/control/model-connections/check":
+            from memstara.model_connections import check_and_save
+            try:
+                self._send(201, {"connection": check_and_save(body)})
+            except ValueError as exc:
+                self._send(400, {"error": str(exc)})
+            except Exception:
+                self._send(503, {"error": "Model connection could not be saved. Please try again."})
             return
 
         if path == "/control/research-inputs/check-csv":
@@ -953,7 +999,12 @@ class Handler(BaseHTTPRequestHandler):
         # operational readiness after research-specific input validation; registered
         # inputs supersede unused legacy dataset/corpus defaults.
         from memstara.operational import check
-        effective = dict(os.environ)
+        from memstara.model_connections import execution_environment
+        try:
+            effective = execution_environment(body.get('model_connection_id', ''))
+        except ValueError as exc:
+            self._send(422, {'error': str(exc)})
+            return
         if research or body.get('data_mode') == 'proposal':
             effective.pop('MEMSTARA_DATASET_PATH', None)
         if research or body.get('knowledge_mode') == 'llm_only':

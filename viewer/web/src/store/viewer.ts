@@ -3,6 +3,7 @@ import { useContext } from 'react';
 import { SnapshotScope } from '../lib/SnapshotScope';
 import { create } from "zustand";
 import type { Snapshot } from "../types";
+import { useOutputNavigation } from './outputNavigation';
 
 const SELECTION_KEY = "memstara-selection-v1";
 function restoredSelection(): string | null | undefined {
@@ -59,7 +60,7 @@ interface ViewerState {
    *  nobody knows to switch on may as well not exist. It is closable because three
    *  columns plus the main area is a lot of width to spend on a laptop. */
 
-  setView: (v: ViewId) => void;
+  setView: (v: ViewId, options?: {preserveOutputSelection?: boolean}) => void;
   toggleRail: () => void;
   setRunTag: (t: string | null) => void;
   selectTask: (id: number | null) => void;
@@ -94,7 +95,11 @@ export const useViewer = create<ViewerState>((set, get) => ({
   fetchedAt: null,
   railCollapsed: false,
 
-  setView: (view) => {
+  setView: (view, options) => {
+    // General navigation opens the tile list. Only explicit related-detail links
+    // keep the selected Pipeline / Replicate across output views.
+    if (['results', 'report', 'agents'].includes(view) && !options?.preserveOutputSelection)
+      useOutputNavigation.getState().back();
     try { localStorage.setItem("memstara-workspace-v1", view === "clinician" ? "clinician" : "research"); } catch { /* Session still works. */ }
     set({ view });
   },

@@ -33,7 +33,7 @@ from typing import Any
 #: pulls in asyncpg, litellm and motoro. `tests/test_control_request.py` reads the
 #: real `add_argument` line out of the source and compares, so the copy cannot drift
 #: without a test failing.
-PROVIDERS = ("anthropic", "azure_foundry", "openai")
+PROVIDERS = ("anthropic", "azure_foundry", "openai", "openrouter", "local", "bedrock")
 
 #: A column name. Not a whitelist of real columns — the control service does not open
 #: the cohort file, and it must not: that is the one place patient data lives. This
@@ -104,6 +104,7 @@ DEFAULTS: dict[str, Any] = {
     "provider": "",
     "model": "",
     "stage_models": {},
+    "model_connection_id": "",
     "controlled_comparison": {},
     # One key per stage rather than one `playbooks` object, so the allow-list stays flat
     # and an unknown *stage* is caught by the same check that catches an unknown field
@@ -216,7 +217,14 @@ def build_argv(
         raise ValueError(f"provider must be one of {', '.join(PROVIDERS)}")
     if requested_model and not _MODEL.fullmatch(requested_model):
         raise ValueError("model is not a model identifier")
-    provider, model = configured_llm()
+    connection_id = _text(body, 'model_connection_id')
+    connection = None
+    if connection_id:
+        from memstara.model_connections import load
+        connection = load(connection_id)['connection']
+        provider, model = connection['provider'], connection['model']
+    else:
+        provider, model = configured_llm()
 
     continuous = body.get("continuous", False)
     if not isinstance(continuous, bool):
@@ -327,7 +335,15 @@ def build_argv(
     if objective:
         argv += ['--research-objective', objective]
     from memstara.stage_models import resolve_run_profiles
-    stage_models = resolve_run_profiles(body.get("stage_models"))
+    if connection is not None:
+        from memstara.model_connections import profiles
+        stage_models = profiles(connection)
+        supplied = body.get('stage_models')
+        if supplied and supplied != stage_models:
+            raise ValueError('Model settings differ from the checked connection')
+        argv += ['--model-connection-id', connection_id]
+    else:
+        stage_models = resolve_run_profiles(body.get("stage_models"))
     if stage_models:
         import json
         from memstara.stage_models import validate_profiles

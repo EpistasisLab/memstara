@@ -4,7 +4,7 @@ import type { RunRequest } from '../store/control';
 
 export type NewPipelineConfiguration = Omit<RunRequest, 'provider' | 'model' | 'stage_models'>;
 
-/** Only research settings enter creation; model assignments are not serialized. */
+/** Persist the explicitly checked connection ID, never keys or stale model profiles. */
 export function newPipelineRequest(configuration: RunRequest): NewPipelineConfiguration {
   const research = Object.fromEntries(Object.entries(configuration)
     .filter(([key]) => !['provider', 'model', 'stage_models'].includes(key)));
@@ -13,7 +13,7 @@ export function newPipelineRequest(configuration: RunRequest): NewPipelineConfig
 
 /** Editor placeholders are separate from the model-free creation request. */
 export function newPipelineConfiguration(configuration: RunRequest): RunRequest {
-  const draft = {...newPipelineRequest(configuration), provider: '', model: ''};
+  const draft = {...newPipelineRequest(configuration), provider: '', model: '', model_connection_id: ''};
   if (['hypothesis_research','comorbidity','drug-class-effect','shared-anatomy',
     'shared-pharmacology','symptom-bridge','taxonomic','treatment-toxicity'].includes(draft.playbook_hypothesis)) {
     draft.playbook_hypothesis = 'hypothesis_general';

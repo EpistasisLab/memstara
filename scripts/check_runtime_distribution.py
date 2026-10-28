@@ -50,7 +50,7 @@ from importlib.metadata import version
 import memstara
 assert Path(memstara.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())
 assert memstara.__version__ == version('memstara')
-assert version('motoro') == '0.10.0'
+assert version('motoro') == '0.13.0'
 modules = json.loads(sys.argv[1])
 for name in modules:
     importlib.import_module(name)

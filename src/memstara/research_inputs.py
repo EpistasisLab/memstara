@@ -543,7 +543,9 @@ def instructions(profile):
 def validate_skills(books, profile=None, *, knowledge_mode='okf'):
     """Validate the selected skills against the actual, explicitly bound corpus."""
     from memstara.corpus_skills import validate_hypotheses
-    from memstara.control.catalog import ensure_hypothesis_enabled, ensure_explanation_enabled, ensure_interpretation_enabled
+    from memstara.control.catalog import (
+        ensure_hypothesis_enabled, ensure_explanation_enabled, ensure_interpretation_enabled,
+    )
     ensure_hypothesis_enabled(books.get('hypothesis', []))
     ensure_explanation_enabled(books.get('report', []))
     ensure_interpretation_enabled(books.get('interpreter', []))

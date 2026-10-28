@@ -29,8 +29,10 @@ SPECIALIST_SKILLS = {
     'shared-lime': ('LIME-Interpretation.md', 'interpreter', 'LIME Interpretation'),
     'shared-addiction': ('Addiction-Expert-Explanation.md', 'report', 'Addiction Expert Explanation'),
     'shared-hiv': ('HIV-Expert-Explanation.md', 'report', 'HIV Expert Explanation'),
-    'shared-heart-failure-cardiovascular': ('Heart-Failure-Cardiovascular-Expert-Explanation.md', 'report', 'Heart Failure — Cardiovascular Explanation'),
-    'shared-heart-failure-comorbidity': ('Heart-Failure-Comorbidity-Expert-Explanation.md', 'report', 'Heart Failure — Comorbidities and Social Context Explanation'),
+    'shared-heart-failure-cardiovascular': ('Heart-Failure-Cardiovascular-Expert-Explanation.md',
+     'report', 'Heart Failure — Cardiovascular Explanation'),
+    'shared-heart-failure-comorbidity': ('Heart-Failure-Comorbidity-Expert-Explanation.md',
+     'report', 'Heart Failure — Comorbidities and Social Context Explanation'),
 }
 
 

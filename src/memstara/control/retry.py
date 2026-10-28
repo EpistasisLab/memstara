@@ -39,6 +39,7 @@ def configuration_for_retry(record, configuration, pipeline_id):
     if configuration.get('research_input_id', '') != saved.get('research_input_id', ''):
         raise ValueError('Research source changed; use a separate new execution')
     result = copy.deepcopy(configuration)
+    result['model_connection_id'] = saved.get('model_connection_id', '')
     # Preserve original experimental settings; new attempt gets new artifacts and
     # a separate attempt identity, not a pretend continuation of trained models.
     for key in tuple(result):
@@ -46,7 +47,7 @@ def configuration_for_retry(record, configuration, pipeline_id):
             result[key] = copy.deepcopy(saved[key])
     # CLI snapshots encode structured flags as JSON strings; restore HTTP types.
     defaults: dict[str, Any] = {'evaluation': {}, 'ml_overrides': {},
-                                'controlled_comparison': {}, 'baseline_columns': []}
+                                'controlled_comparison': {}, 'baseline_columns': [], 'stage_models': {}}
     for key, default in defaults.items():
         value = result.get(key, default)
         if isinstance(value, str):

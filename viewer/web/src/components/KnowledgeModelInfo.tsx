@@ -1,8 +1,10 @@
-import {useEffect, useState} from 'react';
+import {useContext, useEffect, useState} from 'react';
+import {ExperimentModelContext} from './ExperimentModelSettings';
 import {stageModelRows, type ModelConfiguration} from '../lib/stageModels';
 
 /** Display configured model names only; never expose connection URLs or credentials. */
 export default function KnowledgeModelInfo() {
+  const selectedModel = useContext(ExperimentModelContext);
   const [label, setLabel] = useState('Loading model…');
   useEffect(() => {
     const controller = new AbortController();
@@ -26,5 +28,5 @@ export default function KnowledgeModelInfo() {
     void load();
     return () => { active = false; clearTimeout(timeout); controller.abort(); };
   }, []);
-  return <span className="research-llm-model" role="status" aria-label="Configured language model">{label}</span>;
+  return <span className="research-llm-model" role="status" aria-label="Configured language model">{selectedModel ?? label}</span>;
 }

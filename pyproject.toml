@@ -33,7 +33,7 @@ dependencies = [
     # same library, and a resolver that ever drops that edge would break the matcher
     # for a reason with no visible connection to it.
     "pydantic",
-    # Match Motoro v0.9.0's supported SDK range (>=1.29.0,<2.0.0). mcp 2.0.0
+    # Match Motoro v0.13.0's supported SDK range (>=1.29.0,<2.0.0). mcp 2.0.0
     # renames FastMCP and changes ClientSession's shutdown so a connected client hangs
     # on exit. Declaring it unpinned here would let a resolver walk this environment
     # straight into that, past the cap core wrote to prevent it.
@@ -49,7 +49,7 @@ pilot = ["shap==0.52.0", "lime==0.2.0.1"]
 # Match the runtime used for the four-mode Haiku acceptance. A public clone can
 # install this extra without a sibling checkout; runtime-dependent CI must use it.
 runtime = [
-    "motoro @ git+https://github.com/EpistasisLab/motoro.git@bd0b461c3b2eaef1b1f5c54cc18027647d01cb58",
+    "motoro @ git+https://github.com/EpistasisLab/motoro.git@da2847c0321dd90a6f885f82399c2d579a7e08ee",
     "litellm==1.97.0",
     "boto3>=1.35,<2",  # Bedrock SigV4 and bearer-token request support.
     "torch==2.13.0",
