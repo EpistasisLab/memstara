@@ -109,10 +109,12 @@ def test_launch_rejects_disallowed_defaults_before_creating_run(monkeypatch):
 def test_skill_draft_cannot_use_disallowed_provider(monkeypatch):
     from memstara import operational
     from memstara.control import skill_drafts
-    start = Mock()
-    monkeypatch.setattr(skill_drafts, 'start', start)
-    monkeypatch.setattr(operational, 'agent_profile', lambda _: {'provider': 'openai'})
-    request = handler('/control/skill-drafts', {'stage': 'hypothesis'})
+    worker = Mock()
+    monkeypatch.setattr(skill_drafts, 'models', lambda _: {'model_connection_id': ''})
+    monkeypatch.setattr(skill_drafts.threading, 'Thread', worker)
+    monkeypatch.setattr(operational, 'agent_profile', lambda *args: {'provider': 'openai', 'model': 'test'})
+    request = handler('/control/skill-drafts', {'stage': 'hypothesis', 'model': 'test',
+        'domain': 'General', 'population': 'Adults', 'features': 'Age', 'constraints': 'None'})
     request.do_POST()
-    assert request._send.call_args.args[0] == 400
-    start.assert_not_called()
+    assert request._send.call_args.args == (400, {'error': model_policy.MESSAGE})
+    worker.assert_not_called()

@@ -605,9 +605,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/control/skill-drafts/models":
             from memstara.control.skill_drafts import models
             try:
-                self._send(200, models())
+                connection_id = parse_qs(urlsplit(self.path).query).get('model_connection_id', [''])[0]
+                self._send(200, models(connection_id))
             except ValueError:
-                self._send(503, {"error": "Configure the model connection before generating a skill."})
+                self._send(400, {"error": "Set up or select a valid model before generating a skill."})
             return
         if path.startswith("/control/skill-drafts/"):
             from memstara.control.skill_drafts import get
@@ -813,9 +814,6 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/control/skill-drafts":
             from memstara.control.skill_drafts import start
             try:
-                from memstara.control.model_policy import require_provider
-                from memstara.operational import agent_profile
-                require_provider(agent_profile(body.get('stage', 'hypothesis'))['provider'])
                 self._send(202, start(body))
             except ValueError as exc:
                 self._send(400, {"error": str(exc)})

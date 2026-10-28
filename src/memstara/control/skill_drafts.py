@@ -19,9 +19,19 @@ def validate(body: dict) -> dict:
     stage = body.get('stage', 'hypothesis')
     if stage == 'explanation':
         stage = 'report'
-    if not isinstance(stage, str) or stage not in ('hypothesis', 'data', 'ml', 'interpreter', 'report'):
-        raise ValueError('Choose a supported agent role.')
+    if stage in ('interpreter', 'report'):
+        raise ValueError('Interpretation and Explanation use the supplied skills from the library.')
+    if not isinstance(stage, str) or stage not in ('hypothesis', 'data', 'ml'):
+        raise ValueError('Choose a Hypothesis, Data or ML agent role.')
     data = {'stage': stage}
+    from memstara.skill_bases import CHOICES, validate as validate_base
+    if stage in CHOICES:
+        data['base_skill'] = validate_base(stage, body.get('base_skill', CHOICES[stage][0]))
+    elif body.get('base_skill'):
+        raise ValueError('Hypothesis skills do not select a Data or ML policy.')
+    if body.get('model_connection_id'):
+        from memstara.model_connections import identifier
+        data['model_connection_id'] = identifier(body['model_connection_id'])
     for field in FIELDS:
         value = body.get(field, '')
         if not isinstance(value, str) or not value.strip() or len(value) > 4000 or '\0' in value:
@@ -34,15 +44,26 @@ def validate(body: dict) -> dict:
     return data
 
 
-def models() -> dict:
+def models(connection_id='') -> dict:
     from memstara.stage_models import deployment_profiles, public_profiles
-    return {'agents': public_profiles(deployment_profiles())}
+    from memstara import model_connections
+    if not connection_id:
+        current = model_connections.current_default()
+        connection_id = current['id'] if current else ''
+    profiles = (model_connections.profiles(model_connections.load(connection_id)['connection'])
+                if connection_id else deployment_profiles())
+    return {'agents': public_profiles(profiles), 'model_connection_id': connection_id}
 
 
 def start(body: dict) -> dict:
     data = validate(body)
     from memstara.operational import agent_profile
-    profile = agent_profile(data['stage'])
+    from memstara.model_connections import execution_environment
+    from memstara.control.model_policy import require_provider
+    selected = models(data.get('model_connection_id', ''))
+    data['model_connection_id'] = selected['model_connection_id']
+    profile = agent_profile(data['stage'], execution_environment(data['model_connection_id']))
+    require_provider(profile['provider'])
     if data['model'] != profile['model']:
         raise ValueError('Skill draft model differs from the selected agent configuration; refresh settings')
     data['provider'] = profile['provider']
@@ -69,11 +90,14 @@ def get(key: str) -> dict | None:
 
 def _generate(key: str, data: dict) -> None:
     try:
+        from memstara.model_connections import execution_environment
         # A separate event loop/process avoids sharing Motoro DB pools with the control server.
         result = subprocess.run(
             [sys.executable, '-m', 'memstara.control.skill_draft_worker'],
             input=json.dumps(data), capture_output=True, text=True, timeout=150,
             cwd=Path(__file__).resolve().parents[3],
+            env=execution_environment(
+                data.get('model_connection_id', '')),
         )
         if result.returncode:
             raise RuntimeError('Generation failed. Check the selected deployment and model connection, then retry.')

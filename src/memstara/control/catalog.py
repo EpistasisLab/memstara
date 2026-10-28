@@ -220,6 +220,10 @@ def register(body: dict) -> dict:
         raise ValueError('Choose a Hypothesis, ML, Interpreter or Explanation agent skill')
     if stage in FINAL_STAGE_SKILLS:
         raise ValueError('Interpretation and Explanation use the supplied skills from the library.')
+    base_skill = body.get('base_skill')
+    if base_skill is not None:
+        from memstara.skill_bases import validate as validate_base
+        validate_base(stage, base_skill)
     if not isinstance(name, str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,60}', name):
         raise ValueError('Use a name of 1–60 letters, numbers, hyphens or underscores')
     if not isinstance(content, str) or not content.strip() or len(content.encode()) > 48_000:
@@ -238,6 +242,9 @@ def register(body: dict) -> dict:
     if evaluation is not None:
         item['evaluation'] = evaluation
         item['hash'] = hashlib.sha256((content.strip() + json.dumps(evaluation, sort_keys=True)).encode()).hexdigest()
+    if base_skill is not None:
+        item['base_skill'] = base_skill
+        item['hash'] = hashlib.sha256((item['hash'] + ':' + base_skill).encode()).hexdigest()
     item['id'] = f'user-{stage}-{name}-{item["hash"][:12]}'
     directory = user_dir()
     directory.mkdir(parents=True, exist_ok=True)

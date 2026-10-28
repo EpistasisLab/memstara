@@ -25,7 +25,9 @@ def for_dataset(snapshot, path):
     handoff = path.with_suffix('.comparison.json')
     record = json.loads(handoff.read_text()) if handoff.exists() else {}
     names = task_books(snapshot, record.get('trial', 0)).get('ml', [])
-    primary = next((MODEL_SKILLS[name] for name in names if name in MODEL_SKILLS), None)
+    from memstara.skill_bases import base_for
+    bases = [base_for(snapshot, name) for name in names]
+    primary = next((MODEL_SKILLS[name] for name in bases if name in MODEL_SKILLS), None)
     if primary and snapshot.get('combination_plan') and 'trial' not in record:
         raise ValueError('Selected ML skill requires the saved task trial identity')
     return {**snapshot, '_selected_ml_primary': primary, '_default_ml': names == [DEFAULT_SKILL]}
@@ -48,7 +50,9 @@ def selected_model(snapshot):
     snapshot = snapshot or {}
     selected = snapshot.get('_selected_ml_primary')
     if selected is None:
-        from_books = [MODEL_SKILLS[name] for name in snapshot.get('books', {}).get('ml', [])
+        from memstara.skill_bases import base_for
+        bases = [base_for(snapshot, name) for name in snapshot.get('books', {}).get('ml', [])]
+        from_books = [MODEL_SKILLS[name] for name in bases
                       if name in MODEL_SKILLS]
         selected = from_books[0] if len(from_books) == 1 else None
     if selected not in MODELS:

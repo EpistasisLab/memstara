@@ -94,10 +94,15 @@ async def generate(body: dict) -> dict:
         raise ValueError('Skill draft model changed; refresh the agent configuration')
     from motoro.runner import create_agent, create_run, execute_run
     from motoro.schemas.agent import ModelConfig
+    instructions = system_prompt(data['stage'])
+    if data.get('base_skill'):
+        instructions += (' The user selected the executable base policy ' + data['base_skill']
+                         + '. Preserve that split method or ML algorithm in these instructions; '
+                         'do not substitute another policy.')
     agent = await create_agent(
         name=f"memstara-{data['stage']}-skill-draft-{uuid.uuid4().hex}",
         goal=f"Generate a reviewable {ROLE_NAMES[data['stage']]} Agent Markdown skill.",
-        system_prompt=system_prompt(data['stage']),
+        system_prompt=instructions,
         model_config=ModelConfig(**profile),
         pattern_config={'execution_pattern': 'reason_act'},
         max_run_duration_seconds=120,
@@ -109,6 +114,7 @@ async def generate(body: dict) -> dict:
     if result.error or result.status != 'completed':
         raise RuntimeError('Skill generation failed')
     return {'stage': data['stage'], 'content': extract(result.output or ''), 'model': data['model'],
+            **({'base_skill': data['base_skill']} if data.get('base_skill') else {}),
             'provider': profile['provider'], 'run_id': str(run.id),
             'cost_estimate_usd': float(result.total_cost or 0)}
 

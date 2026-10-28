@@ -49,8 +49,7 @@ The path must be accessible to the **control service**, not just your browser.
 | `user-inputs/my-study/okf` in the checkout | `/app/user-inputs/my-study/okf` |
 
 `MEMSTARA_INPUTS_DIR` chooses the host folder mounted read-only at
-`/app/user-inputs`. A host path such as `/Users/.../okf` is not automatically
-available inside Docker. For a native control service, use its accessible absolute
+`/app/user-inputs`. A folder on your computer is not automatically available inside Docker. For a native control service, use its accessible absolute
 filesystem path. **LLM only** needs no OKF folder.
 
 ## Register the supplied synthetic example

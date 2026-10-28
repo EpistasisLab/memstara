@@ -13,16 +13,18 @@ try {
   let catalog=roles.map(stage=>({id:fixtureSkillId(stage),stage,title:stage,content:'# Default',hash:stage,source:'Default'}));
   await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Offline fixture'}}));
   await page.route('**/control/**',async r=>{
-   const path=new URL(r.request().url()).pathname;
+   const url=new URL(r.request().url());const path=url.pathname;
+   if(path==='/control/model-defaults')return r.fulfill({json:{profiles:[],current_allowed:true,setup_required:false,source:'saved_connection',connection:{id:'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',provider:'azure_foundry',model:'selected-model',api_base:'https://example.services.ai.azure.com/anthropic'}}});
   if(path==='/control/research-inputs')return r.fulfill({json:preparedInputs});
    if(path==='/control/pipelines')return r.fulfill({json:{pipelines:[]}});
 if(path==='/control/skills')return r.fulfill({json:{skills:[]}});
    if(path==='/control/skill-drafts/models'){
+    if(mode==='All Combinations'&&url.searchParams.get('model_connection_id')!=='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')throw Error('Experiment connection not passed to model lookup');
     await new Promise(resolve=>{releaseModels=resolve;});
-    return r.fulfill({json:{agents:Object.fromEntries(['question','hypothesis','data','ml','interpretation','explanation'].map(role=>[role,{provider:'openai',model:'selected-model'}]))}});
+    return r.fulfill({json:{model_connection_id:'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',agents:Object.fromEntries(['question','hypothesis','data','ml','interpretation','explanation'].map(role=>[role,{provider:'azure_foundry',model:'selected-model'}]))}});
    }
    if(path==='/control/skill-drafts'){calls.push(r.request().postDataJSON());return r.fulfill({status:202,json:{id:String(calls.length),status:'generating'}});}
-   if(path.startsWith('/control/skill-drafts/'))return r.fulfill({json:{status:'ready',content:'# Draft',model:'selected-model',provider:'openai'}});
+   if(path.startsWith('/control/skill-drafts/'))return r.fulfill({json:{status:'ready',content:'# Draft',model:'selected-model',provider:'azure_foundry'}});
    if(path==='/control/playbooks'){
     if(r.request().method()==='GET')return r.fulfill({json:{catalog,playbooks:catalog.map(s=>s.id),stages:roles,references:[]}});
     const q=r.request().postDataJSON();saves.push(q);const skill={...q,id:'user-'+q.stage+'-'+saves.length,title:q.name,hash:'hash-'+saves.length,source:'User'};catalog.push(skill);return r.fulfill({json:skill});
@@ -60,12 +62,15 @@ if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for t
    for(const input of await assistant.locator('fieldset').first().locator('textarea').all())await input.fill('General research priorities');
    await expect(assistant.getByLabel('Generation model / deployment')).toHaveValue('selected-model');
    await expect(assistant.getByLabel('Generation model / deployment')).not.toBeEditable();
+   const policy=i===1?'data_balanced_stratified':i===2?'ml_xgboost':undefined;
+   if(policy)await assistant.getByRole('combobox',{name:i===1?'Data split for this skill':'ML algorithm for this skill'}).selectOption(policy);
    await assistant.getByRole('button',{name:'Generate skill draft',exact:true}).click();
    await expect(assistant.getByLabel('Generated Markdown skill')).toHaveValue('# Draft');
    const save=assistant.getByRole('button',{name:mode==='Selected Pipelines'?'Save and select for this pipeline':'Save and add to combinations'});
    await expect(save).toBeDisabled();await assistant.getByLabel('Generated skill name').fill('clinical-'+roles[i]);
    await assistant.getByLabel('Generated Markdown skill').fill('# Edited '+roles[i]);
    await assistant.getByRole('checkbox',{name:'I reviewed these instructions and want to use this skill.'}).check();await save.click();await expect(assistant.getByText('Saved and selected. Finish the pipeline review when ready.',{exact:true})).toBeVisible();await expect(save).toBeDisabled();
+   if(calls.at(-1).model_connection_id!=='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'||calls.at(-1).base_skill!==policy||saves.at(-1).base_skill!==policy)throw Error('Model connection or execution policy was not preserved');
    if(calls.at(-1).stage!==roles[i]||saves.at(-1).stage!==roles[i]||calls.at(-1).model!=='selected-model'||saves.at(-1).content!=='# Edited '+roles[i])throw Error(JSON.stringify({role:roles[i],call:calls.at(-1),save:saves.at(-1)}));
    if(mode==='Selected Pipelines')await expect(d.getByRole('combobox',{name:labels[i]+' skill',exact:true})).toHaveValue('user-'+roles[i]+'-'+saves.length);
    else {

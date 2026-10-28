@@ -53,6 +53,14 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         return {}
     dataset = Path(os.environ["MEMSTARA_DATASET_PATH"])
     from memstara.control.catalog import resolve
+    from memstara.skill_bases import validate as validate_base
+    bindings = dict(previous.get('skill_bindings', {})) if previous is not None else {}
+    if previous is None:
+        for stage in ('data', 'ml'):
+            for name in books.get(stage, []):
+                base = resolve(name).get('base_skill')
+                if base is not None:
+                    bindings[name] = validate_base(stage, base)
     ml_books = books.get("ml") or []
     skill_policy = resolve(ml_books[0]).get("evaluation", {}) if ml_books else {}
     # Skills supply model defaults; registered consent controls imputation.
@@ -76,7 +84,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
             from memstara.evaluation import DataQualityError
             # Check the most restrictive requested allocation before paid calls.
             for skill in books.get('data') or ['data_training_heavy']:
-                fraction = .5 if skill == 'data_balanced_stratified' else .3
+                fraction = .5 if bindings.get(skill, skill) == 'data_balanced_stratified' else .3
                 splits = evaluation_splits(frame[args.y_column], {**evaluation, 'test_size': fraction,
                                                                   'replicates': 1}, partition={})
                 if any(len(test) != math.ceil(len(frame) * fraction) for _, _, test in splits):
@@ -151,6 +159,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         "waves": args.waves,
         "continuous": getattr(args, "continuous", False),
     }
+    if bindings:
+        state['skill_bindings'] = bindings
     if getattr(args, 'research_profile', None):
         state['research_profile'] = args.research_profile
         state['missing_value_policy'] = missing_policy
@@ -182,7 +192,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         prior_profiles = json.loads(prior_path.read_text()).get("stage_models") if prior_path.exists() else None
         state["stage_models"] = snapshot_profiles(args.stage_models, prior_profiles)
     configurable_models = ('ml_logistic_regression', 'ml_xgboost', 'ml_default_logistic_regression')
-    if any(book in configurable_models for book in books.get('ml', [])):
+    if any(bindings.get(book, book) in configurable_models for book in books.get('ml', [])):
         from memstara.ml_configuration import policy
         state['ml_configuration_policy'] = policy()
     knowledge = Path(os.environ.get("AGENTIC_OKF_BUNDLE_DIR", "/nonexistent"))

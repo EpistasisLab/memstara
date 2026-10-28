@@ -12,7 +12,7 @@ const roleQuestions: Record<Stage, [string, string]> = {
  interpreter: ['Which measured results should the agent explain to clinicians?', 'Which uncertainty, limitations, and unsupported interpretations must it clearly identify?'],
  report: ['Which clinical or biological meanings and possible next research steps should it explain?', 'Which boundaries and further-validation labels should guide its explanations and suggestions?'],
 };
-type Props = { stage?: Stage; disabled?: boolean; multiple?: boolean; onSelect: (skill: SkillInfo) => void; onBusy: (busy: boolean) => void };
+type Props = { modelConnectionId?: string; stage?: Stage; disabled?: boolean; multiple?: boolean; onSelect: (skill: SkillInfo) => void; onBusy: (busy: boolean) => void };
 const questions = [
   ['domain', 'What is your clinical domain of expertise?', 'e.g. Addiction medicine'],
   ['population', 'What patient population or clinical setting do you want to study?', 'e.g. Adults receiving outpatient HIV care'],
@@ -27,12 +27,14 @@ async function request(url: string, body?: object) {
   return data;
 }
 
-export default function HypothesisSkillWizard({ stage = 'hypothesis', disabled, multiple, onSelect, onBusy }: Props) {
+export default function HypothesisSkillWizard({ stage = 'hypothesis', modelConnectionId, disabled, multiple, onSelect, onBusy }: Props) {
   const role = roleNames[stage];
   const modelListId = useId();
   const prompts = questions.map(([key, label, placeholder]) => [key, key==='features' ? roleQuestions[stage][0] : key==='constraints' ? roleQuestions[stage][1] : label, stage!=='hypothesis' && key==='features' ? 'Describe your priorities for this agent.' : placeholder]);
   const [open, setOpen] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({domain:'', population:'', features:'', constraints:''});
+  const [connectionId, setConnectionId] = useState('');
+  const [baseSkill, setBaseSkill] = useState(stage === 'data' ? 'data_training_heavy' : stage === 'ml' ? 'ml_logistic_regression' : '');
   const [model, setModel] = useState('');
   const [provider, setProvider] = useState('');
   const [models, setModels] = useState<string[]>([]);
@@ -48,9 +50,11 @@ export default function HypothesisSkillWizard({ stage = 'hypothesis', disabled, 
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   async function loadModels() {
-    setError(''); setLoadingModels(true);
+    setError(''); setLoadingModels(true); setProvider(''); setModel('');
     try {
-      const data = await request('/control/skill-drafts/models');
+      const data = await request('/control/skill-drafts/models' + (modelConnectionId ? `?model_connection_id=${encodeURIComponent(modelConnectionId)}` : ''));
+      if (!mounted.current) return;
+      setConnectionId(data.model_connection_id || '');
       const role = stage === 'interpreter' ? 'interpretation' : stage === 'report' ? 'explanation' : stage;
       const profile = data.agents?.[role];
       if (!profile?.model || !profile?.provider) throw Error('Agent model is not configured.');
@@ -62,7 +66,7 @@ export default function HypothesisSkillWizard({ stage = 'hypothesis', disabled, 
   async function generate(resume = false) {
     setBusy(true); onBusy(true); setError(''); setSaved(false);
     try {
-      const id = resume ? job : (await request('/control/skill-drafts', {stage, ...answers, model})).id;
+      const id = resume ? job : (await request('/control/skill-drafts', {stage, ...answers, model, model_connection_id: connectionId, ...(baseSkill ? {base_skill: baseSkill} : {})})).id;
       setJob(id);
       const deadline = Date.now() + 165000;
       while (mounted.current && Date.now() < deadline) {
@@ -82,7 +86,7 @@ export default function HypothesisSkillWizard({ stage = 'hypothesis', disabled, 
   async function save() {
     setBusy(true); onBusy(true); setError('');
     try {
-      const skill: SkillInfo = await request('/control/playbooks', {stage, name:name.trim(), content:draft});
+      const skill: SkillInfo = await request('/control/playbooks', {stage, name:name.trim(), content:draft, ...(baseSkill ? {base_skill: baseSkill} : {})});
       if (!skill.id || skill.stage !== stage) throw Error('The saved skill could not be verified.');
       useControl.setState(s => ({catalog:[...s.catalog.filter(c => c.id !== skill.id), skill], playbooks:[...new Set([...(s.playbooks ?? []), skill.id])]}));
       onSelect(skill); setSaved(true);
@@ -98,10 +102,13 @@ export default function HypothesisSkillWizard({ stage = 'hypothesis', disabled, 
       {loadingModels && <p role="status">Loading the model connection…</p>}
       <fieldset disabled={locked}>
         <legend>1. Describe your research perspective</legend>
+        {baseSkill && <label>{stage === 'data' ? 'Data split for this skill' : 'ML algorithm for this skill'}<select value={baseSkill} disabled={!!job} onChange={e => {setBaseSkill(e.target.value);setDraft('');setReviewed(false);setSaved(false);}}>
+          {stage === 'data' ? <><option value="data_training_heavy">70% training / 30% test</option><option value="data_balanced_stratified">50% training / 50% test</option></> : <><option value="ml_logistic_regression">Logistic regression</option><option value="ml_xgboost">XGBoost</option></>}
+        </select><span className="text-xs text-ink-muted">Saved with the skill and applied when the pipeline runs.</span></label>}
         {prompts.map(([key, label, placeholder]) => <label key={key}>{label}<textarea rows={2} maxLength={4000} value={answers[key]} placeholder={placeholder} onChange={e => setAnswers(a => ({...a, [key]:e.target.value}))}/></label>)}
         <label>Generation model / deployment<input list={modelListId} value={model} readOnly maxLength={160}/></label>
         <datalist id={modelListId}>{models.map(m => <option key={m} value={m}/>)}</datalist>
-        <p className="text-xs text-ink-muted">Connection: {provider || 'Not loaded'}. Uses this agent’s configured model. Change its assignment in .env and restart to use another model.</p>
+        <p className="text-xs text-ink-muted">Connection: {provider || 'Not loaded'}. Uses the model selected for this experiment, or your saved model defaults.</p>
       </fieldset>
       {job ? <button type="button" disabled={locked} onClick={() => void generate(true)}>Check generation status</button> : <button type="button" disabled={locked || !provider || !model.trim() || questions.some(([key]) => !answers[key].trim())} onClick={() => void generate()}>{draft ? 'Generate a new draft' : 'Generate skill draft'}</button>}
       {busy && <p role="status">Working… Your answers and existing draft are retained.</p>}

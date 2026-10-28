@@ -23,12 +23,14 @@ def request(snapshot, trial):
             'pipeline_sequence_v1', 'independent_pipelines', 'fixed_experiment_v1')
         books = ['data_manual_split' if manual else 'data_training_heavy']
     manual = books == ['data_manual_split'] and version == TWO_WAY_VERSION
-    if len(books) != 1 or (books[0] not in SKILLS and not manual):
+    from memstara.skill_bases import base_for
+    base = base_for(snapshot, books[0]) if len(books) == 1 else None
+    if len(books) != 1 or not isinstance(base, str) or (base not in SKILLS and not manual):
         return None
     skill = books[0]
-    low, high = (snapshot['evaluation']['test_size'],) * 2 if manual else SKILLS[skill]
+    low, high = (snapshot['evaluation']['test_size'],) * 2 if manual else SKILLS[base]
     if version == TWO_WAY_VERSION and not manual:
-        low = high = .3 if skill == 'data_training_heavy' else .5
+        low = high = .3 if base == 'data_training_heavy' else .5
     prompt = snapshot['prompts'].get(f'board/data:{skill}', snapshot['prompts'].get('board/data:', {}))
     instruction = ('Supply data_plan with these three fields in submit_result. '
                    'Preserve all rows and exact hypothesis predictors. The server performs the split.')
