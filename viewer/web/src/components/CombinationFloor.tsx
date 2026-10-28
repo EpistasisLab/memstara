@@ -21,17 +21,16 @@ function Room({data}:NodeProps<Node<RoomData>>){
  const active=data.status==='Running'||data.processing;
  return <div className={`cf-room ${data.recorded?'is-recorded':''} ${active?'cf-active-room':''}`} style={{'--role-color':STAGE_COLOR[data.role]} as CSSProperties}>
   <header><span className="cf-room-icon"><Icon size={23}/></span><div><small>Stage {PLAYBOOK_STAGES.indexOf(data.role)+1}</small><h4>{labels[data.role]}</h4></div></header>
-  {active&&<div className="cf-stage-running" role="status" aria-label={`${labels[data.role]} stage is ${data.processing?'processing':'running'}`}><span aria-hidden="true"/>{data.processing?'Stage in progress':'Running now'}</div>}
+  <div className="cf-stage-running" style={{visibility:active?'visible':'hidden'}} aria-hidden={!active} role={active?'status':undefined} aria-label={`${labels[data.role]} stage is ${data.processing?'processing':'running'}`}><span aria-hidden="true"/>{data.processing?'Stage in progress':'Running now'}</div>
   <p className="cf-room-purpose">{descriptions[data.role]}</p>
-  {data.status==='Call still open'&&<p className="cf-room-purpose">Call not yet returned. Main-task activity is not confirmed.</p>}
   <div className="cf-desks">{data.skills.map((s,i)=><div className={`cf-desk ${data.selected===s.id?'is-selected':data.recorded?'cf-unused':''}`} key={s.id}>
    <Handle type="target" position={Position.Left} id={`in-${i}`} isConnectable={false}/>
    <div className="cf-skill-label"><span className="cf-orbit"><Icon size={17}/></span><span><small>{data.recorded?(data.selected===s.id?'Selected for this Replicate':'Other variant'):`Variant ${i+1}`}</small><strong>{skillLabel(s.id,s.title)}</strong></span></div>
    <button className="cf-inspect nodrag" aria-label={`Inspect ${skillLabel(s.id,s.title)} instructions`} onClick={()=>data.inspect(s)}><ExternalLink size={14}/></button>
    <Handle type="source" position={Position.Right} id={`out-${i}`} isConnectable={false}/>
   </div>)}</div>
-  {active&&<div className="cf-running-track" aria-hidden="true"><span/><span/><span/></div>}
-  <footer>{data.recorded?<span className={`cf-status ${active?'is-running':''}`}>{data.processing?(data.status==='Completed'?'Call completed · stage in progress':'Preparing agent call'):(data.status??'No call recorded')}</span>:<span>{data.skills.length} configured {data.skills.length===1?'skill':'skills'}</span>}</footer>
+  <div className="cf-running-track" style={{visibility:active?'visible':'hidden'}} aria-hidden="true"><span/><span/><span/></div>
+  <footer title={data.status==='Call still open'?'Call not yet returned. Main-task activity is not confirmed.':undefined}>{data.recorded?<span className={`cf-status ${active?'is-running':''}`}>{data.processing?(data.status==='Completed'?'Call completed · stage in progress':'Preparing agent call'):(data.status??'No call recorded')}</span>:<span>{data.skills.length} configured {data.skills.length===1?'skill':'skills'}</span>}</footer>
  </div>;
 }
 const nodeTypes={room:Room};

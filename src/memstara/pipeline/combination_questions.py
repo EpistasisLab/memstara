@@ -12,7 +12,7 @@ def enabled(plan):
     from memstara.pipeline.experiment_policy import enabled as independent_replicates
     if independent_replicates(plan):
         return True
-    return bool((plan or {}).get('combination_plan')) and (plan or {}).get(
+    return (plan or {}).get(
         'hypothesis_policy', {}).get('combination_questions') == VERSION
 
 

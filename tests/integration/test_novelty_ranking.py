@@ -12,10 +12,11 @@ pytestmark = pytest.mark.integration
 
 
 async def test_real_ranking_sql(database, monkeypatch):
-    await database.execute('CREATE TEMP TABLE memstara_questions (question_id int, status text)')
+    await database.execute("CREATE TEMP TABLE memstara_questions "
+                           "(question_id int, status text, origin_run text NOT NULL DEFAULT '')")
     await database.execute('CREATE TEMP TABLE memstara_results (task_id int, result_id int, question_id int, '
                            'run_tag text, trial int, hypothesis text, auc float, evaluation jsonb)')
-    await database.execute("INSERT INTO memstara_questions VALUES (1,'done'),(2,'cleared')")
+    await database.execute("INSERT INTO memstara_questions(question_id,status) VALUES (1,'done'),(2,'cleared')")
     for i, score in enumerate([None, 0, .5, 1, 'invalid', .5], 1):
         n = dict(policy='predicted_path_fraction_v1', rankable=True, score=score, coverage=1)
         await database.execute('INSERT INTO memstara_results VALUES ($1,$1,1,$2,0,\'Fixture\',.6,$3::jsonb)',

@@ -41,6 +41,16 @@ def test_sequential_seeds_have_independent_bases_and_survive_round_trip():
         seed_for(saved, 2, 1)
 
 
+def test_noncombination_independent_question_policy_has_no_feedback():
+    from memstara.pipeline.combination_questions import enabled
+    from memstara.pipeline.iteration_learning import enabled as feedback
+    state = {'hypothesis_policy': {'version': 'knowledge_only_v1',
+             'combination_questions': 'independent_combination_questions_v1'}}
+    assert enabled(state)
+    assert not feedback(state)
+    assert not enabled({'hypothesis_policy': {'version': 'iterative_discovery_v1'}})
+
+
 def test_empty_data_selection_builds_manual_split_and_disallows_mixing():
     from memstara.combinations import build_plan
     choices = {'hypothesis': ['hypothesis_general'], 'data': [], 'ml': [],

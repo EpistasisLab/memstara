@@ -209,7 +209,7 @@ def test_maximum_loops_can_cover_partial_set_or_multiple_cycles(skills):
 
 @pytest.mark.parametrize('maximum', [0, -1, 10001, True, 1.5, '10'])
 def test_invalid_maximum_rejected(skills, maximum):
-    with pytest.raises(ValueError, match='Maximum Loops'):
+    with pytest.raises(ValueError, match='Total runs'):
         build_plan(skills, max_loops=maximum)
 
 

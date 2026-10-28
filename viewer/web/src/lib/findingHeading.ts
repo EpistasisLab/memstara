@@ -1,4 +1,4 @@
-import { displayText } from './displayText';
+import { displayText } from './displayText.ts';
 import type { Result } from '../types';
 
 /** A display heading quoted from saved AI output, never a new clinical claim or a rename. */

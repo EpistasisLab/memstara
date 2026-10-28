@@ -81,7 +81,7 @@ export default function LogPanel() {
           <p>Loading the log for this execution…</p>
         </div>
       ) : (
-        <RunLog lines={lines} skipped={skipped} tail={tail} />
+        <RunLog runTag={logTag??undefined} lines={lines} skipped={skipped} tail={tail} />
       )}
     </Panel>
   );

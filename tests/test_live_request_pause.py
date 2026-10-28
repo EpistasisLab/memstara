@@ -13,7 +13,8 @@ from memstara.pipeline.request_pause import invoke, VERSION
 
 
 def enabled(monkeypatch):
-    monkeypatch.setattr('memstara.evaluation.active_plan', lambda: {'pause_policy': VERSION})
+    from memstara.pipeline.request_pause import RESTART_ML_VERSION
+    monkeypatch.setattr('memstara.evaluation.active_plan', lambda: {'pause_policy': RESTART_ML_VERSION})
     monkeypatch.setattr('memstara.stage_models.validate_call', lambda *args: None)
 
 

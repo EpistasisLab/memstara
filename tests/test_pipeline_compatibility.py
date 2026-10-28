@@ -209,7 +209,9 @@ def test_three_loop_driver_stops_on_first_rejection_and_cleans_up(isolated_board
     registry = NS(disconnect_all=AsyncMock())
     from memstara.pipeline import preparation
     monkeypatch.setattr(preparation, 'configure', lambda _: None)
-    monkeypatch.setattr(preparation, 'Settings', lambda: NS(model_copy=lambda **kw: None))
+    settings = NS()
+    settings.model_copy = lambda **kw: settings
+    monkeypatch.setattr(preparation, 'Settings', lambda: settings)
     monkeypatch.setattr(snapshot, 'freeze', lambda *args: None)
     monkeypatch.setattr(blackboard, 'create', AsyncMock())
     monkeypatch.setattr(board, 'setup_logging', lambda **kwargs: None)

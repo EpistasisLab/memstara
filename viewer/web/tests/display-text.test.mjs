@@ -19,7 +19,7 @@ test('legacy attribution is omitted without changing clinical terms or numerical
   assert.equal(displayText("Anil's rules; Phil and Jason; Hyunjun Choi"), "contributor's rules; contributor and contributor; contributor");
   assert.equal(displayText('Phil Freda, Jason Moore, Anil Saini, HyunjunA'), 'contributor, contributor, contributor, contributor');
   assert.equal(displayText('not an Anil-authored skill'), 'not a contributor-authored skill');
-  assert.equal(displayText('SPECIALIST_SKILLS / anil_shared / phil_shared'), 'contributor_SKILLS / contributed-resources / contributed-resources');
+  assert.equal(displayText('SPECIALIST_SKILLS / anil_shared / phil_shared'), 'SPECIALIST_SKILLS / contributed-resources / contributed-resources');
   const scientific='Neutrophil count, aniline exposure, HIV, SHAP, LIME, AUROC 0.731, USD 0.11321064.';
   assert.equal(displayText(scientific), scientific);
   assert.equal(displayText(displayText("Anil's shared-shap")), displayText("Anil's shared-shap"));

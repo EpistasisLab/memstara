@@ -56,7 +56,7 @@ try {
   const consent=dialog.getByRole('checkbox',{name:/I reviewed/}),create=dialog.getByRole('button',{name:'Create combination design'});
   for(const invalid of ['0','10001','1.5','']){await maximum.fill(invalid);await consent.check();assert(await create.isDisabled());}
   await maximum.fill('10');await consent.check();await expect(dialog.getByRole('checkbox',{name:/Random Start/})).toHaveCount(0);
-  await consent.check();assert(!(await create.isDisabled()));assert.match(await dialog.innerText(),/240 total replicates/);
+  await consent.check();assert(!(await create.isDisabled()));assert.match(await dialog.innerText(),/240 total runs/);
   assert(await dialog.evaluate(e=>e.scrollWidth<=e.clientWidth+2));await dialog.screenshot({path:`/tmp/random-start-${width}-${theme}.png`});
   await create.click();await dialog.waitFor({state:'hidden'});await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
   assert.equal(posted.configuration.combination_random_start,false);assert.equal(posted.configuration.combination_max_loops,null);assert.equal(posted.configuration.combination_repetitions,10);assert.equal(posted.configuration.waves,240);assert.equal(posted.configuration.continuous,false);assert.equal(runPosts,0);

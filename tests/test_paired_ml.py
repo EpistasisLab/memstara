@@ -51,6 +51,82 @@ def experiment(tmp_path, monkeypatch):
     return subset,snapshot,effective,proposal
 
 
+def test_paused_fit_survives_parent_process_death(experiment, monkeypatch, tmp_path):
+    import subprocess
+    from memstara.pipeline.paused_recovery import VERSION, fit_path, saved_fit
+    path, snapshot, effective, proposal = experiment
+    snapshot.update(pause_policy='fresh_request_and_ml_restart_v2', pause_recovery_policy=VERSION)
+    frozen = tmp_path/'config.json'
+    frozen.write_text(json.dumps(snapshot))
+    monkeypatch.setenv('MEMSTARA_RUN_CONFIG', str(frozen))
+    request = tmp_path/'test-request.json'
+    request.write_text(json.dumps({'path':str(path), 'snapshot':snapshot, 'evaluation':effective, 'proposal':proposal}))
+    script = '''
+import json, os, sys
+from pathlib import Path
+from memstara import paired_ml
+from memstara.pipeline import pause_runtime
+r=json.loads(Path(sys.argv[1]).read_text())
+def stop(command, **kwargs):
+    kwargs['pause_marker'].touch()
+    raise paired_ml.FitPaused()
+paired_ml.supervise=stop
+pause_runtime.wait_for_ml_resume=lambda *args: os._exit(137)
+paired_ml.execute(Path(r['path']), 'Y', r['evaluation'], r['snapshot'], r['proposal'])
+'''
+    assert subprocess.run([sys.executable, '-c', script, str(request)]).returncode == 137
+    assert fit_path(tmp_path, path).exists()
+    assert not path.with_suffix('.paired-evaluation.json').exists()
+    original = path.read_bytes()
+    path.write_bytes(original + b'\n')
+    with pytest.raises(ValueError, match='integrity'):
+        saved_fit(path, snapshot)
+    path.write_bytes(original)
+    (tmp_path/'pause.request').unlink()
+    changed = copy.deepcopy(proposal)
+    changed['models']['xgboost']['parameters']['n_estimators'] = 20
+    result = paired_ml.execute(path, 'Y', effective, snapshot, changed)
+    assert result.get('status') != 'failed', result
+    assert result['ml_resource_usage']['pause_restarts'] == 1
+    assert not fit_path(tmp_path, path).exists()
+    assert paired_ml.execute(path, 'Y', effective, snapshot, proposal) == result
+
+
+def test_paused_fit_restarts_with_identical_inputs(experiment, monkeypatch, tmp_path):
+    import threading
+    import time
+    from memstara.pipeline.pause_runtime import ml_pause_count
+    path, snapshot, effective, proposal = experiment
+    snapshot['pause_policy'] = 'fresh_request_and_ml_restart_v2'
+    frozen = tmp_path/'config.json'
+    frozen.write_text(json.dumps(snapshot))
+    monkeypatch.setenv('MEMSTARA_RUN_CONFIG', str(frozen))
+    real = paired_ml.supervise
+    calls = []
+    def interrupted_once(command, **kwargs):
+        calls.append(json.loads(Path(command[-2]).read_text()))
+        if len(calls) == 1:
+            kwargs['pause_marker'].touch()
+            raise paired_ml.FitPaused()
+        return real(command, **kwargs)
+    monkeypatch.setattr(paired_ml, 'supervise', interrupted_once)
+    def resume():
+        deadline = time.monotonic()+10
+        while not ml_pause_count(tmp_path) and time.monotonic()<deadline:
+            time.sleep(.02)
+        (tmp_path/'pause.request').unlink(missing_ok=True)
+    thread = threading.Thread(target=resume)
+    thread.start()
+    result = paired_ml.execute(path, 'Y', effective, snapshot, proposal)
+    thread.join()
+    assert result.get('status') != 'failed', result
+    assert calls[0] == calls[1]
+    assert result['ml_resource_usage']['pause_restarts'] == 1
+    # A completed evaluation is returned as-is, never fitted again.
+    again = paired_ml.execute(path, 'Y', effective, snapshot, proposal)
+    assert again == result and len(calls) == 2
+
+
 @pytest.mark.parametrize('submission', ['omitted', 'missing_rationale', 'changed_settings'])
 def test_frozen_tool_uses_server_plan_and_saves_resolution(experiment, monkeypatch, submission):
     from memstara.mcp_servers.ml import train_and_score
@@ -420,3 +496,24 @@ def test_default_lr_rejects_parameter_changes_and_user_overrides(experiment):
     snapshot['ml_overrides'] = {'version': 1, 'folds': 2}
     with pytest.raises(ValueError, match='overrides'):
         config.resolve(None, snapshot, effective)
+
+
+def test_completed_fit_winning_pause_race_is_not_replayed(experiment, monkeypatch, tmp_path):
+    path, snapshot, effective, proposal = experiment
+    snapshot['pause_policy'] = 'fresh_request_and_ml_restart_v2'
+    frozen = tmp_path/'config.json'
+    frozen.write_text(json.dumps(snapshot))
+    monkeypatch.setenv('MEMSTARA_RUN_CONFIG', str(frozen))
+    calls = []
+    complete = {'status': 'completed', 'fixture': 'already-published'}
+    def published_then_paused(command, **kwargs):
+        calls.append(command)
+        kwargs['pause_marker'].touch()
+        kwargs['output_path'].write_text(json.dumps(complete))
+        raise paired_ml.FitPaused()
+    monkeypatch.setattr(paired_ml, 'supervise', published_then_paused)
+    result = paired_ml.execute(path, 'Y', effective, snapshot, proposal)
+    assert result['fixture'] == complete['fixture']
+    assert result['ml_resource_usage']['completed_during_pause'] is True
+    assert result['ml_resource_usage']['pause_restarts'] == 0
+    assert len(calls) == 1

@@ -98,6 +98,10 @@ def train_and_score(
         plan_resolution = None
         if enabled(snapshot):
             snapshot = for_dataset(snapshot, p)
+            from memstara.pipeline.paused_recovery import saved_fit
+            stopped_fit = saved_fit(p, snapshot)
+            if stopped_fit:
+                ml_plan = stopped_fit['proposal']
             # Proposal errors are repairable and cannot start training or freeze a plan.
             ml_plan, plan_resolution = resolve_ml(ml_plan, snapshot, plan)
             if snapshot.get('ml_overrides'):

@@ -86,8 +86,11 @@ def inspect_csv(raw: bytes) -> CsvInspection:
         raise ValueError('CSV cannot be parsed; check quoting and field sizes') from None
     if not rows:
         raise ValueError('CSV has no data rows')
+    metadata = types.metadata(headers)
     return {
-        **types.metadata(headers),
+        **metadata,
+        'column_kinds': metadata['column_kinds'],
+        'type_confirmation_columns': metadata['type_confirmation_columns'],
         'columns': headers,
         'rows': rows,
         'columns_with_missing': dict(missing),
@@ -108,15 +111,20 @@ def setup_options(columns: list[str]) -> dict[str, Any]:
     preset = None
     if set(columns) == set((*FEATURES, TARGET)):
         preset = {
-            'name': 'Heart failure study',
-            'target': {'column': TARGET, 'positive_label': '1', 'negative_label': '0',
-                       'description': ('Classify the recorded chronic heart failure indicator '
-                                       '(1 = present, 0 = absent). Software demonstration; '
-                                       'clinical endpoint not independently validated.'),
-                       'prediction_time': 'Timing not established in the supplied files; software demonstration only.',
-                       'horizon': 'Not established; do not interpret as future risk prediction.'},
-            'categorical_columns': ['essential_hypertension_stage'],
-            'knowledge_path': sources[0]['path'] if sources else '',
+            "name": "Heart failure study",
+            "target": {
+                "column": TARGET,
+                "positive_label": "1",
+                "negative_label": "0",
+                "description": (
+                    "Classify the recorded chronic heart failure indicator (1 = present, 0 = absent). "
+                    "Software demonstration; clinical endpoint not independently validated."
+                ),
+                "prediction_time": "Timing not established in the supplied files; software demonstration only.",
+                "horizon": "Not established; do not interpret as future risk prediction.",
+            },
+            "categorical_columns": ["essential_hypertension_stage"],
+            "knowledge_path": sources[0]["path"] if sources else "",
         }
     return {'knowledge_sources': sources, 'preset': preset}
 

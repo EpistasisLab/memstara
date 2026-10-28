@@ -222,11 +222,11 @@ def test_specialist_web_configuration_freezes_exact_sources(specification,monkey
     original_prompt=prompts.load_prompt
     def resolve(key):
         if key in xai.SKILLS:return original_resolve(key)
-        return {'id':key,'title':key,'hash':key,'stage':key}
+        return {'id':key,'title':key,'hash':key,'stage':'data' if key=='data_manual_split' else key}
     monkeypatch.setattr(catalog,'resolve',resolve)
     monkeypatch.setattr('memstara.pipeline.snapshot.load_prompt',
         lambda name,book:original_prompt(name,book) if book in xai.SKILLS else {'goal':name,'system_prompt':book})
-    choices={s:list(xai.SKILLS) if s=='interpreter' else [s]
+    choices={s:list(xai.SKILLS) if s=='interpreter' else ['data_manual_split' if s=='data' else s]
              for s in ('hypothesis','data','ml','interpreter','report')}
     for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
         monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')

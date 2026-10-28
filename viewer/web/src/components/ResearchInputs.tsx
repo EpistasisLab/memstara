@@ -2,7 +2,7 @@ import {useId,useState} from 'react';
 import {csvClassValues} from './csvClassValues';
 import {automaticPredictorTypes} from './automaticPredictorTypes';
 import KnowledgeModelInfo from './KnowledgeModelInfo';
-import {UploadCloud, FileUp, CheckCircle2} from 'lucide-react';
+import {UploadCloud, FileUp, CheckCircle2, AlertTriangle, CircleAlert} from 'lucide-react';
 import './research-inputs.css';
 import ResearchInputFeedback, {type InputFeedback} from './ResearchInputFeedback';
 
@@ -12,7 +12,7 @@ export type Inspection={id?:string;configuration:ResearchConfig;fingerprint:stri
  dataset:{rows:number;column_count:number;columns:string[];missing_cells:number;eligible_predictor_count:number};
  knowledge:{documents:number;domains:string[]};issues:{code:string;message:string}[]};
 const initial:ResearchConfig={name:'',dataset_path:'',knowledge_path:'',target:{column:'',description:'',positive_label:'',negative_label:'',prediction_time:'',horizon:''},excluded_columns:[],missing_policy:'reject',predictor_types:{}};
-type UploadInspection={dataset_path:string;columns:string[];rows:number;missing_cells:number;columns_with_missing:Record<string,number>;message:string;nonfinite_columns:string[];nonnumeric_columns?:string[];binary_columns?:string[];column_kinds?:Record<string,string>;type_confirmation_columns?:string[];setup_options?:{knowledge_sources:{label:string;path:string}[];preset:{name:string;target:Target;categorical_columns:string[];knowledge_path:string}|null}};
+type UploadInspection={dataset_path:string;columns:string[];rows:number;missing_cells:number;columns_with_missing:Record<string,number>;message:string;nonfinite_columns:string[];nonnumeric_columns?:string[];binary_columns?:string[];column_kinds?:Record<string,string>;type_confirmation_columns?:string[];suggested_predictor_types?:Record<string,'continuous'|'categorical'>;column_examples?:Record<string,(string|number)[]>;setup_options?:{knowledge_sources:{label:string;path:string}[];preset:{name:string;target:Target;categorical_columns:string[];knowledge_path:string}|null}};
 const style='w-full min-w-0 rounded border border-paper-line bg-paper px-3 py-2 text-sm';
 
 export default function ResearchInputs({onSaved,onFeedback,initialConfig,disabled=false}:{onSaved?:(record:Inspection)=>void|Promise<void>;onFeedback?:(feedback:InputFeedback)=>void;initialConfig?:ResearchConfig;disabled?:boolean}={}){
@@ -64,9 +64,9 @@ export default function ResearchInputs({onSaved,onFeedback,initialConfig,disable
    else notify({ready:false,messages:d.issues?.length?d.issues.map((issue:{message:string})=>issue.message):['The input check did not pass. Review your CSV and outcome settings.']});
   }catch(e){const message=e instanceof Error?e.message:String(e);setError(message);notify({ready:false,messages:[message]});}finally{setBusy(false);}
  }
- return <section className="space-y-4 p-4" aria-label="Research input preparation">
+ return <section className="research-setup min-w-0 space-y-5 p-4 sm:p-5" aria-label="Research input preparation">
   <p className="research-setup-intro">Choose a CSV. We’ll check it and guide you through the next step.</p>
-  <fieldset disabled={busy||disabled} className="min-w-0 space-y-3">
+  <fieldset disabled={busy||disabled} className="research-setup-fields min-w-0 space-y-5">
    {form.data_mode==='proposal'&&<p>Without a dataset, this creates an analysis plan, not measured results. Describe your research objective below.</p>}
    {form.data_mode!=='proposal'&&<div className="space-y-3">
     <h4 className="text-sm font-semibold">1 · Upload your CSV</h4>
@@ -85,9 +85,15 @@ export default function ResearchInputs({onSaved,onFeedback,initialConfig,disable
       </div>
       <p className="mt-3 text-xs text-slate-500">We check for missing values as soon as the file uploads.</p>
     </div>
-    {uploaded&&<div role="status" className="rounded border border-paper-line p-3 text-sm"><strong>{uploaded.missing_cells===0?'✓ CSV check complete':'CSV check complete'} · {uploaded.rows.toLocaleString()} rows · {uploaded.columns.length} columns</strong><p>{uploaded.missing_cells?`${uploaded.missing_cells.toLocaleString()} missing values found.`:'No missing values found.'}</p>{Object.entries(uploaded.columns_with_missing).map(([column,count])=><p key={column}>{column}: {count.toLocaleString()} missing</p>)}{uploaded.nonfinite_columns.length>0&&<p>Resolve infinite values in: {uploaded.nonfinite_columns.join(', ')}</p>}{!!uploaded.nonnumeric_columns?.length&&<p>Columns containing text: {uploaded.nonnumeric_columns.join(', ')}. Whether these are suitable depends on your target and predictor choices.</p>}</div>}
+    {uploaded&&<div role="status" className={`research-upload-status ${uploaded.nonfinite_columns.length?'is-error':uploaded.missing_cells?'is-warning':'is-success'}`}>
+     <div className="research-upload-status-heading">{uploaded.nonfinite_columns.length?<CircleAlert size={22} aria-hidden="true"/>:uploaded.missing_cells?<AlertTriangle size={22} aria-hidden="true"/>:<CheckCircle2 size={22} aria-hidden="true"/>}<div><strong>{uploaded.nonfinite_columns.length?'CSV needs correction':uploaded.missing_cells?'Missing values found':'No missing values found'}</strong><p>{uploaded.rows.toLocaleString()} rows · {uploaded.columns.length} columns</p></div></div>
+     {uploaded.missing_cells>0?<><p className="research-upload-count">{uploaded.missing_cells.toLocaleString()} empty {uploaded.missing_cells===1?'cell':'cells'} across {Object.keys(uploaded.columns_with_missing).length.toLocaleString()} {Object.keys(uploaded.columns_with_missing).length===1?'column':'columns'}</p><p>Review the affected columns, then choose how to handle missing values below. Uploading your file does not fill these gaps.</p></>:<p>No empty cells detected. Continue with the outcome and knowledge source settings below.</p>}
+     {uploaded.missing_cells>0&&<details className="research-upload-findings"><summary>View columns with missing values</summary><dl>{Object.entries(uploaded.columns_with_missing).map(([column,count])=><div key={column}><dt>{column}</dt><dd>{count.toLocaleString()} missing</dd></div>)}</dl></details>}
+     {uploaded.nonfinite_columns.length>0&&<p role="alert" className="research-input-error">Replace infinite values with valid values in your CSV, then upload it again. Affected columns: {uploaded.nonfinite_columns.join(', ')}</p>}
+     {!!uploaded.nonnumeric_columns?.length&&<p className="research-setup-help">Text columns detected. We’ll check whether they can be used with your selected outcome.</p>}
+    </div>}
     {uploaded && uploaded.missing_cells>0 && <div className="research-missing-panel" role="group" aria-label="Missing value consent">
-     <div className="research-missing-heading"><span className="research-missing-dot" aria-hidden="true"/><div><h4>How should we handle missing values?</h4><p>Some models need these gaps filled before they can run.</p></div></div>
+     <div className="research-missing-heading"><AlertTriangle className="research-missing-icon" size={20} aria-hidden="true"/><div><h4>How should we handle missing values?</h4><p>Some models need these gaps filled before they can run.</p></div></div>
      <div className="research-missing-options">
       <label className={`research-missing-option ${form.missing_policy==='reject'?'is-selected':''}`}>
        <input type="radio" name="missing-policy" aria-label="I’ll fix the CSV" checked={form.missing_policy==='reject'} onChange={()=>edit({...form,missing_policy:'reject'})}/>
@@ -106,7 +112,7 @@ export default function ResearchInputs({onSaved,onFeedback,initialConfig,disable
 
     {form.data_mode!=='proposal'&&<>
      <label className="research-setup-field">Outcome column <small>Required</small>{uploaded?<select aria-label="Target column" className={style} value={form.target.column} onChange={e=>chooseTarget(e.target.value)}><option value="">Choose a column from your CSV</option>{uploaded.columns.map(c=><option key={c} value={c}>{c}</option>)}</select>:<input aria-label="Target column" className={style} placeholder="Upload your CSV to choose from its columns" value={form.target.column} onChange={e=>chooseTarget(e.target.value)}/>}</label>
-     {invalidOutcome?<p role="alert" className="research-setup-help">This workflow supports binary classification. Choose a column with exactly two distinct non-missing values.</p>:form.target.column&&(outcomeValues?<>
+     {invalidOutcome?<p role="alert" className="research-input-error">This workflow supports binary classification. Choose a column with exactly two distinct non-missing values.</p>:form.target.column&&(outcomeValues?<>
       <p className="research-setup-help">Binary classification · Values: {outcomeValues.map(value=>JSON.stringify(value)).join(', ')}</p>
      </>:<p className="research-setup-help">Upload the CSV to read the values in this target column.</p>)}
     </>}
@@ -141,12 +147,12 @@ export default function ResearchInputs({onSaved,onFeedback,initialConfig,disable
     </div>:null)}
    </div>
    <div className="research-setup-readiness" aria-live="polite">{requiredDetails.length?`Still needed: ${requiredDetails.join(' · ')}`:'✓ Required details filled. Check & use this data will validate your settings.'}</div>
-   <div className="flex flex-wrap gap-2"><button type="button" className={style+' !w-auto'} onClick={()=>void submit('register')}>Check & use this data</button></div>
+   <div className="research-setup-actions"><button type="button" className="research-check-button" onClick={()=>void submit('register')}>Check & use this data</button></div>
    </>}
   </fieldset>
   {feedback&&<ResearchInputFeedback feedback={feedback} onClose={()=>setFeedback(null)}/>}
   {busy&&<p role="status">Checking inputs…</p>}
-  {error&&<p role="alert" className="break-words">{error}</p>}
+  {error&&<p role="alert" className="research-input-error"><CircleAlert size={20} aria-hidden="true"/><span>{error}</span></p>}
   {result&&<div className="space-y-2" role="status">
    <p>{result.id?'Study saved.':'Input check complete.'} {result.dataset.rows.toLocaleString()} rows · {result.dataset.column_count} columns · {result.dataset.missing_cells.toLocaleString()} missing cells · {result.knowledge.documents} OKF documents.</p>
    <p className="font-semibold">{result.input_checks_passed?'Inputs are ready to use':'Resolve input issues before execution'}</p>

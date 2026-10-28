@@ -14,7 +14,7 @@ export function pipelineLoopLabel(pipeline: PipelineDefinition): string {
   const execution = pipeline.running ?? pipeline.latest;
   const config = execution ? execution.configuration : pipeline.configuration;
   const draft=pipeline.configuration;
-  const count=Object.values(draft.combination_skills??{}).reduce((n,ids)=>n*(ids?.length??0),1);
+  const count=Object.values(draft.combination_skills??{}).reduce((n,ids)=>n*Math.max(1,ids?.length??0),1);
   const plan=config?.combination_plan??(!execution&&draft.combination_skills?{combinations:count,repetitions:draft.combination_repetitions??1,execution_order:draft.combination_execution_order,total_loops:draft.combination_max_loops??count*(draft.combination_repetitions??1)}:undefined);
   return executionLoopLabel(pipeline.progress.iteration,config?.waves,!!execution,!!config?.continuous,plan);
 }

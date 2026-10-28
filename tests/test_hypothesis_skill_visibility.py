@@ -13,7 +13,7 @@ def test_catalog_contains_both_corpus_profiles_and_general_choice(tmp_path, monk
     ids = {i['id'] for i in catalog.catalog() if i['stage'] == 'hypothesis'}
     assert ids == {'addiction-psychiatric', 'addiction-sdoh', 'addiction-substance-use',
                    'heart-failure-cardiovascular', 'heart-failure-metabolic-renal',
-                   'heart-failure-lifestyle-social', 'random_features', 'hypothesis_general'}
+                   'heart-failure-lifestyle-social', 'heart-failure-all-categories', 'hypothesis_general'}
     for name in ids:
         catalog.validate_selection({'playbook_hypothesis': name})
 

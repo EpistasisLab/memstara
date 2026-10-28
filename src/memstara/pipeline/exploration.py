@@ -155,14 +155,32 @@ class ExecutionGate:
     async def call(self, operation, *args, **kwargs):
         await self.wait()
         import uuid
+        import json
+        from memstara.pipeline.checkpoint import current_phase, atomic_json
+        from memstara.pipeline import paused_recovery
+        meta = (paused_recovery.metadata(self.run_dir, args, kwargs, current_phase.get())
+                if self.checkpoint and paused_recovery.enabled(self.run_dir) else None)
+        saved = None
+        if meta and meta['safe'] and meta['phase']:
+            folder = self.run_dir / 'completed_agents'
+            folder.mkdir(exist_ok=True)
+            saved = folder / (meta['input_hash'] + '.json')
+            if saved.exists():
+                receipt = json.loads(saved.read_text())
+                if receipt['metadata'] != meta or receipt['digest'] != paused_recovery.digest(receipt['result']):
+                    raise RuntimeError('Completed agent output integrity mismatch')
+                return receipt['result']
         call_key = uuid.uuid4().hex
         if self.checkpoint:
-            self.checkpoint.call_started(call_key)
+            self.checkpoint.call_started(call_key, meta)
         self.active_calls += 1
         self.publish()
         binding = current_agent_gate.set((self, call_key))
         try:
             result = await operation(*args, **kwargs)
+            if saved:
+                atomic_json(saved, {'metadata': meta, 'result': result,
+                                    'digest': paused_recovery.digest(result)})
         finally:
             current_agent_gate.reset(binding)
             self.paused_calls.discard(call_key)

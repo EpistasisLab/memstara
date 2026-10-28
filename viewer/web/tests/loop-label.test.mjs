@@ -6,7 +6,7 @@ test('48 pipelines with 10 replicates map positions to separate identities',()=>
  const plan={combinations:48,total_loops:480};
  assert.equal(loopLabel({iteration:49},1,plan),'Pipeline 1 · Replicate 2');
  assert.equal(executionLoopLabel(480,480,true,false,plan),'Pipeline 48 / 48 · Replicate 10 / 10');
- assert.equal(executionLoopLabel(undefined,480,false,false,plan),'48 pipelines · 480 total replicates');
+ assert.equal(executionLoopLabel(undefined,480,false,false,plan),'48 pipelines · 480 total runs');
 });
 test('random start and partial legacy limits retain actual per-pipeline counts',()=>{
  const plan={combinations:4,total_loops:6,start_index:3};

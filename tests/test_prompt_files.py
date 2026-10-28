@@ -27,7 +27,7 @@ AGENTS = [
 ]
 
 #: Files that are not agents. A fragment has no goal and is never loaded on its own.
-FRAGMENTS = ["board/_claim_preamble", "board/_ml_common"]
+FRAGMENTS = ["board/_claim_preamble", "board/_ml_common", "board/_two_way_data"]
 
 #: Optional local instructions, never a runtime prompt. Fresh clones omit them.
 NOT_A_PROMPT = ["CLAUDE"]
@@ -97,30 +97,36 @@ def test_the_shared_preamble_reaches_exactly_the_three_claimers():
 #  The playbooks, which are prompt text by another route
 # --------------------------------------------------------------------------- #
 #
-#  A playbook is spliced into a system prompt, so every rule above applies to it. It is
-#  checked separately because it is loaded differently: `load_prompt` is given its name
-#  at run time, so a playbook nothing points at is still shipped and still reachable by
-#  anyone who types its stem. The stage it is attached to is deliberately not fixed — a
-#  reporting standard is legitimate on more than one — so these run against **every
-#  playbook on every marked prompt**, which is the cross product and is meant to be.
-#
-#  Two of the five stages carry the marker; `data` and `interpreter` and `report` do not
-#  yet. The list is written out rather than discovered by scanning the prompts, so that
-#  marking a stage is a visible act in a diff rather than a file quietly joining a glob.
+# Generic playbooks can be loaded at marked stages. Specialist aliases belong
+# only to their owning stage, including the Heart Failure Explanation aliases.
 MARKED_STAGES = ["board/ml", "board/hypothesis"]
+SPECIALIST_PLAYBOOKS = {
+    "report_heart_failure_cardiovascular": "board/report",
+    "report_heart_failure_cardiorenal": "board/report",
+}
 
 
-def test_every_playbook_loads_into_a_marked_prompt():
-    """A playbook that raises does so at parse time on a real run (`board.py` reads them
-    before Postgres is touched), which is cheap. This is cheaper and needs neither."""
+def playbook_cases():
+    for book in playbook_names():
+        for stage in ([SPECIALIST_PLAYBOOKS[book]] if book in SPECIALIST_PLAYBOOKS else MARKED_STAGES):
+            yield stage, book
+
+
+def test_every_playbook_loads_into_an_appropriate_prompt():
     assert playbook_names(), "no playbooks — this test would then check nothing"
-    for stage in MARKED_STAGES:
-        for book in playbook_names():
-            body = load_prompt(stage, book)["system_prompt"]
-            assert body, f"{stage} + {book}: empty"
-            assert body != load_prompt(stage)["system_prompt"], (
-                f"{stage} + {book}: the playbook did not change the prompt"
-            )
+    for stage, book in playbook_cases():
+        body = load_prompt(stage, book)["system_prompt"]
+        assert body, f"{stage} + {book}: empty"
+        assert body != load_prompt(stage)["system_prompt"], (
+            f"{stage} + {book}: the playbook did not change the prompt"
+        )
+
+
+@pytest.mark.parametrize("book", SPECIALIST_PLAYBOOKS)
+@pytest.mark.parametrize("stage", MARKED_STAGES)
+def test_specialist_aliases_cannot_reach_other_agents(book, stage):
+    with pytest.raises(ValueError, match="skill belongs to report"):
+        load_prompt(stage, book)
 
 
 def test_the_outcome_column_is_never_named_in_a_playbook():
@@ -133,10 +139,9 @@ def test_the_outcome_column_is_never_named_in_a_playbook():
 
 
 def test_no_comment_survives_into_a_playbook():
-    for stage in MARKED_STAGES:
-        for book in playbook_names():
-            body = load_prompt(stage, book)["system_prompt"]
-            assert "<!--" not in body and "-->" not in body, f"{stage} + {book}"
+    for stage, book in playbook_cases():
+        body = load_prompt(stage, book)["system_prompt"]
+        assert "<!--" not in body and "-->" not in body, f"{stage} + {book}"
 
 
 def test_a_playbook_carries_no_front_matter():

@@ -22,8 +22,13 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     two_way = (previous.get('partition_policy') == TWO_WAY_VERSION if previous is not None
                else not bool(json.loads(getattr(args, 'controlled_comparison', '{}') or '{}')))
     research_config = (getattr(args, "research_profile", None) or {}).get("configuration", {})
-    preprocessing = (previous.get('preprocessing_policy', 'legacy_encoding_v1') if previous is not None
-                     else TYPED if 'predictor_types' in research_config else VERSION)
+    preprocessing = (
+        previous.get("preprocessing_policy", "legacy_encoding_v1")
+        if previous is not None
+        else TYPED
+        if "predictor_types" in research_config
+        else VERSION
+    )
     prepared_input = requires_numeric({'preprocessing_policy': preprocessing})
     missing_policy = research_config.get("missing_policy", "reject")
     if missing_policy not in ("reject", "impute_train_v1"):
@@ -93,7 +98,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     state = {
         "preprocessing_policy": preprocessing,
         "classifier_seed_policy": "split_seed_v1",
-        "pause_policy": "fresh_model_request_v1",
+        "pause_policy": "fresh_request_and_ml_restart_v2",
+        "pause_recovery_policy": "durable_paused_agents_v1",
         "schema_version": 1,
         "critic_policy": {"version": "deterministic_feasibility_v1", "extra_llm_calls": 0},
         "knowledge_policy": {"mode": "no_okf" if ablate_okf else "okf", "retrieval_enabled": not ablate_okf},
@@ -104,13 +110,13 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
                          if getattr(args, "stage_models", None) else None),
         "validation_partition": partition,
         "hypothesis_policy": {} if getattr(args, "report_only", False) else {
-            "version": "knowledge_only_v1" if combination_plan else "iterative_discovery_v1",
-            "kind": "independent_combination" if combination_plan else "iterative_discovery",
-            **({"combination_questions": "independent_combination_questions_v1"} if combination_plan else {}),
+            "version": "knowledge_only_v1",
+            "kind": "independent_combination",
+            "combination_questions": "independent_combination_questions_v1",
             "question_contract": "fixed_target_v1",
-            "prior_ml_feedback": not bool(combination_plan),
+            "prior_ml_feedback": False,
             "validation_status": "exploratory_not_independently_validated",
-            "refinement": "none" if combination_plan else "prior_iteration_evidence_with_explicit_lineage",
+            "refinement": "none",
         },
         "data_mode": "dataset",
         "knowledge_mode": "llm_only" if ablate_okf else "okf",
@@ -236,6 +242,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     # recovery changes are separately validated and recorded by active_plan().
     if getattr(args, 'resume', False) and (run_dir / 'config.json').exists():
         original = json.loads((run_dir / 'config.json').read_text())
+        state['hypothesis_policy'] = original.get('hypothesis_policy', {})
         state['preprocessing_policy'] = original.get('preprocessing_policy', 'legacy_encoding_v1')
         if 'preprocessing_policy' not in original:
             state.pop('preprocessing_policy', None)
@@ -243,6 +250,10 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
             state['classifier_seed_policy'] = original['classifier_seed_policy']
         else:
             state.pop('classifier_seed_policy', None)
+        if 'pause_recovery_policy' in original:
+            state['pause_recovery_policy'] = original['pause_recovery_policy']
+        else:
+            state.pop('pause_recovery_policy', None)
         if 'pause_policy' in original:
             state['pause_policy'] = original['pause_policy']
         else:

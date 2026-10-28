@@ -7,7 +7,7 @@ export function loopLabel(record: ReplicateIdentity & {iteration?:number|null;tr
  return identityLabel(scheduleIdentity(position,plan));
 }
 export function executionLoopLabel(iteration:number|undefined,limit:number|null|undefined,started:boolean,continuous=false,plan?:Schedule|null):string {
- if(!started)return plan?`${plan.combinations} pipelines · ${plan.total_loops} total replicates`:`1 pipeline · ${limit??'—'} replicates`;
+ if(!started)return plan?`${plan.combinations} pipelines · ${plan.total_loops} total runs`:`1 pipeline · ${limit??'—'} replicates`;
  const identity=scheduleIdentity(iteration,plan);
  if(!plan)identity.replicate_count=continuous?null:limit;
  return identityLabel(identity,true)+(continuous?' · Continuous':'');

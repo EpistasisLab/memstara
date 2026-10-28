@@ -157,7 +157,7 @@ def test_missing_infinite_categorical_and_empty_features_are_handled(clean_data,
     frame["empty"] = np.nan
     frame.to_csv(clean_data, index=False)
     original = clean_data.read_bytes()
-    with pytest.raises(DataQualityError, match="AI-ready input required"):
+    with pytest.raises(DataQualityError, match="A predictor has no observed values"):
         score(clean_data, "outcome", {"engine": engine, "folds": 2})
     assert clean_data.read_bytes() == original
 

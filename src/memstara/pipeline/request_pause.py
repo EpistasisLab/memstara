@@ -8,6 +8,7 @@ import asyncio
 from pathlib import Path
 
 VERSION = 'fresh_model_request_v1'
+RESTART_ML_VERSION = 'fresh_request_and_ml_restart_v2'
 
 
 class RequestPaused(Exception):
@@ -16,7 +17,7 @@ class RequestPaused(Exception):
 
 async def invoke(operation, context):
     from memstara.evaluation import active_plan
-    enabled = context and (active_plan() or {}).get('pause_policy') == VERSION
+    enabled = context and (active_plan() or {}).get('pause_policy') in (VERSION, RESTART_ML_VERSION)
     if not enabled:
         return await operation()
     task = asyncio.create_task(operation())
@@ -50,6 +51,13 @@ def mark_waiting(waiting):
     binding = current_agent_gate.get()
     if binding is not None:
         gate, identity = binding
+        from . import paused_recovery
+        if gate.checkpoint and paused_recovery.enabled(gate.run_dir):
+            metadata = gate.checkpoint.state.get('call_metadata', {}).get(identity)
+            if waiting and metadata:
+                paused_recovery.paused(gate.run_dir, identity, metadata)
+            elif not waiting:
+                paused_recovery.unpaused(gate.run_dir, identity)
         if waiting:
             gate.paused_calls.add(identity)
         else:

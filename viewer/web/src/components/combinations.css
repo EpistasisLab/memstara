@@ -212,6 +212,7 @@
 .comb-next-help .comb-order-footer { color:rgb(var(--accent)); font-weight:700; }
 @media(max-width:640px) { .comb-order-options { grid-template-columns:1fr; } .comb-execution-order { padding:14px; } }
 
+
 .combination-dialog .comb-split-choice { container-type:inline-size; min-width:0; margin:0 0 24px; padding:20px; border:1px solid rgb(var(--line)); border-radius:14px; background:rgb(var(--paper)); }
 .combination-dialog .comb-split-choice legend { max-width:100%; padding:0 6px; font-size:15px; font-weight:650; line-height:1.5; overflow-wrap:anywhere; }
 .combination-dialog .comb-split-intro { margin:0 0 18px; font-size:13px; line-height:1.7; color:rgb(var(--ink-soft)); }

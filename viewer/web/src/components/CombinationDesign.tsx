@@ -30,7 +30,7 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
  const [response,setResponse]=useState<{key:string;data:Trace}|null>(null),[failure,setFailure]=useState<{key:string;message:string}|null>(null);
  useEffect(()=>{if(board.current)board.current.scrollLeft=0;},[role,search,view]);
  const choices=p.configuration.combination_skills??{};
- const lists=PLAYBOOK_STAGES.map(stage=>(choices[stage]??[]).filter((id,i,ids)=>ids.findIndex(other=>(catalog.find(s=>s.id===other)?.hash??other)===(catalog.find(s=>s.id===id)?.hash??id))===i));
+ const lists=PLAYBOOK_STAGES.map(stage=>(choices[stage]?.length?choices[stage]:[{hypothesis:'hypothesis_general',data:'data_manual_split',ml:'ml_default_logistic_regression',interpreter:'shared-shap',report:'shared-addiction'}[stage]]).filter((id,i,ids)=>ids.findIndex(other=>(catalog.find(s=>s.id===other)?.hash??other)===(catalog.find(s=>s.id===id)?.hash??id))===i));
  const count=lists.reduce((n,ids)=>n*ids.length,1);
  const following=!!(p.running||p.latest);
  const activityMode=p.running?'live':'history';

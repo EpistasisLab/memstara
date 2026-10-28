@@ -24,7 +24,7 @@ def standalone(monkeypatch, tmp_path):
 
 def test_standalone_catalog_and_preserved_hashes(standalone):
     rows = catalog.catalog()
-    assert [sum(r['stage'] == stage for r in rows) for stage in catalog.ROLES] == [8, 2, 2, 2, 5]
+    assert [sum(r['stage'] == stage for r in rows) for stage in catalog.ROLES] == [8, 3, 2, 2, 4]
     bundle = PACKAGE_ROOT / 'resources/contributed'
     manifest = json.loads((bundle / 'manifest.json').read_text())
     for entry in manifest['files']:
@@ -49,7 +49,10 @@ def test_default_is_internal_even_when_sibling_exists(standalone, monkeypatch):
     (local / 'SHAP-Interpretation.md').write_text('# External content must not win')
     monkeypatch.setattr(paths, 'WORKSPACE_ROOT', standalone)
     assert catalog.specialist_dir() == PACKAGE_ROOT / 'resources/contributed/specialists'
-    assert len(catalog.specialist_skills()) == 4
+    assert {item['id'] for item in catalog.specialist_skills()} == {
+        'shared-shap', 'shared-lime', 'shared-hiv', 'shared-addiction',
+        'shared-heart-failure-cardiovascular', 'shared-heart-failure-comorbidity',
+    }
 
 
 def test_explicit_partial_directory_is_not_mixed_with_bundle(standalone, monkeypatch):

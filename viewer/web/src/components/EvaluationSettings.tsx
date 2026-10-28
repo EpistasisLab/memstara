@@ -50,7 +50,7 @@ export default function EvaluationSettings({value, onChange, disabled = false, p
         <span className="mt-1 block text-xs font-normal text-ink-muted">1 uses the preset model settings. 2–10 compares predefined candidates using training CV, not hold-out performance.</span>
       </label>
     </div>
-    <p className="text-xs text-ink-muted">More splits, folds and candidates increase computation. Baseline comparisons, ablations and reproducibility checks can add further fits. New executions reserve 20% of the dataset for later validation; these controls apply within the remaining exploration data.</p>
+    <p className="text-xs text-ink-muted">More splits, folds and candidates increase computation. Baseline comparisons, ablations and reproducibility checks can add further fits. New executions split the full dataset into training and test data. Any cross-validation uses training data only.</p>
     <details className="text-sm"><summary className="cursor-pointer font-medium">Which model settings can change?</summary>
       <p className="mt-2 text-ink-muted">{value.engine==='xgboost'?'XGBoost uses predefined combinations of tree depth and tree count.':value.engine==='random_forest'?'Random forest uses predefined combinations of maximum depth and tree count.':'Logistic regression uses predefined regularization strengths (C), with a maximum of 2000 solver iterations.'} Individual hyperparameter values and the 0.5 prediction cutoff are not editable here. The selected values are recorded with each result.</p>
     </details>

@@ -5,16 +5,16 @@ from memstara.control.catalog import catalog, resolve, validate_selection
 from memstara.pipeline.prompts import load_prompt, playbook_names
 
 
-def test_only_two_builtin_data_choices_are_published(tmp_path, monkeypatch):
+def test_catalog_contains_two_data_skills_and_manual_split_contract(tmp_path, monkeypatch):
     monkeypatch.setenv('MEMSTARA_USER_SKILLS_DIR', str(tmp_path))
     assert {x['id'] for x in catalog() if x['stage'] == 'data'} == {
-        'data_training_heavy', 'data_balanced_stratified'}
+        'data_training_heavy', 'data_balanced_stratified', 'data_manual_split'}
     assert 'data_exact_features' not in playbook_names()
 
 
 def test_exact_extraction_contract_applies_without_a_selectable_skill(monkeypatch):
     monkeypatch.delenv('MEMSTARA_RUN_CONFIG', raising=False)
-    for skill in ('', 'data_training_heavy', 'data_balanced_stratified'):
+    for skill in ('', 'data_training_heavy', 'data_balanced_stratified', 'data_manual_split'):
         body = load_prompt('board/data', skill)['system_prompt']
         assert 'Use slice_columns to cut out exactly those columns plus that outcome' in body
         assert 'Do not add columns' in body

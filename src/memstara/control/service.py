@@ -173,7 +173,9 @@ class _Runs:
             except (OSError, ValueError):
                 pass
             record["resumable"] = bool(record.get("resumable") or control.get("resumable"))
-            pending = control.get('active_calls', 1) > control.get('paused_model_calls', 0)
+            from memstara.pipeline.pause_runtime import ml_pause_count
+            paused_ml = ml_pause_count(record['run_dir'])
+            pending = control.get('active_calls', 1) > control.get('paused_model_calls', 0) + paused_ml
             record["execution_state"] = (
                 ('stopping' if pending else 'paused')
                 if record['pause_requested'] else 'running'
@@ -977,14 +979,16 @@ class Handler(BaseHTTPRequestHandler):
                 plan = validate({**policy, **body.get("evaluation", {})})
                 input_policy = (research or {}).get('configuration', {}).get('missing_policy', 'reject')
                 preflight(Path(dataset), argv[argv.index("--y-column") + 1], plan,
-                          reserve_validation=True, missing_policy=input_policy,
+                          reserve_validation=bool(body.get('controlled_comparison')), missing_policy=input_policy,
                           require_numeric='predictor_types' not in (research or {}).get('configuration', {}))
                 if body.get("combination_skills"):
                     from memstara.pipeline.feature_context import freeze_feature_context
-                    freeze_feature_context(Path(dataset), argv[argv.index("--y-column") + 1],
-                                           require_complete=input_policy != "impute_train_v1",
-                                           require_numeric='predictor_types' not in
-                                           (research or {}).get('configuration', {}))
+                    freeze_feature_context(
+                        Path(dataset),
+                        argv[argv.index("--y-column") + 1],
+                        require_complete=input_policy != "impute_train_v1",
+                        require_numeric="predictor_types" not in (research or {}).get("configuration", {}),
+                    )
                 from memstara.comparisons import validate_baseline
                 validate_baseline(body.get("baseline_columns", []), argv[argv.index("--y-column") + 1], Path(dataset))
         except ValueError as e:
@@ -1017,6 +1021,10 @@ class Handler(BaseHTTPRequestHandler):
         # response, instead of the screen having to guess which new run is the one it
         # just asked for.
         run_tag = started.strftime("board_%Y%m%dT%H%M%S_%f")
+        # Match the driver's knowledge-mode suffix before persisting ownership.
+        # Otherwise saved results and Resume refer to a different execution ID.
+        if body.get('knowledge_mode') == 'llm_only':
+            run_tag += '_ablate_okf'
         trials = argv[argv.index("--trials") + 1]
         run_dir = new_run_dir(f"board_{trials}trials", started.strftime("%Y-%m-%dT%H%M%S_%f"))
         skill = argv[argv.index("--skill") + 1]
