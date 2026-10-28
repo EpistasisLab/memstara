@@ -22,7 +22,7 @@ COPY src/ src/
 COPY examples/ examples/
 COPY deployment/ deployment/
 RUN SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0+container uv sync --frozen --extra runtime --no-dev
-RUN .venv/bin/python -c "from importlib.metadata import version; assert version('motoro') == '0.10.0'"
+RUN .venv/bin/python -c "from importlib.metadata import version; assert version('motoro') == '0.13.0'"
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 MEMSTARA_CONFIG_MODE=environment
 ENTRYPOINT ["python", "/app/deployment/exec_service.py"]
 CMD ["python", "-m", "memstara.control"]

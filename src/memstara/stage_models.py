@@ -90,7 +90,7 @@ def validate_profiles(profiles: dict) -> dict:
             type(profile["max_tokens"]) is not int or not 0 < profile["max_tokens"] <= 200000
         ):
             raise ValueError("max_tokens must be an integer between 1 and 200000")
-        if profile.get("effort") not in (None, "low", "medium", "high", "xhigh", "max"):
+        if profile.get("effort") not in (None, "none", "minimal", "low", "medium", "high", "xhigh", "max"):
             raise ValueError("Unsupported reasoning effort")
         if profile.get("api_base") is not None and not isinstance(profile["api_base"], str):
             raise ValueError("api_base must be a URL string")
