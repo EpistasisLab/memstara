@@ -100,7 +100,10 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
       region: profile.region, auth_type: profile.auth_type || 'api_key'});
     const match = catalog?.providers.find(row => row.id === profile.provider)?.models.find(row => row.model === profile.model);
     setSelection(match?.id || 'manual'); setCaps(profile.capabilities);
-    setSettings({...defaults(profile.capabilities), ...profile.settings});
+    setSettings({...defaults(profile.capabilities),
+      ...(profile.settings.max_tokens !== undefined ? {max_tokens: profile.settings.max_tokens} : {}),
+      ...(profile.capabilities.supports_temperature && profile.settings.temperature !== undefined ? {temperature: profile.settings.temperature} : {}),
+      ...(profile.capabilities.supports_effort && profile.settings.effort !== undefined ? {effort: profile.settings.effort} : {})});
   }
   useEffect(() => {
     if (mode === 'custom' && !formTouched.current && catalog && configured.length) useConfigured(configured[0]);
@@ -246,6 +249,7 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
       {caps && catalog && <details className="experiment-model-advanced"><summary>Advanced model settings <span>Optional · settings from Motoro</span></summary>
         <div className="experiment-model-advanced-body">
           <p>These settings apply to every agent in this experiment. Provider limits may be lower than Motoro’s allowed range.</p>
+          {configuredProfile?.model === form.model && configuredProfile.provider === form.provider && ((!caps.supports_temperature && configuredProfile.settings.temperature !== undefined) || (!caps.supports_effort && configuredProfile.settings.effort !== undefined)) && <p className="experiment-default-source">Server defaults: {!caps.supports_temperature && configuredProfile.settings.temperature !== undefined ? `temperature ${configuredProfile.settings.temperature}. ` : ''}{!caps.supports_effort && configuredProfile.settings.effort !== undefined ? `reasoning effort ${configuredProfile.settings.effort}. ` : ''}Motoro has not confirmed support for these settings on this model. Choose “Use current model” to keep the server configuration; a new connection uses only confirmed settings.</p>}
           <div className="experiment-model-grid">
             {caps.supports_temperature && <label htmlFor="experiment-temperature">Temperature<input id="experiment-temperature" type="number" min={catalog.controls.temperature.minimum} max={catalog.controls.temperature.maximum} step="0.1" placeholder="Automatic" value={Number.isNaN(settings.temperature) ? '' : settings.temperature ?? ''} onChange={e => {invalidate(); setSettings(previous => ({...previous, temperature: e.target.value === '' ? undefined : Number(e.target.value)}));}}/><small>Leave blank to use Motoro’s default for this model and reasoning mode.</small></label>}
             {caps.supports_effort && <label htmlFor="experiment-effort">Reasoning effort<select id="experiment-effort" value={settings.effort ?? ''} onChange={e => {invalidate(); setSettings(previous => ({...previous, effort: e.target.value || undefined}));}}><option value="">Automatic</option>{(caps.effort_levels ?? (caps.default_effort ? [caps.default_effort] : [])).map(level => <option key={level} value={level}>{level === 'xhigh' ? 'Extra high' : level === 'max' ? 'Maximum' : level[0].toUpperCase() + level.slice(1)}</option>)}</select><small>Higher effort can take longer and cost more.</small></label>}

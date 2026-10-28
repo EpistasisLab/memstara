@@ -4,8 +4,9 @@ import {launchResponsiveBrowser} from './responsive-browser.mjs';
 const temperature={supports_temperature:true,supports_effort:false,effort_levels:[],default_effort:null,default_temperature:.7};
 const reasoning={supports_temperature:false,supports_effort:true,effort_levels:['low','high'],default_effort:'high'};
 const profiles=[
- {role:'question',roles:['question','hypothesis','data','ml','interpretation'],provider:'openai',model:'gpt-4o',api_base:'',region:'',auth_type:'',settings:{temperature:.2,max_tokens:7000},capabilities:temperature,credentials_available:true},
+ {role:'question',roles:['question','hypothesis','data','interpretation'],provider:'openai',model:'gpt-4o',api_base:'',region:'',auth_type:'',settings:{temperature:.2,max_tokens:7000},capabilities:temperature,credentials_available:true},
  {role:'explanation',roles:['explanation'],provider:'azure_foundry',model:'clinical-deployment',api_base:'https://clinical.example',region:'',auth_type:'',settings:{effort:'low',max_tokens:11000},capabilities:reasoning,credentials_available:true},
+ {role:'ml',roles:['ml'],provider:'azure_foundry',model:'unlisted-deployment',api_base:'https://clinical.example',region:'',auth_type:'',settings:{temperature:1},capabilities:{supports_temperature:null,supports_effort:null,effort_levels:null,default_effort:null},credentials_available:true},
 ];
 const catalog={source:'motoro',version:'test',controls:{temperature:{default:null,minimum:0,maximum:2},max_tokens:{default:4096,exclusiveMinimum:0,maximum:200000}},providers:[
  {id:'openai',label:'OpenAI',custom_model_name:false,can_list_models:true,models:[{id:'openai:gpt-4o',model:'gpt-4o',label:'GPT-4o',capabilities:temperature}]},
@@ -33,12 +34,12 @@ try {for(const width of [320,390,768,1280]) {
  await page.goto(`${process.env.TEST_BASE_URL??'http://127.0.0.1:4180'}/tests/responsive-scroll.fixture.html`);
  const dialog=page.getByRole('dialog'),settings=dialog.locator('.experiment-model-settings');
  await expect(settings.getByRole('radio',{name:/Use current model/})).toBeChecked();
- await expect(settings.locator('.experiment-default-card')).toHaveCount(2);
+ await expect(settings.locator('.experiment-default-card')).toHaveCount(3);
  await expect(settings.locator('.experiment-default-card').first()).toContainText('Interpretation');
- await expect(settings.locator('.experiment-default-card').last()).toContainText('Explanation');
- await settings.locator('.experiment-default-card').last().locator('summary').click();
- await expect(settings.locator('.experiment-default-card').last()).toContainText('https://clinical.example');
- await expect(settings.locator('.experiment-default-card').last()).toContainText('11000');
+ await expect(settings.locator('.experiment-default-card').nth(1)).toContainText('Explanation');
+ await settings.locator('.experiment-default-card').nth(1).locator('summary').click();
+ await expect(settings.locator('.experiment-default-card').nth(1)).toContainText('https://clinical.example');
+ await expect(settings.locator('.experiment-default-card').nth(1)).toContainText('11000');
  await expect(settings.locator('input[type=password]')).toHaveCount(0);
  await dialog.getByRole('button',{name:'Use Manual dataset',exact:true}).click();
  await expect(dialog.getByRole('button',{name:'Choose skills',exact:true})).toBeEnabled();
@@ -70,6 +71,14 @@ try {for(const width of [320,390,768,1280]) {
  await expect(settings.getByRole('checkbox',{name:/Use configured credentials/})).toHaveCount(0);
  await expect(settings.locator('#experiment-api-key')).toBeVisible();
  await expect(settings.getByRole('button',{name:'Check & use model'})).toBeDisabled();
+ await settings.locator('#experiment-default-profile').selectOption('ml');
+ await expect(settings.locator('.experiment-model-advanced')).toContainText('Server defaults: temperature 1.');
+ await settings.getByRole('button',{name:'Check & use model'}).click();
+ await expect(settings).toContainText('Model ready');
+ assert.equal(submitted[1].default_role,'ml');
+ assert.deepEqual(submitted[1].settings,{max_tokens:4096});
+ await settings.getByRole('button',{name:'Change',exact:true}).click();
+ await settings.locator('.experiment-model-advanced summary').click();
  await settings.locator('#experiment-default-profile').selectOption('question');
  await settings.locator('#experiment-temperature').fill('0.4');
  await settings.getByRole('radio',{name:/Use current model/}).check();
