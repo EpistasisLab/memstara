@@ -40,3 +40,17 @@
 .experiment-model-advanced summary span{display:block;margin:.25rem 0 0 1rem;color:rgb(var(--ink-soft));font-size:.75rem;font-weight:400}
 .experiment-model-advanced-body{display:grid;gap:1rem;padding:0 .85rem .85rem}
 .experiment-model-advanced-body>button{justify-self:start}
+.experiment-default-source{font-size:.75rem;color:rgb(var(--ink-soft))}
+.experiment-default-card{margin-top:.75rem;padding:.85rem;border:1px solid rgb(var(--line));border-radius:10px;background:rgb(var(--panel));min-width:0}
+.experiment-default-card>strong{display:block;font-size:.875rem;color:rgb(var(--ink));overflow-wrap:anywhere}
+.experiment-default-card>p{font-size:.75rem;margin-top:.2rem}
+.experiment-default-card details{margin-top:.6rem}
+.experiment-default-card summary{cursor:pointer;font-size:.75rem;font-weight:600;color:rgb(var(--ink))}
+.experiment-default-card dl{display:grid;gap:.6rem;margin:.65rem 0 0}
+.experiment-default-card dl>div{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:.75rem;font-size:.75rem;align-items:start}
+.experiment-default-card dt{color:rgb(var(--ink-soft))}.experiment-default-card dd{margin:0;color:rgb(var(--ink));overflow-wrap:anywhere;min-width:0}
+.experiment-default-prefill{display:grid;gap:.6rem}.experiment-default-prefill p{margin:0;font-size:.75rem;line-height:1.6;color:rgb(var(--ink-soft))}
+.experiment-model-settings .experiment-model-form .experiment-configured-key{display:flex;align-items:flex-start;gap:.65rem;padding:.8rem;border:1px solid rgb(var(--accent)/.3);border-radius:10px;background:rgb(var(--accent)/.05)}
+.experiment-model-settings .experiment-configured-key input{width:16px;min-height:16px;height:16px;flex-shrink:0;margin:.15rem 0 0;accent-color:rgb(var(--accent))}
+.experiment-configured-key span{min-width:0}.experiment-configured-key small{margin-top:.2rem}
+@media(max-width:480px){.experiment-default-card dl>div{grid-template-columns:minmax(0,1fr);gap:.1rem}}

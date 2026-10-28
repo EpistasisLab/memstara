@@ -31,6 +31,9 @@ _lock = threading.Lock()
 
 
 def validate(value, *, stored=False):
+    if not stored:
+        from memstara.model_defaults import resolve_credentials
+        value = resolve_credentials(value)
     fields = {'provider', 'model', 'api_key', 'api_base', 'region', 'auth_type',
               'access_key_id', 'secret_access_key', 'session_token'}
     extra = {'settings', 'catalog_id'} | ({'resolved_capabilities'} if stored else set())

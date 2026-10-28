@@ -553,6 +553,15 @@ class Handler(BaseHTTPRequestHandler):
                              "note": "Motoro owns execution cost estimates. Local rates are not applied."})
             return
 
+        if path == "/control/model-defaults":
+            from memstara.model_defaults import public_defaults
+            try:
+                self._send(200, public_defaults())
+            except ValueError:
+                self._send(503, {"error": "Configured model defaults are unavailable. "
+                               "Check the server model settings."})
+            return
+
         if path == "/control/model-catalog":
             from memstara.model_catalog import catalog
             try:
