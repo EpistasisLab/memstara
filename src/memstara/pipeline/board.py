@@ -2493,8 +2493,10 @@ async def main() -> int:
              "\"mechanism_family=treatment-toxicity,terminus_kind=sud\". Empty (the "
              "default) leaves the whole bundle readable",
     )
-    ap.add_argument("--provider", default="", choices=["anthropic", "azure_foundry", "openai"])
+    ap.add_argument("--provider", default="",
+                    choices=["anthropic", "azure_foundry", "openai", "openrouter", "local", "bedrock"])
     ap.add_argument("--model", default="")
+    ap.add_argument("--model-connection-id", default="")
     ap.add_argument("--stage-models", default="{}",
                     help="Optional JSON qwen/sonnet profiles: Sonnet for Explanation, Qwen for other stages")
     ap.add_argument('--controlled-comparison', default='{}',
@@ -2611,6 +2613,16 @@ async def main() -> int:
         args = argparse.Namespace(**saved)
         args.resume = True
         args.run_dir = str(root)
+    if args.report_only and not getattr(args, 'model_connection_id', ''):
+        from memstara.pipeline.preparation import frozen_model_source
+        original_models = frozen_model_source(args, Path(args.run_dir) if args.run_dir else Path('.'))
+        args.model_connection_id = (original_models or {}).get('model_connection_id', '')
+    if getattr(args, 'model_connection_id', ''):
+        from memstara.model_connections import execution_environment
+        selected_env = execution_environment(args.model_connection_id)
+        for name in set(os.environ) - set(selected_env):
+            os.environ.pop(name, None)
+        os.environ.update(selected_env)
     if getattr(args, 'research_input_id', ''):
         from memstara.research_inputs import prepare, activate, validate_skills
         try:

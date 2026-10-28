@@ -165,6 +165,8 @@ def freeze(args, root, books):
         "input_contract": "Research planning only; proposed variables are not verified dataset columns",
         "planning_adapter": "proposal_v1",
     }
+    if getattr(args, 'model_connection_id', ''):
+        state['model_connection_id'] = args.model_connection_id
     from memstara.ml_configuration import validate_overrides
     overrides = validate_overrides(json.loads(getattr(args, 'ml_overrides', '{}')), all_books.get('ml', []))
     if overrides:

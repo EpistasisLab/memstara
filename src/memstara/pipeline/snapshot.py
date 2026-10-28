@@ -147,6 +147,12 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     if getattr(args, 'research_profile', None):
         state['research_profile'] = args.research_profile
         state['missing_value_policy'] = missing_policy
+    # New records include partition-specific metrics; saved runs keep their contract.
+    from memstara.performance_metrics import VERSION as metrics_version
+    if previous is None:
+        state['metrics_policy'] = metrics_version
+    elif 'metrics_policy' in previous:
+        state['metrics_policy'] = previous['metrics_policy']
     from memstara.ml_configuration import validate_overrides
     ml_skills = ([item['id'] for item in combination_plan['skills']['ml']]
                  if combination_plan else books.get('ml', []))
@@ -195,6 +201,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
             state["specialist_xai_policy"] = specialist
             from memstara.ml_configuration import policy
             state.setdefault("ml_configuration_policy", policy())
+    if getattr(args, 'model_connection_id', ''):
+        state['model_connection_id'] = args.model_connection_id
     from memstara.specialist_explanation import freeze as freeze_explanation
     from memstara.corpus_skills import corpus_profile
     # A specialist's writing skill must not switch a Heart Failure/general

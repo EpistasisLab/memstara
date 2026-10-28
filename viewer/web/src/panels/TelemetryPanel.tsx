@@ -45,7 +45,7 @@ const descriptions: Record<Tab, string> = {
   Results: 'Review recorded findings and their supporting evidence.',
 };
 
-export default function TelemetryPanel() {
+export default function TelemetryPanel({lockedLoop}: {lockedLoop?: number} = {}) {
   const labelReplicate=useLoopLabel();
   const totals = useTelemetryTotals();
   const runTag = useViewer(s => s.runTag);
@@ -53,7 +53,7 @@ export default function TelemetryPanel() {
   const selectedPipelineId = usePipelines(s => s.selected);
   const pipelineError = usePipelines(s => s.error?.includes('Pipeline workspace is unavailable') ? s.error : null);
   const [selection, setSelection] = useState<{tag: string | null; loop: number | null}>({tag: null, loop: null});
-  const loop = selection.tag === runTag ? selection.loop : null;
+  const loop = lockedLoop ?? (selection.tag === runTag ? selection.loop : null);
   const [tab, setTab] = useState<Tab>('Totals');
   const [taskSelection, setTaskSelection] = useState<{scope: string; id: number | null}>({scope: '', id: null});
   const taskScope = `${runTag ?? ''}:${loop ?? 'all'}`;
@@ -71,7 +71,7 @@ export default function TelemetryPanel() {
   const pipeline = owner ?? (!runTag ? pipelines.find(p => p.id === selectedPipelineId) : undefined);
   const choices = execution?.loops.map(l => ({number: l.number, status: l.status ?? 'recorded'}))
     ?? (catalog?.tag === runTag ? catalog.loops : []);
-  const globalScope = tab === 'Experiments';
+  const globalScope = lockedLoop === undefined && tab === 'Experiments';
   const selectLoop = (value: number | null) => {setSelection({tag: runTag, loop: value});};
   const refresh = () => {totals.refresh(); setRevision(n => n + 1); void usePipelines.getState().poll();};
 
@@ -123,7 +123,7 @@ export default function TelemetryPanel() {
           <button type="button" className="tm-button tm-refresh" disabled={totals.refreshing || refreshing} onClick={refresh} aria-label="Refresh telemetry" title="Refresh recorded measurements and the selected view"><RefreshCw size={15} aria-hidden="true"/><span>Refresh</span></button>
         </div>
       </div>
-      <section className="tm-scope" aria-label="Pipeline and replicate selection">
+      {lockedLoop === undefined && <section className="tm-scope" aria-label="Pipeline and replicate selection">
         <label className="tm-field tm-pipeline-field"><span>Pipeline</span>
           <select aria-label="Pipeline to inspect" title={pipeline?.name} value={pipeline?.id ?? ''} disabled={globalScope} onChange={e => usePipelines.getState().select(e.target.value)}>
             <option value="" disabled>{runTag ? 'Saved execution' : 'Choose a pipeline'}</option>
@@ -144,13 +144,13 @@ export default function TelemetryPanel() {
         <div className="tm-scope-caption">{globalScope && <span>The registry covers all saved executions.</span>}
           {runTag && !globalScope && <details className="tm-execution-id"><summary>Execution ID</summary><code>{runTag}</code></details>}
         </div>
-      </section>
+      </section>}
       {pipelineError && <div className="tm-notice" role="status"><AlertCircle size={16}/><p>Pipeline list updates are delayed. Retained selections remain available.</p></div>}
       <nav aria-label="Usage tabs" className="tm-navigation">
         <div className="tm-primary-tabs">{primaryTabs.map(({id, label, icon: Icon}) => <button type="button" key={id} aria-pressed={tab === id} aria-controls="telemetry-content" onClick={() => setTab(id)}><Icon size={16} aria-hidden="true"/>{label}</button>)}</div>
         <label className="tm-detail-picker"><span className="sr-only">Detailed records</span>
           <select aria-label="Detailed records" data-active={recordTabs.some(t => t === tab)} value={recordTabs.some(t => t === tab) ? tab : ''} onChange={e => {if (e.target.value) setTab(e.target.value as Tab);}}>
-            <option value="" disabled>More records</option>{recordTabs.map(name => <option key={name} value={name}>{labels[name]}</option>)}
+            <option value="" disabled>More records</option>{recordTabs.filter(name => lockedLoop === undefined || (name !== 'Experiments' && name !== 'Results')).map(name => <option key={name} value={name}>{labels[name]}</option>)}
           </select>
         </label>
       </nav>
@@ -163,7 +163,7 @@ export default function TelemetryPanel() {
       </details>}
       <div id="telemetry-content" key={globalScope ? 'experiments' : key} tabIndex={0} role="region" aria-label="Usage details" className="telemetry-tab-body">
         {tab === 'Experiments' ? <div className="tm-records"><ExperimentRegistry refreshRevision={revision}/></div>
-          : tab === 'Totals' ? <TelemetryTotals data={totals.data} error={totals.error} runTag={runTag} loop={loop} onRetry={totals.refresh} refreshRevision={revision}/>
+          : tab === 'Totals' ? <TelemetryTotals data={totals.data} error={totals.error} runTag={runTag} loop={loop} onRetry={totals.refresh} refreshRevision={revision} scopedOnly={lockedLoop !== undefined}/>
           : !runTag ? <TelemetryState title="Choose an execution">Select a pipeline with saved activity to inspect its records.</TelemetryState>
           : !data ? <TelemetryState loading={!error} title={error ? 'Records are temporarily unavailable' : `Loading ${scope.toLowerCase()}`}>
             {error ? 'Retry above, or wait for the next automatic update.' : 'Preparing the saved history. Larger executions may take a little longer.'}

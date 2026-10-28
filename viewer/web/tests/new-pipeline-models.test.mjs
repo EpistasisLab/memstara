@@ -44,7 +44,7 @@ test('new drafts avoid hidden Interpretation choices without editing saved ones'
 
 test('new drafts replace disabled Explanation choices without editing saved ones',()=>{
  const saved={playbook_explanation:'shared-ml-results'};
- assert.equal(newPipelineConfiguration(saved).playbook_explanation,'report_general');
+ assert.equal(newPipelineConfiguration(saved).playbook_explanation,'shared-addiction');
  assert.equal(saved.playbook_explanation,'shared-ml-results');
  assert.equal(newPipelineConfiguration({playbook_explanation:'shared-hiv'}).playbook_explanation,'shared-hiv');
 });
@@ -57,11 +57,24 @@ test('new drafts avoid disabled hypothesis choices and preserve saved selections
 });
 
 
-test('new registered-study drafts replace incompatible inherited domain skills',()=>{
+test('new study drafts replace incompatible hypothesis skills and preserve supplied Explanation skills',()=>{
  const saved={research_input_id:'heart-failure',playbook_hypothesis:'addiction-psychiatric',playbook_explanation:'shared-hiv'};
  const draft=newPipelineConfiguration(saved);
  assert.equal(draft.playbook_hypothesis,'hypothesis_general');
- assert.equal(draft.playbook_explanation,'report_general');
+ assert.equal(draft.playbook_explanation,'shared-hiv');
  assert.equal(saved.playbook_hypothesis,'addiction-psychiatric');
  assert.equal(saved.playbook_explanation,'shared-hiv');
+});
+
+
+test('new drafts reset inherited connections but an explicit selection is saved without credentials',()=>{
+ const saved={model_connection_id:'old-connection',provider:'openai',model:'old-model',stage_models:{}};
+ const draft=newPipelineConfiguration(saved);
+ assert.equal(draft.model_connection_id,'');
+ draft.model_connection_id='checked-connection';
+ const request=newPipelineRequest(draft);
+ assert.equal(request.model_connection_id,'checked-connection');
+ assert(!Object.hasOwn(request,'stage_models'));
+ assert(!Object.hasOwn(request,'provider'));
+ assert.equal(saved.model_connection_id,'old-connection');
 });

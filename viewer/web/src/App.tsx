@@ -9,15 +9,13 @@ import ControlPanel from "./panels/ControlPanel";
 import PipelineWorkspace, { PipelineStatus } from "./panels/PipelineWorkspace";
 // Load with the application so an open tab cannot request a retired deployment chunk.
 import DiscoveryPanel from "./panels/DiscoveryPanel";
-import TelemetryPanel from "./panels/TelemetryPanel";
 import { usePipelines } from "./store/pipelines";
 import { useViewer, type ViewId } from "./store/viewer";
 import PipelineCreationDialog from "./panels/PipelineCreationDialog";
 import AgentConfigPanel from "./panels/AgentConfigPanel";
 import LogPanel from "./panels/LogPanel";
 import ClinicianPanel from "./panels/ClinicianPanel";
-import ReportPanel from "./panels/ReportPanel";
-import ResultsPanel from "./panels/ResultsPanel";
+import ExecutionOutputsPanel from "./panels/ExecutionOutputsPanel";
 import AccessTab from "./tabs/AccessTab";
 import BoardTab from "./tabs/BoardTab";
 import TaskTab from "./tabs/TaskTab";
@@ -28,12 +26,10 @@ import { useControl } from "./store/control";
 import { useCompletedResults } from './lib/useCompletedResults';
 
 
-const SECONDARY: Record<Exclude<ViewId, "chain" | "scene" | "log" | "clinician" | "results">, ComponentType> = {
+const SECONDARY: Record<Exclude<ViewId, "chain" | "scene" | "log" | "clinician" | "results" | "report" | "agents">, ComponentType> = {
   discovery: DiscoveryPanel,
-  report: ReportPanel,
   board: BoardTab,
   task: TaskTab,
-  agents: TelemetryPanel,
   access: AccessTab,
 };
 
@@ -41,7 +37,7 @@ function TopRegion() {
   const view = useViewer((s) => s.view);
 
   if (view === "clinician") return <ClinicianPanel />;
-  if (view === "results") return <ResultsPanel embedded />;
+  if (view === "results" || view === "report" || view === "agents") return <ExecutionOutputsPanel view={view}/>;
   if (view === "chain") return <div className="h-full overflow-auto"><PipelineStatus /></div>;
   if (view === "scene") return <PipelineWorkspace />;
   if (view === "log") return <LogPanel />;
@@ -88,7 +84,7 @@ export default function App() {
     <PipelineCreationDialog />
     <WindowWorkspace toolbar={<WorkspaceActions only="history"/>} items={[
       { id: "control", title: "Control", content: <ControlPanel /> },
-      { id: "pipeline", title: `${VIEWS[view].label}${pipeline && view !== "discovery" ? ` · ${pipeline.name}${view === "agents" ? "" : ` · ${pipelineLoopLabel(pipeline)}`}` : ""}`, content: <TopRegion /> },
+      { id: "pipeline", title: `${VIEWS[view].label}${pipeline && view !== "discovery" ? ` · ${pipeline.name}${(view === "agents" || view === "report" || view === "results") ? "" : ` · ${pipelineLoopLabel(pipeline)}`}` : ""}`, content: <TopRegion /> },
     ]} />
   </Tooltip.Provider>;
 }

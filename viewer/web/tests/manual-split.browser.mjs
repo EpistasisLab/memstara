@@ -11,7 +11,9 @@ try{for(const width of [320,390,768,1200]){
  await dialog.getByRole('button',{name:'Choose skills',exact:true}).click();
  await dialog.getByRole('button',{name:'Next: Data',exact:true}).click();
  await expect(dialog.getByLabel('Training data (%)',{exact:true})).toHaveCount(0);
- await expect(dialog.locator('.comb-split-choice')).toContainText('increase by 1 for each run');
+ await expect(dialog.locator('.comb-split-choice')).toContainText('Every replicate across all pipelines gets its own automatically generated seed');
+ await expect(dialog.locator('.comb-split-choice')).not.toContainText('increase by 1');
+ await expect(dialog.getByLabel('Fixed seed',{exact:true})).toHaveCount(0);
  await dialog.getByLabel('Set the split myself',{exact:true}).check();
  await expect(dialog.locator('.comb-split-choice')).toContainText('stays fixed for every pipeline and replicate');
  await dialog.getByLabel('Training data (%)',{exact:true}).fill('');

@@ -84,13 +84,26 @@ def validate_profiles(profiles: dict) -> dict:
             raise ValueError(f"{family} deployment must have a nonempty model name")
         if profile["provider"] not in ("anthropic", "azure_foundry", "openai", "bedrock", "local", "openrouter"):
             raise ValueError("Unsupported model provider")
-        if set(profile) - {"provider", "model", "api_base", "temperature", "max_tokens", "effort"}:
+        if set(profile) - {
+            "provider", "model", "api_base", "temperature", "max_tokens", "effort", "resolved_capabilities"
+        }:
             raise ValueError("Profiles cannot contain credentials or implicit fallback models")
+        if profile.get('resolved_capabilities') is not None:
+            from motoro.services.model_capabilities import ModelCapabilities
+            try:
+                caps = ModelCapabilities.model_validate(profile['resolved_capabilities'])
+            except Exception:
+                raise ValueError('Invalid frozen model capabilities') from None
+            from memstara.model_catalog import validate_settings
+            validate_settings({k: profile[k] for k in ('temperature', 'effort', 'max_tokens') if k in profile},
+                              caps.model_dump(mode='json'))
         if "max_tokens" in profile and (
             type(profile["max_tokens"]) is not int or not 0 < profile["max_tokens"] <= 200000
         ):
             raise ValueError("max_tokens must be an integer between 1 and 200000")
-        if profile.get("effort") not in (None, "none", "minimal", "low", "medium", "high", "xhigh", "max"):
+        if profile.get('resolved_capabilities') is None and profile.get("effort") not in (
+            None, "none", "minimal", "low", "medium", "high", "xhigh", "max"
+        ):
             raise ValueError("Unsupported reasoning effort")
         if profile.get("api_base") is not None and not isinstance(profile["api_base"], str):
             raise ValueError("api_base must be a URL string")
@@ -150,8 +163,10 @@ def call_overrides(profiles, stage, temperature=None):
     if profiles and set(profiles) == set(AGENT_ROLES):
         from motoro.schemas.agent import ModelConfig
         profile = ModelConfig(**for_stage(profiles, stage)).model_dump(mode='json')
-        return {key: profile[key] for key in
-                ('provider', 'model', 'api_base', 'temperature', 'max_tokens', 'effort')}
+        keys = ['provider', 'model', 'api_base', 'temperature', 'max_tokens', 'effort']
+        if profile.get('resolved_capabilities') is not None:
+            keys.append('resolved_capabilities')
+        return {key: profile[key] for key in keys}
     overrides = {"temperature": temperature} if temperature is not None else {}
     if stage == 'report':
         overrides['max_tokens'] = 8192

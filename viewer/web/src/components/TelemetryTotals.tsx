@@ -38,7 +38,7 @@ export function UsageCards({metric}:{metric:Metric}){
   ];
   return <dl className="usage-metric-cards tm-summary-cards">{cards.map(({label,value,note})=><div key={label}><dt>{label}</dt><dd>{value}</dd>{note&&<p>{note}</p>}</div>)}</dl>;
 }
-export default function TelemetryTotals({data,error,runTag,loop,onRetry,refreshRevision=0}:{data:Totals|null;error:string;runTag:string|null;loop:number|null;onRetry?:()=>void;refreshRevision?:number}){
+export default function TelemetryTotals({data,error,runTag,loop,onRetry,refreshRevision=0,scopedOnly=false}:{data:Totals|null;error:string;runTag:string|null;loop:number|null;onRetry?:()=>void;refreshRevision?:number;scopedOnly?:boolean}){
  const labelReplicate=useLoopLabel();
   const [evidenceOpen,setEvidenceOpen]=useState(false);
   const current=usePipelines(s=>s.items.find(p=>p.running?.run_tag===runTag));
@@ -65,8 +65,8 @@ export default function TelemetryTotals({data,error,runTag,loop,onRetry,refreshR
         <p className="telemetry-usage-note">Overview sums distinct Motoro agent execution records for the selected scope. Request details use saved LLM requests in that same scope. Elapsed time is a span, not the sum of parallel durations.</p>
       </div></details>
     </>}
-    {execution&&<details className="telemetry-disclosure"><summary><span><GitCompareArrows size={17} aria-hidden="true"/>Compare replicates</span><small>{execution.loops.length} recorded</small></summary><div><LoopUsage execution={execution} updatedAt={data?.updated_at}/></div></details>}
-    {data&&<details className="telemetry-disclosure"><summary><span><Layers3 size={17} aria-hidden="true"/>All pipelines</span><small>{data.pipelines.length} pipelines</small></summary><div>
+    {!scopedOnly&&execution&&<details className="telemetry-disclosure"><summary><span><GitCompareArrows size={17} aria-hidden="true"/>Compare replicates</span><small>{execution.loops.length} recorded</small></summary><div><LoopUsage execution={execution} updatedAt={data?.updated_at}/></div></details>}
+    {!scopedOnly&&data&&<details className="telemetry-disclosure"><summary><span><Layers3 size={17} aria-hidden="true"/>All pipelines</span><small>{data.pipelines.length} pipelines</small></summary><div>
       <p className="telemetry-usage-note">All saved executions · {data.scope}</p><UsageCards metric={data.total}/>
       <div className="tm-table-scroll" role="region" aria-label="All pipeline usage; scroll horizontally for more columns" tabIndex={0}><table className="tm-table"><caption className="sr-only">Usage across all saved pipeline executions</caption><thead><tr><th>Pipeline</th><th className="tm-number">Agent executions</th><th className="tm-number">Estimated cost</th></tr></thead><tbody>{data.pipelines.map(p=><tr key={p.id}><td><button className="tm-text-button" onClick={()=>usePipelines.getState().select(p.id)}>{p.name}</button><small>{p.executions} saved executions</small></td><td className="tm-number">{p.calls.toLocaleString()}</td><td className="tm-number">{costLabel(p.cost)}{p.cost.missing_costs>0&&<small>{p.cost.missing_costs} unpriced agent executions</small>}</td></tr>)}</tbody></table>{!data.pipelines.length&&<p className="telemetry-usage-note">No saved pipeline usage yet.</p>}</div>
     </div></details>}

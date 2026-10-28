@@ -37,7 +37,8 @@ def environment() -> dict:
 
 
 def save_bundle(source, target, plan, predictors, fixed_trials, partition, artifacts, result, *,
-                feature_selection=None, data_allocation=None, configuration=None, agent_plan=None, xai_request=None):
+                feature_selection=None, data_allocation=None, configuration=None, agent_plan=None, xai_request=None,
+                cv_artifacts=None):
     import joblib
     import numpy as np
     import pandas as pd
@@ -64,6 +65,9 @@ def save_bundle(source, target, plan, predictors, fixed_trials, partition, artif
                 arrays[f'cv_{fold}_train'] = train[fit]
                 arrays[f'cv_{fold}_validation'] = train[validate]
         np.savez_compressed(directory / f'split-{index}.npz', **arrays)
+        if cv_artifacts and cv_artifacts[index] is not None:
+            np.savez_compressed(directory / f'cv-predictions-{index}.npz',
+                                training_rows=train, **cv_artifacts[index])
         # Verify fresh fitting, not merely loading the already-fitted estimator.
         try:
             repeated = clone(model).fit(X.iloc[train], y.iloc[train]).predict_proba(X.iloc[test])[:, 1]
@@ -79,6 +83,8 @@ def save_bundle(source, target, plan, predictors, fixed_trials, partition, artif
     sources: tuple[str, ...] = ('evaluation.py', 'reproducibility.py', 'missing_values.py', 'preprocessing_policy.py')
     if agent_plan:
         sources += ('ml_configuration.py', 'paired_ml.py', 'comparisons.py', 'data_allocation.py')
+    if result['evaluation'].get('metrics_policy'):
+        sources += ('performance_metrics.py',)
     if xai_request:
         sources += ('specialist_xai.py',)
     for name in sources:
@@ -101,6 +107,7 @@ def save_bundle(source, target, plan, predictors, fixed_trials, partition, artif
         'target_classes': [0, 1], 'decision_threshold': configuration['threshold'] if configuration else .5,
         'configuration': configuration,
         'classifier_seed_policy': result['evaluation'].get('classifier_seed_policy', 'configured_seed_v1'),
+        'metrics_policy': result['evaluation'].get('metrics_policy', 'legacy_auc_only'),
         'preprocessing_policy': result.get('data_quality', {}).get('preprocessing_policy', 'legacy_encoding_v1'),
         'imputation_categories': result.get('data_quality', {}).get('imputation_categories', []),
         'predictor_types': result.get('data_quality', {}).get('predictor_types', {}),
@@ -131,8 +138,18 @@ def replay(directory: Path) -> dict:
         if Path(name).name != name or not (directory / name).is_file() or digest(directory / name) != expected:
             return {'status': 'integrity_mismatch'}
     for name, expected in manifest['code'].items():
-        allowed = ('evaluation.py', 'reproducibility.py', 'ml_configuration.py',
-                   'paired_ml.py', 'comparisons.py', 'data_allocation.py', 'specialist_xai.py', 'missing_values.py', 'preprocessing_policy.py')
+        allowed = (
+            "evaluation.py",
+            "reproducibility.py",
+            "ml_configuration.py",
+            "paired_ml.py",
+            "comparisons.py",
+            "data_allocation.py",
+            "specialist_xai.py",
+            "missing_values.py",
+            "preprocessing_policy.py",
+            "performance_metrics.py",
+        )
         if name not in allowed or digest(Path(__file__).with_name(name)) != expected:
             return {'status': 'code_mismatch'}
     # Load the evaluation libraries before recording native thread pools, as in score().
@@ -149,7 +166,8 @@ def replay(directory: Path) -> dict:
                    partition=manifest['partition'], persist=False, explain=False,
                    configuration=manifest.get('configuration'),
                    preprocessing_policy=manifest.get('preprocessing_policy', 'legacy_encoding_v1'),
-                   seed_policy=manifest.get('classifier_seed_policy', 'configured_seed_v1'))
+                   seed_policy=manifest.get('classifier_seed_policy', 'configured_seed_v1'),
+                   metrics_policy=manifest.get('metrics_policy', 'legacy_auc_only'))
     equal = (actual['evaluation']['replicates'] == expected['evaluation']['replicates']
              and actual['features'] == expected['features'] and actual['auc'] == expected['auc'])
     status = {'status': 'verified' if equal else 'mismatch',

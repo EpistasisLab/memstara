@@ -216,7 +216,8 @@ def preflight(path: Path, target: str, plan: dict, *, reserve_validation: bool =
 
 def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=None, explain=True,
           persist=True, partition=None, configuration=None, xai_request=None, missing_policy=None,
-          imputation_categories=None, preprocessing_policy=None, seed_policy=None, predictor_types=None) -> dict:
+          imputation_categories=None, preprocessing_policy=None, seed_policy=None, predictor_types=None,
+          metrics_policy=None) -> dict:
     import numpy as np
     import sklearn
     from sklearn.metrics import roc_auc_score, average_precision_score, balanced_accuracy_score, confusion_matrix
@@ -226,6 +227,11 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
     from memstara.missing_values import resolve_policy, TrainingImputer, imputation_record
+    from memstara import performance_metrics as performance
+    metrics_policy = metrics_policy or (active_plan() or {}).get('metrics_policy', performance.LEGACY)
+    if metrics_policy not in (performance.VERSION, performance.LEGACY):
+        raise DataQualityError('Unsupported performance metrics policy')
+    detailed_metrics = metrics_policy == performance.VERSION
     missing_policy = missing_policy or resolve_policy()
     if missing_policy not in ("reject", "native_xgboost", "impute_train_v1"):
         raise DataQualityError("Unsupported missing-value policy")
@@ -286,6 +292,7 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     threshold = configuration['threshold'] if configuration else .5
     runs: list[dict[str, Any]] = []
     artifacts = []
+    cv_artifacts = []
     last = None
     splits = evaluation_splits(y, plan, partition=partition)
     replicate_seeds = [seed for seed, _, _ in splits]
@@ -297,6 +304,7 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
             ('categorical', OneHotEncoder(handle_unknown='ignore', sparse_output=False), categorical),
         ], verbose_feature_names_out=False)
         best, best_cv, best_params, selected_trial = None, float('-inf'), None, 0
+        best_cv_record, best_cv_evidence = None, None
         fold_count = plan['folds'] or (3 if plan['search_trials'] > 1 else 0)
         requested_folds = fold_count
         fold_count = min(fold_count, int(y.iloc[train].value_counts().min()))
@@ -326,13 +334,20 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
             steps.extend([('encode', pre), ('model', model)])
             pipe = Pipeline(steps)
             cv_scores = None
+            cv_record, cv_evidence = None, None
             if fold_count:
                 cv = StratifiedKFold(n_splits=fold_count, shuffle=True, random_state=seed)
-                cv_scores = cross_val_score(pipe, X.iloc[train], y.iloc[train], cv=cv, scoring='roc_auc',
-                                            n_jobs=1, error_score='raise')
+                if detailed_metrics:
+                    cv_record, cv_evidence = performance.cross_validation(
+                        pipe, X.iloc[train], y.iloc[train], cv, threshold, missing_policy)
+                    cv_scores = [row['metrics']['auroc'] for row in cv_record['folds']]
+                else:
+                    cv_scores = cross_val_score(pipe, X.iloc[train], y.iloc[train], cv=cv, scoring='roc_auc',
+                                                n_jobs=1, error_score='raise')
             avg = float(np.mean(cv_scores)) if cv_scores is not None else 0.0
             if best is None or avg > best_cv:
                 best, best_cv, selected_trial = pipe, avg, trial
+                best_cv_record, best_cv_evidence = cv_record, cv_evidence
                 # XGBoost's missing-value sentinel is NaN. Persist it symbolically;
                 # PostgreSQL JSONB and browser JSON require finite JSON numbers.
                 best_params = json.loads(json.dumps(model.get_params(), default=str), parse_constant=str)
@@ -341,6 +356,7 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
         best.fit(X.iloc[train], y.iloc[train])
         probability = best.predict_proba(X.iloc[test])[:, 1]
         artifacts.append((best, train.copy(), test.copy(), probability.copy()))
+        cv_artifacts.append(best_cv_evidence)
         auc = float(roc_auc_score(y.iloc[test], probability))
         matrix = confusion_matrix(y.iloc[test], probability >= threshold, labels=[0, 1])
         tn, fp, fn, tp = (int(n) for n in matrix.ravel())
@@ -376,6 +392,20 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                             log_loss=float(log_loss(y.iloc[test], probability, labels=[0, 1])),
                             f1=float(f1_score(y.iloc[test], probability >= threshold, zero_division=0)),
                             pr_auc=float(area(recall, precision)))
+        if detailed_metrics:
+            measured_test = performance.binary_metrics(y.iloc[test], probability, threshold)
+            measured_test.update(scope='held_out_test', uncertainty=performance.bootstrap_intervals(
+                y.iloc[test], probability, threshold, seed))
+            runs[-1]['performance'] = {
+                'training': {'n': len(train), 'purpose': 'model fitting', 'metrics_status': 'not_computed',
+                             'reason': 'Training performance is not used as a generalization estimate.'},
+                'cross_validation': best_cv_record or {
+                    'status': 'not_performed', 'fold_count': 0,
+                    'requested_folds': requested_folds,
+                    'reason': ('Insufficient training class counts for CV.' if requested_folds else
+                               'Training CV is disabled for this evaluation.')},
+                'test': measured_test,
+            }
         last = (best, train, test)
     if last is None:
         raise DataQualityError('Evaluation requires at least one train/test split')
@@ -423,6 +453,8 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                              'validation_reserve': {k:v for k,v in reserve.items()
                                                     if k != 'exploration_rows'}},
               'explanation': explanation}
+    if detailed_metrics:
+        result['evaluation']['metrics_policy'] = metrics_policy
     if configuration:
         result['ml_configuration'] = configuration
         result['data_quality']['preprocessing'] = (
@@ -449,7 +481,8 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
             feature_selection=selection, data_allocation=handoff.get('data_allocation'),
             configuration=configuration, xai_request=xai_request,
             agent_plan=json.loads(path.with_suffix(".ml-plan.json").read_text())
-            if path.with_suffix(".ml-plan.json").exists() else None)
+            if path.with_suffix(".ml-plan.json").exists() else None,
+            cv_artifacts=cv_artifacts if detailed_metrics else None)
     return result
 
 

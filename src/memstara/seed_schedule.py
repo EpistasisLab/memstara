@@ -51,7 +51,7 @@ def create(pipelines, replicates, policy):
 
 
 def mode_schedule(pipelines, replicates, base_seed, *, manual, plan=None):
-    """Manual: one fixed seed. Skills: +1 in the frozen execution order."""
+    """Manual fixed seeds, plus the historical incrementing schedule for replay."""
     if any(type(n) is not int or n < 1 for n in (pipelines, replicates)) or pipelines * replicates > 10000:
         raise ValueError('Invalid seed schedule dimensions')
     if type(base_seed) is not int or not 0 <= base_seed <= 2147483647:
@@ -174,7 +174,8 @@ def freeze(snapshot, args, previous=None):
         manual = not data or data == ['data_manual_split']
         if 'data_manual_split' in data and not manual:
             raise ValueError('Manual split cannot be mixed with Data skills')
-        schedule = mode_schedule(count, repeats, snapshot.get('evaluation', {}).get('seed', 42),
-                                 manual=manual, plan=plan)
+        schedule = (mode_schedule(count, repeats, snapshot.get('evaluation', {}).get('seed', 42),
+                                  manual=True, plan=plan) if manual
+                    else create(count, repeats, 'independent_pipelines'))
     snapshot['seed_schedule'] = schedule
     snapshot['seed_policy'] = VERSION

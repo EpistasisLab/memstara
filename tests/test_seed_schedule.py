@@ -44,8 +44,8 @@ def test_independent_seeds_freeze_once_and_replay_both_orders(monkeypatch):
     first = experiment('all_pipelines_first')
     args = SimpleNamespace(continuous=False)
     freeze(first, args)
-    assert first['seed_schedule']['policy'] == 'execution_sequence_v1'
-    assert [task_seed(first, i) for i in range(6)] == list(range(42, 48))
+    assert first['seed_schedule']['policy'] == 'independent_pipelines'
+    assert len({task_seed(first, i) for i in range(6)}) == 6
     assert len({s for row in first['seed_schedule']['seeds'] for s in row}) == 6
     original = json.loads(json.dumps(first))
     def no_redraw(*args, **kwargs):
@@ -129,8 +129,9 @@ def test_data_settings_seed_modes_follow_scheduled_runs(order, manual):
     original['evaluation'] = {'seed': 708}
     original['combination_plan']['skills']['data'] = [{'id': 'data_manual_split' if manual else 'data_training_heavy'}]
     freeze(original, SimpleNamespace())
-    assert original['seed_schedule']['policy'] == (FIXED if manual else INCREMENTING)
-    assert [task_seed(original, n) for n in range(6)] == ([708] * 6 if manual else list(range(708, 714)))
+    assert original['seed_schedule']['policy'] == (FIXED if manual else 'independent_pipelines')
+    seeds = [task_seed(original, n) for n in range(6)]
+    assert seeds == [708] * 6 if manual else len(set(seeds)) == 6
     for retry in (False, True):
         restored = json.loads(json.dumps(original))
         restored.pop('seed_schedule'); restored.pop('seed_policy')
@@ -138,8 +139,11 @@ def test_data_settings_seed_modes_follow_scheduled_runs(order, manual):
             k: original[k] for k in ('seed_schedule', 'dataset_sha256', 'y_column')})) if retry else SimpleNamespace()
         freeze(restored, args, None if retry else original)
         assert restored['seed_schedule'] == original['seed_schedule']
-    original['seed_schedule']['seeds'][0][1] += 1
-    with pytest.raises(ValueError, match='frozen Data settings'):
+    if manual:
+        original['seed_schedule']['seeds'][0][1] += 1
+    else:
+        original['seed_schedule']['seeds'][0][1] = original['seed_schedule']['seeds'][1][0]
+    with pytest.raises(ValueError, match='frozen Data settings|Independent executions'):
         seed_for(original['seed_schedule'], 1, 1)
 
 
@@ -153,4 +157,4 @@ def test_sequence_bounds_and_rotated_extended_schedules():
             state = experiment(order)
             state['combination_plan'].update(start_index=1, total_loops=loops)
             freeze(state, SimpleNamespace())
-            assert [task_seed(state, n) for n in range(loops)] == list(range(42, 42+loops))
+            assert len({task_seed(state, n) for n in range(loops)}) == loops

@@ -1,0 +1,115 @@
+import {expect} from '@playwright/test';
+import assert from 'node:assert/strict';
+import {launchResponsiveBrowser} from './responsive-browser.mjs';
+const temperature={supports_temperature:true,supports_effort:false,effort_levels:[],default_effort:null};
+const reasoning={supports_temperature:false,supports_effort:true,effort_levels:['low','medium','high'],default_effort:'medium'};
+const fullReasoning={...reasoning,effort_levels:['low','medium','high','xhigh','max']};
+const rows=[{id:'openai:gpt-4o',model:'gpt-4o',label:'GPT-4o from Motoro',capabilities:temperature},{id:'openai:gpt-5',model:'gpt-5',label:'GPT-5 from Motoro',capabilities:reasoning},{id:'anthropic:claude-opus-5',model:'claude-opus-5',label:'Claude Opus 5 from Motoro',capabilities:fullReasoning}];
+const catalog={source:'motoro',version:'test',controls:{temperature:{default:.7,minimum:0,maximum:2},max_tokens:{default:4096,exclusiveMinimum:0,maximum:200000}},providers:Object.entries({openai:'OpenAI',anthropic:'Anthropic',azure_foundry:'Azure Foundry',local:'Local / self-hosted',bedrock:'Amazon Bedrock',openrouter:'OpenRouter'}).map(([id,label])=>({id,label,custom_model_name:['azure_foundry','local','bedrock'].includes(id),can_list_models:!['azure_foundry','bedrock'].includes(id),models:rows.filter(row=>!['openai','anthropic'].includes(id)||row.id.startsWith(id+':'))}))};
+const browser=await launchResponsiveBrowser();
+try {for(const width of [320,390,768,1280]) {
+ const page=await browser.newPage({viewport:{width,height:1000}});const errors=[];const submitted=[];
+ page.on('pageerror',error=>errors.push(error.message));
+ await page.route('**/control/**',async route=>{
+  if(route.request().url().endsWith('/model-catalog'))return route.fulfill({json:catalog});
+  if(route.request().url().includes('/model-capabilities?'))return route.fulfill({json:{capabilities:temperature,source:'motoro'}});
+  if(route.request().url().endsWith('/model-connections/models'))return route.fulfill({json:{models:[{model:'account-model',label:'account-model',capabilities:{supports_temperature:null,supports_effort:true,effort_levels:null,default_effort:null}}],truncated:false}});
+  if(route.request().url().endsWith('/model-connections/check')){
+   const data=route.request().postDataJSON();submitted.push(data);
+   if(data.api_key==='bad-key')return route.fulfill({status:400,json:{error:'Authentication failed. Check the API key and model access.'}});
+   return route.fulfill({status:201,json:{connection:{id:'a'.repeat(32),provider:data.provider,model:data.model,api_base:data.api_base||'',region:'',checked_at:'2026-10-27T00:00:00Z'}}});
+  }
+  return route.fulfill({json:{llm:{},stage_models:{non_explanation_agents:{provider:'azure_foundry',model:'current-model'},explanation_agent:{provider:'azure_foundry',model:'current-model'}},inputs:[{id:'manual-data',input_checks_passed:true,configuration:{name:'Manual dataset',dataset_path:'/data.csv',knowledge_mode:'okf',knowledge_path:'/okf',data_mode:'dataset',target:{column:'outcome',positive_label:'1',negative_label:'0'},excluded_columns:[],missing_policy:'reject'}}],models:[],skills:[]}});
+ });
+ await page.goto(`${process.env.TEST_BASE_URL??'http://127.0.0.1:4177'}/tests/responsive-scroll.fixture.html`);
+ if(width===390)await page.evaluate(()=>document.documentElement.dataset.theme='dark');
+ const dialog=page.getByRole('dialog');const settings=dialog.locator('.experiment-model-settings');
+ await expect(settings).toContainText('Azure Foundry · current-model');
+ await expect(settings.locator('#experiment-api-key')).toHaveCount(0);
+ await dialog.getByRole('button',{name:'Use Manual dataset',exact:true}).click();
+ await settings.getByRole('radio',{name:/Set up a model/}).check();
+ await expect(dialog.getByRole('button',{name:'Choose skills',exact:true})).toBeDisabled();
+ for(const provider of ['azure_foundry','local','bedrock','anthropic','openrouter','openai']) {
+  await settings.locator('#experiment-model-provider').selectOption(provider);
+  await expect(settings.locator('#experiment-model-endpoint')).toHaveCount(['azure_foundry','local'].includes(provider)?1:0);
+  await expect(settings.locator('#experiment-model-region')).toHaveCount(provider==='bedrock'?1:0);
+  if(provider==='bedrock'){
+   await settings.locator('#experiment-model-auth').selectOption('aws_credentials');
+   await expect(settings.locator('#experiment-aws-secret')).toHaveAttribute('type','password');
+   await expect(settings.locator('#experiment-api-key')).toHaveCount(0);
+  }
+ }
+ await settings.locator('#experiment-model-choice').selectOption('openai:gpt-5');
+ await expect(settings.locator('.experiment-model-advanced')).not.toHaveAttribute('open','');
+ await settings.locator('summary').click();
+ assert.deepEqual(await settings.locator('#experiment-effort option').evaluateAll(nodes=>nodes.map(n=>n.value)),['','low','medium','high']);
+ await expect(settings.locator('#experiment-temperature')).toHaveCount(0);
+ await settings.locator('#experiment-effort').selectOption('high');
+ await settings.locator('#experiment-model-provider').selectOption('anthropic');
+ await settings.locator('#experiment-model-choice').selectOption('anthropic:claude-opus-5');
+ await settings.locator('summary').click();
+ assert.deepEqual(await settings.locator('#experiment-effort option').evaluateAll(nodes=>nodes.map(n=>n.value)),['','low','medium','high','xhigh','max']);
+ await settings.locator('#experiment-model-provider').selectOption('openai');
+ await settings.locator('#experiment-model-choice').selectOption('openai:gpt-4o');
+ await settings.locator('summary').click();
+ await expect(settings.locator('#experiment-effort')).toHaveCount(0);
+ await expect(settings.locator('#experiment-temperature')).toHaveValue('0.7');
+ await settings.locator('#experiment-temperature').fill('2.1');
+ await settings.locator('#experiment-api-key').fill('synthetic-private-key');
+ await expect(settings.getByRole('button',{name:'Check & use model'})).toBeDisabled();
+ await settings.getByRole('button',{name:'Reset to Motoro defaults'}).click();
+ await expect(settings.locator('#experiment-temperature')).toHaveValue('0.7');
+ await settings.getByRole('button',{name:'Load provider models'}).click();
+ await expect(settings.locator('#experiment-model-choice option[value="provider:account-model"]')).toHaveCount(1);
+ await settings.locator('#experiment-model-choice').selectOption('provider:account-model');
+ await expect(settings.locator('#experiment-temperature')).toHaveCount(0);
+ assert.deepEqual(await settings.locator('#experiment-effort option').evaluateAll(nodes=>nodes.map(n=>n.value)),['']);
+ await expect(settings.locator('#experiment-model-id')).toHaveCount(0);
+ await settings.locator('#experiment-model-choice').selectOption('manual');
+ await settings.locator('#experiment-model-id').fill('chosen-model');
+ await expect(settings.locator('#experiment-temperature')).toHaveCount(1);
+ await settings.locator('summary').click();
+ await settings.locator('#experiment-temperature').fill('0.2');
+ await settings.locator('#experiment-max-tokens').fill('6000');
+ await settings.locator('#experiment-api-key').fill('bad-key');
+ await settings.getByRole('button',{name:'Check & use model'}).click();
+ await expect(settings.getByRole('alert')).toContainText('Authentication failed');
+ await expect(dialog.getByRole('button',{name:'Choose skills',exact:true})).toBeDisabled();
+ await settings.locator('#experiment-api-key').fill('synthetic-private-key');
+ await expect(settings.locator('#experiment-api-key')).toHaveAttribute('type','password');
+ await settings.getByRole('button',{name:'Show API key'}).click();
+ await expect(settings.locator('#experiment-api-key')).toHaveAttribute('type','text');
+ await settings.getByRole('button',{name:'Hide API key'}).click();
+ // Credential edits must not trigger delayed capability/default resets.
+ await page.waitForTimeout(500);
+ await expect(settings.locator('#experiment-temperature')).toHaveValue('0.2');
+ await expect(settings.locator('#experiment-max-tokens')).toHaveValue('6000');
+ await settings.scrollIntoViewIfNeeded();
+ const bounds=await settings.evaluate(el=>({width:el.clientWidth,scroll:el.scrollWidth,dialogOverflow:el.closest('dialog').scrollWidth>el.closest('dialog').clientWidth+2}));
+ assert(bounds.scroll<=bounds.width+2&&!bounds.dialogOverflow,JSON.stringify(bounds));
+ await page.screenshot({path:`/private/tmp/memstara-model-settings-${width}.png`,fullPage:true});
+ await settings.getByRole('button',{name:'Check & use model'}).click();
+ await expect(settings).toContainText('Model ready');
+ await expect(settings.locator('#experiment-api-key')).toHaveCount(0);
+ await expect(dialog.getByRole('button',{name:'Choose skills',exact:true})).toBeEnabled();
+ await dialog.getByRole('button',{name:'Choose skills',exact:true}).click();
+ await dialog.getByRole('button',{name:'Back',exact:true}).click();
+ await expect(settings).toContainText('OpenAI · chosen-model');
+ await dialog.getByRole('button',{name:'Choose skills',exact:true}).click();
+ for(const name of ['Next: Data','Next: Machine learning','Next: Interpretation','Next: Explanation','Review plan'])await dialog.getByRole('button',{name,exact:true}).click();
+ await expect(dialog).toContainText('openai · chosen-model');
+ await dialog.getByLabel('Name',{exact:true}).fill('Own model');
+ await dialog.getByRole('checkbox',{name:/I reviewed/}).check();
+ await dialog.getByRole('button',{name:'Create combination design'}).click();
+ const saved=JSON.parse(await page.locator('body').getAttribute('data-created'));
+ assert.equal(saved.configuration.model_connection_id,'a'.repeat(32));
+ assert(!JSON.stringify(saved).includes('synthetic-private-key'));
+ assert.equal(submitted.length,2);
+ assert.deepEqual(submitted[1].settings,{temperature:.2,max_tokens:6000});
+ assert.deepEqual(errors,[]);
+ await page.reload();
+ await expect(page.getByRole('radio',{name:/Use current model/})).toBeChecked();
+ await expect(page.locator('#experiment-api-key')).toHaveCount(0);
+ console.log(JSON.stringify({width,providerFields:true,maskedKey:true,invalidBlocksNext:true,checkedConnectionSaved:true,noSecretsInDesign:true,freshWizard:true,noOverflow:true}));
+ await page.close();
+}} finally {await browser.close();}

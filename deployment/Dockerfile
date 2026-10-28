@@ -23,6 +23,10 @@ COPY examples/ examples/
 COPY deployment/ deployment/
 RUN SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0+container uv sync --frozen --extra runtime --no-dev
 RUN .venv/bin/python -c "from importlib.metadata import version; assert version('motoro') == '0.13.0'"
+# Fail local image builds as well as CI on undefined/shadowed names and broken
+# HTTP query handlers. The smoke test uses isolated synthetic records, no LLM.
+RUN uvx --from ruff==0.16.8 ruff check --select F821,F823 src/ \
+    && .venv/bin/python deployment/check_control_routes.py
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 MEMSTARA_CONFIG_MODE=environment
 ENTRYPOINT ["python", "/app/deployment/exec_service.py"]
 CMD ["python", "-m", "memstara.control"]

@@ -30,9 +30,9 @@ def state(skill='data_manual_split'):
 def test_new_experiments_follow_data_settings_seed_mode(skill):
     first = state(skill)
     seed_schedule.freeze(first, SimpleNamespace())
-    expected = [708] * 6 if skill == 'data_manual_split' else list(range(708, 714))
-    assert [seed_schedule.task_seed(first, n) for n in range(6)] == expected
-    assert first['seed_schedule']['policy'] == (seed_schedule.FIXED if skill == 'data_manual_split' else seed_schedule.INCREMENTING)
+    seeds = [seed_schedule.task_seed(first, n) for n in range(6)]
+    assert seeds == [708] * 6 if skill == 'data_manual_split' else len(set(seeds)) == 6
+    assert first['seed_schedule']['policy'] == (seed_schedule.FIXED if skill == 'data_manual_split' else 'independent_pipelines')
 
 
 @pytest.mark.parametrize('recovery', ['resume', 'retry'])
@@ -91,8 +91,9 @@ def test_frozen_combinations_reach_real_split_and_model(tmp_path, monkeypatch, o
     snapshot = freeze_snapshot(args, run, {})
     saved = (run / 'config.json').read_bytes()
     assert snapshot['classifier_seed_policy'] == 'split_seed_v1'
-    assert snapshot['seed_schedule']['policy'] == (seed_schedule.FIXED if skill == 'data_manual_split' else seed_schedule.INCREMENTING)
-    assert [seed_schedule.task_seed(snapshot, n) for n in range(4)] == ([708] * 4 if skill == 'data_manual_split' else list(range(708, 712)))
+    assert snapshot['seed_schedule']['policy'] == (seed_schedule.FIXED if skill == 'data_manual_split' else 'independent_pipelines')
+    seeds = [seed_schedule.task_seed(snapshot, n) for n in range(4)]
+    assert seeds == [708] * 4 if skill == 'data_manual_split' else len(set(seeds)) == 4
     split_ids = []
     for trial in range(4):
         identity = loop_flavors(combination, trial + 1)
@@ -128,3 +129,58 @@ def test_frozen_combinations_reach_real_split_and_model(tmp_path, monkeypatch, o
     resumed = freeze_snapshot(args, run, {})
     assert resumed['seed_schedule'] == snapshot['seed_schedule']
     assert (run / 'config.json').read_bytes() == saved
+
+
+@pytest.mark.parametrize('order', ['all_pipelines_first', 'pipeline_replicates_first'])
+@pytest.mark.parametrize('manual', [False, True])
+def test_sixteen_pipelines_two_replicates_have_thirty_two_seed_identities(order, manual, monkeypatch):
+    choices = {'hypothesis': ['heart-failure-all-categories', 'heart-failure-cardiovascular'],
+               'data': ['data_manual_split' if manual else 'data_training_heavy'],
+               'ml': ['ml_logistic_regression', 'ml_xgboost'],
+               'interpreter': ['shared-shap', 'shared-lime'],
+               'report': ['shared-heart-failure-cardiovascular', 'shared-heart-failure-comorbidity']}
+    plan = build_plan(choices, 2, execution_order=order)
+    assert plan['combinations'] == 16 and plan['total_loops'] == 32
+    original = state()
+    original['combination_plan'] = plan
+    # Deliberately collide draws: uniqueness must hold across pipelines as well
+    # as within one pipeline, independently of the hidden evaluation.seed.
+    values = iter(v for n in range(32) for v in (1000 + n * 137,) * 2)
+    monkeypatch.setattr(seed_schedule.secrets, 'randbelow', lambda _: next(values))
+    seed_schedule.freeze(original, SimpleNamespace())
+    seeds = [seed_schedule.task_seed(original, n) for n in range(32)]
+    assert seeds == [708] * 32 if manual else set(seeds) == {1000 + n * 137 for n in range(32)}
+    pairs = { (loop_flavors(plan, n + 1)['combination'], loop_flavors(plan, n + 1)['repetition']): seeds[n]
+              for n in range(32)}
+    assert len(pairs) == 32
+    def no_redraw(*args, **kwargs):
+        pytest.fail('Resume/retry must keep all 32 recorded seeds')
+    monkeypatch.setattr(seed_schedule, 'create', no_redraw)
+    resumed = state()
+    seed_schedule.freeze(resumed, SimpleNamespace(), original)
+    assert resumed['seed_schedule'] == original['seed_schedule']
+    retry = state()
+    retry['combination_plan'] = build_plan(choices, 2, execution_order=(
+        'pipeline_replicates_first' if order == 'all_pipelines_first' else 'all_pipelines_first'))
+    seed_schedule.freeze(retry, SimpleNamespace(retry_source_run='original', retry_seed_schedule=json.dumps({
+        k: original[k] for k in ('seed_schedule', 'dataset_sha256', 'y_column')})))
+    for n in range(32):
+        identity = loop_flavors(retry['combination_plan'], n + 1)
+        assert seed_schedule.task_seed(retry, n) == pairs[identity['combination'], identity['repetition']]
+
+
+@pytest.mark.parametrize('order', ['all_pipelines_first', 'pipeline_replicates_first'])
+def test_existing_incrementing_runs_keep_original_seeds_on_resume(order, monkeypatch):
+    original = state('data_training_heavy')
+    original['combination_plan']['execution_order'] = order
+    original['seed_policy'] = seed_schedule.VERSION
+    original['seed_schedule'] = seed_schedule.mode_schedule(2, 3, 708, manual=False,
+                                                           plan=original['combination_plan'])
+    monkeypatch.setattr(seed_schedule, 'create', lambda *a: pytest.fail('Do not rewrite historical seeds'))
+    for retry in (False, True):
+        restored = state('data_training_heavy')
+        restored['combination_plan']['execution_order'] = order
+        args = SimpleNamespace(retry_source_run='original', retry_seed_schedule=json.dumps({
+            k: original[k] for k in ('seed_schedule', 'dataset_sha256', 'y_column')})) if retry else SimpleNamespace()
+        seed_schedule.freeze(restored, args, None if retry else original)
+        assert [seed_schedule.task_seed(restored, n) for n in range(6)] == list(range(708, 714))

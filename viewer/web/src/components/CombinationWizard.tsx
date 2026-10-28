@@ -6,6 +6,7 @@ import {ArrowRight,ArrowLeft,Check,Search,Brain,Database,ChartNoAxesCombined,Sca
 import './combinations.css';
 import FloorDetailDialog from './FloorDetailDialog';
 import ResearchInputSelect from './ResearchInputSelect';
+import ExperimentModelSettings, {ExperimentModelContext, type ModelConnection} from './ExperimentModelSettings';
 import CustomSkillUpload from './CustomSkillUpload';
 import HypothesisSkillWizard from './HypothesisSkillWizard';
 import {evaluationPlanError} from '../lib/evaluationPlan';
@@ -19,7 +20,10 @@ export default function CombinationWizard(){
  // Each newly opened wizard starts from app defaults, independently of the selected experiment.
  // Keep draft changes local so editing or running saved experiments cannot seed new creation.
  const [draft,setDraft]=useState<RunRequest>(()=>({...newPipelineConfiguration(DEFAULT_REQUEST),combination_skills:{},ml_overrides:{},evaluation:{...DEFAULT_REQUEST.evaluation,engine:'logistic_regression',folds:0,replicates:1,search_trials:1},combination_repetitions:1,combination_execution_order:'all_pipelines_first',combination_random_start:false,combination_max_loops:null,trials:1,hypothesis_agents:1,interpret_agents:1,continuous:false,waves:1}));
- const [sourceError,setSourceError]=useState('');
+ const [inputError,setSourceError]=useState('');
+ const [connectionError,setConnectionError]=useState('');
+ const [connection,setConnection]=useState<ModelConnection|null>(null);
+ const sourceError=inputError||connectionError;
  const [skillMode,setSkillMode]=useState<'library'|'custom'|'ai'>('library');
  const [step,setStep]=useState(0);const [activeRole,setActiveRole]=useState<PlaybookStage>('hypothesis');const [search,setSearch]=useState('');
  const icons={hypothesis:Brain,data:Database,ml:ChartNoAxesCombined,interpreter:ScanSearch,report:Lightbulb};
@@ -68,11 +72,12 @@ export default function CombinationWizard(){
  const RoleIcon=icons[activeRole];
  const visible=catalog.filter(s=>s.id!=='data_manual_split'&&compatibleResearchSkill(s,draft)&&s.stage===activeRole&&displayText(`${skillLabel(s.id,s.title)} ${s.description??''}`).toLowerCase().includes(search.toLowerCase()));
  return <FloorDetailDialog title="All Combinations" close={()=>{if(!busy&&!uploading)closeCreation();}} className="pipeline-management-dialog combination-dialog">
-  <div className="comb-builder">
+  <ExperimentModelContext.Provider value={connection?`Model: ${connection.model} (${connection.provider.replace(/_/g, ' ')})`:connectionError?'Choose your AI model above.':undefined}><div className="comb-builder">
    <nav className="comb-steps" aria-label="Combination setup steps">{['Research inputs','Agent skills','Review & create'].map((label,i)=><button key={label} aria-current={step===i?'step':undefined} disabled={busy||uploading||(i>0&&!!sourceError)||(i===2&&!count)} onClick={()=>setStep(i)}><span>{(i===0&&!sourceError&&step>0)||(i===1&&count>0&&!modelError)?<Check size={14}/>:i+1}</span>{label}</button>)}</nav>
    {step===2&&<div className="comb-budget" role="status" aria-label="Pipeline replicate summary"><div><strong>{count.toLocaleString()}</strong><span>total pipelines</span></div><span className="comb-budget-operator" aria-hidden="true">×</span><div><strong>{Number.isInteger(repetitions)?repetitions.toLocaleString():'—'}</strong><span>replicates per pipeline</span></div><span className="comb-budget-operator" aria-hidden="true">=</span><div className="comb-total"><strong>{Number.isInteger(total)?total.toLocaleString():'—'}</strong><span>total replicates</span></div></div>}
    <div className="comb-step-content" data-context-help-managed={step===1&&activeRole==='hypothesis'?true:undefined}>
    <header className="comb-guidance"><span className="comb-eyebrow">Step {step+1} of 3{step===1?` · Agent ${activeIndex+1} of 5`:''}</span><h3>{step===0?'Set up your research':step===1?(activeRole==='data'?'Configure your data':`Choose ${flavorNames[activeRole]} skills`):'Confirm your pipeline'}</h3><p>{instruction}</p></header>
+   <div hidden={step!==0}><ExperimentModelSettings onValidityChange={setConnectionError} onChange={value=>{setConnection(value);setDraft(d=>({...d,model_connection_id:value?.id??'',stage_models:{}}));setReviewed(false);}}/></div>
    {step===0&&<section className="comb-inputs"><ResearchInputSelect onValidityChange={setSourceError} value={draft} onChange={patch=>{setDraft(d=>({...d,...patch}));setReviewed(false);}}/></section>}
    {step===1&&<div className="comb-skill-layout">
     <nav className="comb-roles" aria-label="Agent roles">
@@ -99,7 +104,7 @@ export default function CombinationWizard(){
         <div className="comb-split-bar" aria-hidden="true"><span style={{width:`${(1-draft.evaluation.test_size)*100}%`}}/></div>
        </div>:<p className="comb-split-error" role="alert">Enter a training percentage from 50 to 90.</p>}
        <p className="comb-split-note">Seed {Number.isFinite(draft.evaluation.seed)?draft.evaluation.seed:'—'} stays fixed for every pipeline and replicate. The split and model use this same seed.</p>
-      </div>:<p className="comb-split-note">Select data skills below to set the split. Seeds start at {draft.evaluation.seed} and increase by 1 for each run in your execution order. Each run uses the same seed for its split and model.</p>}
+      </div>:<p className="comb-split-note">Select data skills below to set the split. Every replicate across all pipelines gets its own automatically generated seed. No two executions in this experiment share a seed. Each execution uses the same seed for its data split and model; retries keep that seed.</p>}
      </fieldset>}
      <div hidden={activeRole==='data'&&manualSplit}>
      <div className="comb-skill-methods" role="group" aria-label="How to add skills">
@@ -136,6 +141,7 @@ export default function CombinationWizard(){
       <p id="comb-limit-help" className="comb-review-hint">One Pipeline is one skill combination. One Replicate completes that Pipeline’s research process once. {count} pipelines × {Number.isInteger(repetitions)?repetitions:'—'} replicates per pipeline = {Number.isInteger(total)?total:'—'} total replicates.</p>
       <details className="comb-review-rules"><summary>How execution works</summary><p>{draft.combination_execution_order==='pipeline_replicates_first'?'Complete every replicate of one pipeline before moving to the next pipeline.':'All pipelines complete their first replicate before the next replicate cycle begins.'} The schedule contains {Number.isInteger(total)?total.toLocaleString():'—'} total replicates. A blocked attempt is recorded separately from successful completion; retries stay attached to the same scheduled replicate. Resume preserves the schedule.</p></details>
      </section>
+     <section className="comb-review-card"><h4>AI model</h4><p className="break-words text-sm">{connection?`${connection.provider.replace(/_/g,' ')} · ${connection.model}`:'Current configured model'}</p><button type="button" className="mt-2 text-sm underline" onClick={()=>setStep(0)}>Edit model</button></section>
      <section className="comb-review-card" aria-labelledby="comb-agents-heading"><h4 id="comb-agents-heading">Your agents</h4><ol className="comb-review-agents">{PLAYBOOK_STAGES.map((stage,i)=>{const Icon=icons[stage];return <li key={stage}>
       <div className="comb-review-agent-heading"><Icon size={18} aria-hidden="true"/><h5>{flavorNames[stage]}</h5><span>{stage==='data'&&manualSplit?'Manual split':`${counts[i]} ${counts[i]===1?'skill':'skills'}`}</span><button type="button" aria-label={`Edit ${flavorNames[stage]} skills`} disabled={busy||uploading} onClick={()=>{moveRole(i);setStep(1);}}>Edit</button></div>
       <ul>{stage==='data'&&manualSplit&&<li>Train {Math.round((1-draft.evaluation.test_size)*100)}% / Test {Math.round(draft.evaluation.test_size*100)}% · Fixed seed {draft.evaluation.seed}</li>}{stage==='ml'&&!selected.ml?.length&&<li>Default scikit-learn Logistic Regression</li>}{(effectiveSelected[stage]??[]).map(id=><li key={id}>{skillLabel(id,catalog.find(s=>s.id===id)?.title)}</li>)}</ul>
@@ -158,6 +164,6 @@ export default function CombinationWizard(){
    </div>
    {total>10000&&<p role="alert">Choose at most 10,000 total replicates.</p>}{error&&<p role="alert">{error}</p>}
    <footer className="comb-footer"><div className="comb-next-help" id="comb-next-help" role="status" aria-live="polite"><strong>{busy?'Saving…':uploading?'Saving skill…':blocker?'To continue':'Ready to continue'}</strong><span>{blocker||(step===2?'Create pipeline saves your design. Select Run afterward to start.':`Select ${nextLabel} to continue.`)}</span>{step===2&&<span className="comb-order-footer">Execution order: {executionOrderLabel}</span>}</div><div className="comb-footer-actions">{step>0&&<button disabled={busy||uploading} onClick={back}><ArrowLeft size={16}/>Back</button>}{step<2?<button className="comb-primary" aria-describedby="comb-next-help" disabled={!!blocker} onClick={next}>{nextLabel}<ArrowRight size={16}/></button>:<button className="comb-primary" aria-label="Create combination design" aria-describedby="comb-next-help" disabled={!valid||busy||uploading} onClick={()=>void create(name.trim(),{...draft,combination_skills:effectiveSelected,ml_overrides:{},waves:total})}>{busy?'Creating…':'Create pipeline'}<Check size={16}/></button>}</div></footer>
-  </div>
+  </div></ExperimentModelContext.Provider>
  </FloorDetailDialog>;
 }

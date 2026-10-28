@@ -154,6 +154,13 @@ def agent_profile(role, values=None):
     effort = setting('effort')
     if effort:
         profile['effort'] = effort
+    capabilities_json = setting('capabilities_json')
+    if capabilities_json:
+        import json
+        try:
+            profile['resolved_capabilities'] = json.loads(capabilities_json)
+        except ValueError:
+            raise ValueError('Invalid model capability metadata') from None
     if not profile['api_base']:
         profile.pop('api_base')
     # Reuse strict profile-value validation without reading other agents or secrets.
