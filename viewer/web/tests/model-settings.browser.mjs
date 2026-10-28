@@ -35,6 +35,12 @@ try {for(const width of [320,390,768,1280]) {
  await expect(settings.locator('#experiment-model-provider')).toHaveValue('azure_foundry');
  assert.deepEqual(await settings.locator('#experiment-model-provider option').evaluateAll(nodes=>nodes.map(n=>n.value)),['azure_foundry']);
  await expect(settings.locator('#experiment-model-region')).toHaveCount(0);
+ await expect(settings).toContainText('Base model');
+ await expect(settings).toContainText('Azure deployment name');
+ await expect(settings.locator('#experiment-base-model-help')).toContainText('not your Azure deployment list');
+ await expect(settings.locator('#experiment-deployment-help')).toContainText('research-model');
+ await expect(settings.locator('#experiment-endpoint-help')).toContainText('https://your-resource.services.ai.azure.com');
+ await expect(settings.locator('#experiment-model-id')).toHaveValue(''); // Examples are not submitted as values.
  await settings.locator('#experiment-model-endpoint').fill('https://clinical.example');
  await settings.locator('#experiment-model-id').fill('chosen-model');
  await settings.locator('#experiment-model-choice').selectOption('openai:gpt-5');

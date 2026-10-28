@@ -4,6 +4,8 @@ import { useViewer } from '../store/viewer';
 import { usePipelines } from '../store/pipelines';
 import { useOutputNavigation } from '../store/outputNavigation';
 import { useResultNotices } from '../store/resultNotices';
+import { outputNoticeKeys } from '../lib/outputNotices';
+import { useOutputReadReceipt } from '../lib/useOutputReadReceipt';
 import { useExecutionContext } from '../components/ExecutionContext';
 import { useTelemetryTotals } from '../components/TelemetryTotals';
 import InterpretationOutput from '../components/InterpretationOutput';
@@ -63,6 +65,10 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
   const active = selection?.tag === tag ? tiles.find(tile => tile.loop === selection.loop) : undefined;
   const waiting = !!requested && requested !== tag;
   const root = useRef<HTMLDivElement>(null);
+  const noticeKeys = useMemo(() => snapshot && active && view !== 'results'
+    ? outputNoticeKeys(snapshot, usage, view, active.loop) : [], [snapshot, active, usage, view]);
+  useOutputReadReceipt(root, noticeKeys, !!active && !waiting && !error && !snapshot?.stale
+    && snapshot?.health.memstara.up !== false && (view !== 'agents' || !totals.error));
   const heading = useRef<HTMLHeadingElement>(null);
   const listKey = `${tag}:${view}`;
   const detailLoop = active?.loop;

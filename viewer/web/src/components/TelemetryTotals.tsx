@@ -13,16 +13,16 @@ export type Distribution = {mean:number;median:number;min:number;max:number};
 export type LoopSummary = {sample_count:number;completed_count:number;excluded_completed:number;other_loops:number;seconds:Distribution|null;usd:Distribution|null;tokens:Distribution|null;basis:string};
 export type ExecutionUsage = Metric & {run_tag:string;pipeline_id:string;model?:string;provider?:string;loops:(Metric&ReplicateIdentity&{number:number})[];loop_summary:LoopSummary;unassigned:Metric};
 export type Totals = {scope:string;updated_at:string;total:Metric;pipelines:(Metric&{id:string;name:string;executions:number})[];executions:ExecutionUsage[];loop_summary:LoopSummary};
-export function useTelemetryTotals(){
+export function useTelemetryTotals(enabled=true){
   const [data,setData]=useState<Totals|null>(null);const [error,setError]=useState('');
   const [revision,setRevision]=useState(0),[refreshing,setRefreshing]=useState(false);
   const refresh=useCallback(()=>setRevision(n=>n+1),[]);
-  useEffect(()=>{let disposed=false;let timer:ReturnType<typeof setTimeout>;let controller:AbortController;
+  useEffect(()=>{if(!enabled)return;let disposed=false;let timer:ReturnType<typeof setTimeout>;let controller:AbortController;
     const poll=async()=>{controller=new AbortController();setRefreshing(true);const deadline=setTimeout(()=>controller.abort(),6500);
       try{const r=await fetch('/api/telemetry/totals',{signal:controller.signal});const body=await controlResponse(r);if(!r.ok)throw Error(body.detail||'Totals unavailable');if(!disposed){setData(body);setError('');}}
       catch(e){if(!disposed)setError(e instanceof Error?e.message:'Totals unavailable');}
       finally{clearTimeout(deadline);if(!disposed){setRefreshing(false);timer=setTimeout(poll,6000);}}};
-    void poll();return()=>{disposed=true;clearTimeout(timer);controller?.abort();};},[revision]);
+    void poll();return()=>{disposed=true;clearTimeout(timer);controller?.abort();};},[revision,enabled]);
   return {data,error,refresh,refreshing};
 }
 export function TelemetryState({title,loading=false,children}:{title:string;loading?:boolean;children:ReactNode}){

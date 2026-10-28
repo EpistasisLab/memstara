@@ -3,6 +3,7 @@ import { cn } from "../lib/cn";
 import { VIEWS, VIEW_ORDER } from "../lib/views";
 import { useViewer } from "../store/viewer";
 import ResultsNavigationButton from '../components/ResultsNavigationButton';
+import OutputNavigationButton from '../components/OutputNavigationButton';
 
 /** View navigation only; configuration lives beside its pipeline or resource. */
 export default function ControlPanel() {
@@ -21,6 +22,7 @@ export default function ControlPanel() {
               active ? "bg-accent font-bold text-accent-contrast" : "text-ink-soft hover:bg-paper hover:text-ink",
             );
             if (id === 'results') return <ResultsNavigationButton key={id} active={active} className={className} open={() => setView(id)} />;
+            if (id === 'report' || id === 'agents') return <OutputNavigationButton key={id} view={id} active={active} className={className} open={() => setView(id)} />;
             const button = (
               <button
                 type="button"

@@ -10,8 +10,8 @@ import '../src/index.css';
 import '../src/readability.css';
 import '../src/workspace-layout.css';
 
-Object.assign(window, {deliverOutputs(snapshot: Snapshot, error: string | null = null) {
-  useViewer.setState({snapshot, runTag:snapshot.run_tag, error, loading:false, newRunMode:false});
+Object.assign(window, {deliverOutputs(snapshot: Snapshot, error: string | null = null, requested = snapshot.run_tag) {
+  useViewer.setState({snapshot, runTag:requested, error, loading:false, newRunMode:false});
 }});
 usePipelines.setState({loaded:true,selected:'example',items:[{id:'example',number:1,name:'Heart Failure study',latest:{run_tag:'selected'},running:null,progress:{},configuration:{}}] as never});
 useViewer.setState({view:'results'});
