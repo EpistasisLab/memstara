@@ -22,7 +22,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     two_way = (previous.get('partition_policy') == TWO_WAY_VERSION if previous is not None
                else not bool(json.loads(getattr(args, 'controlled_comparison', '{}') or '{}')))
     research_config = (getattr(args, "research_profile", None) or {}).get("configuration", {})
-    preprocessing = previous.get('preprocessing_policy', 'legacy_encoding_v1') if previous is not None else TYPED if 'predictor_types' in research_config else VERSION
+    preprocessing = (previous.get('preprocessing_policy', 'legacy_encoding_v1') if previous is not None
+                     else TYPED if 'predictor_types' in research_config else VERSION)
     prepared_input = requires_numeric({'preprocessing_policy': preprocessing})
     missing_policy = research_config.get("missing_policy", "reject")
     if missing_policy not in ("reject", "impute_train_v1"):

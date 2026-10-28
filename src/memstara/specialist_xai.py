@@ -119,11 +119,14 @@ def _lime(model, X, train, explained, background, seed, name, samples):
     features = list(X.columns)
     training = X.iloc[train]
     observed = X.iloc[explained]
-    encoded_categories = {c for block, _, columns in model.named_steps['encode'].transformers_ if block == 'categorical' for c in columns}
-    categorical = [i for i, c in enumerate(features) if c in encoded_categories or c not in X.select_dtypes(include='number').columns]
+    encoded_categories = {c for block, _, columns in model.named_steps['encode'].transformers_
+                          if block == 'categorical' for c in columns}
+    categorical = [i for i, c in enumerate(features)
+                   if c in encoded_categories or c not in X.select_dtypes(include='number').columns]
     categories = {i: training.iloc[:, i].drop_duplicates().tolist() for i in categorical}
     # Unseen categories map to a value absent from training; fitted OHE ignores it.
-    unknown = {i: (-1.0 if pd.api.types.is_numeric_dtype(training.iloc[:, i]) else '__MEMSTARA_UNSEEN__') for i in categorical}
+    unknown = {i: (-1.0 if pd.api.types.is_numeric_dtype(training.iloc[:, i]) else '__MEMSTARA_UNSEEN__')
+               for i in categorical}
     for i in categorical:
         while unknown[i] in categories[i]:
             unknown[i] = unknown[i] - 1 if isinstance(unknown[i], float) else unknown[i] + '_'

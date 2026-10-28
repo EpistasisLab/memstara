@@ -101,7 +101,9 @@ def config(value):
         result["categorical_columns"] = sorted(set(categories))
     if 'predictor_types' in result:
         types = result['predictor_types']
-        if not isinstance(types, dict) or any(not isinstance(k, str) or v not in ('continuous', 'categorical') for k, v in types.items()):
+        if not isinstance(types, dict) or any(
+            not isinstance(k, str) or v not in ('continuous', 'categorical') for k, v in types.items()
+        ):
             raise ValueError('Predictor types must map column names to continuous or categorical')
         result['predictor_types'] = dict(types)
     result["missing_policy"] = result.get("missing_policy", "reject")
@@ -212,7 +214,9 @@ def inspect(value):
                 elif kind == 'categorical':
                     resolved[column] = 'categorical'
                 elif column in metadata['type_confirmation_columns'] and value['missing_policy'] == 'impute_train_v1':
-                    issue('predictor_type_required', f'Confirm whether {column} contains category codes or continuous measurements before imputation')
+                    issue('predictor_type_required',
+                          f'Confirm whether {column} contains category codes or continuous measurements '
+                          'before imputation')
                 elif kind == 'numeric':
                     resolved[column] = 'continuous'
             value['predictor_types'] = resolved
@@ -223,7 +227,8 @@ def inspect(value):
                   "automatic encoding and scaling are disabled: " + ", ".join(unsupported))
         active = set(predictors) | {target["column"]}
         if any(missing[k] for k in predictors) and value["missing_policy"] == "reject":
-            issue("missing_values", "Predictors contain missing values. Approve training-only imputation or supply complete data")
+            issue("missing_values",
+                  "Predictors contain missing values. Approve training-only imputation or supply complete data")
         if any(missing[k] == rows for k in predictors):
             issue("empty_predictors", "A predictor has no observed values; exclude it or supply observed data")
         if any(nonfinite[k] for k in active):

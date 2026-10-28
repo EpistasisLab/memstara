@@ -10,7 +10,11 @@ from pathlib import Path
 VERSION = 'agent_selected_ml_v2'
 MODELS = ('logistic_regression', 'xgboost')
 DEFAULT_SKILL = 'ml_default_logistic_regression'
-MODEL_SKILLS = {DEFAULT_SKILL: 'logistic_regression', 'ml_logistic_regression': 'logistic_regression', 'ml_xgboost': 'xgboost'}
+MODEL_SKILLS = {
+    DEFAULT_SKILL: "logistic_regression",
+    "ml_logistic_regression": "logistic_regression",
+    "ml_xgboost": "xgboost",
+}
 
 
 def for_dataset(snapshot, path):
@@ -188,38 +192,51 @@ def context(snapshot, evaluation):
         params = json.loads(json.dumps(model.get_params(), default=str), parse_constant=str)
         models[name] = {'parameters': params, 'scale_numeric': not prepared_input and name == 'logistic_regression',
                         'threshold': .5}
-    specification = {'version': VERSION, 'required': enabled(snapshot),
-            'proposal_template': {'primary_model': chosen_model,
-                                  'folds': 0,
-                                  'models': models, 'rationale': ''},
-            'editable_parameter_ranges': {chosen_model: RANGES[chosen_model]},
-            'editable_parameter_choices': {chosen_model: CHOICES[chosen_model]},
-            'editable_common_settings': {'scale_numeric': [False] if prepared_input else [True, False], 'threshold': [.05, .95],
-                                         'folds': [0, 2, 3, 4, 5]},
-            'fixed': {'primary_model': snapshot.get('_selected_ml_primary'),
-                      'data_seed': evaluation['seed'], 'test_size': evaluation['test_size'],
-                      'replicates': evaluation['replicates'], 'search_trials': 1,
-                      'resource_limits': (snapshot or {}).get('ml_configuration_policy'),
-                      'system_parameters': 'CPU execution, one worker/thread, binary-classification objective, '
-                                           'and the installed-library compatibility contract remain server-owned.'},
-            'preprocessing_contract': 'No row cleaning or imputation. LR requires complete predictors. '
-                                      'Categoricals use training-fold one-hot encoding. '
-                                      'Numeric scaling is agent-selected.',
-            'instructions': 'Return the complete proposal_template with fresh stochastic choices and rationale. '
-                            'For every new pipeline execution, choose new values for every editable statistical '
-                            'parameter, numeric scaling, threshold, and CV folds; do not copy template defaults. '
-                            'Configure only the selected model before seeing results. '
-                            'Preserve upstream features/splits. '
-                            'LR l1 requires liblinear. No hold-out tuning; accepted proposals are immutable.'}
+    specification = {
+        "version": VERSION,
+        "required": enabled(snapshot),
+        "proposal_template": {"primary_model": chosen_model, "folds": 0, "models": models, "rationale": ""},
+        "editable_parameter_ranges": {chosen_model: RANGES[chosen_model]},
+        "editable_parameter_choices": {chosen_model: CHOICES[chosen_model]},
+        "editable_common_settings": {
+            "scale_numeric": [False] if prepared_input else [True, False],
+            "threshold": [0.05, 0.95],
+            "folds": [0, 2, 3, 4, 5],
+        },
+        "fixed": {
+            "primary_model": snapshot.get("_selected_ml_primary"),
+            "data_seed": evaluation["seed"],
+            "test_size": evaluation["test_size"],
+            "replicates": evaluation["replicates"],
+            "search_trials": 1,
+            "resource_limits": (snapshot or {}).get("ml_configuration_policy"),
+            "system_parameters": "CPU execution, one worker/thread, binary-classification objective, "
+            "and the installed-library compatibility contract remain server-owned.",
+        },
+        "preprocessing_contract": "No row cleaning or imputation. LR requires complete predictors. "
+        "Categoricals use training-fold one-hot encoding. "
+        "Numeric scaling is agent-selected.",
+        "instructions": "Return the complete proposal_template with fresh stochastic choices and rationale. "
+        "For every new pipeline execution, choose new values for every editable statistical "
+        "parameter, numeric scaling, threshold, and CV folds; do not copy template defaults. "
+        "Configure only the selected model before seeing results. "
+        "Preserve upstream features/splits. "
+        "LR l1 requires liblinear. No hold-out tuning; accepted proposals are immutable.",
+    }
     from memstara.evaluation import classifier_seed_policy, CLASSIFIER_SEED_POLICY
     if classifier_seed_policy(snapshot) == CLASSIFIER_SEED_POLICY:
         specification['fixed']['classifier_seed_policy'] = CLASSIFIER_SEED_POLICY
         specification['instructions'] += (' The server applies each recorded split seed as classifier random_state '
             'before fitting; any proposed random_state is recorded but cannot override the split seed.')
     if prepared_input:
-        specification['preprocessing_contract'] = ('Require prepared numeric predictors. No automatic encoding or scaling. '
-            'Missing values block execution for every classifier; no imputation is permitted.')
-        specification['instructions'] = specification['instructions'].replace('parameter, numeric scaling, threshold', 'parameter, threshold') + ' Keep scale_numeric false.'
+        specification["preprocessing_contract"] = (
+            "Require prepared numeric predictors. No automatic encoding or scaling. "
+            "Missing values block execution for every classifier; no imputation is permitted."
+        )
+        specification["instructions"] = (
+            specification["instructions"].replace("parameter, numeric scaling, threshold", "parameter, threshold")
+            + " Keep scale_numeric false."
+        )
     from memstara.missing_values import resolve_policy
     if resolve_policy(snapshot) == 'impute_train_v1':
         specification['preprocessing_contract'] = (
@@ -229,9 +246,12 @@ def context(snapshot, evaluation):
             + ('No automatic encoding or scaling.' if prepared_input else 'Encoding follows the frozen policy.'))
     from memstara.preprocessing_policy import typed_predictors
     if typed_predictors(snapshot):
-        specification['preprocessing_contract'] = ('User-approved training-only mean/mode imputation when enabled. '
-            'Use the frozen predictor_types: continuous means, categorical/binary modes. '
-            'Fit categorical encoding inside each training/CV fold; never on test data. No scaling, row removal or target imputation.')
+        specification["preprocessing_contract"] = (
+            "User-approved training-only mean/mode imputation when enabled. "
+            "Use the frozen predictor_types: continuous means, categorical/binary modes. "
+            "Fit categorical encoding inside each training/CV fold; never on test data. "
+            "No scaling, row removal or target imputation."
+        )
     overrides = validate_overrides(snapshot.get('ml_overrides', {}))
     if prepared_input and any(v.get('scale_numeric') for v in overrides.get('models', {}).values()):
         raise ValueError('Automatic scaling is disabled; remove scale_numeric overrides')

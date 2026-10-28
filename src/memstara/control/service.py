@@ -983,7 +983,8 @@ class Handler(BaseHTTPRequestHandler):
                     from memstara.pipeline.feature_context import freeze_feature_context
                     freeze_feature_context(Path(dataset), argv[argv.index("--y-column") + 1],
                                            require_complete=input_policy != "impute_train_v1",
-                                           require_numeric='predictor_types' not in (research or {}).get('configuration', {}))
+                                           require_numeric='predictor_types' not in
+                                           (research or {}).get('configuration', {}))
                 from memstara.comparisons import validate_baseline
                 validate_baseline(body.get("baseline_columns", []), argv[argv.index("--y-column") + 1], Path(dataset))
         except ValueError as e:

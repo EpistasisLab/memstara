@@ -110,7 +110,9 @@ def setup_options(columns: list[str]) -> dict[str, Any]:
         preset = {
             'name': 'Heart failure study',
             'target': {'column': TARGET, 'positive_label': '1', 'negative_label': '0',
-                       'description': 'Classify the recorded chronic heart failure indicator (1 = present, 0 = absent). Software demonstration; clinical endpoint not independently validated.',
+                       'description': ('Classify the recorded chronic heart failure indicator '
+                                       '(1 = present, 0 = absent). Software demonstration; '
+                                       'clinical endpoint not independently validated.'),
                        'prediction_time': 'Timing not established in the supplied files; software demonstration only.',
                        'horizon': 'Not established; do not interpret as future risk prediction.'},
             'categorical_columns': ['essential_hypertension_stage'],

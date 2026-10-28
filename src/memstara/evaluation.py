@@ -246,7 +246,9 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     prepared_input = analysis_ready(policy_snapshot)
     typed_input = typed_predictors(policy_snapshot)
     continuous_columns = [c for c, kind in predictor_types.items() if kind == "continuous"]
-    imputation_categories = sorted(set(imputation_categories) | {c for c, kind in predictor_types.items() if kind == "categorical"})
+    imputation_categories = sorted(
+        set(imputation_categories) | {c for c, kind in predictor_types.items() if kind == "categorical"}
+    )
     seed_policy = seed_policy or classifier_seed_policy()
     if seed_policy not in (CLASSIFIER_SEED_POLICY, LEGACY_CLASSIFIER_SEED_POLICY):
         raise DataQualityError("Unsupported classifier seed policy")
@@ -297,12 +299,27 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     splits = evaluation_splits(y, plan, partition=partition)
     replicate_seeds = [seed for seed, _, _ in splits]
     for seed, train, test in splits:
-        pre = ColumnTransformer([('numeric', 'passthrough', list(X.columns))],
-                                verbose_feature_names_out=False) if prepared_input and not typed_input else ColumnTransformer([
-            ('numeric', 'passthrough' if typed_input else ((StandardScaler() if configuration['scale_numeric'] else 'passthrough') if configuration else
-             ('passthrough' if plan['engine'] == 'xgboost' else StandardScaler())), numeric),
-            ('categorical', OneHotEncoder(handle_unknown='ignore', sparse_output=False), categorical),
-        ], verbose_feature_names_out=False)
+        pre = (
+            ColumnTransformer([("numeric", "passthrough", list(X.columns))], verbose_feature_names_out=False)
+            if prepared_input and not typed_input
+            else ColumnTransformer(
+                [
+                    (
+                        "numeric",
+                        "passthrough"
+                        if typed_input
+                        else (
+                            (StandardScaler() if configuration["scale_numeric"] else "passthrough")
+                            if configuration
+                            else ("passthrough" if plan["engine"] == "xgboost" else StandardScaler())
+                        ),
+                        numeric,
+                    ),
+                    ("categorical", OneHotEncoder(handle_unknown="ignore", sparse_output=False), categorical),
+                ],
+                verbose_feature_names_out=False,
+            )
+        )
         best, best_cv, best_params, selected_trial = None, float('-inf'), None, 0
         best_cv_record, best_cv_evidence = None, None
         fold_count = plan['folds'] or (3 if plan['search_trials'] > 1 else 0)
@@ -330,7 +347,15 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                 model.set_params(random_state=seed)
             steps = []
             if use_imputation:
-                steps.append(('impute', TrainingImputer(categorical_columns=tuple(imputation_categories), continuous_columns=tuple(continuous_columns))))
+                steps.append(
+                    (
+                        "impute",
+                        TrainingImputer(
+                            categorical_columns=tuple(imputation_categories),
+                            continuous_columns=tuple(continuous_columns),
+                        ),
+                    )
+                )
             steps.extend([('encode', pre), ('model', model)])
             pipe = Pipeline(steps)
             cv_scores = None
@@ -467,8 +492,10 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
             'Numeric predictors unchanged: no encoding, scaling, row removal or resampling. '
             + ('User-approved training-only imputation.' if use_imputation else 'No imputation.'))
     if typed_input:
-        result['data_quality']['preprocessing'] = ('Numeric measurements unchanged; categorical encoding fitted on training folds only. '
-            + ('User-approved training-only mean/mode imputation.' if use_imputation else 'No imputation.'))
+        result["data_quality"]["preprocessing"] = (
+            "Numeric measurements unchanged; categorical encoding fitted on training folds only. "
+            + ("User-approved training-only mean/mode imputation." if use_imputation else "No imputation.")
+        )
     if path.read_bytes() != source_bytes:
         raise DataQualityError('Input changed during evaluation; results cannot be reproduced.')
     if persist:

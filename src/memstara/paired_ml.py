@@ -147,7 +147,8 @@ def fit(request):
     frame = validate_clean_dataset(path, request['target'], allow_missing=proposal['primary_model'] == 'xgboost')
     X = frame.drop(columns=[request['target']])
     from memstara.preprocessing_policy import typed_predictors
-    declared = snapshot.get('research_profile', {}).get('configuration', {}).get('categorical_columns', []) if typed_predictors(snapshot) else []
+    declared = (snapshot.get('research_profile', {}).get('configuration', {}).get('categorical_columns', [])
+                if typed_predictors(snapshot) else [])
     categorical = X[[c for c in X if c in declared or c in X.select_dtypes(exclude='number').columns]]
     width = len(X.columns) - len(categorical.columns) + sum(categorical.nunique(dropna=False))
     limits = snapshot['ml_configuration_policy']
