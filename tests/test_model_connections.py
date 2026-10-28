@@ -149,3 +149,22 @@ def test_missing_or_modified_connection_never_falls_back(store):
 def test_current_connection_keeps_existing_environment():
     source = {'MEMSTARA_LLM_MODEL': 'current', 'OPENAI_API_KEY': 'current-key'}
     assert connections.execution_environment('', source) == {**source, 'MEMSTARA_CONFIG_MODE': 'environment'}
+
+
+def test_gui_connection_makes_empty_server_model_configuration_executable(store):
+    from memstara.operational import check
+    source = {'MEMSTARA_LLM_PROVIDER': '', 'MEMSTARA_LLM_MODEL': '',
+              'MEMSTARA_LLM_API_BASE': '', 'MEMSTARA_AZURE_FOUNDRY_API_KEY': '',
+              'MEMSTARA_DATABASE_URL': 'postgresql://test:fixture@localhost/board',
+              'MOTORO_DATABASE_URL': 'postgresql://test:fixture@localhost/runtime',
+              'MOTORO_REDIS_URL': 'redis://localhost:6379/0'}
+    before = dict(source)
+    assert check(source, require_models=False)['configuration_valid']
+    assert not check(connections.execution_environment('', source))['configuration_valid']
+    public = save('azure_foundry', api_base='https://fixture.services.ai.azure.com')
+    effective = connections.execution_environment(public['id'], source)
+    ready = check(effective)
+    assert ready['configuration_valid'], ready['errors']
+    assert all(profile['provider'] == 'azure_foundry' and profile['model'] == 'chosen-model'
+               for profile in ready['models'].values())
+    assert source == before

@@ -11,8 +11,10 @@ def require_provider(provider):
 
 def defaults_view(body):
     profiles = body['profiles']
+    ready = bool(profiles) and all(p['provider'] == PROVIDER and p.get('credentials_available', True)
+                                  for p in profiles)
     return {**body, 'profiles': [p for p in profiles if p['provider'] == PROVIDER],
-            'current_allowed': bool(profiles) and all(p['provider'] == PROVIDER for p in profiles),
+            'current_allowed': ready, 'setup_required': not ready,
             'allowed_provider': PROVIDER}
 
 

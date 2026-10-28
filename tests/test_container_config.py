@@ -46,6 +46,24 @@ def test_container_addresses_and_secret_separation(tmp_path):
     assert values["MEMSTARA_DATABASE_URL"].endswith("@127.0.0.1:15541/boarddb")
 
 
+@pytest.mark.parametrize('mode', ['empty', 'missing_key', 'placeholder_key'])
+def test_startup_allows_gui_model_setup_but_execution_still_requires_it(tmp_path, mode):
+    from memstara.operational import check
+    values = configuration(tmp_path)
+    values['OPENAI_API_KEY'] = 'YOUR_API_KEY' if mode == 'placeholder_key' else ''
+    if mode == 'empty':
+        from memstara.stage_models import AGENT_ROLES
+        for role in ('LLM', *(role.upper() for role in AGENT_ROLES)):
+            for field in ('PROVIDER', 'MODEL', 'API_BASE'):
+                values[f'MEMSTARA_{role}_{field}'] = ''
+    groups = derive(values, root=tmp_path)
+    assert check(groups['control'], require_models=False)['configuration_valid']
+    assert not check(groups['control'])['configuration_valid']
+    broken = {**values, 'MEMSTARA_DATABASE_URL': 'invalid'}
+    with pytest.raises(ValueError):
+        derive(broken, root=tmp_path)
+
+
 @pytest.mark.parametrize(
     "key,value",
     [

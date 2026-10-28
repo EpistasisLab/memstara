@@ -225,9 +225,10 @@ def test_storage_commands_reject_same_database_before_subprocess(tmp_path, monke
 def test_control_refuses_invalid_storage_before_creating_worker(monkeypatch):
     from unittest.mock import Mock
     from memstara.control import service
-    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'openai')
+    monkeypatch.setenv('MEMSTARA_LLM_PROVIDER', 'azure_foundry')
     monkeypatch.setenv('MEMSTARA_LLM_MODEL', 'fixture-model')
-    monkeypatch.setenv('OPENAI_API_KEY', 'fixture-key')
+    monkeypatch.setenv('MEMSTARA_LLM_API_BASE', 'https://fixture.services.ai.azure.com')
+    monkeypatch.setenv('ANTHROPIC_FOUNDRY_API_KEY', 'fixture-key')
     monkeypatch.setenv('MEMSTARA_DATABASE_URL', 'postgresql://test:SECRET_SENTINEL@localhost/shared')
     monkeypatch.setenv('MOTORO_DATABASE_URL', 'postgresql://test:SECRET_SENTINEL@localhost/shared')
     monkeypatch.setenv('MOTORO_REDIS_URL', 'redis://localhost:6379/0')

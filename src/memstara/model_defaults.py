@@ -38,9 +38,12 @@ def connection(role):
 
 
 def credentials_available(data):
+    def present(key):
+        value = data.get(key, '').strip()
+        return bool(value) and not value.startswith(('YOUR_', 'REPLACE_'))
     if data['provider'] == 'bedrock' and data['auth_type'] == 'aws_credentials':
-        return bool(data['access_key_id'] and data['secret_access_key'])
-    return bool(data['api_key'])
+        return present('access_key_id') and present('secret_access_key')
+    return present('api_key')
 
 
 def public_defaults():

@@ -132,7 +132,9 @@ def derive(values: dict[str, str], *, root: Path) -> dict[str, dict[str, str]]:
     control["MEMSTARA_CONTROL_PORT"] = "8072"
     control["MEMSTARA_API_PORT"] = "8000"
     # Public port is retained for origin checks; it is not the container listener.
-    result = check(control)
+    # The GUI can supply an experiment's model after the application starts.
+    # Execution still uses operational.check's strict default with resolved credentials.
+    result = check(control, require_models=False)
     if not result["configuration_valid"]:
         raise ConfigurationError("; ".join(result["errors"]))
     groups["control"] = control

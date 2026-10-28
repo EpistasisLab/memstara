@@ -230,8 +230,8 @@ def provider_errors(values, profiles):
     return errors
 
 
-def check(values: dict) -> dict:
-    """Static readiness, deliberately not a successful network or model probe."""
+def check(values: dict, *, require_models: bool = True) -> dict:
+    """Check infrastructure at startup; require model readiness before execution."""
     errors = database_errors(values)
     for name in PATH_KEYS - set(PATH_DEFAULTS) - {'HF_HUB_CACHE', 'MEMSTARA_USER_SKILLS_DIR', 'MEMSTARA_INPUTS_DIR'}:
         if values.get(name) and not Path(values[name]).exists():
@@ -239,11 +239,12 @@ def check(values: dict) -> dict:
     if values.get('MEMSTARA_STAGE_MODELS_PATH'):
         errors.append('Set model fields in .env and remove unsupported MEMSTARA_STAGE_MODELS_PATH')
     profiles = {}
-    try:
-        profiles = model_profiles(values)
-    except ValueError as exc:
-        errors.append(str(exc))
-    errors.extend(provider_errors(values, profiles))
+    if require_models:
+        try:
+            profiles = model_profiles(values)
+        except ValueError as exc:
+            errors.append(str(exc))
+        errors.extend(provider_errors(values, profiles))
     keys = {'azure_foundry': 'ANTHROPIC_FOUNDRY_API_KEY', 'anthropic': 'ANTHROPIC_API_KEY',
             'openai': 'OPENAI_API_KEY', 'openrouter': 'OPENROUTER_API_KEY'}
     for role, profile in profiles.items():

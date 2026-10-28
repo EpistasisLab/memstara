@@ -9,9 +9,7 @@ if [ "$#" -ne 0 ]; then
 fi
 if [ ! -f .env ]; then
     (umask 077; cp .env.example .env)
-    echo "Created .env. Edit the model deployment and credentials, then run ./start.sh again."
-    echo "No services were started."
-    exit 1
+    echo "Created .env with installation defaults. You can configure the model in Add experiment after startup."
 fi
 if ! command -v docker >/dev/null 2>&1; then
     echo "Install Docker Desktop (or Docker Engine with Compose v2), then run ./start.sh again." >&2

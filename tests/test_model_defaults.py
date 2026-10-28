@@ -133,4 +133,13 @@ def test_defaults_http_uses_safe_preview_and_safe_errors(configured, monkeypatch
         raise ValueError('synthetic-private-error')
     monkeypatch.setattr(model_defaults, 'public_defaults', broken)
     status, body = request(service, '/control/model-defaults')
-    assert status == 503 and 'synthetic-private-error' not in json.dumps(body)
+    assert status == 200 and 'synthetic-private-error' not in json.dumps(body)
+    assert body['profiles'] == [] and body['setup_required'] and not body['current_allowed']
+
+
+@pytest.mark.parametrize('key', ['', '   ', 'YOUR_API_KEY', 'REPLACE_ME'])
+def test_missing_credentials_are_not_offered_as_ready_defaults(key):
+    from memstara.control.model_policy import defaults_view
+    available = model_defaults.credentials_available({'provider': 'azure_foundry', 'api_key': key})
+    body = defaults_view({'profiles': [{'provider': 'azure_foundry', 'credentials_available': available}]})
+    assert body['setup_required'] and not body['current_allowed']

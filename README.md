@@ -7,8 +7,9 @@ See [release notes](CHANGELOG.md) for the included features.
 
 ## Get started
 
-**Requirements:** Git, a running Docker Desktop (or Docker Engine with Compose v2),
-and credentials for an Azure Foundry deployment. Docker installs the application
+**Requirements:** Git and a running Docker Desktop (or Docker Engine with Compose v2).
+Azure Foundry credentials are needed when configuring a model to run an experiment.
+Docker installs the application
 and its dependencies, including **Motoro 0.13.0**; no separate Python, Node or database setup is needed.
 
 ### 1. Download
@@ -36,6 +37,10 @@ complete-case dataset and preserves the supplied files. Private HIV data is not 
 Use `.env` for installation settings and server-wide model defaults. After starting
 Memstara, use **Add experiment → AI model → Set up a model** to configure the model
 for an individual experiment.
+
+You may leave the API key, deployment name and endpoint blank in `.env` and start
+the app. Then configure and check the connection in **Add experiment → AI model**.
+An experiment cannot run until its model configuration is complete.
 
 To set server defaults in `.env`, enter your Azure Foundry API key, deployment
 name and endpoint:

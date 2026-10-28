@@ -559,8 +559,8 @@ class Handler(BaseHTTPRequestHandler):
                 from memstara.control.model_policy import defaults_view
                 self._send(200, defaults_view(public_defaults()))
             except ValueError:
-                self._send(503, {"error": "Configured model defaults are unavailable. "
-                               "Check the server model settings."})
+                self._send(200, defaults_view({'source': 'project_env', 'profiles': [],
+                                             'restart_required_after_edit': True}))
             return
 
         if path == "/control/model-catalog":

@@ -24,7 +24,8 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
   const [loaded, setLoaded] = useState(false);
   const [configured, setConfigured] = useState<ConfiguredProfile[]>([]);
   const [currentAllowed, setCurrentAllowed] = useState<boolean | undefined>();
-  const providerNotice = 'Only Azure Foundry is available. Set up an Azure Foundry model to continue.';
+  const [setupRequired, setSetupRequired] = useState(false);
+  const providerNotice = setupRequired ? 'Set up an Azure Foundry model to continue. Server model defaults are not ready.' : 'Only Azure Foundry is available. Set up an Azure Foundry model to continue.';
   useEffect(() => {if (mode === 'current' && currentAllowed !== undefined) onValidityChange(currentAllowed ? '' : providerNotice);}, [mode, currentAllowed, onValidityChange]);
   const [defaultRole, setDefaultRole] = useState('');
   const [useServerKey, setUseServerKey] = useState(false);
@@ -64,6 +65,8 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
       .then(body => {if (!controller.signal.aborted && Array.isArray(body.profiles)) {
         setConfigured(body.profiles.filter((profile: ConfiguredProfile) => profile.provider === 'azure_foundry'));
         setCurrentAllowed(body.current_allowed ?? (body.profiles.length > 0 && body.profiles.every((profile: ConfiguredProfile) => profile.provider === 'azure_foundry')));
+        setSetupRequired(body.setup_required === true);
+        if (body.setup_required && !formTouched.current) choose('custom');
       }})
       .catch(() => {}); // Existing server defaults still work if their detailed preview is unavailable.
     return () => controller.abort();
@@ -197,6 +200,7 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
     <header className="experiment-model-heading"><span className="experiment-model-icon"><Cpu size={21} aria-hidden="true"/></span>
       <div><h4 id="experiment-model-heading">AI model</h4><p>Use an Azure Foundry model for your agents.</p></div>
     </header>
+    {setupRequired && mode === 'custom' && !saved && <p className="experiment-model-notice" role="status">No server model is ready. Enter your Azure connection below; you do not need to edit .env or restart the app.</p>}
     <fieldset className="experiment-model-modes"><legend className="sr-only">Model connection</legend>
       <label className={mode === 'current' ? 'is-selected' : ''}><input type="radio" name="experiment-model-mode" disabled={currentAllowed === false} checked={mode === 'current'} onChange={() => choose('current')}/><span><strong>Use current model</strong><small>Use the defaults configured for each agent.</small></span>{mode === 'current' && <Check size={17} aria-hidden="true"/>}</label>
       <label className={mode === 'custom' ? 'is-selected' : ''}><input type="radio" name="experiment-model-mode" checked={mode === 'custom'} onChange={() => choose('custom')}/><span><strong>Set up a model</strong><small>Start from your defaults or use another model.</small></span>{mode === 'custom' && <Check size={17} aria-hidden="true"/>}</label>
