@@ -31,7 +31,7 @@ try {
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`Page overflow at ${width}px`);
   }
   await nav.getByRole('button',{name:'Conclusions',exact:true}).click();
-  await page.getByTestId('report-page').waitFor();
+  await page.getByTestId('execution-outputs').waitFor();
   assert.equal(await page.locator('#workspace-pipeline .panel-header').count(),0,'One workspace title, not nested title bars');
   const minimized=page.locator('.workspace-minimized-window');
   if(width<760&&await minimized.count()===2) {

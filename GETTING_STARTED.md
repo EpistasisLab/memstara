@@ -33,7 +33,7 @@ against the JSON file's directory. Use absolute paths for your own files.
 | Corpus entry | `examples/research-inputs/okf/index.md` | Corpus entry point |
 | Knowledge document | `examples/research-inputs/okf/observations/simulated-risk.md` | Predictor meanings and simulation scope |
 | Research contract | `examples/research-inputs/research.json` | Paths, target, positive/negative labels, prediction timing and excluded ID |
-| Tutorial skills | `examples/research-inputs/skills/` | Separate user Hypothesis and Explanation instructions |
+| Tutorial skills | `examples/research-inputs/skills/` | Custom Hypothesis instructions and historical Explanation reference |
 
 ```sh
 python -m memstara.research_inputs inspect examples/research-inputs/research.json
@@ -41,15 +41,17 @@ python scripts/prepare_research_tutorial.py examples/research-inputs/research.js
 ```
 
 Inspection should return `input_checks_passed: true`. The preparation script saves
-a research version and two user skills, validates their selection, and prints the
+a research version and one custom Hypothesis skill, selects a supplied Explanation
+skill, validates that selection, and prints the
 one-Loop `next_command`. It never executes that command. `execution_ready: false`
 means runtime services, embeddings and model availability were not validated by
 this offline step. It is not a failed experiment.
 
-Do not substitute the old domain-specific Hypothesis/Explanation defaults: the
-user research contract rejects them. The tutorial uses separate custom skills,
-training-heavy Data, LR as the ML selection and the unchanged SHAP specialist.
-A clinical specialist is not an endorsement of a synthetic outcome.
+Choose a Hypothesis skill compatible with the selected research corpus. The
+tutorial uses training-heavy Data, LR ML, the unchanged supplied SHAP skill and a
+supplied Explanation skill. It does not register custom Interpretation/Explanation
+instructions. Review the printed specialist choice for your question; its use is
+not an endorsement of a synthetic outcome.
 
 ## 3. Start one execution and inspect its evidence
 

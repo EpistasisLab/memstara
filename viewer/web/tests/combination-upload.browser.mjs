@@ -1,28 +1,31 @@
+import {preparedInputs,fixtureSkillId} from './current-research.fixture.mjs';
 // Browser regression: all writes are mocked; no pipeline or paid LLM call is started.
-import {chromium} from '@playwright/test';
+import {chromium,expect} from '@playwright/test';
 const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
 try {
- const page=await browser.newPage({viewport:{width:1300,height:900}});let uploads=[],skills=[];
+ const page=await browser.newPage({viewport:{width:1300,height:900}});let uploads=[],skills=['interpreter','report'].map(stage=>({id:fixtureSkillId(stage),stage,title:stage,hash:stage,content:'# Supplied test skill',source:'Fixture'}));
  await page.route('**/control/**',async r=>{
   const path=new URL(r.request().url()).pathname;
+  if(path==='/control/research-inputs')return r.fulfill({json:preparedInputs});
   if(path==='/control/pipelines')return r.fulfill({json:{pipelines:[]}});
-  if(path==='/control/research-inputs')return r.fulfill({json:{inputs:[]}});
   if(path==='/control/health')return r.fulfill({json:{input_defaults:{dataset_available:true,knowledge_available:true}}});
   if(path==='/control/playbooks'){
    if(r.request().method()==='GET')return r.fulfill({json:{catalog:skills,playbooks:[],stages:['hypothesis','data','ml','interpreter','report'],references:[]}});
    const b=r.request().postDataJSON();uploads.push(b);
    if(b.name==='server-fail')return r.fulfill({status:500,json:{error:'Test upload rejected'}});
-   const s={id:b.stage+'-'+b.name,stage:b.stage,title:b.name,content:b.content,description:'Custom',hash:b.stage+b.name,source:'Custom'};skills.push(s);return r.fulfill({json:s});
+   const s={id:'user-'+b.stage+'-'+b.name,stage:b.stage,title:b.name,content:b.content,description:'Custom',hash:b.stage+b.name,source:'Custom'};skills.push(s);return r.fulfill({json:s});
   }
   if(r.request().method()==='POST')throw Error('Unexpected mutation '+path);
   return r.continue();
  });
  await page.goto(process.env.MEMSTARA_TEST_URL || 'http://localhost:8070');await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add experiment/i}).click();
  const d=page.getByRole('dialog',{name:'All Combinations',exact:true});
- await d.getByLabel('Deployment target column',{exact:true}).fill('outcome');
+ await d.getByRole('button',{name:'Use CI dataset',exact:true}).click();
  await d.getByRole('button',{name:'Choose skills'}).click();
  for(let i=0;i<5;i++){
   await d.getByRole('navigation',{name:'Agent roles'}).getByRole('button').nth(i).click();
+  if(i>=3){await expect(d.getByRole('button',{name:/^Upload or write/})).toHaveCount(0);continue;}
+  if(i===1)await d.getByRole('radio',{name:'Use data skills',exact:true}).check();
   for(const box of await d.locator('.comb-skill-card input:checked').all())await box.uncheck();
   await d.getByRole('button',{name:/^Upload or write/}).click();
   await d.getByLabel('Custom skill Markdown file').setInputFiles([
@@ -35,7 +38,7 @@ try {
   if(!await d.locator('.comb-skill-card').filter({hasText:'alpha'}).locator('input[type=checkbox]').isChecked()||!await d.locator('.comb-skill-card').filter({hasText:'beta'}).locator('input[type=checkbox]').isChecked())throw Error('Successes not selected');
   await d.getByRole('alert').filter({hasText:'Test upload rejected'}).waitFor();
  }
- if(uploads.length!==15||uploads.some(x=>x.name==='bad'))throw Error('Wrong upload validation');
- await d.getByRole('button',{name:'Review plan'}).click();await d.getByLabel('Replicates per pipeline').fill('1');await d.getByText('How execution works',{exact:true}).click();await d.getByText(/The schedule contains 32 total runs\./).waitFor();
- console.log('All five roles: multiple files selected, invalid extension rejected locally, server failure shown, later successes retained; 32 combinations. No real writes.');
+ if(uploads.length!==9||uploads.some(x=>x.name==='bad'))throw Error('Wrong upload validation');
+ await d.getByRole('button',{name:'Review plan'}).click();await d.getByLabel('Replicates per pipeline').fill('1');await d.getByText('How execution works',{exact:true}).click();await d.getByText(/The schedule contains 8 total runs\./).waitFor();
+ console.log('Three editable roles; two supplied-only roles: multiple files selected, invalid extension rejected locally, server failure shown, later successes retained; 8 combinations. No real writes.');
 } finally {await browser.close();}

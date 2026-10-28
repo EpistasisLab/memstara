@@ -74,7 +74,7 @@ try {
  await expect(panel.locator('tbody tr').first()).toContainText(pipelines[0].name.trim());
  const overflow=await panel.evaluate(e=>e.scrollWidth>e.clientWidth+1);assert(!overflow);
  await panel.getByRole('button',{name:'View in Usage',exact:true}).click();
- await expect(panel).not.toBeVisible();await expect(page.locator('.telemetry-workspace')).toBeVisible();
+ await expect(panel).not.toBeVisible();await expect(page.getByTestId('execution-outputs')).toBeVisible();await expect(page.getByRole('navigation',{name:'Output views'}).getByRole('button',{name:'Usage',exact:true})).toHaveAttribute('aria-current','page');
  empty=true;await page.reload();await expect(trigger).toContainText('No executions');await expect(trigger).not.toContainText('$0.0000');
  assert.deepEqual(errors,[]);assert.deepEqual(writes,[]);
  console.log('Persistent cost, shared summary/breakdown values, ten responsive/theme cases, Escape/focus, partial/unknown/stale costs, execution-scope changes, large costs, long names, Telemetry navigation and empty workspace passed. No writes or model calls.');

@@ -13,7 +13,8 @@ def enabled(plan):
 def freeze(state, args: Any, previous=None):
     """Keep historical scientific contracts intact; new runs never learn from scores."""
     retry = getattr(args, 'retry_experiment_policy', '')
-    if previous is None and getattr(args, 'retry_source_run', ''):
+    source_run = getattr(args, 'retry_source_run', '')
+    if previous is None and source_run:
         if not retry:
             raise ValueError('Retry requires the original experiment policy; do not change feedback semantics')
         previous = json.loads(retry)

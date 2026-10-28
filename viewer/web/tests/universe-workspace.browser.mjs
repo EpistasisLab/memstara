@@ -27,7 +27,7 @@ try {for(const width of [1440,390]){
  await expect(page.locator('#workspace-results, #workspace-report')).toHaveCount(0);
  await expect(page.locator('.floor-observatory').getByRole('button',{name:/Results|Conclusions/})).toHaveCount(0);
  await nav.getByRole('button',{name:'Results',exact:true}).click();
- await expect(page.locator('#results-panel')).toBeVisible();
+ await expect(page.getByTestId('execution-outputs')).toBeVisible();
  await expect(nav.getByRole('button',{name:'Results',exact:true})).toHaveAttribute('aria-current','page');
  await openRetainedView(page);
  await expect(page.locator('#workspace-pipeline')).toBeVisible();

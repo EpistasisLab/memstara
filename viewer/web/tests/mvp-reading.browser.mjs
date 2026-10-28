@@ -25,13 +25,10 @@ try{
   // A successful live transition opens Results, even for a measured AUC of zero.
   const completed=snap('completed');completed.results[0].auc=0;
   await deliver(completed);await current('Results');
-  const interpretation=page.getByRole('region',{name:'Clinical interpretation summary'});
-  await expect(interpretation).toContainText('Recorded interpretation');
-  const details=page.locator('details.analysis-technical-details').filter({has:page.getByText('Model performance and technical details',{exact:true})});
-  await expect(details).not.toHaveAttribute('open','');
-  assert(await interpretation.evaluate(e=>e.getBoundingClientRect().bottom<=e.parentElement.querySelector('.analysis-technical-details').getBoundingClientRect().top));
-  await details.locator('summary').first().focus();await page.keyboard.press('Enter');
-  await expect(details).toHaveAttribute('open','');await expect(details).toContainText('AUC 0.0000');
+  const interpretation=page.getByRole('article',{name:'Selected interpretation outputs'});
+  await expect(interpretation).toContainText('Recorded interpretation, not a treatment recommendation.');
+  await expect(interpretation).not.toContainText('Recorded hypothesis');
+  await expect(interpretation.locator('table')).toHaveCount(0);
   await go('Experiments');await deliver(completed);await current('Experiments');
   // Completion in another reading view must not interrupt it.
   await go('Usage');await deliver(snap('running','beta-run'));await deliver(snap('completed','beta-run'));await current('Usage');
@@ -45,10 +42,10 @@ try{
   const report=page.getByTestId('report-page');await expect(report.locator('[data-report-content]')).toContainText('Actual saved output for alpha-run');
   await expect(report.getByRole('heading',{level:2})).toContainText('Recorded hypothesis');
   const downloadEvent=page.waitForEvent('download');await report.getByRole('button',{name:'Download Markdown'}).click();
-  const download=await downloadEvent;assert.equal(download.suggestedFilename(),'alpha-run_loop-1_result-1_conclusions.md');
-  const stream=await download.createReadStream();let markdown='';for await(const data of stream)markdown+=data;assert.equal(markdown,snap('completed').report.explanation_outputs[0].text);
+  const download=await downloadEvent;assert.equal(download.suggestedFilename(),'alpha-run_pipeline-1_conclusions.md');
+  const stream=await download.createReadStream();let markdown='';for await(const data of stream)markdown+=data;assert(markdown.includes(snap('completed').report.explanation_outputs[0].text));
   const comparisonOnly=snap('completed');comparisonOnly.report.explanation_outputs=[];await deliver(comparisonOnly);await expect(report.locator('[data-report-content]')).toHaveCount(0);await deliver(snap('completed'));
-  const multiple=snap('completed');multiple.report.explanation_outputs.push({loop:2,result_id:2,status:'completed',text:'Second loop exact narrative'});await deliver(multiple);await report.getByRole('combobox',{name:'Saved Explanation'}).selectOption('alpha-run:2:2');await expect(report.locator('[data-report-content]')).toHaveText('Second loop exact narrative');
+  const multiple=snap('completed');multiple.report.explanation_outputs.push({loop:2,result_id:2,status:'completed',text:'Second loop exact narrative'});await deliver(multiple);await expect(report.getByRole('combobox',{name:'Pipeline report'}).locator('option')).toHaveCount(1);await expect(report.locator('[data-report-content]')).toContainText('Second loop exact narrative');
   await report.getByRole('combobox',{name:'Pipeline conclusions'}).selectOption('beta');
   await deliver(snap('completed','beta-run'));await expect(report.locator('[data-report-content]')).toContainText('Actual saved output for beta-run');
   await expect(report.locator('[data-report-content]')).not.toContainText('Actual saved output for alpha-run');
@@ -59,7 +56,7 @@ try{
   const geometry=await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,width:innerWidth}));assert(geometry.scroll<=geometry.width+1,JSON.stringify({width,theme,geometry}));
   assert(await report.evaluate(e=>e.scrollWidth<=e.clientWidth+1));
   if(process.env.MEMSTARA_SCREENSHOT_DIR)await page.screenshot({path:`${process.env.MEMSTARA_SCREENSHOT_DIR}/mvp-conclusions-${theme}-${width}.png`});
-  console.log(JSON.stringify({width,theme,completion:'observed only',interpretation:'first',metrics:'collapsed and readable',reports:'pipeline scoped, download, partial and missing'}));
+  console.log(JSON.stringify({width,theme,completion:'observed only',interpretation:'first',metrics:'not injected into agent output',reports:'pipeline scoped, download, partial and missing'}));
   await page.close();
  }
  assert.deepEqual(errors,[]);assert.deepEqual(writes,[]);

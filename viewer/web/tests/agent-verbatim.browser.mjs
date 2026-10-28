@@ -1,3 +1,5 @@
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {expect} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {launchResponsiveBrowser} from './responsive-browser.mjs';
@@ -65,7 +67,7 @@ try{for(const width of [320,768,1440]){
  const geometry=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));
  assert(geometry.scroll<=geometry.width+1,JSON.stringify(geometry));
  assert.deepEqual(errors,[]);
- await page.screenshot({path:`/private/tmp/memstara-verbatim-${width}.png`,fullPage:true});
+ await page.screenshot({path:join(tmpdir(),`memstara-verbatim-${width}.png`),fullPage:true});
  console.log(JSON.stringify({width,allColumns:true,originalNames:true,fencesPreserved:true,rawHtmlInert:true,downloadExact:true,onlyAgentOutputs:true,independentBranches:true,replicateSwitch:true,pendingHasNoFabricatedOutput:true,noOverflow:true}));
  await page.close();
 }}finally{await browser.close();}

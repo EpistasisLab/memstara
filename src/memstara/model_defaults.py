@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from memstara.stage_models import AGENT_ROLES, deployment_profiles, expanded_profiles
 
@@ -45,7 +46,7 @@ def credentials_available(data):
 def public_defaults():
     """Group identical role assignments without exposing keys or loading sibling .env files."""
     from memstara.model_catalog import capabilities
-    groups = []
+    groups: list[dict[str, Any]] = []
     for role in AGENT_ROLES:
         data, profile = connection(role)
         safe = {key: data[key] for key in ('provider', 'model', 'api_base', 'region', 'auth_type')}

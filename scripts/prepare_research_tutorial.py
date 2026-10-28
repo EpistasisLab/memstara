@@ -1,4 +1,4 @@
-"""Register tutorial inputs and separate user skills; never start an execution."""
+"""Register tutorial inputs and a hypothesis skill; use supplied interpretation/explanation skills."""
 import argparse
 import json
 from pathlib import Path
@@ -14,14 +14,16 @@ def prepare(configuration):
     checked = research_inputs.inspect(configuration)
     if not checked["input_checks_passed"]:
         raise ValueError(json.dumps(checked["issues"]))
-    skills = {}
-    for stage, filename in (("hypothesis", "hypothesis.md"), ("report", "explanation.md")):
-        skills[stage] = catalog.register({
-            "stage": stage, "name": "research-tutorial",
-            "content": (ROOT / "examples/research-inputs/skills" / filename).read_text(),
-        })["id"]
+    from memstara.corpus_skills import PROFILES, corpus_profile
+    skills = {
+        "hypothesis": catalog.register({
+            "stage": "hypothesis", "name": "research-tutorial",
+            "content": (ROOT / "examples/research-inputs/skills/hypothesis.md").read_text(),
+        })["id"],
+        "report": PROFILES[corpus_profile(checked)]["report"][0],
+    }
     books = {"hypothesis": [skills["hypothesis"]], "report": [skills["report"]]}
-    research_inputs.validate_skills(books)
+    research_inputs.validate_skills(books, checked)
     selection = {
         "playbook_hypothesis": skills["hypothesis"],
         "playbook_data": "data_training_heavy", "playbook_ml": "ml_logistic_regression",

@@ -5,7 +5,7 @@ import {launchResponsiveBrowser} from './responsive-browser.mjs';
 const browser=await launchResponsiveBrowser();
 const root=process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:4177';
 const receiptKey='memstara-results-read-v1';
-const result=(id,auc=.65)=>({result_id:id,task_id:id,trial:id-1,perspective:`Question ${id}`,hypothesis:`Hypothesis ${id}`,columns_used:['age'],columns_missing:[],importance:{age:.1},okf_concept_ids:[],y_column:'outcome',auc,model:'lr',interpretation:'Recorded interpretation',created_at:`2026-10-22T12:${String(id).padStart(2,'0')}:00Z`});
+const result=(id,auc=.65)=>({result_id:id,task_id:id,trial:id-1,perspective:`Question ${id}`,hypothesis:`Hypothesis ${id}`,columns_used:['age'],columns_missing:[],importance:{age:.1},okf_concept_ids:[],y_column:'outcome',auc,model:'lr',interpretation:`Recorded interpretation ${id}`,created_at:`2026-10-22T12:${String(id).padStart(2,'0')}:00Z`});
 const snapshot=(rows,tag='alpha-run')=>({run_tag:tag,run_configuration:{trials:1,pipeline_name:tag==='alpha-run'?'Alpha research':'Beta research'},generated_at:'2026-10-22T13:00:00Z',stale:false,health:{core:{up:true},memstara:{up:true}},runs:[],scene:{places:[],agents:[],flashes:[]},board:{lanes:{},tasks:[]},feed:[],agents:[],access:{rows:[],windows:[]},results:rows,report:null});
 const errors=[],writes=[];
 try{
@@ -21,7 +21,7 @@ try{
   const launch=nav.getByRole('button',{name:'Results',exact:true});
   const badge=launch.locator('.results-new-badge');
   const dock=page.locator('#results-panel');
-  const selected=dock.getByRole('article',{name:'Selected analysis evidence'});
+  const selected=dock.getByRole('article',{name:'Selected interpretation outputs'});
   const seen=()=>page.evaluate(key=>JSON.parse(localStorage.getItem(key)||'{}'),receiptKey);
   const close=()=>nav.getByRole('button',{name:'Experiments',exact:true}).click();
   await goto();
@@ -42,17 +42,17 @@ try{
   }
   await page.emulateMedia({reducedMotion:'reduce'});await expect(badge.locator('i')).toHaveCSS('animation-name','none');
   await page.emulateMedia({reducedMotion:'no-preference'});await page.setViewportSize({width:1440,height:900});
-  await launch.click();await expect(selected).toContainText('Hypothesis 1');await expect(badge).toHaveCount(0);
+  await launch.click();await expect(selected).toContainText('Recorded interpretation 1');await expect(badge).toHaveCount(0);
   assert.equal((await seen())['alpha-run:1'],true);
   // Keep the selected evidence stable while a later loop completes.
   await deliver([result(1,0),result(2)]);
   await expect(dock.getByRole('button',{name:'View latest results'})).toBeVisible();
-  await expect(selected).toContainText('Hypothesis 1');assert.equal((await seen())['alpha-run:2'],undefined);
-  await dock.getByRole('button',{name:'View latest results'}).click();await expect(selected).toContainText('Hypothesis 2');
+  await expect(selected).toContainText('Recorded interpretation 1');assert.equal((await seen())['alpha-run:2'],undefined);
+  await dock.getByRole('button',{name:'View latest results'}).click();await expect(selected).toContainText('Recorded interpretation 2');
   await expect(badge).toHaveCount(0);await close();
   // Opening chooses the latest timestamp, independent of API ordering or ID order.
   await deliver([result(3),result(2),result(1,0)]);await expect(badge).toBeVisible();await launch.click();
-  await expect(selected).toContainText('Hypothesis 3');await close();
+  await expect(selected).toContainText('Recorded interpretation 3');await close();
   await goto();await deliver([result(3),result(2),result(1,0)]);await expect(badge).toHaveCount(0);
   // The same result number in another execution is still unread. Mismatched snapshots do not alert.
   await deliver([result(4)],'alpha-run','beta-run');await expect(badge).toHaveCount(0);
@@ -64,11 +64,11 @@ try{
   await deliver([result(4)]);await expect(badge).toHaveCount(0);await close();
   // Opening without results, then receiving them, acknowledges only once content is visible.
   await deliver([]);await launch.click();await expect(dock).toContainText('No finished results yet.');
-  await deliver([result(5)]);await expect(selected).toContainText('Hypothesis 5');await expect(badge).toHaveCount(0);await close();
+  await deliver([result(5)]);await expect(selected).toContainText('Recorded interpretation 5');await expect(badge).toHaveCount(0);await close();
   // A background tab must retain the receipt until the user returns.
   await deliver([result(6)]);
   await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
-  await launch.click();await expect(selected).toContainText('Hypothesis 6');assert.equal((await seen())['alpha-run:6'],undefined);
+  await launch.click();await expect(selected).toContainText('Recorded interpretation 6');assert.equal((await seen())['alpha-run:6'],undefined);
   await page.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
   await expect(badge).toHaveCount(0);await close();
   // Reading one execution cannot silently acknowledge another one.
@@ -78,12 +78,12 @@ try{
   // Out-of-order arrival of a lower ID must not be lost to a high-watermark receipt.
   await launch.click();await expect(badge).toHaveCount(0);await close();
   await deliver([result(7),{...result(2),result_id:20}]);await expect(badge).toBeVisible();
-  await launch.click();await expect(selected).toContainText('Hypothesis 7');await expect(badge).toHaveCount(0);await close();
+  await launch.click();await expect(selected).toContainText('Recorded interpretation 7');await expect(badge).toHaveCount(0);await close();
   await deliver([result(7),{...result(2),result_id:20},{...result(2),result_id:19}]);await expect(badge).toBeVisible();
   // Corrupt or unavailable browser storage must not break the workspace.
   await page.evaluate(key=>localStorage.setItem(key,'invalid json'),receiptKey);await goto();await deliver([result(1)]);await expect(badge).toBeVisible();
   await page.evaluate(()=>{Storage.prototype.setItem=function(){throw new DOMException('Blocked','SecurityError');};});
-  await launch.click();await expect(selected).toContainText('Hypothesis 1');await expect(badge).toHaveCount(0);await close();
+  await launch.click();await expect(selected).toContainText('Recorded interpretation 1');await expect(badge).toHaveCount(0);await close();
   await deliver([result(1)]);await expect(badge).toHaveCount(0);
   assert.deepEqual(errors,[]);assert.deepEqual(writes,[]);
   console.log('Results arrivals, visible receipts, persistence, pipeline isolation, repeat polling, errors, reduced motion and responsive themes passed. No backend writes or model calls.');

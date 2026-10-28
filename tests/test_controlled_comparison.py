@@ -57,7 +57,7 @@ def test_data_split_cannot_drift():
                      'validation_seed': partition.get('seed', snapshot['evaluation']['seed']),
                      'validation_size': partition.get('fraction', .2)}
     assert data.validate(fixed, spec, snapshot['evaluation'])['seed'] == 42
-    with pytest.raises(ValueError, match='frozen controlled-comparison'):
+    with pytest.raises(ValueError, match='frozen split'):
         data.validate({**fixed, 'seed': 7}, spec, snapshot['evaluation'])
 
 

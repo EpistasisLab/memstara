@@ -1,10 +1,6 @@
 // Render saved selection provenance and measured columns; every API response is synthetic.
-import {chromium} from '@playwright/test';
+import {chromium,expect} from '@playwright/test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {resolve,basename} from 'node:path';
-import {fileURLToPath} from 'node:url';
-const root=fileURLToPath(new URL('../',import.meta.url));
 const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
 try {
  for(const width of [1440,390]) {
@@ -33,56 +29,34 @@ try {
       operating_point:{true_negative:50,false_positive:14,false_negative:6,true_positive:10,probability_cutoff:.5}}],
       reproducibility:{status:'verified',bundle_path:'/synthetic/replay/'+name}}
   }]));
-  const run={run_tag:'fixture' ,configuration:{waves:1}};
-  await page.route('**/*',async route=>{
-   const path=new URL(route.request().url()).pathname;
-   if(path==='/control/pipelines')return route.fulfill({json:{pipelines:[{id:'p',name:'Fixture',number:1,
-    configuration:{waves:1},latest:run,running:null,progress:{}}]}});
-   if(path.startsWith('/control/'))return route.fulfill({json:{}});
-   if(path==='/api/pipeline-results')return route.fulfill({json:{results:[result],failures:[]}});
-   if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unrelated fixture endpoint'}});
-   const file=path.startsWith('/assets/')?resolve(root,'dist/assets',basename(path)):resolve(root,'dist/index.html');
-   return route.fulfill({body:await readFile(file),contentType:path.endsWith('.js')?'application/javascript':path.endsWith('.css')?'text/css':'text/html'});
-  });
-  await page.goto('http://fixture.local/');
-  await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
-  await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Results',exact:true}).click();
-  const tab=page.getByRole('tab',{name:'Results',exact:true});if(await tab.count())await tab.click();
-  await page.getByRole('button',{name:'Latest executions across pipelines',exact:true}).click();
-  await page.getByText('Model performance and technical details',{exact:true}).click();
-  const evidence=page.getByRole('article',{name:'Selected analysis evidence'});
-  await evidence.getByText(/Hypothesis selection: random/).waitFor();
-  const text=await evidence.innerText();
-  for(const value of ['4 predictors used','4 original predictors','allowed 4–20','eligible pool 30',
-                      'random seed 12345','Pipeline 2','Replicate 1'])assert(text.includes(value),value);
-  const allocation=page.getByRole('region',{name:'Data allocation'});
-  await allocation.waitFor();
-  const allocationText=await allocation.innerText();
-  for(const value of ['50% / 50% of 160 exploration rows','40 independent validation rows','seed 7',
-                      'training 80 rows','evaluation 80 rows','0: 64 / 64','1: 16 / 16'])assert(allocationText.includes(value),value);
-  const pair=page.getByRole('region',{name:'Selected ML model results'});
-  await pair.waitFor();
-  assert.equal(await pair.getByRole('table',{name:/confusion matrix/}).count(),2);
-  assert.equal(await pair.getByRole('table',{name:/attribution summary/}).count(),4);
-  assert((await pair.innerText()).includes('LIME local fidelity R²: mean 0.8000'));
-  assert((await pair.innerText()).includes('sampled evaluation rows'));
-  assert((await pair.innerText()).includes('not classifier accuracy'));
-  assert((await pair.innerText()).includes('AUROC 0.6000'));assert((await pair.innerText()).includes('AUROC 0.7000'));
-  assert((await pair.innerText()).includes('exploratory scores, not independent validation'));
-  await pair.getByText('Agent proposal and enforced limits',{exact:true}).click();
-  assert((await pair.innerText()).includes('Synthetic fixture'));
-  assert(await pair.evaluate(el=>el.scrollWidth<=el.clientWidth+2));
-  for(const name of features)assert(await evidence.getByText(name,{exact:true}).count());
+  result.interpretation='# Saved feature analysis\n\nFour selected predictors: age, bmi, marker, history.\n\nOriginal agent score: 0.600123.';
+  const snapshot={run_tag:'fixture',run_configuration:{pipeline_name:'Fixture',trials:1,waves:1},results:[result],report:null,stale:false,health:{core:{up:true},memstara:{up:true}},board:{tasks:[],lanes:{}},scene:{places:[],agents:[],flashes:[]},runs:[],feed:[],agents:[],access:{rows:[],windows:[]}};
+  await page.route(/\/(api|control)\//,r=>r.fulfill({status:503,json:{error:'Isolated fixture'}}));
+  await page.goto((process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:4177')+'/tests/execution-tiles.fixture.html');
+  await page.waitForFunction(()=>typeof window.deliverOutputs==='function');
+  await page.evaluate(snapshot=>window.deliverOutputs(snapshot),snapshot);
+  const tile=page.locator('.execution-output-tile');await expect(tile).toHaveCount(1);
+  const predictors=tile.locator('.output-predictor-meta');
+  await expect(predictors).toContainText('Predictors · 4');
+  for(const name of features)await expect(predictors).toContainText(name);
+  await expect(predictors).not.toContainText('target');
+  await expect(tile.locator('.output-test-metric')).toContainText('0.600');
+  await tile.click();
+  const evidence=page.locator('.output-documents');
+  await expect(evidence).toContainText('Original agent score: 0.600123.');
+  await expect(evidence).not.toContainText('Synthetic random control');
+  await expect(evidence).not.toContainText('allowed 4–20');
+  await expect(evidence.locator('table')).toHaveCount(0);
+  await page.getByText('Data columns & recorded metrics',{exact:true}).click();
+  for(const name of features)await expect(page.locator('.output-data-details')).toContainText(name);
+  assert(await evidence.evaluate(el=>el.scrollWidth<=el.clientWidth+2));
   assert.deepEqual(errors,[]);
   result.evaluation.model_results.xgboost.specialist_xai.items[1]={method:'lime',model:'xgboost',replicate:1,
     status:'failed',error_type:'RuntimeError',seed:7};
-  await page.reload();
-  await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
-  await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Results',exact:true}).click();
-  const reselect=page.getByRole('tab',{name:'Results',exact:true});if(await reselect.count())await reselect.click();
-  await page.getByRole('button',{name:'Latest executions across pipelines',exact:true}).click();
-  await page.getByText('Model performance and technical details',{exact:true}).click();
-  await page.getByText('Explanation unavailable (RuntimeError). Do not infer feature effects.',{exact:true}).waitFor();
+  // Failure evidence must not cause the UI to invent or replace the saved agent narrative.
+  await page.evaluate(snapshot=>window.deliverOutputs(snapshot),snapshot);
+  await expect(evidence).toContainText('Original agent score: 0.600123.');
+  await expect(evidence).not.toContainText('RuntimeError');
   assert.deepEqual(errors,[]);
   console.log(`Saved selection and evaluated predictor display passed at ${width}px; all APIs mocked.`);
   await page.close();

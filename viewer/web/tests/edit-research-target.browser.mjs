@@ -8,6 +8,7 @@ try{
  let records=[original],submitted;
  await page.route('**/control/**',async route=>{
   const path=new URL(route.request().url()).pathname;
+  if(path==='/control/research-inputs/upload')return route.fulfill({json:{dataset_path:'/inputs/data.csv',columns:['old_label','new_label'],rows:2,missing_cells:0,columns_with_missing:{},nonfinite_columns:[],class_values:{old_label:['0','1'],new_label:['no','yes']}}});
   if(path==='/control/health')return route.fulfill({json:{input_defaults:{dataset_available:false,knowledge_available:false,target_column:'stale_env_label'}}});
   if(path==='/control/research-inputs')return route.fulfill({json:{inputs:records}});
   if(path==='/control/research-inputs/register'){
@@ -21,15 +22,23 @@ try{
  await page.getByRole('button',{name:'Use Existing study',exact:true}).click();
  await page.getByRole('button',{name:'Edit data & target',exact:true}).click();
  assert.equal(await page.getByLabel('Target column',{exact:true}).inputValue(),'old_label');
- assert.equal(await page.getByLabel('Dataset CSV path').inputValue(),'/inputs/data.csv');
+ assert.equal(await page.getByLabel('Dataset CSV path').count(),0);
  await page.getByLabel('Target column',{exact:true}).fill('new_label');
+ await page.getByRole('button',{name:'Check & use this data'}).click();
+ await page.getByRole('dialog',{name:'Review your data settings'}).getByText('Upload the CSV to read the values in the selected target column.').waitFor();
+ assert.equal(submitted,undefined);
+ await page.getByRole('button',{name:'Back to settings'}).click();
+ await page.getByLabel('Upload CSV',{exact:true}).setInputFiles({name:'data.csv',mimeType:'text/csv',buffer:Buffer.from('old_label,new_label\n0,no\n1,yes\n')});
+ await page.getByLabel('Target column',{exact:true}).selectOption('new_label');
  await page.getByRole('button',{name:'Check & use this data'}).click();
  await page.waitForFunction(()=>JSON.parse(document.querySelector('output').textContent).research_input_id==='revised');
  const selected=JSON.parse(await page.getByLabel('Selected research configuration').textContent());
  assert.equal(selected.y_column,'new_label');
  assert.equal(original.configuration.target.column,'old_label');
  assert.equal(submitted.dataset_path,config.dataset_path);
- await page.getByRole('button',{name:'Use server defaults instead',exact:true}).click();
- assert.equal(JSON.parse(await page.getByLabel('Selected research configuration').textContent()).y_column,'');
+ await page.getByRole('button',{name:'Got it',exact:true}).click();
+ await page.getByRole('button',{name:'Upload new CSV',exact:true}).click();
+ assert.equal(await page.getByLabel('Target column',{exact:true}).count(),0);
+ assert.equal(JSON.parse(await page.getByLabel('Selected research configuration').textContent()).research_input_id,'revised');
  console.log('Existing target prefilled, saved as a new version, automatically selected; old target and source preserved.');
 }finally{await browser.close();}

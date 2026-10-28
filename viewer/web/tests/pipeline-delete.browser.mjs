@@ -26,16 +26,12 @@ try {
   await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
   async function showList(){const b=page.getByRole('button',{name:'Show pipeline list',exact:true});if(await b.isVisible())await b.click();}
   await showList();await page.locator('.pipeline-card-delete').first().waitFor();assert.equal(await page.locator('.pipeline-card-delete').count(),3);
-  assert.equal(await page.locator('.pipeline-card-status-actions .pipeline-card-delete').count(),3);
-  assert(await page.locator('.pipeline-card-status-actions').first().evaluate(e=>{
-   const badge=e.querySelector('.pipeline-state-badge').getBoundingClientRect();
-   const button=e.querySelector('button').getBoundingClientRect();
-   return button.left>=badge.right && Math.abs((badge.top+badge.bottom)/2-(button.top+button.bottom)/2)<2;
-  }));
+  assert.equal(await page.locator('.pipeline-card-header .pipeline-card-delete').count(),3);
   assert(await page.locator('.pipeline-card-header').evaluateAll(headers=>headers.every(e=>{
    const identity=e.querySelector('.pipeline-card-identity').getBoundingClientRect();
-   const actions=e.querySelector('.pipeline-card-status-actions').getBoundingClientRect();
-   return Math.abs((identity.top+identity.bottom)/2-(actions.top+actions.bottom)/2)<2 && identity.right<=actions.left && e.scrollWidth<=e.clientWidth+1;
+   const button=e.querySelector('.pipeline-card-delete').getBoundingClientRect();
+   const badge=e.querySelector('.pipeline-state-badge').getBoundingClientRect();
+   return identity.right<=button.left+1 && Math.abs(identity.top-button.top)<2 && badge.top>=identity.bottom-1 && e.scrollWidth<=e.clientWidth+1;
   })));
   await page.screenshot({path:`/tmp/pipeline-tile-${width}-${theme}.png`});
   const heading=page.getByRole('button',{name:'Select pipeline 2: Running research',exact:true});

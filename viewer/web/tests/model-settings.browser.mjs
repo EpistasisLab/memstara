@@ -1,3 +1,5 @@
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {expect} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {launchResponsiveBrowser} from './responsive-browser.mjs';
@@ -87,7 +89,7 @@ try {for(const width of [320,390,768,1280]) {
  await settings.scrollIntoViewIfNeeded();
  const bounds=await settings.evaluate(el=>({width:el.clientWidth,scroll:el.scrollWidth,dialogOverflow:el.closest('dialog').scrollWidth>el.closest('dialog').clientWidth+2}));
  assert(bounds.scroll<=bounds.width+2&&!bounds.dialogOverflow,JSON.stringify(bounds));
- await page.screenshot({path:`/private/tmp/memstara-model-settings-${width}.png`,fullPage:true});
+ await page.screenshot({path:join(tmpdir(),`memstara-model-settings-${width}.png`),fullPage:true});
  await settings.getByRole('button',{name:'Check & use model'}).click();
  await expect(settings).toContainText('Model ready');
  await expect(settings.locator('#experiment-api-key')).toHaveCount(0);

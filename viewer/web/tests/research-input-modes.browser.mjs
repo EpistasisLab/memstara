@@ -16,22 +16,12 @@ try {
     dataset:{rows:data==='dataset'?120:0,column_count:data==='dataset'?6:0,columns:[],missing_cells:0},
     knowledge:{documents:knowledge==='okf'?1:0,domains:[]}}});
   });
-  await page.goto((process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:5179')+'/tests/research-inputs.fixture.html');
+  const initial={name:'Synthetic mode matrix',dataset_path:data==='dataset'?'/synthetic/data.csv':'',knowledge_path:'',knowledge_mode:'llm_only',data_mode:data,excluded_columns:[],missing_policy:'reject',target:{column:data==='dataset'?'event':'',positive_label:'yes',negative_label:'no',description:'Predict a synthetic future event',prediction_time:'',horizon:''}};
+  await page.goto((process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:4177')+'/tests/research-inputs.fixture.html?initial='+encodeURIComponent(JSON.stringify(initial)));
   await page.getByRole('radio',{name:knowledge==='okf'?'My research folder':'LLM only',exact:true}).check();
-  await page.locator('.research-setup-advanced > summary').click();
-  await page.getByLabel('Data mode',{exact:true}).selectOption(data);
-  assert.equal(await page.getByLabel('Dataset CSV path',{exact:true}).count(),data==='dataset'?1:0);
+  assert.equal(await page.getByLabel('Dataset CSV path',{exact:true}).count(),0);
   assert.equal(await page.getByLabel('Research document folder path',{exact:true}).count(),knowledge==='okf'?1:0);
-  await page.getByLabel('Study name',{exact:true}).fill('Synthetic mode matrix');
-
-  if(data==='dataset') {
-   await page.getByText('Use a server file instead of uploading',{exact:true}).click();
-   await page.getByLabel('Dataset CSV path',{exact:true}).fill('/synthetic/data.csv');
-   await page.getByLabel('Target column',{exact:true}).fill('event');
-   await page.getByLabel('Positive-class value (exact CSV value)',{exact:true}).fill('yes');
-   await page.getByLabel('Negative-class value (exact CSV value)',{exact:true}).fill('no');
-  } else await page.getByText('Without a dataset, this creates an analysis plan, not measured results.',{exact:false}).waitFor();
-  await page.getByLabel('Prediction objective and target meaning',{exact:true}).fill('Predict a synthetic future event');
+  assert.equal(await page.getByLabel('Target column',{exact:true}).count(),data==='dataset'?1:0);
   if(knowledge==='okf') await page.getByLabel('Research document folder path',{exact:true}).fill('/synthetic/okf');
   await page.getByRole('button',{name:'Check & use this data',exact:true}).click();
   await page.getByText('Inputs are ready to use',{exact:true}).waitFor();
@@ -42,7 +32,8 @@ try {
   assert.equal(requests[0].target.description,'Predict a synthetic future event');
   if(data==='proposal') assert.equal(requests[0].target.column,'');
   // An implicit textarea label can include its current value in its accessible name.
-  await page.getByLabel('Prediction objective and target meaning').fill('A new objective');
+  if(data==='proposal')await page.getByLabel('Prediction objective and target meaning').fill('A new objective');
+  else await page.getByLabel('Target column',{exact:true}).fill('new_event');
   assert.equal(await page.getByText('Inputs are ready to use',{exact:true}).count(),0);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
   assert.deepEqual(errors,[]);

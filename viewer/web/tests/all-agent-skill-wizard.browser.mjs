@@ -1,7 +1,7 @@
+import {preparedInputs,fixtureSkillId} from './current-research.fixture.mjs';
 import {openBuildModeFixture} from './build-mode.fixture.mjs';
 // Mock every API write and generation: exercise UI contracts without paid model calls.
 import {chromium, expect} from '@playwright/test';
-import fs from 'node:fs';
 const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
 const roles=['hypothesis','data','ml','interpreter','report'];
 const labels=['Hypothesis','Data','Machine learning','Interpretation','Explanation'];
@@ -10,12 +10,12 @@ try {
   const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[],calls=[],saves=[];
   page.on('pageerror',e=>errors.push(e.message));
   let releaseModels;
-  let catalog=roles.map(stage=>({id:stage,stage,title:stage,content:'# Default',hash:stage,source:'Default'}));
+  let catalog=roles.map(stage=>({id:fixtureSkillId(stage),stage,title:stage,content:'# Default',hash:stage,source:'Default'}));
   await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Offline fixture'}}));
   await page.route('**/control/**',async r=>{
    const path=new URL(r.request().url()).pathname;
+  if(path==='/control/research-inputs')return r.fulfill({json:preparedInputs});
    if(path==='/control/pipelines')return r.fulfill({json:{pipelines:[]}});
-   if(path==='/control/research-inputs')return r.fulfill({json:{inputs:[]}});
 if(path==='/control/skills')return r.fulfill({json:{skills:[]}});
    if(path==='/control/skill-drafts/models'){
     await new Promise(resolve=>{releaseModels=resolve;});
@@ -25,7 +25,7 @@ if(path==='/control/skills')return r.fulfill({json:{skills:[]}});
    if(path.startsWith('/control/skill-drafts/'))return r.fulfill({json:{status:'ready',content:'# Draft',model:'selected-model',provider:'openai'}});
    if(path==='/control/playbooks'){
     if(r.request().method()==='GET')return r.fulfill({json:{catalog,playbooks:catalog.map(s=>s.id),stages:roles,references:[]}});
-    const q=r.request().postDataJSON();saves.push(q);const skill={...q,id:'generated-'+saves.length,title:q.name,hash:'hash-'+saves.length,source:'User'};catalog.push(skill);return r.fulfill({json:skill});
+    const q=r.request().postDataJSON();saves.push(q);const skill={...q,id:'user-'+q.stage+'-'+saves.length,title:q.name,hash:'hash-'+saves.length,source:'User'};catalog.push(skill);return r.fulfill({json:skill});
    }
    if(r.request().method()!=='GET')throw Error('Unexpected mutation '+path);
    return r.fulfill({json:{}});
@@ -36,13 +36,20 @@ if(path==='/control/skills')return r.fulfill({json:{skills:[]}});
   await page.route('**/assets/**',r=>{const name=new URL(r.request().url()).pathname.split('/').at(-1);return r.fulfill({path:new URL('assets/'+name,dist).pathname,contentType:name.endsWith('.css')?'text/css':'application/javascript'});});
   await page.goto(base);await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add experiment/i,exact:true}).click();await openBuildModeFixture(page,mode);
   const d=page.getByRole('dialog',{name:mode==='Selected Pipelines'?'Create a pipeline':'All Combinations',exact:true});
-  await d.getByLabel('Deployment target column',{exact:true}).fill('fixture_target');
+  await d.getByRole('button',{name:'Use CI dataset',exact:true}).click();
 if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();await d.getByRole('button',{name:'Next',exact:true}).click();}
   else await d.getByRole('button',{name:'Choose skills',exact:true}).click();
   for(let i=0;i<roles.length;i++) {
    if(mode==='All Combinations'){
     await d.getByRole('navigation',{name:'Agent roles'}).getByRole('button',{name:new RegExp('^'+labels[i])}).click();
-    await d.getByRole('button',{name:/^Create with AI/}).click();
+    if(i<3)await d.getByRole('button',{name:/^Create with AI/}).click();
+   }
+   if(i>=3){
+    await expect(d.getByLabel('Custom skill Markdown file')).toHaveCount(0);
+    await expect(d.getByRole('button',{name:'Create a skill with AI',exact:true})).toHaveCount(0);
+    await expect(d.getByRole('button',{name:/^Upload or write/})).toHaveCount(0);
+    if(mode==='Selected Pipelines')await d.getByRole('button',{name:'Next',exact:true}).click();
+    continue;
    }
    await d.getByRole('button',{name:'Create a skill with AI',exact:true}).click();
    const assistant=d.locator('.hypothesis-skill-wizard:visible');
@@ -60,7 +67,7 @@ if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for t
    await assistant.getByLabel('Generated Markdown skill').fill('# Edited '+roles[i]);
    await assistant.getByRole('checkbox',{name:'I reviewed these instructions and want to use this skill.'}).check();await save.click();await expect(assistant.getByText('Saved and selected. Finish the pipeline review when ready.',{exact:true})).toBeVisible();await expect(save).toBeDisabled();
    if(calls.at(-1).stage!==roles[i]||saves.at(-1).stage!==roles[i]||calls.at(-1).model!=='selected-model'||saves.at(-1).content!=='# Edited '+roles[i])throw Error(JSON.stringify({role:roles[i],call:calls.at(-1),save:saves.at(-1)}));
-   if(mode==='Selected Pipelines')await expect(d.getByRole('combobox',{name:labels[i]+' skill',exact:true})).toHaveValue('generated-'+saves.length);
+   if(mode==='Selected Pipelines')await expect(d.getByRole('combobox',{name:labels[i]+' skill',exact:true})).toHaveValue('user-'+roles[i]+'-'+saves.length);
    else {
     await expect(d.locator('.comb-skill-card').filter({hasText:'clinical-'+roles[i]}).locator('input[type=checkbox]')).toBeChecked();await expect(d.locator('.comb-selected-skills')).toHaveCount(0);
     await assistant.getByRole('button',{name:new RegExp('^Create another')}).click();await assistant.getByRole('button',{name:'Generate skill draft',exact:true}).click();
@@ -80,7 +87,7 @@ if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for t
   }
   if(mode==='Selected Pipelines')await expect(d.getByRole('textbox',{name:'Pipeline name',exact:true})).toBeVisible();
   if(errors.length)throw Error(errors.join('\n'));
-  console.log(JSON.stringify({mode,roles:5,generations:calls.length,saves:saves.length,responsiveChecks:30,errors}));
+  console.log(JSON.stringify({mode,editableRoles:3,suppliedOnlyRoles:2,generations:calls.length,saves:saves.length,responsiveChecks:30,errors}));
   await page.unrouteAll({behavior:'ignoreErrors'});await page.close();
  }
 }finally{await browser.close();}

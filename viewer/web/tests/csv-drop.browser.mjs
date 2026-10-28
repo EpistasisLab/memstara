@@ -26,8 +26,10 @@ try {
   await drop(page,['ignored-while-busy.csv']);
   expect(calls).toBe(1);
   release();
-  await expect(page.getByText('Missing values found. Some classifiers cannot run without imputation.',{exact:true})).toBeVisible();
-  await expect(page.getByLabel('No — require complete input before starting.',{exact:true})).toBeChecked();
+  await expect(page.getByText('Missing values found',{exact:true})).toBeVisible();
+  await expect(page.getByLabel('I’ll fix the CSV',{exact:true})).toBeChecked();
+  await expect(page.getByLabel('Target column',{exact:true})).toHaveCount(0);
+  await page.getByLabel('Fill missing values for me',{exact:true}).check();
   await expect(page.getByLabel('Target column',{exact:true})).toHaveValue('');
   await page.getByLabel('Upload CSV',{exact:true}).focus();
   await expect(page.getByLabel('Upload CSV',{exact:true})).toBeFocused();

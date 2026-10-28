@@ -20,10 +20,9 @@ def shared(tmp_path, monkeypatch):
     monkeypatch.delenv('MEMSTARA_RUN_CONFIG', raising=False)
 
 
-def test_current_domain_explanations_and_general_choice_visible(shared):
+def test_only_available_supplied_explanations_visible(shared):
     assert {i['id'] for i in catalog.catalog() if i['stage'] == 'report'} == {
-        'shared-addiction', 'shared-hiv', 'report_general',
-        'report_heart_failure_cardiovascular', 'report_heart_failure_cardiorenal'}
+        'shared-addiction', 'shared-hiv'}
     for name in ('shared-addiction', 'shared-hiv'):
         catalog.validate_selection({'playbook_explanation': name})
 
@@ -32,7 +31,7 @@ def test_current_domain_explanations_and_general_choice_visible(shared):
 def test_disabled_skills_remain_readable_but_cannot_launch(shared, name):
     assert catalog.resolve(name)['stage'] == 'report'
     assert prompts.load_prompt('board/report', name)['system_prompt']
-    with pytest.raises(ValueError, match='disabled for execution'):
+    with pytest.raises(ValueError, match='disabled for new execution'):
         catalog.validate_selection({'playbook_explanation': name})
 
 
@@ -43,6 +42,6 @@ def test_board_rejects_disabled_skill_before_execution(tmp_path, combination, mo
     args = SimpleNamespace(data_mode=mode, playbook_explanation='' if combination else 'report_evidence',
                            combination_plan=json.dumps({'skills': {'report': [{'id': 'report_evidence'}]}})
                            if combination else '')
-    with pytest.raises(ValueError, match='disabled for execution'):
+    with pytest.raises(ValueError, match='disabled for new execution'):
         asyncio.run(run(args, tmp_path))
     assert list(tmp_path.iterdir()) == []

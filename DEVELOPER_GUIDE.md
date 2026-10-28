@@ -725,6 +725,14 @@ a fresh uninterrupted execution.
 
 ## Development checks and source map
 
+The workflow in [.github/workflows/ci.yml](.github/workflows/ci.yml) runs on
+Ubuntu 24.04 with Python 3.12/3.13 and Node 22.18.0. If every job fails within
+seconds with no executed steps, inspect the run annotations before debugging code.
+A failed-payment or spending-limit annotation means GitHub did not allocate a
+runner. The account owner must resolve the billing/Actions allowance and then
+rerun the workflow. Local test success does not establish a successful hosted run;
+do not bypass required jobs or change repository visibility to hide this problem.
+
 For reproducible runtime-dependent tests without a sibling checkout, install the
 `dev` and `runtime` extras into a separate environment:
 
@@ -733,8 +741,8 @@ UV_PROJECT_ENVIRONMENT=.venv-test uv sync --frozen --extra dev --extra runtime
 UV_PROJECT_ENVIRONMENT=.venv-test uv run --frozen --extra dev --extra runtime pytest -q
 ```
 
-The runtime extra fixes Motoro v0.10.0 to its release commit and LiteLLM 1.97.0,
-the adapter version used for the actual four-mode Haiku verification. Linux uv
+The runtime extra fixes Motoro v0.13.0 to its release commit; `uv.lock` records
+the complete dependency set. Linux uv
 installs select CPU Torch. This extra is for a reproducible test/runtime baseline;
 it does not edit or replace an existing sibling checkout. CI installs it explicitly.
 The default tests exclude paid inference; see [tests/README.md](tests/README.md)

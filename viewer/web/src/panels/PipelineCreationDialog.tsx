@@ -141,10 +141,10 @@ export function CreationWizard() {
             </select></label>
           {stage==='ml'&&<MLAdvancedSettings skills={[draft.playbook_ml]} value={draft.ml_overrides} replicates={draft.evaluation.replicates} proposal={draft.data_mode==='proposal'} disabled={busy||loading||uploading} onChange={ml_overrides=>setDraft(d=>({...d,ml_overrides}))}/>}
           {!loading && !catalog.some(s => s.stage === stage) && <div role="alert" className="text-sm">Skills are unavailable. <button type="button" onClick={() => void reload()} className="underline">Try again</button></div>}
-          <CustomSkillUpload key={stage} stage={stage} disabled={busy}
-            onBusy={setUploading} onSelect={chosen => setDraft(d => ({ ...d, [`playbook_${stage === "report" ? "explanation" : stage}`]: chosen.id,
+          {stage!=='interpreter'&&stage!=='report'&&<CustomSkillUpload key={stage} stage={stage} disabled={busy}
+            onBusy={setUploading} onSelect={chosen => setDraft(d => ({ ...d, [`playbook_${stage}`]: chosen.id,
               ml_overrides:stage==='ml'?overridesForSkills(d.ml_overrides,[chosen.id]):d.ml_overrides,
-              evaluation: stage === 'ml' ? { ...d.evaluation, ...chosen.evaluation } : d.evaluation }))} />
+              evaluation: stage === 'ml' ? { ...d.evaluation, ...chosen.evaluation } : d.evaluation }))} />}
           {skill && <div className="rounded-lg border border-paper-line bg-paper-panel p-4 text-sm"><p className={addictionSkills.has(skill.id) ? 'font-bold' : 'font-medium'}>{skillLabel(skill.id,skill.title)}</p><p className="mt-2 text-ink-muted">{displayText(skill.description)}</p>
             <details className="mt-3"><summary className="cursor-pointer">Read skill instructions</summary><pre className="mt-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-sans text-xs">{displayText(skill.content)}</pre></details></div>}
           {stage === 'ml' && <><AgentReferenceKnowledge /><EvaluationSettings proposal={draft.data_mode==='proposal'} paired={paired} dataSkill={draft.playbook_data} value={draft.evaluation} disabled={busy || loading || uploading} onChange={evaluation=>setDraft(d=>({...d,evaluation}))}/>

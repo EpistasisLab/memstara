@@ -35,8 +35,8 @@ try{
    await expect(page.locator('#workspace-pipeline > .window-titlebar')).toContainText(name);
    await expect(page.locator('#workspace-results, #workspace-report, .workspace-minimized-window')).toHaveCount(0);
    await expect(page.locator('.is-evidence-fullscreen')).toHaveCount(0);
-   if(name==='Results')await expect(page.locator('#results-panel')).toBeVisible();
-   else await expect(page.locator('#results-panel')).toHaveCount(0);
+   if(name==='Results'||name==='Conclusions')await expect(page.getByTestId('execution-outputs')).toBeVisible();
+   else await expect(page.getByTestId('execution-outputs')).toHaveCount(0);
    if(name==='Experiments')await expect(page.locator('.floor-observatory')).toBeVisible();
    else await expect(page.locator('.floor-observatory')).toHaveCount(0);
    await button.scrollIntoViewIfNeeded();await expect(button).toBeInViewport();

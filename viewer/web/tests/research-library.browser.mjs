@@ -13,12 +13,13 @@ try {
   await expect(page.getByRole('region',{name:'Saved research inputs'})).toBeVisible();
   await expect(page.getByText('Choose the prediction target.',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:`Use ${config.name}`,exact:true}).click();
-  await expect(page.getByRole('button',{name:`Use ${config.name}`,exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(page.getByLabel('Selected dataset')).toContainText(config.name);
+  await page.getByText('Change dataset',{exact:false}).click();
   await page.getByRole('button',{name:'Review Target needs setup',exact:true}).click();
   await expect(page.getByLabel('Target column',{exact:true})).toHaveValue('');
   expect(JSON.parse(await page.getByLabel('Selected research configuration').textContent()).research_input_id).toBe('ready');
   await page.getByRole('button',{name:'Cancel editing',exact:true}).click();
-  await expect(page.getByRole('button',{name:`Use ${config.name}`,exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(page.getByLabel('Selected dataset')).toContainText(config.name);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   expect(errors).toEqual([]);
   await page.close();

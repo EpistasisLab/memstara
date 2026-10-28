@@ -4,7 +4,7 @@ const browser=await chromium.launch();
 try{for(const width of [390,1200]){
  const page=await browser.newPage({viewport:{width,height:1000}});let posted,runs=0;page.on('pageerror',error=>console.error(error.message));
  const roles=['hypothesis','data','ml','interpreter','report'];
- const skills=roles.map(stage=>({id:stage==='hypothesis'?'hypothesis_general':stage==='report'?'report_general':`${stage}_fixture`,stage,title:`${stage} fixture`,hash:stage,content:'Test',source:'fixture'}));
+ const skills=roles.map(stage=>({id:stage==='hypothesis'?'hypothesis_general':stage==='report'?'shared-addiction':stage==='interpreter'?'shared-shap':`${stage}_fixture`,stage,title:`${stage} fixture`,hash:stage,content:'Test',source:'fixture'}));
  await page.route('**/control/**',route=>{
   const req=route.request(),path=new URL(req.url()).pathname;
   if(path==='/control/playbooks')return route.fulfill({json:{catalog:skills,playbooks:skills.map(s=>s.id),stages:roles,references:[]}});

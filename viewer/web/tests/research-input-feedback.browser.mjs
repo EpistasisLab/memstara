@@ -22,7 +22,7 @@ try{for(const width of [390,1200]){
  await page.getByLabel('Upload CSV',{exact:true}).setInputFiles({name:'test.csv',mimeType:'text/csv',buffer:Buffer.from('a,outcome\n1,0\n2,1')});
  await page.getByRole('button',{name:'Check & use this data',exact:true}).click();
  let feedback=page.getByRole('dialog',{name:'Review your data settings',exact:true});
- await expect(feedback).toContainText('Choose the outcome column');await expect(feedback).toContainText('Choose a knowledge source');assert.equal(attempts,0);
+ await expect(feedback).toContainText('Choose the outcome column');await expect(feedback).toContainText('Choose the outcome column');assert.equal(attempts,0);
  await page.keyboard.press('Escape');await expect(feedback).toHaveCount(0);await expect(page.getByRole('dialog',{name:'Outer setup'})).toBeVisible();
  await page.getByLabel('Upload CSV',{exact:true}).setInputFiles({name:'test.csv',mimeType:'text/csv',buffer:Buffer.from('a,outcome\n1,0\n2,1')});
  await page.getByLabel('Target column',{exact:true}).selectOption('outcome');

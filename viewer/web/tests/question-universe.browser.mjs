@@ -1,3 +1,5 @@
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {chromium,expect} from '@playwright/test';
 import assert from 'node:assert/strict';
 const browser=await chromium.launch({headless:true});
@@ -42,7 +44,7 @@ try{
   assert(await page.locator('.related-search textarea').evaluate(el=>el.getBoundingClientRect().height>=100));
   assert(await page.locator('.related-primary').evaluate(el=>el.getBoundingClientRect().height>=44));
   assert(await page.locator('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth+2));
-  await page.screenshot({path:`/private/tmp/memstara-related-${width}.png`});
+  await page.screenshot({path:join(tmpdir(),`memstara-related-${width}.png`)});
   await page.getByRole('button',{name:'Search meaning',exact:true}).click();
   await expect(page.getByText('Indexed 2 of 2 active questions',{exact:false})).toBeVisible();
   await page.getByRole('button',{name:'Open question 2 · cosine 0.900'}).click();

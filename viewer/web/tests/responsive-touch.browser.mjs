@@ -1,3 +1,4 @@
+import {preparedInputs} from './current-research.fixture.mjs';
 import {chromium,webkit,expect} from '@playwright/test';
 import assert from 'node:assert/strict';
 const root=process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:4177';
@@ -7,10 +8,11 @@ if(!engine)throw Error('Touch emulation is supported by this harness in Chromium
 {
  const browser=await engine.launch();try{
  const context=await browser.newContext({viewport:{width:390,height:700},hasTouch:true,isMobile:true});const page=await context.newPage();
- await page.route('**/control/**',r=>r.fulfill({json:{inputs:[],models:[],skills:[]}}));
+ await page.route('**/control/**',r=>r.fulfill({json:{...preparedInputs,models:[],skills:[]}}));
  await page.goto(root+'/tests/responsive-scroll.fixture.html');
+ await page.getByRole('button',{name:'Use CI dataset',exact:true}).tap();
  await page.getByRole('button',{name:/Agent skills/}).tap();await page.locator('.comb-skill-card input').first().waitFor({state:'visible'});
- await page.locator('.comb-skill-card input').first().tap();await expect(page.locator('.comb-skill-card input').first()).toBeChecked();
+ await page.locator('.comb-skill-card input').first().uncheck();await page.locator('.comb-skill-card input').first().tap();await expect(page.locator('.comb-skill-card input').first()).toBeChecked();
  await page.locator('.comb-skill-card details > summary').first().tap();
  const scroll=page.locator('.comb-step-content');
  if(name==='chromium'){

@@ -1,3 +1,4 @@
+import {preparedInputs,fixtureSkillId} from './current-research.fixture.mjs';
 import {chromium,expect} from '@playwright/test';
 import assert from 'node:assert/strict';
 // All requests are mocked; no real pipeline or paid model run.
@@ -8,10 +9,11 @@ try {
   await page.addInitScript(()=>localStorage.setItem('memstara-draft-v1',JSON.stringify({stage_models:{non_explanation_agents:{provider:'openai',model:'qwen-old'},explanation_agent:{provider:'azure_foundry',model:'sonnet-old'}}})));
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   const roles=['hypothesis','data','ml','interpreter','report'],counts=[2,3,2,2,1];
-  const skills=roles.flatMap((stage,i)=>Array.from({length:counts[i]},(_,n)=>({id:`${stage}_${n}`,stage,title:`${stage} flavor ${n+1}`,hash:`${stage}-${n}`,content:'# Fixture',description:'Test instructions',source:'fixture'})));
+  const skills=roles.flatMap((stage,i)=>Array.from({length:counts[i]},(_,n)=>({id:fixtureSkillId(stage,n),stage,title:`${stage} flavor ${n+1}`,hash:`${stage}-${n}`,content:'# Fixture',description:'Test instructions',source:'fixture'})));
   let rows=[],posted,runPosts=0;
   await page.route('**/control/**',async route=>{
    const url=new URL(route.request().url()),path=url.pathname;
+   if(path==='/control/research-inputs')return route.fulfill({json:preparedInputs});
    if(path==='/control/playbooks')return route.fulfill({json:{catalog:skills,playbooks:skills.map(s=>s.id),stages:roles,references:[],max_hypotheses:4}});
    if(path==='/control/skills')return route.fulfill({json:{skills:[]}});
    if(path==='/control/pipelines') {
@@ -30,24 +32,24 @@ try {
   await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Fixture'}}));
   await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
   await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.getByRole('button',{name:/Add experiment/i}).click();
-  const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});await dialog.getByLabel('Deployment target column',{exact:true}).fill('fixture_target');await dialog.getByRole('button',{name:'Choose skills'}).click();
+  const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});await dialog.getByRole('button',{name:'Use CI dataset',exact:true}).click();await dialog.getByRole('button',{name:'Choose skills'}).click();
   const labels=['Hypothesis','Data','Machine learning','Interpretation','Explanation'];
   for(const [i,role] of roles.entries()){
-   await dialog.getByRole('heading',{name:labels[i]+' skills',exact:true}).waitFor();
+   await dialog.getByRole('heading',{name:i===1?'Data settings':labels[i]+' skills',exact:true}).waitFor();
    const forward=dialog.getByRole('button',{name:i===4?'Review plan':'Next: '+labels[i+1],exact:true});
    assert(!(await forward.isDisabled()),'Default role must advance');
-   const choices=skills.filter(s=>s.stage===role);
    await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'});
-   for(const skill of choices)await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).check();
+   for(const box of await dialog.locator('.comb-skill-card input').all())await box.check();
    assert(!(await forward.isDisabled()),'Selected role must advance');
-   for(const skill of choices)await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).uncheck();
-   assert.equal(await forward.isDisabled(),!['ml','hypothesis'].includes(role));
-   for(const skill of choices)await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).check();
+   for(const box of await dialog.locator('.comb-skill-card input').all())await box.uncheck();
+   assert.equal(await forward.isDisabled(),false);
+   if(role==='data')await dialog.getByRole('radio',{name:'Use data skills',exact:true}).check();
+   for(const box of await dialog.locator('.comb-skill-card input').all())await box.check();
    if(i<4){
-    await forward.click();await dialog.getByRole('heading',{name:labels[i+1]+' skills',exact:true}).waitFor();
+    await forward.click();await dialog.getByRole('heading',{name:i===0?'Data settings':labels[i+1]+' skills',exact:true}).waitFor();
     await dialog.getByRole('button',{name:'Back',exact:true}).click();
     await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'});
-    for(const skill of choices)assert(await dialog.getByRole('checkbox',{name:new RegExp(skill.title)}).isChecked());
+    for(const box of await dialog.locator('.comb-skill-card input').all())assert(await box.isChecked());
     await forward.click();
    }
   }
@@ -63,9 +65,9 @@ try {
   rows[0].latest={run_tag:'frozen',exit_code:0,configuration:{waves:10}};await page.reload();await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();
   const studio=page.getByRole('region',{name:'Combination design',exact:true});await studio.waitFor();
   await page.getByText('Pipeline 23 · Replicate 1 · Latest execution',{exact:true}).waitFor();
-  await expect(studio.locator('.cf-desk.is-selected').filter({hasText:'interpreter flavor 1'})).toHaveCount(1);
+  await expect(studio.locator('.cf-desk.is-selected').filter({hasText:'SHAP Interpretation'})).toHaveCount(1);
   rows[0].progress={iteration:2};await page.getByText('Pipeline 24 · Replicate 1 · Latest execution',{exact:true}).waitFor();
-  await expect(studio.locator('.cf-desk.is-selected').filter({hasText:'interpreter flavor 2'})).toHaveCount(1);
+  await expect(studio.locator('.cf-desk.is-selected').filter({hasText:'LIME Interpretation'})).toHaveCount(1);
   assert.equal(await page.getByRole('button',{name:'Loop explorer',exact:true}).count(),0);
   assert.equal(await studio.getByRole('spinbutton',{name:'Combination Loop',exact:true}).count(),0);assert.deepEqual(errors,[]);assert.equal(runPosts,0);
   console.log(JSON.stringify({width,theme,limits:'pass',randomStartRemoved:'pass',frozenCurrentLoop:'pass',noRunOnCreate:'pass'}));await page.close();

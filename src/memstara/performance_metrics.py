@@ -35,7 +35,8 @@ def binary_metrics(labels, probability, threshold):
         'precision': tp / (tp + fp) if tp + fp else None,
         'negative_predictive_value': tn / (tn + fn) if tn + fn else None,
         'f1': 2 * tp / (2 * tp + fp + fn) if 2 * tp + fp + fn else None,
-        'balanced_accuracy': (sensitivity + specificity) / 2 if both else None,
+        'balanced_accuracy': (sensitivity + specificity) / 2
+        if sensitivity is not None and specificity is not None else None,
         'brier_score': float(np.mean((p - y) ** 2)),
         'log_loss': float(-np.mean(y * np.log(clipped) + (1 - y) * np.log1p(-clipped))),
     }
@@ -104,7 +105,7 @@ def bootstrap_intervals(labels, probability, threshold, seed, *, samples=BOOTSTR
     if samples < 2:
         raise ValueError('Bootstrap requires at least two resamples')
     rng = np.random.default_rng(seed)
-    distributions = {name: [] for name in binary_metrics(y, p, threshold)['metrics']}
+    distributions: dict[str, list[float]] = {name: [] for name in binary_metrics(y, p, threshold)['metrics']}
     for _ in range(samples):
         rows = np.concatenate([rng.choice(group, len(group), replace=True) for group in groups])
         values = binary_metrics(y[rows], p[rows], threshold)['metrics']
@@ -115,9 +116,9 @@ def bootstrap_intervals(labels, probability, threshold, seed, *, samples=BOOTSTR
     for name, values in distributions.items():
         valid = len(values)
         complete = valid == samples
-        bounds = np.quantile(values, [.025, .975]) if complete else [None, None]
-        intervals[name] = {'lower': float(bounds[0]) if complete else None,
-                           'upper': float(bounds[1]) if complete else None,
+        lower, upper = (map(float, np.quantile(values, [.025, .975])) if complete else (None, None))
+        intervals[name] = {'lower': lower,
+                           'upper': upper,
                            'valid_resamples': valid,
                            'status': 'estimated' if complete else 'undefined_in_resamples'}
     return {'status': 'completed', 'method': 'stratified_paired_percentile_bootstrap',

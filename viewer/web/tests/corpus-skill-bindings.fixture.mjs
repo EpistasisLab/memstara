@@ -1,4 +1,4 @@
-// Explicit corpus profiles for isolated UI tests; no patient data.
+// Explicit current corpus profiles for isolated UI tests; no patient data.
 export const corpusSkillBindings={
   "profiles": {
     "hiv": {
@@ -6,12 +6,13 @@ export const corpusSkillBindings={
       "hypothesis": [
         "addiction-substance-use",
         "addiction-sdoh",
-        "addiction-psychiatric",
-        "random_features"
+        "addiction-psychiatric"
       ],
       "report": [
         "shared-addiction",
-        "shared-hiv"
+        "shared-hiv",
+        "shared-heart-failure-cardiovascular",
+        "shared-heart-failure-comorbidity"
       ]
     },
     "heart_failure": {
@@ -19,22 +20,25 @@ export const corpusSkillBindings={
       "hypothesis": [
         "heart-failure-cardiovascular",
         "heart-failure-metabolic-renal",
-        "heart-failure-lifestyle-social",
-        "random_features"
+        "heart-failure-lifestyle-social"
       ],
       "report": [
-        "report_heart_failure_cardiovascular",
-        "report_heart_failure_cardiorenal"
+        "shared-addiction",
+        "shared-hiv",
+        "shared-heart-failure-cardiovascular",
+        "shared-heart-failure-comorbidity"
       ]
     },
     "general": {
       "label": "General research corpus / model knowledge",
       "hypothesis": [
-        "hypothesis_general",
-        "random_features"
+        "hypothesis_general"
       ],
       "report": [
-        "report_general"
+        "shared-addiction",
+        "shared-hiv",
+        "shared-heart-failure-cardiovascular",
+        "shared-heart-failure-comorbidity"
       ]
     }
   },

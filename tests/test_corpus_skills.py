@@ -40,7 +40,7 @@ def test_wrong_corpus_skills_rejected_for_single_and_combination_requests(scope,
     names = [item['id'] for item in catalog()]
     correct = PROFILES[scope]['hypothesis'][0]
     request = {'research_input_id': 'a' * 32, 'provider': 'openai', 'model': 'fixture',
-               'playbook_hypothesis': correct, 'playbook_explanation': 'report_general'}
+               'playbook_hypothesis': correct, 'playbook_explanation': 'shared-addiction'}
     assert correct in build_argv(request, [], names, ['hypothesis', 'report'])
     bad = PROFILES[wrong]['hypothesis'][0]
     with pytest.raises(ValueError, match='does not match the selected corpus'):
@@ -64,13 +64,15 @@ def test_profile_binding_uses_actual_index_not_a_study_name_or_target(tmp_path, 
         validate_skills({'hypothesis': PROFILES['hiv']['hypothesis']})
 
 
-def test_general_saved_choices_remain_executable_without_rewriting_history():
+def test_legacy_explanation_is_readable_but_rejected_for_new_execution():
     for scope in ['hiv', 'heart_failure']:
-        validate_skills({'hypothesis': ['hypothesis_general'], 'report': ['report_general']}, profile(scope))
+        assert load_prompt('board/report', playbook='report_general')['system_prompt']
+        with pytest.raises(ValueError, match='disabled for new execution'):
+            validate_skills({'hypothesis': ['hypothesis_general'], 'report': ['report_general']}, profile(scope))
 
 
 @pytest.mark.parametrize('scope,wrong', [('hiv', 'heart_failure'), ('heart_failure', 'hiv')])
-def test_two_explanations_reach_report_prompt_and_reject_wrong_corpus(scope, wrong, monkeypatch):
+def test_four_supplied_explanations_are_selectable_across_corpora(scope, wrong, monkeypatch):
     import memstara.research_inputs as research
     monkeypatch.setattr(research, 'load', lambda identifier: profile(scope))
     monkeypatch.setattr('memstara.stage_models.deployment_profiles', lambda: {})
@@ -79,15 +81,13 @@ def test_two_explanations_reach_report_prompt_and_reject_wrong_corpus(scope, wro
         monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'fixture')
     rows = {row['id']: row for row in catalog()}
     reports = PROFILES[scope]['report']
-    assert len(reports) == 2
-    assert len(PROFILES[scope]['hypothesis']) * 2 * 2 * 2 * len(reports) == (96 if scope == 'heart_failure' else 64)
+    assert len(reports) == 4
+    assert len(PROFILES[scope]['hypothesis']) * 2 * 2 * 2 * len(reports) == (192 if scope == 'heart_failure' else 128)
     for name in reports:
         assert rows[name]['stage'] == 'report'
         assert rows[name]['content'].strip() in load_prompt('board/report', playbook=name)['system_prompt']
         request = {'research_input_id': 'a' * 32, 'playbook_hypothesis': PROFILES[scope]['hypothesis'][0],
                    'playbook_explanation': name}
         assert name in build_argv(request, [], list(rows), ['hypothesis', 'report'])
-    with pytest.raises(ValueError, match='Explanation skill does not match'):
-        validate_skills({'report': PROFILES[wrong]['report']}, profile(scope))
-    with pytest.raises(ValueError, match='Explanation skill does not match'):
-        validate_skills({'report': reports}, profile(scope), knowledge_mode='llm_only')
+    validate_skills({'report': PROFILES[wrong]['report']}, profile(scope))
+    validate_skills({'report': reports}, profile(scope), knowledge_mode='llm_only')

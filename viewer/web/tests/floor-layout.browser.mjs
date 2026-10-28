@@ -28,7 +28,7 @@ try {
   await page.getByRole('button',{name:'Inspect Research pipeline 2',exact:true}).click();await page.waitForTimeout(600);
   const nav=page.locator('[aria-label="View navigation"]');
   await nav.getByRole('button',{name:'Results',exact:true}).click();
-  await page.locator('#results-panel').waitFor();
+  await page.getByTestId('execution-outputs').waitFor();
   await nav.getByRole('button',{name:'Experiments',exact:true}).click();await page.waitForTimeout(400);
   await page.locator('.floor-canvas .react-flow').waitFor();
   assert((await page.locator('.pipeline-context-title').innerText()).includes('Research pipeline 2'),'Changing views lost the inspected pipeline');

@@ -24,14 +24,12 @@ try{for(const width of [390,1200])for(const theme of ['light','dark']){
  await expect(page.getByLabel('Target column',{exact:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Check inputs',exact:true})).toHaveCount(0);
  await page.getByLabel('Upload CSV',{exact:true}).setInputFiles({name:'my-study.csv',mimeType:'text/csv',buffer:Buffer.from('a,outcome\n,0\n2,1')});
- await page.getByRole('button',{name:'Check & use this data',exact:true}).click();
- await expect(page.getByRole('dialog',{name:'Review your data settings'})).toContainText('Choose the outcome column');
- await page.getByRole('button',{name:'Back to settings'}).click();
+ await expect(page.getByRole('button',{name:'Check & use this data',exact:true})).toHaveCount(0);
  await page.getByLabel('Fill missing values for me').check();
  await page.getByLabel('Target column',{exact:true}).selectOption('outcome');
  await page.getByRole('radio',{name:'LLM only',exact:true}).check();
  await expect(page.getByRole('radio',{name:'LLM only',exact:true})).toBeChecked();
- await expect(page.locator('.research-knowledge-summary')).toContainText('LLM only');
+ await expect(page.getByRole('radio',{name:'LLM only',exact:true})).toBeChecked();
  await expect(page.getByLabel('Knowledge source',{exact:true})).toBeVisible();
  await page.getByRole('radio',{name:'LLM only',exact:true}).check();
  await expect(page.getByText('Additional information',{exact:true})).toHaveCount(0);

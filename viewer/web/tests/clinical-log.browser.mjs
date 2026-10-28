@@ -55,7 +55,7 @@ try {
    await panel.locator('[data-role=ml]').getByText('Running',{exact:true}).waitFor();
    traceUnavailable=true;
    await panel.locator('[data-role=ml]').getByText('Last recorded: call open',{exact:true}).waitFor();
-   assert.equal(await page.getByLabel('Machine learning stage is running').count(),0);
+   assert.equal(await page.getByLabel('Machine learning stage is running').isVisible(),false);
    traceUnavailable=false;
    await panel.locator('[data-role=ml]').getByText('Running',{exact:true}).waitFor();
 

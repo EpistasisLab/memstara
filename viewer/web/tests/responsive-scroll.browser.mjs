@@ -1,3 +1,4 @@
+import {preparedInputs} from './current-research.fixture.mjs';
 import {expect} from '@playwright/test';
 import {launchResponsiveBrowser} from './responsive-browser.mjs';
 import assert from 'node:assert/strict';
@@ -7,9 +8,10 @@ try{
  for(const [width,height] of [[360,700],[390,500],[768,700],[1024,500],[1280,900],[1440,700],[1920,900]]){
   const page=await browser.newPage({viewport:{width,height}});const errors=[];
   page.on('pageerror',e=>errors.push(e.message));
-  await page.route('**/control/**',r=>r.fulfill({json:{inputs:[],models:[],skills:[]}}));
+  await page.route('**/control/**',r=>r.fulfill({json:{...preparedInputs,models:[],skills:[]}}));
   await page.goto(root+'/tests/responsive-scroll.fixture.html');
   const dialog=page.getByRole('dialog',{name:'All Combinations',exact:true});
+  await dialog.getByRole('button',{name:'Use CI dataset',exact:true}).click();
   await dialog.getByRole('button',{name:/Agent skills/}).click();
   await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'});
   await expect(dialog.locator('.comb-skill-card')).toHaveCount(16);
@@ -38,11 +40,13 @@ try{
  }
  for(const mode of ['single','editor'])for(const [width,height] of [[390,500],[1440,900]]){
   const page=await browser.newPage({viewport:{width,height}});
-  await page.route('**/control/**',r=>r.fulfill({json:{inputs:[],models:[],skills:[]}}));
+  await page.route('**/control/**',r=>r.fulfill({json:{...preparedInputs,models:[],skills:[]}}));
   await page.goto(root+`/tests/responsive-scroll.fixture.html?${mode}=1`);
   if(mode==='single'){
+   await page.getByRole('button',{name:'Use CI dataset',exact:true}).click();
    await page.getByRole('checkbox',{name:/Use .* for this pipeline/}).check();
    await page.getByRole('button',{name:'Next',exact:true}).click();
+   await page.getByRole('combobox',{name:'Hypothesis skill',exact:true}).selectOption('user-hypothesis-0');
    await page.getByText('Read skill instructions',{exact:true}).click();
   }else{
    await page.locator('[aria-label="Review selected skill"] summary').click();

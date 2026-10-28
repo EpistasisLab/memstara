@@ -38,10 +38,7 @@ try {
   await assertBars('.universe-evidence');
   await page.keyboard.press('Escape');await openRetainedView(page,'clinician');await page.getByText('Explore the supporting evidence',{exact:true}).click();await page.locator('.clinical-contribution').first().waitFor();
   assert.deepEqual(await page.locator('.clinical-contribution > div:first-child > span').allTextContents(),['positive','zero','negativeSmall','negativeLarge']);await assertBars('.clinical-contributions');
-  await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.locator('[aria-label="View navigation"]').getByRole('button',{name:'Results',exact:true}).click();
-  const tab=page.getByRole('tab',{name:'Results',exact:true});if(await tab.count())await tab.click();
-  await page.getByRole('button',{name:'Latest executions across pipelines',exact:true}).click();
-  await page.getByText('Model performance and technical details',{exact:true}).click();
+  await page.evaluate(result=>window.openFeatureChart(result),result);
   await page.locator('.result-feature-row').first().waitFor();
   assert.deepEqual(await page.locator('.result-feature-row').evaluateAll(es=>es.map(e=>e.dataset.feature)),['positive','zero','negativeSmall','negativeLarge']);
   await page.getByRole('button',{name:'SHAP magnitude',exact:true}).click();

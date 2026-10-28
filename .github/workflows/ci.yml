@@ -15,7 +15,7 @@ concurrency:
 jobs:
   container-recovery:
     name: Isolated container recovery
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
         with:
@@ -39,7 +39,7 @@ jobs:
 
   backend:
     name: Python tests (${{ matrix.python }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -81,7 +81,7 @@ jobs:
 
   analysis:
     name: Python type and formatting diagnostics
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
         with:
@@ -136,7 +136,7 @@ jobs:
 
   frontend:
     name: Frontend unit, type, lint and browser tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: viewer/web
@@ -166,7 +166,7 @@ jobs:
 
   responsive-ui:
     name: Responsive UI across browsers and zoom levels
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     defaults:
       run:
@@ -192,7 +192,7 @@ jobs:
 
   package:
     name: Distribution build and installed version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
         with:

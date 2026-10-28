@@ -1,3 +1,5 @@
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {expect} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {launchResponsiveBrowser} from './responsive-browser.mjs';
@@ -25,7 +27,7 @@ try {for(const width of [320,390,768,1440]) {
  };
  await expect(panel.locator('.execution-output-tile')).toHaveCount(3);
  await checkLayout();
- await page.screenshot({path:`/private/tmp/memstara-execution-tiles-${width}.png`,fullPage:true});
+ await page.screenshot({path:join(tmpdir(),`memstara-execution-tiles-${width}.png`),fullPage:true});
  // Scroll restoration and keyboard activation use a tile well below the first row.
  const last=panel.getByRole('button',{name:'Open Results: Pipeline 16 · Replicate 2',exact:true});
  await last.scrollIntoViewIfNeeded();await last.focus();

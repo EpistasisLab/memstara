@@ -31,8 +31,13 @@ def test_fresh_user_modes(tmp_path, monkeypatch, knowledge, data):
     assert saved['configuration']['data_mode'] == data
     assert saved['configuration']['knowledge_mode'] == knowledge
     for role, identifier in result['skills'].items():
-        record = json.loads((tmp_path / 'skills' / (identifier + '.json')).read_text())
-        assert record['stage'] == role
+        if role == 'hypothesis':
+            record = json.loads((tmp_path / 'skills' / (identifier + '.json')).read_text())
+            assert record['stage'] == role
+        else:
+            from memstara.corpus_skills import EXPLANATION_SKILLS
+            assert identifier in EXPLANATION_SKILLS
+            assert not (tmp_path / 'skills' / (identifier + '.json')).exists()
         assert identifier in argv
     assert not (tmp_path / 'runs').exists()
 

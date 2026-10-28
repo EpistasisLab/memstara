@@ -12,7 +12,7 @@ try{for(const width of [1440,390,320]){
   await expect(page.locator('#workspace-pipeline>.window-titlebar')).toContainText(name);
   await expect(page.locator('#workspace-results, #workspace-report, .is-evidence-fullscreen, .workspace-minimized-panels')).toHaveCount(0);
   await expect(page.getByRole('button',{name:/Open (Results|Conclusions) full screen/})).toHaveCount(0);
-  const content=name==='Results'?page.locator('#results-panel'):page.getByTestId('report-page');
+  const content=name==='Results'?page.getByTestId('execution-outputs'):page.getByTestId('execution-outputs');
   await expect(content).toBeVisible();
   const box=await content.boundingBox(),workspace=await page.locator('#workspace-pipeline').boundingBox();
   expect(box.width).toBeGreaterThan(workspace.width*.9);

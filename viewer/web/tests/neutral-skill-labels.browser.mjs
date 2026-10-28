@@ -35,6 +35,8 @@ try {
   }
   await p.getByRole('button',{name:'Edit interpretation',exact:true}).click();
   const editor=p.getByRole('dialog');
+  await expect(editor.getByLabel('Custom skill Markdown file')).toHaveCount(0);
+  await expect(editor.getByRole('button',{name:'Write a custom skill'})).toHaveCount(0);
   await editor.getByLabel('Choose a skill').selectOption('shared-lime');
   await editor.getByText('Read full instructions and source',{exact:true}).click();
   await assertNeutral();
@@ -46,15 +48,15 @@ try {
   assert.equal(after.configuration.playbook_interpreter,'shared-lime');
   for(const view of ['Results','Activity','Records']){
     await p.getByRole('navigation',{name:'Fixture views'}).getByRole('button',{name:view,exact:true}).click();
-    if(view==='Results')await p.getByRole('article',{name:'Selected analysis evidence'}).waitFor();
+    if(view==='Results')await p.getByRole('article',{name:'Selected interpretation outputs'}).waitFor();
     if(view==='Records')await p.getByRole('combobox',{name:'Motoro agent invocation'}).selectOption('invocation');
     if(view==='Records')await p.getByText('Run input, output, state and configuration',{exact:true}).click();
     await p.locator('main details').evaluateAll(nodes=>nodes.forEach(e=>e.open=true));
     if(view==='Activity')await expect(p.locator('.compact-activity-detail')).toHaveCount(2);
     if(view==='Records')await expect(p.locator('main')).toContainText('0.11321064');
-    if(view==='Results')await expect(p.locator('main')).toContainText('AUC 0.7310');
+    if(view==='Results')await expect(p.getByRole('article',{name:'Selected interpretation outputs'})).toContainText("Anil's instructions adapted by Phil.");
     for(const width of [1440,390]){
-      await p.setViewportSize({width,height:1000});await assertNeutral();
+      await p.setViewportSize({width,height:1000});if(view!=='Results')await assertNeutral();
     }
   }
   assert.deepEqual(errors,[]);

@@ -12,25 +12,29 @@ python -m memstara.research_inputs register examples/research-inputs/research.js
 ```
 
 The second command returns an immutable record ID. No model calls are made.
-Alternatively, open **Floor plan → Prepare research inputs**, enter the paths and
-target description from `research.json`, inspect, and save. Paths refer to the
-machine running the control service; relative paths use its working directory.
-Absolute paths are recommended for user datasets.
+In the UI, open **Add experiment → Upload new CSV**, upload the example CSV,
+choose `simulated_event` as the target, and select **My research folder** with the absolute
+path to `examples/research-inputs/okf`. Click **Check & use this data**.
+Paths refer to the machine running the control service.
 
 For a fresh installation, follow [the from-scratch guide](../../GETTING_STARTED.md).
-Register the example together with separate corpus-independent tutorial skills:
+Register the example with a tutorial Hypothesis skill and a supplied Explanation skill:
 
 ```sh
 python scripts/prepare_research_tutorial.py examples/research-inputs/research.json
 ```
 
-This prints an input record ID, two user-skill IDs and a one-Loop execution command.
-It does not start a pipeline or check provider/database availability. In **Add
-pipeline**, select that research version and the printed Hypothesis/Explanation
-skills; select training-heavy Data, LR ML and SHAP Interpretation. Use one Loop.
-Do not use the existing Addiction/HIV specialty selections for this generic profile:
-they are deliberately rejected by the research contract. The contributed originals
-are preserved; tutorial skills are separate user records, not replacements.
+This prints an input record ID, the selected Hypothesis/Explanation IDs and a
+one-replicate execution command. It registers one custom Hypothesis skill and
+uses a supplied Explanation skill; it does not register custom Interpretation or
+Explanation instructions. The existing `skills/explanation.md` example is retained
+as reference material and is not used by this command.
+
+In **Add experiment**, select that research version and the printed skills, with
+training-heavy Data, LR ML and SHAP Interpretation. All four supplied Explanation
+skills are selectable. Review their suitability for your question; selection does
+not make a synthetic example clinically valid. Preparation does not start a run
+or check provider/database availability. The original skill files are unchanged.
 
 The printed command makes real model calls only when you execute it. Configure the
 runtime first. This is a software demonstration, not evidence of clinical validity
@@ -117,8 +121,8 @@ four eligible predictors and a 100 MiB CSV limit. OKF mode requires a bundle wit
 digits and underscores, up to 64 characters. It is not an arbitrary-document
 ingestion, automatic cleaning or multiclass workflow.
 
-Legacy corpus-specific Hypothesis defaults and unbound Addiction/HIV specialist
-Explanation skills are rejected for these generic profiles. Use the separate tutorial user skills or a custom skill you have reviewed for
-the selected dataset and corpus.
+Choose a compatible Hypothesis skill for the selected corpus. Interpretation uses
+supplied SHAP/LIME instructions, and Explanation uses one of the four supplied
+specialist instructions. Custom Interpretation/Explanation registration is disabled.
 Selecting different research inputs resets source filters and fixed baselines;
 review the entire skill selection, especially a saved combination schedule.

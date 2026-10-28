@@ -4,7 +4,7 @@ from memstara.control import catalog
 from memstara.pipeline import prompts
 
 
-def test_only_current_anil_interpretation_choices_visible(tmp_path, monkeypatch):
+def test_only_supplied_interpretation_choices_visible(tmp_path, monkeypatch):
     monkeypatch.setenv('MEMSTARA_USER_SKILLS_DIR', str(tmp_path / 'users'))
     monkeypatch.setattr(catalog, 'specialist_dir', lambda: tmp_path)
     for name in ('SHAP-Interpretation.md', 'LIME-Interpretation.md'):
@@ -22,5 +22,6 @@ def test_hidden_skills_still_resolve_and_load_without_changing_file(name, monkey
     item = catalog.resolve(name)
     assert item['stage'] == 'interpreter'
     assert item['content'] in prompts.load_prompt('board/interpreter', name)['system_prompt']
-    catalog.validate_selection({'playbook_interpreter': name})
+    with pytest.raises(ValueError, match='supplied SHAP or LIME'):
+        catalog.validate_selection({'playbook_interpreter': name})
     assert path.read_bytes() == original

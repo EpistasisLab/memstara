@@ -134,7 +134,7 @@ function Editor({ close }: { close: () => void }) {
 
       {coach===1&&selected&&<button type="button" className="mt-3 rounded border border-paper-line px-3 py-2 text-xs font-semibold text-ink" onClick={()=>setCoach(2)}>Keep this skill · review next</button>}
 
-    <section className="mt-4 border-t border-paper-line pt-3" aria-label="Upload a custom skill" aria-busy={saving}>
+    {stage!=='interpreter'&&stage!=='report'&&<section className="mt-4 border-t border-paper-line pt-3" aria-label="Upload a custom skill" aria-busy={saving}>
       <h3 className="text-sm font-semibold">Use your own instructions</h3>
       <p id="custom-skill-help" className="mt-1 text-xs leading-relaxed text-ink-soft">
         Upload a Markdown file for this {agentStageLabel(stage)} agent. Review it below, then save to apply it.
@@ -152,9 +152,9 @@ function Editor({ close }: { close: () => void }) {
           <span className="min-w-0 break-words">{displayText(uploadedName)} · Uploaded and selected. Save settings to apply.</span></p>}
         {(running || busy) && <p>Stop the pipeline before changing its agent skills.</p>}
       </div>
-    </section>
+    </section>}
     </div>
-    {stage !== "data" && <CreateCustomSkill key={stage} stage={stage} disabled={!!running || busy || saving} onBusy={setSaving}
+    {stage !== "data" && stage !== "interpreter" && stage !== "report" && <CreateCustomSkill key={stage} stage={stage} disabled={!!running || busy || saving} onBusy={setSaving}
       onSelect={skill=>{setChoice(skill.id);setOverrides(v=>overridesForSkills(v,[skill.id]));setCoach(2);if(skill.evaluation)setPlan(p=>({...p,...skill.evaluation}));}} />}
     <section ref={reviewTarget} aria-label="Review selected skill" className="mt-3 rounded-lg border border-paper-line bg-paper/40 p-3">
       <h3 className="mb-3 text-sm font-semibold"><span className="agent-config-step">2</span>Review what it does</h3>

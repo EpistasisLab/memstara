@@ -92,7 +92,7 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
     }, 250);
     return () => {clearTimeout(timer); controller.abort();};
   }, [catalog, form.provider, form.model, selection, caps]);
-  function useConfigured(profile: ConfiguredProfile) {
+  function applyConfiguredProfile(profile: ConfiguredProfile) {
     invalidate(); stopListing(); setListed([]); setShowKey(false);
     formTouched.current = true;
     setDefaultRole(profile.role); setUseServerKey(profile.credentials_available);
@@ -106,7 +106,7 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
       ...(profile.capabilities.supports_effort && profile.settings.effort !== undefined ? {effort: profile.settings.effort} : {})});
   }
   useEffect(() => {
-    if (mode === 'custom' && !formTouched.current && catalog && configured.length) useConfigured(configured[0]);
+    if (mode === 'custom' && !formTouched.current && catalog && configured.length) applyConfiguredProfile(configured[0]);
   }, [mode, catalog, configured]);
 
   function selectModel(value: string) {
@@ -215,7 +215,7 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
       <button type="button" onClick={() => {invalidate(); setForm(previous => ({...previous, api_key: ''}));}}>Change</button>
     </div> : <div className="experiment-model-form">
       {configured.length > 0 && <div className="experiment-default-prefill">
-        {configured.length > 1 && <label htmlFor="experiment-default-profile">Start from a configured model<select id="experiment-default-profile" value={defaultRole} disabled={!catalog} onChange={e => {const profile = configured.find(row => row.role === e.target.value); if (profile) useConfigured(profile);}}><option value="" disabled>Choose a configured model</option>{configured.map(profile => <option key={profile.role} value={profile.role}>{profileRoles(profile)} · {profile.model}</option>)}</select></label>}
+        {configured.length > 1 && <label htmlFor="experiment-default-profile">Start from a configured model<select id="experiment-default-profile" value={defaultRole} disabled={!catalog} onChange={e => {const profile = configured.find(row => row.role === e.target.value); if (profile) applyConfiguredProfile(profile);}}><option value="" disabled>Choose a configured model</option>{configured.map(profile => <option key={profile.role} value={profile.role}>{profileRoles(profile)} · {profile.model}</option>)}</select></label>}
         <p>{defaultRole ? 'Filled from your configured model. Changes apply to all agents in this experiment only.' : 'Choose a provider and model for this experiment.'}</p>
       </div>}
       <div className="experiment-model-grid">

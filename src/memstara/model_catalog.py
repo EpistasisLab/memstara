@@ -1,6 +1,8 @@
 """Expose Motoro's provider/schema/catalog metadata, without a second model registry."""
 from __future__ import annotations
 
+from typing import Any
+
 LABELS = {'openai': 'OpenAI', 'anthropic': 'Anthropic', 'azure_foundry': 'Azure Foundry',
           'openrouter': 'OpenRouter', 'local': 'Local / self-hosted', 'bedrock': 'Amazon Bedrock'}
 ALIASES = {'azure_foundry', 'local', 'bedrock'}
@@ -29,7 +31,7 @@ def catalog():
     controls = {}
     for key in ('temperature', 'max_tokens'):
         # Nullable controls keep their numeric bounds inside anyOf in Motoro 0.13.
-        numeric = next((part for part in schema[key].get('anyOf', [])
+        numeric: dict[str, Any] = next((part for part in schema[key].get('anyOf', [])
                         if part.get('type') in ('number', 'integer')), {})
         fields = {**schema[key], **numeric}
         controls[key] = {field: fields[field] for field in

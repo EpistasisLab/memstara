@@ -31,7 +31,7 @@ try {for(const width of [320,390,768,1280]) {
   }
   return route.fulfill({json:{llm:{},stage_models:Object.fromEntries(profiles.flatMap(p=>p.roles.map(role=>[role,{provider:p.provider,model:p.model}]))),inputs:[{id:'manual-data',input_checks_passed:true,configuration:{name:'Manual dataset',dataset_path:'/data.csv',knowledge_mode:'llm_only',data_mode:'dataset',target:{column:'outcome',positive_label:'1',negative_label:'0'},excluded_columns:[],missing_policy:'reject'}}],models:[],skills:[]}});
  });
- await page.goto(`${process.env.TEST_BASE_URL??'http://127.0.0.1:4180'}/tests/responsive-scroll.fixture.html`);
+ await page.goto(`${process.env.TEST_BASE_URL??process.env.MEMSTARA_FIXTURE_URL??'http://127.0.0.1:4177'}/tests/responsive-scroll.fixture.html`);
  const dialog=page.getByRole('dialog'),settings=dialog.locator('.experiment-model-settings');
  await expect(settings.getByRole('radio',{name:/Use current model/})).toBeChecked();
  await expect(settings.locator('.experiment-default-card')).toHaveCount(3);
