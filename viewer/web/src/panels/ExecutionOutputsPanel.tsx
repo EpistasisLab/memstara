@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { ArrowLeft, ArrowRight, BarChart3, FileText, Layers3, Download, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BarChart3, FileText, Layers3, Download } from 'lucide-react';
 import { useViewer } from '../store/viewer';
 import { usePipelines } from '../store/pipelines';
 import { useOutputNavigation } from '../store/outputNavigation';
@@ -21,10 +21,10 @@ const positions = new Map<string, {top: number; loop?: number}>();
 
 function ResultMetadata({result, compact = false}: {result: Result; compact?: boolean}) {
   const predictors = result.columns_used?.filter(column => column !== result.y_column) ?? [];
-  return <dl className="output-record-meta">
-    <div><dt>Model</dt><dd>{result.model || 'Not recorded'}</dd></div>
-    <div><dt>Target</dt><dd>{result.y_column || 'Not recorded'}</dd></div>
-    <div><dt>Predictors{predictors.length ? ` · ${predictors.length}` : ''}</dt><dd className={compact ? 'output-column-preview' : undefined}>{predictors.length ? predictors.join(', ') : 'Not recorded'}</dd></div>
+  return <dl className={`output-record-meta${compact ? ' is-compact' : ''}`}>
+    <div className="output-model-meta"><dt>Model</dt><dd title={compact ? result.model : undefined}>{result.model || 'Not recorded'}</dd></div>
+    <div className="output-target-meta"><dt>Target</dt><dd title={compact ? result.y_column : undefined}>{result.y_column || 'Not recorded'}</dd></div>
+    <div className="output-predictor-meta"><dt>Predictors{predictors.length ? ` · ${predictors.length}` : ''}</dt><dd className={compact ? 'output-column-preview' : undefined} title={compact ? predictors.join(', ') : undefined}>{predictors.length ? predictors.join(', ') : 'Not recorded'}</dd></div>
     <div className="output-test-metric"><dt>Test AUROC</dt><dd data-reported={testAuroc(result) !== 'Not reported'}>{testAuroc(result)}</dd></div>
   </dl>;
 }
@@ -32,9 +32,8 @@ function ResultMetadata({result, compact = false}: {result: Result; compact?: bo
 function Tile({tile, view, target, onOpen}: {tile: ExecutionTile; view: OutputView; target?: string; onOpen: () => void}) {
   const status = tileStatus(tile, view);
   const metric = tile.usage;
-  const Icon = icons[view];
   return <button type="button" className="execution-output-tile" data-view={view} data-loop={tile.loop} onClick={onOpen} aria-label={`Open ${outputViewNames[view]}: ${identityLabel(tile)}`}>
-    <span className="output-tile-heading"><span className="output-tile-identity"><span className="output-tile-icon"><Icon size={20} strokeWidth={1.7} aria-hidden="true"/></span><strong>Pipeline {tile.pipeline_number ?? '—'}<span>Replicate {tile.replicate_number ?? tile.loop}</span></strong></span><span className="output-status" data-ready={status === 'Ready'} data-warning={tile.failed || status === 'Partial output'}>{status === 'Ready' && <CheckCircle2 size={12} aria-hidden="true"/>}{status}</span></span>
+    <span className="output-tile-heading"><span className="output-tile-identity"><strong>Pipeline {tile.pipeline_number ?? '—'}</strong><span>Replicate {tile.replicate_number ?? tile.loop}</span></span><span className="output-status" data-ready={status === 'Ready'} data-warning={tile.failed || status === 'Partial output'}>{status}</span></span>
     {tile.results.length ? <div className="output-tile-records">{tile.results.map(result => <div key={result.result_id}>{tile.results.length > 1 && <p className="output-analysis-label">Analysis {result.result_id}</p>}<ResultMetadata result={result} compact/></div>)}</div>
       : <dl className="output-record-meta"><div><dt>Target</dt><dd>{target || 'Not recorded'}</dd></div><div><dt>Predictors & model</dt><dd>Available when recorded</dd></div><div><dt>Test AUROC</dt><dd>Not reported</dd></div></dl>}
     {view === 'report' && <p className="output-tile-note">{tile.explanations.filter(o => o.text).length} saved Explanation {tile.explanations.filter(o => o.text).length === 1 ? 'output' : 'outputs'}</p>}
