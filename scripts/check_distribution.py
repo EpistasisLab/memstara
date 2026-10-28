@@ -21,6 +21,14 @@ def main():
     if len(wheels) != 1:
         raise SystemExit("Expected exactly one freshly built wheel in dist/")
     wheel = wheels[0]
+    release_tag = subprocess.run(
+        ['git', 'describe', '--tags', '--exact-match', '--match', 'v[0-9]*', 'HEAD'],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    if release_tag.returncode == 0:
+        expected_release = (ROOT / 'deployment/VERSION').read_text().strip()
+        assert release_tag.stdout.strip() == f'v{expected_release}', 'Git tag and Docker release version differ'
+        assert wheel.name.startswith(f'memstara-{expected_release}-'), 'Wheel and release tag versions differ'
     with zipfile.ZipFile(wheel) as archive:
         names = set(archive.namelist())
         for source, packaged in (

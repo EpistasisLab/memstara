@@ -21,8 +21,10 @@ COPY licenses/ licenses/
 COPY src/ src/
 COPY examples/ examples/
 COPY deployment/ deployment/
-RUN SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0+container uv sync --frozen --extra runtime --no-dev
-RUN .venv/bin/python -c "from importlib.metadata import version; assert version('motoro') == '0.13.0'"
+# Git metadata is excluded from the Docker context. Keep the release version
+# with the source so direct Compose builds and downloaded archives agree.
+RUN SETUPTOOLS_SCM_PRETEND_VERSION="$(cat deployment/VERSION)" uv sync --frozen --extra runtime --no-dev
+RUN .venv/bin/python -c "from importlib.metadata import version; from pathlib import Path; import memstara; assert version('motoro') == '0.13.0'; assert version('memstara') == memstara.__version__ == Path('deployment/VERSION').read_text().strip()"
 # Fail local image builds as well as CI on undefined/shadowed names and broken
 # HTTP query handlers. The smoke test uses isolated synthetic records, no LLM.
 RUN uvx --from ruff==0.16.8 ruff check --select F821,F823 src/ \
@@ -33,7 +35,7 @@ CMD ["python", "-m", "memstara.control"]
 
 # Opt-in paid acceptance runner; never started by the application profile.
 FROM runtime AS acceptance
-RUN SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0+container uv sync --frozen --extra runtime --extra dev --no-dev
+RUN SETUPTOOLS_SCM_PRETEND_VERSION="$(cat deployment/VERSION)" uv sync --frozen --extra runtime --extra dev --no-dev
 COPY tests/conftest.py /app/tests/conftest.py
 COPY tests/live/test_haiku_pipeline.py tests/live/test_request_pause.py /app/tests/live/
 COPY scripts/prepare_heart_failure_demo.py /app/scripts/prepare_heart_failure_demo.py

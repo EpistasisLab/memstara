@@ -2,16 +2,19 @@
 
 A research workspace for generating hypotheses, training predictive models and exploring recorded results.
 
+**First MVP release: [v0.1.0](https://github.com/HyunjunA/memstara/releases/tag/v0.1.0).**
+See [release notes](CHANGELOG.md) for scope and validation limits.
+
 ## Get started
 
 **Requirements:** Git, a running Docker Desktop (or Docker Engine with Compose v2),
-and credentials for a supported LLM deployment. Docker installs the application
-and its dependencies, including **Motoro 0.10.0**; no separate Python, Node or database setup is needed.
+and credentials for an Azure Foundry deployment. Docker installs the application
+and its dependencies, including **Motoro 0.13.0**; no separate Python, Node or database setup is needed.
 
 ### 1. Download
 
 ```bash
-git clone --branch feature/question-universe-ui https://github.com/HyunjunA/memstara.git
+git clone --branch v0.1.0 --depth 1 https://github.com/HyunjunA/memstara.git
 cd memstara
 cp .env.example .env
 ```
@@ -42,13 +45,8 @@ Leave agent overrides blank to inherit these defaults. To use a different model
 for Explanation on the same service, set `MEMSTARA_EXPLANATION_MODEL`.
 Overrides are available for `QUESTION`, `HYPOTHESIS`, `DATA`, `ML`,
 `INTERPRETATION` and `EXPLANATION`, including generation settings.
-When overriding `PROVIDER` with a different service, also set that agent's `MODEL`,
-its `API_BASE` if required (Azure Foundry/local), and the matching provider API key.
-Common endpoints and generation settings are not inherited across providers.
-The template lists provider-specific requirements. Local servers accept HTTP/HTTPS
-and an optional `MEMSTARA_LOCAL_API_KEY`. Bedrock requires `AWS_REGION` and either
-`AWS_BEARER_TOKEN_BEDROCK` or AWS access credentials (plus a session token for temporary
-credentials). Docker receives these from `.env`; host AWS profiles are not mounted.
+This MVP supports **Azure Foundry only** in experiment model setup. Keep every
+agent's provider set to `azure_foundry`; other providers are rejected for new web executions.
 Restart after editing `.env`; saved executions retain their recorded model profiles.
 Keep the remaining defaults for a first installation.
 Database credentials are generated automatically. Keep `.env` private; do not
@@ -77,10 +75,10 @@ For the included example:
 1. Open **Experiments → Add pipeline**.
 2. In **Research inputs**, select **Heart failure complete-case software demonstration** and review its target.
 3. In **Agent skills**, each stage starts with one compatible skill selected. Keep these defaults and select **Next**, or change the selections. The HeartFailure example defaults to hypotheses across all knowledge categories, Training-heavy data, Logistic Regression, SHAP Interpretation and cardiovascular Explanation. Clearing all hypothesis selections uses the compatible default shown in review. If you deselect all ML skills, the server runs scikit-learn default Logistic Regression without LLM parameter tuning.
-4. In **Review & create**, set a name and **1 replicate per pipeline** for a first experiment, review the plan and confirm it. **Random Start** is off by default: execution starts at Pipeline 1 and continues in order.
+4. In **Review & create**, set a name and **1 replicate per pipeline** for a first experiment, review the execution order and confirm it. Execution starts at Pipeline 1.
 5. Select **Create pipeline**, then **Run** on that pipeline's card. Creating a pipeline does not start it.
 
-Random-feature hypothesis generation is unavailable for new MVP designs. **Random Start** changes pipeline execution order only. Existing experiment records remain available.
+Random-feature hypothesis generation and Random Start are unavailable for new MVP designs. Existing experiment records remain available.
 
 Review skill selections in the creation wizard. Pipeline cards have
 execution controls and a delete button; there is no post-creation **Settings** or
@@ -137,6 +135,15 @@ App startup and offline tests alone do not verify a real pipeline execution.
 
 A **Pipeline** is one combination of agent skills. A **Replicate** repeats that Pipeline’s complete research process, from question generation to Explanation. Selecting several skills creates an experiment containing multiple Pipelines. A Replicate repeats the configuration, not necessarily the same question or hypothesis; the actual generated content, data splits and model settings are recorded for each attempt.
 
-For example, **48 pipelines × 10 replicates per pipeline = 480 total replicates**. The default is **1 replicate per pipeline**. All Pipelines complete their first scheduled replicate before the next cycle. Random Start changes the starting Pipeline; resuming preserves the recorded schedule.
+For example, **48 pipelines × 10 replicates per pipeline = 480 total replicates**. The default is **1 replicate per pipeline**. With **All pipelines first**, all Pipelines complete their first scheduled replicate before the next cycle. **One pipeline all replicates first** finishes one Pipeline's replicates before proceeding to the next. Resuming preserves the recorded schedule.
+
+### Release versions
+
+Development continues on `mvp`; install a published `vX.Y.Z` tag for a repeatable
+release. Released tags are immutable. During the MVP phase, use patch releases
+for compatible fixes and minor releases for new features; describe any breaking
+changes explicitly. Version `1.0.0` will mark a stable compatibility contract.
+Python packages derive their version from Git. `deployment/VERSION` records the
+same release number for Docker builds, which do not include Git metadata.
 
 Progress identifies both units, for example **Pipeline 3 / 48 · Replicate 2 / 10**. Failed or skipped attempts remain recorded separately from completed work. Historical **Split evaluations** repeat model evaluation inside a Replicate; they do not multiply the number of Pipeline replicates. New designs use one split evaluation and do not expose advanced ML controls. Existing capped schedules retain their recorded counts. Raw agent outputs and technical execution IDs are preserved as saved.
