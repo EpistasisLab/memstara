@@ -32,7 +32,13 @@ complete-case dataset and preserves the supplied files. Private HIV data is not 
 
 ### 2. Configure `.env`
 
-Enter your provider API key and one common model for all agents. For Azure Foundry:
+**You can configure the LLM model in the GUI as well as in `.env`.**
+Use `.env` for installation settings and server-wide model defaults. After starting
+Memstara, use **Add experiment → AI model → Set up a model** to configure the model
+for an individual experiment.
+
+To set server defaults in `.env`, enter your Azure Foundry API key, deployment
+name and endpoint:
 
 ```dotenv
 MEMSTARA_AZURE_FOUNDRY_API_KEY=YOUR_API_KEY
@@ -52,6 +58,20 @@ Keep the remaining defaults for a first installation.
 Database credentials are generated automatically. Keep `.env` private; do not
 replace an existing installation's `.env` with another checkout's settings.
 
+**Configure a model in the GUI:**
+
+1. Open **Add experiment → AI model → Set up a model**.
+2. Provider is fixed to **Azure Foundry**. Select the model type and enter your
+   **Deployment name**, **Endpoint URL** and **API key**. If available, you can
+   reuse the configured server credentials.
+3. Select **Check & use model** to verify and save the connection. This makes a
+   small test request that your provider may charge for.
+
+The checked GUI configuration applies to **all agents in that experiment**.
+It does not overwrite `.env` or require a server restart. To use the server's
+per-agent defaults instead, select **Use current model**. Installation settings,
+such as the web port, remain in `.env`.
+
 ### 3. Start
 
 ```bash
@@ -67,6 +87,7 @@ After the ready message, you can close the terminal.
 | Configure in | Settings |
 |---|---|
 | `.env` | LLM provider, credentials, common model, optional per-agent model overrides and web port |
+| **Add experiment → AI model** | Use server defaults or check an Azure Foundry model connection for all agents in this experiment |
 | **Add pipeline → Register or revise research inputs** | Your CSV, OKF corpus, prediction target and label mapping |
 | **Add pipeline** | Research input, agent skills, replicates per pipeline and experiment name |
 
