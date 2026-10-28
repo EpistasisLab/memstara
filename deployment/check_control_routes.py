@@ -50,7 +50,7 @@ def main():
                     assert len(body['calls']) == 1 and body['calls'][0]['loop'] == loop
                 assert get('/control/runs/synthetic/log?offset=6')['text'] == 'second\n'
                 assert get('/control/model-catalog')['source'] == 'motoro'
-                assert get('/control/model-capabilities?provider=openai&model=gpt-5')['capabilities']['supports_effort']
+                assert get('/control/model-capabilities?provider=azure_foundry&model=gpt-5')['capabilities']['supports_effort']
             try:
                 get('/control/pipelines/test/combinations?loop=invalid')
                 raise AssertionError('Invalid loop must return a JSON 400 response')

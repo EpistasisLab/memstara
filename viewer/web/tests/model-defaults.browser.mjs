@@ -4,13 +4,13 @@ import {launchResponsiveBrowser} from './responsive-browser.mjs';
 const temperature={supports_temperature:true,supports_effort:false,effort_levels:[],default_effort:null,default_temperature:.7};
 const reasoning={supports_temperature:false,supports_effort:true,effort_levels:['low','high'],default_effort:'high'};
 const profiles=[
- {role:'question',roles:['question','hypothesis','data','interpretation'],provider:'openai',model:'gpt-4o',api_base:'',region:'',auth_type:'',settings:{temperature:.2,max_tokens:7000},capabilities:temperature,credentials_available:true},
+ {role:'question',roles:['question','hypothesis','data','interpretation'],provider:'azure_foundry',model:'gpt-4o',api_base:'https://clinical.example',region:'',auth_type:'',settings:{temperature:.2,max_tokens:7000},capabilities:temperature,credentials_available:true},
  {role:'explanation',roles:['explanation'],provider:'azure_foundry',model:'clinical-deployment',api_base:'https://clinical.example',region:'',auth_type:'',settings:{effort:'low',max_tokens:11000},capabilities:reasoning,credentials_available:true},
  {role:'ml',roles:['ml'],provider:'azure_foundry',model:'unlisted-deployment',api_base:'https://clinical.example',region:'',auth_type:'',settings:{temperature:1},capabilities:{supports_temperature:null,supports_effort:null,effort_levels:null,default_effort:null},credentials_available:true},
 ];
 const catalog={source:'motoro',version:'test',controls:{temperature:{default:null,minimum:0,maximum:2},max_tokens:{default:4096,exclusiveMinimum:0,maximum:200000}},providers:[
  {id:'openai',label:'OpenAI',custom_model_name:false,can_list_models:true,models:[{id:'openai:gpt-4o',model:'gpt-4o',label:'GPT-4o',capabilities:temperature}]},
- {id:'azure_foundry',label:'Azure Foundry',custom_model_name:true,can_list_models:false,models:[]},
+ {id:'azure_foundry',label:'Azure Foundry',custom_model_name:true,can_list_models:false,models:[{id:'openai:gpt-4o',model:'gpt-4o',label:'GPT-4o',capabilities:temperature}]},
 ]};
 const browser=await launchResponsiveBrowser();
 try {for(const width of [320,390,768,1280]) {
@@ -44,15 +44,15 @@ try {for(const width of [320,390,768,1280]) {
  await dialog.getByRole('button',{name:'Use Manual dataset',exact:true}).click();
  await expect(dialog.getByRole('button',{name:'Choose skills',exact:true})).toBeEnabled();
  await settings.getByRole('radio',{name:/Set up a model/}).check();
- await expect(settings.locator('#experiment-model-provider')).toHaveValue('openai');
+ await expect(settings.locator('#experiment-model-provider')).toHaveValue('azure_foundry');
  await expect(settings.locator('#experiment-model-choice')).toHaveValue('openai:gpt-4o');
  await expect(settings.getByRole('checkbox',{name:/Use configured credentials/})).toBeChecked();
  await expect(settings.locator('#experiment-api-key')).toHaveCount(0);
  await settings.locator('.experiment-model-advanced summary').click();
  await expect(settings.locator('#experiment-temperature')).toHaveValue('0.2');
  await expect(settings.locator('#experiment-max-tokens')).toHaveValue('7000');
- await settings.getByRole('button',{name:'Load provider models'}).click();
- await expect(settings.locator('.experiment-model-listing')).toContainText('0 models loaded');
+ await expect(settings.locator('#experiment-model-provider')).toBeDisabled();
+ await expect(settings.getByRole('button',{name:'Load provider models'})).toHaveCount(0);
  await settings.getByRole('button',{name:'Check & use model'}).click();
  await expect(settings).toContainText('Model ready');
  assert.equal(submitted[0].default_role,'question');assert(!submitted[0].api_key);

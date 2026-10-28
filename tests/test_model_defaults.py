@@ -127,7 +127,8 @@ def test_defaults_http_uses_safe_preview_and_safe_errors(configured, monkeypatch
     from test_control_query_routes import request
     from memstara.control import service
     status, body = request(service, '/control/model-defaults')
-    assert status == 200 and body == model_defaults.public_defaults()
+    from memstara.control.model_policy import defaults_view
+    assert status == 200 and body == defaults_view(model_defaults.public_defaults())
     def broken():
         raise ValueError('synthetic-private-error')
     monkeypatch.setattr(model_defaults, 'public_defaults', broken)

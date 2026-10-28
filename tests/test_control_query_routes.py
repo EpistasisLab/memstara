@@ -29,7 +29,7 @@ def test_replicate_query_after_model_capabilities(tmp_path, monkeypatch, loop):
     manager = SimpleNamespace(running=lambda: {'run_dir': str(tmp_path), 'run_tag': 'synthetic-live'})
     monkeypatch.setattr(service, 'WORKSPACE', SimpleNamespace(manager=lambda key: manager))
     # Each request is a fresh handler, as in ThreadingHTTPServer.
-    assert request(service, '/control/model-capabilities?provider=openai&model=gpt-5')[0] == 200
+    assert request(service, '/control/model-capabilities?provider=azure_foundry&model=gpt-5')[0] == 200
     status, body = request(service, f'/control/pipelines/experiment/combinations?loop={loop}')
     assert status == 200
     assert body['run_tag'] == 'synthetic-live'

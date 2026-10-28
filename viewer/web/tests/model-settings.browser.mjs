@@ -31,29 +31,23 @@ try {for(const width of [320,390,768,1280]) {
  await dialog.getByRole('button',{name:'Use Manual dataset',exact:true}).click();
  await settings.getByRole('radio',{name:/Set up a model/}).check();
  await expect(dialog.getByRole('button',{name:'Choose skills',exact:true})).toBeDisabled();
- for(const provider of ['azure_foundry','local','bedrock','anthropic','openrouter','openai']) {
-  await settings.locator('#experiment-model-provider').selectOption(provider);
-  await expect(settings.locator('#experiment-model-endpoint')).toHaveCount(['azure_foundry','local'].includes(provider)?1:0);
-  await expect(settings.locator('#experiment-model-region')).toHaveCount(provider==='bedrock'?1:0);
-  if(provider==='bedrock'){
-   await settings.locator('#experiment-model-auth').selectOption('aws_credentials');
-   await expect(settings.locator('#experiment-aws-secret')).toHaveAttribute('type','password');
-   await expect(settings.locator('#experiment-api-key')).toHaveCount(0);
-  }
- }
+ await expect(settings.locator('#experiment-model-provider')).toBeDisabled();
+ await expect(settings.locator('#experiment-model-provider')).toHaveValue('azure_foundry');
+ assert.deepEqual(await settings.locator('#experiment-model-provider option').evaluateAll(nodes=>nodes.map(n=>n.value)),['azure_foundry']);
+ await expect(settings.locator('#experiment-model-region')).toHaveCount(0);
+ await settings.locator('#experiment-model-endpoint').fill('https://clinical.example');
+ await settings.locator('#experiment-model-id').fill('chosen-model');
  await settings.locator('#experiment-model-choice').selectOption('openai:gpt-5');
  await expect(settings.locator('.experiment-model-advanced')).not.toHaveAttribute('open','');
- await settings.locator('summary').click();
+ if(!await settings.locator('.experiment-model-advanced').evaluate(e=>e.open))await settings.locator('.experiment-model-advanced summary').click();
  assert.deepEqual(await settings.locator('#experiment-effort option').evaluateAll(nodes=>nodes.map(n=>n.value)),['','low','medium','high']);
  await expect(settings.locator('#experiment-temperature')).toHaveCount(0);
  await settings.locator('#experiment-effort').selectOption('high');
- await settings.locator('#experiment-model-provider').selectOption('anthropic');
  await settings.locator('#experiment-model-choice').selectOption('anthropic:claude-opus-5');
- await settings.locator('summary').click();
+ if(!await settings.locator('.experiment-model-advanced').evaluate(e=>e.open))await settings.locator('.experiment-model-advanced summary').click();
  assert.deepEqual(await settings.locator('#experiment-effort option').evaluateAll(nodes=>nodes.map(n=>n.value)),['','low','medium','high','xhigh','max']);
- await settings.locator('#experiment-model-provider').selectOption('openai');
  await settings.locator('#experiment-model-choice').selectOption('openai:gpt-4o');
- await settings.locator('summary').click();
+ if(!await settings.locator('.experiment-model-advanced').evaluate(e=>e.open))await settings.locator('.experiment-model-advanced summary').click();
  await expect(settings.locator('#experiment-effort')).toHaveCount(0);
  await expect(settings.locator('#experiment-temperature')).toHaveValue('0.7');
  await settings.locator('#experiment-temperature').fill('2.1');
@@ -61,16 +55,11 @@ try {for(const width of [320,390,768,1280]) {
  await expect(settings.getByRole('button',{name:'Check & use model'})).toBeDisabled();
  await settings.getByRole('button',{name:'Reset to Motoro defaults'}).click();
  await expect(settings.locator('#experiment-temperature')).toHaveValue('0.7');
- await settings.getByRole('button',{name:'Load provider models'}).click();
- await expect(settings.locator('#experiment-model-choice option[value="provider:account-model"]')).toHaveCount(1);
- await settings.locator('#experiment-model-choice').selectOption('provider:account-model');
- await expect(settings.locator('#experiment-temperature')).toHaveCount(0);
- assert.deepEqual(await settings.locator('#experiment-effort option').evaluateAll(nodes=>nodes.map(n=>n.value)),['']);
- await expect(settings.locator('#experiment-model-id')).toHaveCount(0);
+ await expect(settings.getByRole('button',{name:'Load provider models'})).toHaveCount(0);
  await settings.locator('#experiment-model-choice').selectOption('manual');
  await settings.locator('#experiment-model-id').fill('chosen-model');
  await expect(settings.locator('#experiment-temperature')).toHaveCount(1);
- await settings.locator('summary').click();
+ if(!await settings.locator('.experiment-model-advanced').evaluate(e=>e.open))await settings.locator('.experiment-model-advanced summary').click();
  await settings.locator('#experiment-temperature').fill('0.2');
  await settings.locator('#experiment-max-tokens').fill('6000');
  await settings.locator('#experiment-api-key').fill('bad-key');
@@ -96,10 +85,10 @@ try {for(const width of [320,390,768,1280]) {
  await expect(dialog.getByRole('button',{name:'Choose skills',exact:true})).toBeEnabled();
  await dialog.getByRole('button',{name:'Choose skills',exact:true}).click();
  await dialog.getByRole('button',{name:'Back',exact:true}).click();
- await expect(settings).toContainText('OpenAI · chosen-model');
+ await expect(settings).toContainText('Azure Foundry · chosen-model');
  await dialog.getByRole('button',{name:'Choose skills',exact:true}).click();
  for(const name of ['Next: Data','Next: Machine learning','Next: Interpretation','Next: Explanation','Review plan'])await dialog.getByRole('button',{name,exact:true}).click();
- await expect(dialog).toContainText('openai · chosen-model');
+ await expect(dialog).toContainText('azure foundry · chosen-model');
  await dialog.getByLabel('Name',{exact:true}).fill('Own model');
  await dialog.getByRole('checkbox',{name:/I reviewed/}).check();
  await dialog.getByRole('button',{name:'Create combination design'}).click();

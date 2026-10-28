@@ -14,7 +14,7 @@ type ConfiguredProfile = {role: string; roles: string[]; provider: Provider; mod
 const roleLabels: Record<string, string> = {question: 'Question generation', hypothesis: 'Hypothesis', data: 'Data', ml: 'ML', interpretation: 'Interpretation', explanation: 'Explanation'};
 const profileRoles = (profile: ConfiguredProfile) => profile.roles.length === 6 ? 'All agents' : profile.roles.map(role => roleLabels[role] || role).join(', ');
 type GenerationSettings = {temperature?: number; effort?: string; max_tokens: number};
-const emptyForm = {provider: 'openai' as Provider, model: '', api_key: '', api_base: '', region: '', auth_type: 'api_key', access_key_id: '', secret_access_key: '', session_token: ''};
+const emptyForm = {provider: 'azure_foundry' as Provider, model: '', api_key: '', api_base: '', region: '', auth_type: 'api_key', access_key_id: '', secret_access_key: '', session_token: ''};
 
 export default function ExperimentModelSettings({onChange, onValidityChange}: {
   onChange: (connection: ModelConnection | null) => void; onValidityChange: (error: string) => void;
@@ -23,6 +23,9 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
   const [current, setCurrent] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [configured, setConfigured] = useState<ConfiguredProfile[]>([]);
+  const [currentAllowed, setCurrentAllowed] = useState<boolean | undefined>();
+  const providerNotice = 'Only Azure Foundry is available. Set up an Azure Foundry model to continue.';
+  useEffect(() => {if (mode === 'current' && currentAllowed !== undefined) onValidityChange(currentAllowed ? '' : providerNotice);}, [mode, currentAllowed, onValidityChange]);
   const [defaultRole, setDefaultRole] = useState('');
   const [useServerKey, setUseServerKey] = useState(false);
   const formTouched = useRef(false);
@@ -49,7 +52,7 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
         if (!response.ok) throw Error();
         const body = await response.json();
         const rows = stageModelRows({...body.llm, stage_models: body.stage_models});
-        if (!controller.signal.aborted) setCurrent([...new Set(rows.filter(r => r.model !== 'Not recorded').map(r => `${providers[r.provider as Provider] || r.provider} · ${r.model}`))]);
+        if (!controller.signal.aborted) setCurrent([...new Set(rows.filter(r => r.provider === 'azure_foundry' && r.model !== 'Not recorded').map(r => `${providers[r.provider as Provider] || r.provider} · ${r.model}`))]);
       }).catch(() => {}).finally(() => {if (!controller.signal.aborted) setLoaded(true);});
     return () => {controller.abort(); request.current?.abort(); listingRequest.current?.abort();};
   }, []);
@@ -58,7 +61,10 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
     const controller = new AbortController();
     void fetch('/control/model-defaults', {signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)])})
       .then(async response => {if (!response.ok) throw Error(); return response.json();})
-      .then(body => {if (!controller.signal.aborted && Array.isArray(body.profiles)) setConfigured(body.profiles);})
+      .then(body => {if (!controller.signal.aborted && Array.isArray(body.profiles)) {
+        setConfigured(body.profiles.filter((profile: ConfiguredProfile) => profile.provider === 'azure_foundry'));
+        setCurrentAllowed(body.current_allowed ?? (body.profiles.length > 0 && body.profiles.every((profile: ConfiguredProfile) => profile.provider === 'azure_foundry')));
+      }})
       .catch(() => {}); // Existing server defaults still work if their detailed preview is unavailable.
     return () => controller.abort();
   }, []);
@@ -69,7 +75,7 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
     void fetch('/control/model-catalog', {signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)])})
       .then(async response => {if (!response.ok) throw Error(); const body = await response.json();
         if (!body.providers?.length || !body.controls) throw Error();
-        if (!controller.signal.aborted) setCatalog(body);})
+        if (!controller.signal.aborted) setCatalog({...body, providers: body.providers.filter((row: ModelCatalog['providers'][number]) => row.id === 'azure_foundry')});})
       .catch(() => {if (!controller.signal.aborted) setCatalogError('Model options could not be loaded.');});
     return () => controller.abort();
   }, [catalogAttempt]);
@@ -93,6 +99,7 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
     return () => {clearTimeout(timer); controller.abort();};
   }, [catalog, form.provider, form.model, selection, caps]);
   function applyConfiguredProfile(profile: ConfiguredProfile) {
+    if (profile.provider !== 'azure_foundry') return;
     invalidate(); stopListing(); setListed([]); setShowKey(false);
     formTouched.current = true;
     setDefaultRole(profile.role); setUseServerKey(profile.credentials_available);
@@ -149,7 +156,7 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
   }
   function choose(next: 'current' | 'custom') {
     invalidate(); stopListing(); setListed([]); setSelection(''); setCaps(null); setMode(next); setShowKey(false); setForm(emptyForm); setDefaultRole(''); setUseServerKey(false); formTouched.current = false;
-    onValidityChange(next === 'current' ? '' : 'Enter your model connection and select Check & use model.');
+    onValidityChange(next === 'current' ? currentAllowed === false ? providerNotice : '' : 'Enter your model connection and select Check & use model.');
   }
   function field(key: keyof typeof emptyForm, value: string) {
     invalidate(); stopListing(); if (['api_base', 'region', 'auth_type'].includes(key)) setUseServerKey(false); if (key === 'model' && !selected) setCaps(null); setForm(previous => ({...previous, [key]: value}));
@@ -159,9 +166,8 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
   const reuseCredentials = useServerKey && canReuseCredentials;
   const awsCredentials = form.provider === 'bedrock' && form.auth_type === 'aws_credentials';
   const hasEndpoint = form.provider === 'azure_foundry' || form.provider === 'local';
-  const valid = !!catalog && !!caps && Number.isInteger(settings.max_tokens) && settings.max_tokens > 0 && settings.max_tokens <= catalog.controls.max_tokens.maximum && (settings.temperature === undefined || Number.isFinite(settings.temperature) && settings.temperature >= catalog.controls.temperature.minimum && settings.temperature <= catalog.controls.temperature.maximum) && !!form.model.trim() && (!hasEndpoint || !!form.api_base.trim()) &&
-    (form.provider !== 'bedrock' || !!form.region.trim()) &&
-    (reuseCredentials || (awsCredentials ? !!form.access_key_id.trim() && !!form.secret_access_key.trim() : form.provider === 'local' || !!form.api_key.trim()));
+  const valid = form.provider === 'azure_foundry' && !!catalog && !!caps && Number.isInteger(settings.max_tokens) && settings.max_tokens > 0 && settings.max_tokens <= catalog.controls.max_tokens.maximum && (settings.temperature === undefined || Number.isFinite(settings.temperature) && settings.temperature >= catalog.controls.temperature.minimum && settings.temperature <= catalog.controls.temperature.maximum) && !!form.model.trim() && (!hasEndpoint || !!form.api_base.trim()) &&
+    (reuseCredentials || !!form.api_key.trim());
 
   async function check() {
     if (!valid || busy) return;
@@ -189,12 +195,13 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
 
   return <section className="experiment-model-settings" aria-labelledby="experiment-model-heading">
     <header className="experiment-model-heading"><span className="experiment-model-icon"><Cpu size={21} aria-hidden="true"/></span>
-      <div><h4 id="experiment-model-heading">AI model</h4><p>Choose the language model your agents will use.</p></div>
+      <div><h4 id="experiment-model-heading">AI model</h4><p>Use an Azure Foundry model for your agents.</p></div>
     </header>
     <fieldset className="experiment-model-modes"><legend className="sr-only">Model connection</legend>
-      <label className={mode === 'current' ? 'is-selected' : ''}><input type="radio" name="experiment-model-mode" checked={mode === 'current'} onChange={() => choose('current')}/><span><strong>Use current model</strong><small>Use the defaults configured for each agent.</small></span>{mode === 'current' && <Check size={17} aria-hidden="true"/>}</label>
+      <label className={mode === 'current' ? 'is-selected' : ''}><input type="radio" name="experiment-model-mode" disabled={currentAllowed === false} checked={mode === 'current'} onChange={() => choose('current')}/><span><strong>Use current model</strong><small>Use the defaults configured for each agent.</small></span>{mode === 'current' && <Check size={17} aria-hidden="true"/>}</label>
       <label className={mode === 'custom' ? 'is-selected' : ''}><input type="radio" name="experiment-model-mode" checked={mode === 'custom'} onChange={() => choose('custom')}/><span><strong>Set up a model</strong><small>Start from your defaults or use another model.</small></span>{mode === 'custom' && <Check size={17} aria-hidden="true"/>}</label>
     </fieldset>
+    {mode === 'current' && currentAllowed === false && <p className="experiment-model-notice" role="alert">{providerNotice} The server defaults include an unavailable provider.</p>}
     {mode === 'current' ? <div className="experiment-model-current" role="status">
       {configured.length ? <>
         <p className="experiment-default-source">Loaded from this server’s .env configuration.</p>
@@ -216,10 +223,10 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
     </div> : <div className="experiment-model-form">
       {configured.length > 0 && <div className="experiment-default-prefill">
         {configured.length > 1 && <label htmlFor="experiment-default-profile">Start from a configured model<select id="experiment-default-profile" value={defaultRole} disabled={!catalog} onChange={e => {const profile = configured.find(row => row.role === e.target.value); if (profile) applyConfiguredProfile(profile);}}><option value="" disabled>Choose a configured model</option>{configured.map(profile => <option key={profile.role} value={profile.role}>{profileRoles(profile)} · {profile.model}</option>)}</select></label>}
-        <p>{defaultRole ? 'Filled from your configured model. Changes apply to all agents in this experiment only.' : 'Choose a provider and model for this experiment.'}</p>
+        <p>{defaultRole ? 'Filled from your configured model. Changes apply to all agents in this experiment only.' : 'Choose an Azure Foundry deployment for this experiment.'}</p>
       </div>}
       <div className="experiment-model-grid">
-        <label htmlFor="experiment-model-provider">Provider<div className="experiment-model-select"><select id="experiment-model-provider" value={form.provider} onChange={e => {invalidate(); stopListing(); setListed([]); setSelection(''); setCaps(null); setForm({...emptyForm, provider: e.target.value as Provider}); setDefaultRole(''); setUseServerKey(false); setShowKey(false);}}>{catalog?.providers.map(({id, label}) => <option key={id} value={id}>{label}</option>)}</select><ChevronDown size={16} aria-hidden="true"/></div></label>
+        <label htmlFor="experiment-model-provider">Provider<select id="experiment-model-provider" value="azure_foundry" disabled><option value="azure_foundry">Azure Foundry</option></select><small>Azure Foundry only</small></label>
         <label htmlFor="experiment-model-choice">{providerInfo?.custom_model_name ? 'Model type (Motoro)' : 'Model'}<div className="experiment-model-select"><select id="experiment-model-choice" value={selection} onChange={e => selectModel(e.target.value)}>
           <option value="">Choose a model</option><optgroup label="Motoro catalog">{providerInfo?.models.map(row => <option key={row.id} value={row.id}>{row.label}</option>)}</optgroup>
           {listed.length > 0 && <optgroup label="From your provider">{listed.map(row => <option key={row.model} value={`provider:${row.model}`}>{row.label}</option>)}</optgroup>}

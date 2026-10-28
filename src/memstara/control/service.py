@@ -556,7 +556,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/control/model-defaults":
             from memstara.model_defaults import public_defaults
             try:
-                self._send(200, public_defaults())
+                from memstara.control.model_policy import defaults_view
+                self._send(200, defaults_view(public_defaults()))
             except ValueError:
                 self._send(503, {"error": "Configured model defaults are unavailable. "
                                "Check the server model settings."})
@@ -565,7 +566,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/control/model-catalog":
             from memstara.model_catalog import catalog
             try:
-                self._send(200, catalog())
+                from memstara.control.model_policy import PROVIDER
+                options = catalog()
+                options['providers'] = [row for row in options['providers'] if row['id'] == PROVIDER]
+                self._send(200, options)
             except Exception:
                 self._send(503, {"error": "Motoro model options are unavailable. Please retry."})
             return
@@ -576,8 +580,9 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 provider = query.get('provider', [''])[0]
                 model = query.get('model', [''])[0]
-                from memstara.model_connections import PROVIDERS
-                if provider not in PROVIDERS or len(model) > 200:
+                from memstara.control.model_policy import require_provider
+                require_provider(provider)
+                if len(model) > 200:
                     raise ValueError('Choose a provider and model')
                 self._send(200, {"capabilities": capabilities(provider, model), "source": "motoro"})
             except ValueError as exc:
@@ -746,6 +751,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/control/model-connections/models":
             from memstara.model_catalog import list_provider_models
             try:
+                from memstara.control.model_policy import require_provider
+                require_provider(body.get('provider'))
                 self._send(200, list_provider_models(body))
             except ValueError as exc:
                 self._send(400, {"error": str(exc)})
@@ -756,6 +763,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/control/model-connections/check":
             from memstara.model_connections import check_and_save
             try:
+                from memstara.control.model_policy import require_provider
+                require_provider(body.get('provider'))
                 self._send(201, {"connection": check_and_save(body)})
             except ValueError as exc:
                 self._send(400, {"error": str(exc)})
@@ -809,6 +818,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/control/skill-drafts":
             from memstara.control.skill_drafts import start
             try:
+                from memstara.control.model_policy import require_provider
+                from memstara.operational import agent_profile
+                require_provider(agent_profile(body.get('stage', 'hypothesis'))['provider'])
                 self._send(202, start(body))
             except ValueError as exc:
                 self._send(400, {"error": str(exc)})
@@ -845,6 +857,9 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/control/pipelines":
             try:
+                from memstara.control.model_policy import require_selection
+                if body.get('action') in ('add', 'update') and isinstance(body.get('configuration'), dict):
+                    require_selection(body['configuration'])
                 self._send(200, WORKSPACE.mutate(body))
             except (ValueError, OSError) as e:
                 self._send(409, {"error": str(e)})
@@ -1010,6 +1025,8 @@ class Handler(BaseHTTPRequestHandler):
         from memstara.operational import check
         from memstara.model_connections import execution_environment
         try:
+            from memstara.control.model_policy import require_selection
+            require_selection(body, use_defaults=True)
             effective = execution_environment(body.get('model_connection_id', ''))
         except ValueError as exc:
             self._send(422, {'error': str(exc)})
