@@ -61,8 +61,8 @@ replace an existing installation's `.env` with another checkout's settings.
 **Configure a model in the GUI:**
 
 1. Open **Add experiment → AI model → Set up a model**.
-2. Provider is fixed to **Azure Foundry**. Select the model type and enter your
-   **Deployment name**, **Endpoint URL** and **API key**. If available, you can
+2. Provider is fixed to **Azure Foundry**. Select the **Base model** and enter your
+   **Azure deployment name**, **Endpoint URL** and **API key**. If available, you can
    reuse the configured server credentials.
 3. Select **Check & use model** to verify and save the connection. This makes a
    small test request that your provider may charge for.
@@ -151,20 +151,3 @@ To verify one real Haiku 5.5 pipeline in a running Docker installation, run
 connects to databases inside Docker, and retains evidence in `outputs/verification/`.
 It does not restart existing experiments or require publishing database ports.
 App startup and offline tests alone do not verify a real pipeline execution.
-
-### Pipelines and replicates
-
-A **Pipeline** is one combination of agent skills. A **Replicate** repeats that Pipeline’s complete research process, from question generation to Explanation. Selecting several skills creates an experiment containing multiple Pipelines. A Replicate repeats the configuration, not necessarily the same question or hypothesis; the actual generated content, data splits and model settings are recorded for each attempt.
-
-For example, **48 pipelines × 10 replicates per pipeline = 480 total replicates**. The default is **1 replicate per pipeline**. With **All pipelines first**, all Pipelines complete their first scheduled replicate before the next cycle. **One pipeline all replicates first** finishes one Pipeline's replicates before proceeding to the next. Resuming preserves the recorded schedule.
-
-### Release versions
-
-Development continues on `mvp`; install a published `vX.Y.Z` tag for a repeatable
-release. Released tags are immutable. During the MVP phase, use patch releases
-for compatible fixes and minor releases for new features; describe any breaking
-changes explicitly. Version `1.0.0` will mark a stable compatibility contract.
-Python packages derive their version from Git. `deployment/VERSION` records the
-same release number for Docker builds, which do not include Git metadata.
-
-Progress identifies both units, for example **Pipeline 3 / 48 · Replicate 2 / 10**. Failed or skipped attempts remain recorded separately from completed work. Historical **Split evaluations** repeat model evaluation inside a Replicate; they do not multiply the number of Pipeline replicates. New designs use one split evaluation and do not expose advanced ML controls. Existing capped schedules retain their recorded counts. Raw agent outputs and technical execution IDs are preserved as saved.
