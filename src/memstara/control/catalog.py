@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import unicodedata
 from pathlib import Path
 
 from memstara.paths import DEFAULT_OUTPUT_DIR, PACKAGE_ROOT
@@ -220,6 +221,13 @@ def register(body: dict) -> dict:
         raise ValueError('Choose a Hypothesis, ML, Interpreter or Explanation agent skill')
     if stage in FINAL_STAGE_SKILLS:
         raise ValueError('Interpretation and Explanation use the supplied skills from the library.')
+    display_name = body.get('display_name')
+    if display_name is not None:
+        if not isinstance(display_name, str) or any(unicodedata.category(c) in ('Cc', 'Cs') for c in display_name):
+            raise ValueError('Enter a skill name without control characters.')
+        display_name = ' '.join(unicodedata.normalize('NFC', display_name).split())
+        if not 1 <= len(display_name) <= 80:
+            raise ValueError('Enter a skill name of 1–80 characters.')
     base_skill = body.get('base_skill')
     if base_skill is not None:
         from memstara.skill_bases import validate as validate_base
@@ -248,6 +256,12 @@ def register(body: dict) -> dict:
     item['id'] = f'user-{stage}-{name}-{item["hash"][:12]}'
     directory = user_dir()
     directory.mkdir(parents=True, exist_ok=True)
+    if display_name is not None:
+        return _register_named(item, display_name, directory)
+    return _publish(item, directory)
+
+
+def _publish(item, directory):
     from memstara.pipeline.checkpoint import atomic_json
     destination = directory / f'{item["id"]}.json'
     try:
@@ -259,6 +273,33 @@ def register(body: dict) -> dict:
             raise ValueError('This skill version already exists with different content; '
                              'use a different name and retain the existing record') from None
     return item
+
+
+def _register_named(item, requested, directory):
+    """Reserve a visible name atomically; retries return the same saved version."""
+    import fcntl
+    item['requested_title'] = requested
+    item['id'] += '-' + hashlib.sha256(requested.encode()).hexdigest()[:8]
+    destination = directory / f'{item["id"]}.json'
+    # Separate file descriptors serialize both HTTP threads and control processes.
+    with (directory / '.names.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if destination.exists():
+            existing = json.loads(destination.read_text(encoding='utf-8'))
+            if existing != {**item, 'title': existing.get('title')}:
+                raise ValueError('This skill version already exists with different content.')
+            return existing
+        def key(title):
+            return unicodedata.normalize('NFKC', ' '.join(title.split())).casefold()
+        occupied = {key(row['title']) for row in _read_catalog(include_hidden=True)
+                    if row['stage'] == item['stage']}
+        title, number = requested, 2
+        while key(title) in occupied:
+            suffix = f' ({number})'
+            title = requested[:80 - len(suffix)].rstrip() + suffix
+            number += 1
+        item['title'] = title
+        return _publish(item, directory)
 
 
 def ensure_explanation_enabled(names) -> None:

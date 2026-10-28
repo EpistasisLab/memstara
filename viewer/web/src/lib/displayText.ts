@@ -25,6 +25,7 @@ export function displayText(text: string | null | undefined): string {
 
 export function skillLabel(id?: string | null, title?: string | null, fallback = 'Skill not recorded'): string {
   const key = canonicalSkillId(id ?? '');
+  if (key.startsWith('user-') && title?.trim()) return title.trim();
   return Object.hasOwn(specialistLabels, key) ? specialistLabels[key] : displayText(title?.trim() || id?.trim() || fallback);
 }
 

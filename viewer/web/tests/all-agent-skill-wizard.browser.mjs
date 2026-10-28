@@ -27,7 +27,7 @@ if(path==='/control/skills')return r.fulfill({json:{skills:[]}});
    if(path.startsWith('/control/skill-drafts/'))return r.fulfill({json:{status:'ready',content:'# Draft',model:'selected-model',provider:'azure_foundry'}});
    if(path==='/control/playbooks'){
     if(r.request().method()==='GET')return r.fulfill({json:{catalog,playbooks:catalog.map(s=>s.id),stages:roles,references:[]}});
-    const q=r.request().postDataJSON();saves.push(q);const skill={...q,id:'user-'+q.stage+'-'+saves.length,title:q.name,hash:'hash-'+saves.length,source:'User'};catalog.push(skill);return r.fulfill({json:skill});
+    const q=r.request().postDataJSON();saves.push(q);let title=q.display_name;let suffix=2;while(catalog.some(s=>s.stage===q.stage&&s.title===title))title=`${q.display_name} (${suffix++})`;const skill={...q,id:'user-'+q.stage+'-'+saves.length,title,hash:'hash-'+saves.length,source:'User'};catalog.push(skill);return r.fulfill({json:skill});
    }
    if(r.request().method()!=='GET')throw Error('Unexpected mutation '+path);
    return r.fulfill({json:{}});
@@ -53,7 +53,8 @@ if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for t
     if(mode==='Selected Pipelines')await d.getByRole('button',{name:'Next',exact:true}).click();
     continue;
    }
-   await d.getByRole('button',{name:'Create a skill with AI',exact:true}).click();
+   if(mode==='Selected Pipelines')await d.getByRole('button',{name:'Create a skill with AI',exact:true}).click();
+   else await expect(d.getByRole('button',{name:'Create a skill with AI',exact:true})).toHaveCount(0);
    const assistant=d.locator('.hypothesis-skill-wizard:visible');
    await expect(assistant.getByLabel('Generation model / deployment')).toBeDisabled();
    await expect.poll(()=>typeof releaseModels).toBe('function');
@@ -67,18 +68,21 @@ if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for t
    await assistant.getByRole('button',{name:'Generate skill draft',exact:true}).click();
    await expect(assistant.getByLabel('Generated Markdown skill')).toHaveValue('# Draft');
    const save=assistant.getByRole('button',{name:mode==='Selected Pipelines'?'Save and select for this pipeline':'Save and add to combinations'});
-   await expect(save).toBeDisabled();await assistant.getByLabel('Generated skill name').fill('clinical-'+roles[i]);
+   await expect(save).toBeDisabled();await expect(assistant.getByLabel('Skill name',{exact:true})).toHaveValue('');await assistant.getByLabel('Skill name',{exact:true}).fill('Clinical 연구 '+roles[i]);
    await assistant.getByLabel('Generated Markdown skill').fill('# Edited '+roles[i]);
-   await assistant.getByRole('checkbox',{name:'I reviewed these instructions and want to use this skill.'}).check();await save.click();await expect(assistant.getByText('Saved and selected. Finish the pipeline review when ready.',{exact:true})).toBeVisible();await expect(save).toBeDisabled();
+   await assistant.getByRole('checkbox',{name:'I reviewed these instructions and want to use this skill.'}).check();await save.click();await expect(assistant.getByText(/^Saved to Skill library as/)).toBeVisible();await expect(save).toBeDisabled();
    if(calls.at(-1).model_connection_id!=='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'||calls.at(-1).base_skill!==policy||saves.at(-1).base_skill!==policy)throw Error('Model connection or execution policy was not preserved');
    if(calls.at(-1).stage!==roles[i]||saves.at(-1).stage!==roles[i]||calls.at(-1).model!=='selected-model'||saves.at(-1).content!=='# Edited '+roles[i])throw Error(JSON.stringify({role:roles[i],call:calls.at(-1),save:saves.at(-1)}));
    if(mode==='Selected Pipelines')await expect(d.getByRole('combobox',{name:labels[i]+' skill',exact:true})).toHaveValue('user-'+roles[i]+'-'+saves.length);
    else {
-    await expect(d.locator('.comb-skill-card').filter({hasText:'clinical-'+roles[i]}).locator('input[type=checkbox]')).toBeChecked();await expect(d.locator('.comb-selected-skills')).toHaveCount(0);
+    await expect(d.locator('.comb-skill-card').filter({hasText:'Clinical 연구 '+roles[i]}).locator('input[type=checkbox]')).toBeChecked();await expect(d.locator('.comb-selected-skills')).toHaveCount(0);
     await assistant.getByRole('button',{name:new RegExp('^Create another')}).click();await assistant.getByRole('button',{name:'Generate skill draft',exact:true}).click();
-    await expect(assistant.getByLabel('Generated Markdown skill')).toHaveValue('# Draft');await assistant.getByLabel('Generated skill name').fill('second-'+roles[i]);
-    await assistant.getByRole('checkbox',{name:'I reviewed these instructions and want to use this skill.'}).check();await save.click();await expect(assistant.getByText('Saved and selected. Finish the pipeline review when ready.',{exact:true})).toBeVisible();await expect(save).toBeDisabled();
-    await expect(d.locator('.comb-skill-card').filter({hasText:'second-'+roles[i]}).locator('input[type=checkbox]')).toBeChecked();await expect(d.locator('.comb-selected-skills')).toHaveCount(0);
+    await expect(assistant.getByLabel('Generated Markdown skill')).toHaveValue('# Draft');await assistant.getByLabel('Skill name',{exact:true}).fill('Clinical 연구 '+roles[i]);
+    await assistant.getByRole('checkbox',{name:'I reviewed these instructions and want to use this skill.'}).check();await save.click();await expect(assistant.getByText(/^Saved to Skill library as/)).toBeVisible();await expect(save).toBeDisabled();
+    await expect(d.locator('.comb-skill-card').filter({hasText:'Clinical 연구 '+roles[i]+' (2)'}).locator('input[type=checkbox]')).toBeChecked();await expect(d.locator('.comb-selected-skills')).toHaveCount(0);
+    await expect(assistant.getByText(/^Saved to Skill library as/)).toContainText('Clinical 연구 '+roles[i]+' (2)');
+    await d.getByRole('button',{name:'Skill library',exact:true}).click();
+    await expect(d.locator('.comb-skill-card strong').filter({hasText:'Clinical 연구 '+roles[i]+' (2)'})).toBeVisible();
     if(saves.at(-1).stage!==roles[i])throw Error('Second skill role mismatch');
    }
    for(const theme of ['light','dark'])for(const width of [1440,390,320]){

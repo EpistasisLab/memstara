@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useControl, type SkillInfo } from '../store/control';
 import './hypothesis-skill-wizard.css';
@@ -12,7 +12,7 @@ const roleQuestions: Record<Stage, [string, string]> = {
  interpreter: ['Which measured results should the agent explain to clinicians?', 'Which uncertainty, limitations, and unsupported interpretations must it clearly identify?'],
  report: ['Which clinical or biological meanings and possible next research steps should it explain?', 'Which boundaries and further-validation labels should guide its explanations and suggestions?'],
 };
-type Props = { modelConnectionId?: string; stage?: Stage; disabled?: boolean; multiple?: boolean; onSelect: (skill: SkillInfo) => void; onBusy: (busy: boolean) => void };
+type Props = { expanded?: boolean; modelConnectionId?: string; stage?: Stage; disabled?: boolean; multiple?: boolean; onSelect: (skill: SkillInfo) => void; onBusy: (busy: boolean) => void };
 const questions = [
   ['domain', 'What is your clinical domain of expertise?', 'e.g. Addiction medicine'],
   ['population', 'What patient population or clinical setting do you want to study?', 'e.g. Adults receiving outpatient HIV care'],
@@ -27,11 +27,12 @@ async function request(url: string, body?: object) {
   return data;
 }
 
-export default function HypothesisSkillWizard({ stage = 'hypothesis', modelConnectionId, disabled, multiple, onSelect, onBusy }: Props) {
+export default function HypothesisSkillWizard({ stage = 'hypothesis', expanded, modelConnectionId, disabled, multiple, onSelect, onBusy }: Props) {
   const role = roleNames[stage];
   const modelListId = useId();
   const prompts = questions.map(([key, label, placeholder]) => [key, key==='features' ? roleQuestions[stage][0] : key==='constraints' ? roleQuestions[stage][1] : label, stage!=='hypothesis' && key==='features' ? 'Describe your priorities for this agent.' : placeholder]);
   const [open, setOpen] = useState(false);
+  const visible = expanded ?? open;
   const [answers, setAnswers] = useState<Record<string, string>>({domain:'', population:'', features:'', constraints:''});
   const [connectionId, setConnectionId] = useState('');
   const [baseSkill, setBaseSkill] = useState(stage === 'data' ? 'data_training_heavy' : stage === 'ml' ? 'ml_logistic_regression' : '');
@@ -40,6 +41,8 @@ export default function HypothesisSkillWizard({ stage = 'hypothesis', modelConne
   const [models, setModels] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
   const [name, setName] = useState('');
+  const [storageName, setStorageName] = useState('');
+  const [savedName, setSavedName] = useState('');
   const [job, setJob] = useState('');
   const [origin, setOrigin] = useState('');
   const [reviewed, setReviewed] = useState(false);
@@ -49,7 +52,7 @@ export default function HypothesisSkillWizard({ stage = 'hypothesis', modelConne
   const [saved, setSaved] = useState(false);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  async function loadModels() {
+  const loadModels = useCallback(async () => {
     setError(''); setLoadingModels(true); setProvider(''); setModel('');
     try {
       const data = await request('/control/skill-drafts/models' + (modelConnectionId ? `?model_connection_id=${encodeURIComponent(modelConnectionId)}` : ''));
@@ -60,9 +63,10 @@ export default function HypothesisSkillWizard({ stage = 'hypothesis', modelConne
       if (!profile?.model || !profile?.provider) throw Error('Agent model is not configured.');
       setProvider(profile.provider); setModels([profile.model]); setModel(profile.model);
     }
-    catch { setError('Could not load the model connection. Reopen this assistant to retry.'); }
+    catch { if (mounted.current) setError('Could not load the model connection. Reopen this assistant to retry.'); }
     finally { if (mounted.current) setLoadingModels(false); }
-  }
+  }, [modelConnectionId, stage]);
+  useEffect(() => { if (visible) void loadModels(); }, [visible, loadModels]);
   async function generate(resume = false) {
     setBusy(true); onBusy(true); setError(''); setSaved(false);
     try {
@@ -74,7 +78,7 @@ export default function HypothesisSkillWizard({ stage = 'hypothesis', modelConne
         if (data.status === 'failed') { setJob(''); throw Error(data.error); }
         if (data.status === 'ready') {
           setDraft(data.content); setOrigin(`${data.provider} · ${data.model}`); setReviewed(false); setJob('');
-          if (!name) setName(`${stage}-${Date.now().toString(36)}`);
+          setStorageName(`ai-${crypto.randomUUID()}`);
           return;
         }
         await new Promise(resolve => setTimeout(resolve, 1500));
@@ -86,17 +90,17 @@ export default function HypothesisSkillWizard({ stage = 'hypothesis', modelConne
   async function save() {
     setBusy(true); onBusy(true); setError('');
     try {
-      const skill: SkillInfo = await request('/control/playbooks', {stage, name:name.trim(), content:draft, ...(baseSkill ? {base_skill: baseSkill} : {})});
+      const skill: SkillInfo = await request('/control/playbooks', {stage, name:storageName, display_name:name.trim(), content:draft, ...(baseSkill ? {base_skill: baseSkill} : {})});
       if (!skill.id || skill.stage !== stage) throw Error('The saved skill could not be verified.');
       useControl.setState(s => ({catalog:[...s.catalog.filter(c => c.id !== skill.id), skill], playbooks:[...new Set([...(s.playbooks ?? []), skill.id])]}));
-      onSelect(skill); setSaved(true);
+      onSelect(skill); setSavedName(skill.title); setSaved(true);
     } catch(e) { setError(e instanceof Error ? e.message : 'Could not save the skill.'); }
     finally { setBusy(false); onBusy(false); }
   }
   const locked = busy || loadingModels || !!disabled;
   return <section className="hypothesis-skill-wizard" aria-label={`AI ${role} skill assistant`}>
-    <button type="button" className="skill-assistant-trigger" aria-expanded={open} disabled={locked} onClick={() => {setOpen(!open); if (!open) void loadModels();}}><Sparkles size={17} aria-hidden="true"/> Create a skill with AI</button>
-    {open && <div className="skill-assistant-body">
+    {expanded === undefined && <button type="button" className="skill-assistant-trigger" aria-expanded={open} disabled={locked} onClick={() => setOpen(!open)}><Sparkles size={17} aria-hidden="true"/> Create a skill with AI</button>}
+    {visible && <div className="skill-assistant-body">
       <p>Turn your clinical expertise into {role} Agent instructions. {multiple ? 'Save a skill, then create another to add different perspectives to your combinations.' : `The saved skill replaces the ${role} skill selected for this pipeline draft.`}</p>
       <p className="text-xs text-ink-muted">Use general research context, not patient details. Generation uses model tokens. It does not run a pipeline.</p>
       {loadingModels && <p role="status">Loading the model connection…</p>}
@@ -115,12 +119,13 @@ export default function HypothesisSkillWizard({ stage = 'hypothesis', modelConne
       {draft && <fieldset disabled={locked}>
         <legend>2. Review and edit before saving</legend>
         <p className="text-xs text-ink-muted">AI-generated draft · {origin}. Review clinical scope, assumptions, and exclusions. No skill is applied until you save.</p>
-        <label>Generated skill name<input value={name} maxLength={60} onChange={e => {setName(e.target.value);setSaved(false);}}/></label>
+        <label>Skill name<input value={name} maxLength={80} placeholder="e.g. Heart failure risk factors" required onChange={e => {setName(e.target.value);setSaved(false);}}/></label>
+        <p className="text-xs text-ink-muted">This name appears in the Skill library. If it is already used, we’ll add (2), (3), and so on.</p>
         <label>Generated Markdown skill<textarea rows={12} value={draft} onChange={e => {setDraft(e.target.value);setReviewed(false);setSaved(false);}}/></label>
         <label className="skill-review-check"><input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)}/>I reviewed these instructions and want to use this skill.</label>
-        <button type="button" disabled={!reviewed || !/^[A-Za-z0-9_-]{1,60}$/.test(name.trim()) || !draft.trim() || saved} onClick={() => void save()}>{multiple ? 'Save and add to combinations' : 'Save and select for this pipeline'}</button>
+        <button type="button" disabled={!reviewed || !name.trim() || name.trim().length > 80 || !storageName || !draft.trim() || saved} onClick={() => void save()}>{multiple ? 'Save and add to combinations' : 'Save and select for this pipeline'}</button>
       </fieldset>}
-      {saved && <div role="status"><p>Saved and selected. Finish the pipeline review when ready.</p>{multiple && <button type="button" onClick={() => {setDraft('');setName('');setSaved(false);setReviewed(false);}}>Create another {role} skill</button>}</div>}
+      {saved && <div role="status"><p>Saved to Skill library as <strong>{savedName}</strong> and selected.</p>{multiple && <button type="button" onClick={() => {setDraft('');setName('');setSavedName('');setSaved(false);setReviewed(false);}}>Create another {role} skill</button>}</div>}
       {error && <p role="alert">{error}</p>}
     </div>}
   </section>;

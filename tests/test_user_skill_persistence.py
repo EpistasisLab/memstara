@@ -83,3 +83,60 @@ def test_concurrent_registrations_preserve_one_complete_version(skill_store, mon
     files = list(skill_store.iterdir())
     assert len(files) == 1
     assert json.loads(files[0].read_text()) == successes[0]
+
+
+def named(name='request-one', title='심부전 Risk factors', content='# AI heading'):
+    return {'stage': 'hypothesis', 'name': name, 'display_name': title, 'content': content}
+
+
+def test_user_name_is_library_title_without_rewriting_markdown(skill_store):
+    first = catalog.register(named())
+    assert first['title'] == '심부전 Risk factors'
+    assert first['content'] == '# AI heading'
+    assert catalog.resolve(first['id'])['title'] == first['title']
+    assert catalog.register(named()) == first  # Lost HTTP response: retry is idempotent.
+    second = catalog.register(named('request-two'))
+    third = catalog.register(named('request-three'))
+    assert [second['title'], third['title']] == ['심부전 Risk factors (2)', '심부전 Risk factors (3)']
+    assert first['hash'] == second['hash']  # Display names do not change scientific identity.
+    assert json.loads((skill_store / (first['id'] + '.json')).read_text()) == first
+
+
+def test_names_are_case_insensitive_role_scoped_and_uncached(skill_store):
+    first = catalog.register(named(title='Study'))
+    with catalog.catalog_snapshot():
+        catalog.catalog()
+        second = catalog.register(named('two', 'study'))
+        third = catalog.register(named('three', 'Study'))
+    assert second['title'] == 'study (2)' and third['title'] == 'Study (3)'
+    other = catalog.register(named('data', 'Study') | {'stage': 'data', 'base_skill': 'data_training_heavy'})
+    assert other['title'] == first['title']
+
+
+def test_long_duplicate_names_remain_bounded(skill_store):
+    catalog.register(named(title='가' * 80))
+    duplicate = catalog.register(named('two', '가' * 80))
+    assert len(duplicate['title']) == 80 and duplicate['title'].endswith(' (2)')
+
+
+@pytest.mark.parametrize('title', ['', '   ', 'a' * 81, 'bad\nname', '\0name', [], 12])
+def test_invalid_display_names_never_write(skill_store, title):
+    with pytest.raises(ValueError, match='skill name'):
+        catalog.register(named(title=title))
+    assert list(skill_store.iterdir()) == []
+
+
+@pytest.mark.parametrize('identical', [False, True])
+def test_concurrent_display_name_reservations_are_unique_and_retry_safe(skill_store, identical):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    barrier = Barrier(4)
+    def save(index):
+        barrier.wait(timeout=5)
+        return catalog.register(named('same' if identical else f'request-{index}', 'Research skill'))
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(save, range(4)))
+    assert len({row['id'] for row in results}) == (1 if identical else 4)
+    assert {row['title'] for row in results} == ({'Research skill'} if identical else {
+        'Research skill', 'Research skill (2)', 'Research skill (3)', 'Research skill (4)'})
+    assert len(list(skill_store.glob('*.json'))) == (1 if identical else 4)

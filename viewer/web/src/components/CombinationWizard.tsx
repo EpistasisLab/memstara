@@ -130,7 +130,7 @@ export default function CombinationWizard(){
       </details>
      </div>
      {activeRole!=='interpreter'&&activeRole!=='report'&&<div hidden={skillMode!=='custom'}><CustomSkillUpload includeAssistant={false} multiple key={`custom-${activeRole}`} stage={activeRole} disabled={busy||uploading} onBusy={setUploading} onSelect={s=>toggle(activeRole,s.id,true)}/></div>}
-     {activeRole!=='interpreter'&&activeRole!=='report'&&<div hidden={skillMode!=='ai'} className="comb-ai-section"><HypothesisSkillWizard key={`${activeRole}:${connection?.id || "defaults"}`} stage={activeRole} modelConnectionId={connection?.id} multiple disabled={busy||uploading} onBusy={setUploading} onSelect={s=>toggle(activeRole,s.id,true)}/></div>}
+     {activeRole!=='interpreter'&&activeRole!=='report'&&<div hidden={skillMode!=='ai'} className="comb-ai-section"><HypothesisSkillWizard key={`${activeRole}:${connection?.id || "defaults"}`} stage={activeRole} expanded={skillMode==='ai'} modelConnectionId={connection?.id} multiple disabled={busy||uploading} onBusy={setUploading} onSelect={s=>toggle(activeRole,s.id,true)}/></div>}
      </div>
      {activeRole==='hypothesis'&&!selected.hypothesis?.length&&defaultHypothesis&&<p className="comb-review-hint">Default: {skillLabel(defaultHypothesis.id,defaultHypothesis.title)}. Select Next to use this skill.</p>}
      {(['interpreter','report'] as string[]).includes(activeRole)&&!selected[activeRole]?.length&&effectiveSelected[activeRole]?.length&&<p className="comb-review-hint">Default: {skillLabel(effectiveSelected[activeRole]![0],catalog.find(s=>s.id===effectiveSelected[activeRole]![0])?.title)}. Select Next to continue.</p>}
