@@ -42,3 +42,17 @@ test('unknown corpus and LLM-only mode offer general skills without disease-name
   assert(!compatibleResearchSkill({stage:'hypothesis',id:'addiction-psychiatric'},form));
  }
 });
+
+test('user Hypothesis skills remain visible for known corpora and source changes',()=>{
+ const id='user-hypothesis-ai-saved-custom';
+ for(const form of [{research_input_id:'heart'},{research_input_id:'hiv'},
+                   {research_input_id:'unknown'},{knowledge_mode:'llm_only'},{}]){
+  assert(compatibleResearchSkill({id,stage:'hypothesis'},form));
+  const reset=resetResearchSkills({research_input_id:'hiv',playbook_hypothesis:id,
+   combination_skills:{hypothesis:[id],report:['shared-hiv']}},form);
+  assert.equal(reset.playbook_hypothesis,id);
+  assert.deepEqual(reset.combination_skills.hypothesis,[id]);
+ }
+ assert(!compatibleResearchSkill({id:'user-interpreter-test',stage:'interpreter'},{research_input_id:'heart'}));
+ assert(!compatibleResearchSkill({id:'user-report-test',stage:'report'},{research_input_id:'heart'}));
+});

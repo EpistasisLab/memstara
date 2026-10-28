@@ -1,3 +1,4 @@
+import {corpusSkillBindings} from './corpus-skill-bindings.fixture.mjs';
 import {preparedInputs,fixtureSkillId} from './current-research.fixture.mjs';
 import {openBuildModeFixture} from './build-mode.fixture.mjs';
 // Mock every API write and generation: exercise UI contracts without paid model calls.
@@ -10,12 +11,15 @@ try {
   const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[],calls=[],saves=[];
   page.on('pageerror',e=>errors.push(e.message));
   let releaseModels;
-  let catalog=roles.map(stage=>({id:fixtureSkillId(stage),stage,title:stage,content:'# Default',hash:stage,source:'Default'}));
+  const inputs=structuredClone(preparedInputs);
+  const bindings={...corpusSkillBindings,research:{'ci-data':'heart_failure'}};
+  if(mode==='All Combinations')inputs.inputs[0].configuration.knowledge_mode='okf';
+  let catalog=roles.map(stage=>({id:stage==='hypothesis'&&mode==='All Combinations'?'heart-failure-cardiovascular':fixtureSkillId(stage),stage,title:stage,content:'# Default',hash:stage,source:'Default'}));
   await page.route('**/api/**',r=>r.fulfill({status:503,json:{error:'Offline fixture'}}));
   await page.route('**/control/**',async r=>{
    const url=new URL(r.request().url());const path=url.pathname;
    if(path==='/control/model-defaults')return r.fulfill({json:{profiles:[],current_allowed:true,setup_required:false,source:'saved_connection',connection:{id:'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',provider:'azure_foundry',model:'selected-model',api_base:'https://example.services.ai.azure.com/anthropic'}}});
-  if(path==='/control/research-inputs')return r.fulfill({json:preparedInputs});
+  if(path==='/control/research-inputs')return r.fulfill({json:inputs});
    if(path==='/control/pipelines')return r.fulfill({json:{pipelines:[]}});
 if(path==='/control/skills')return r.fulfill({json:{skills:[]}});
    if(path==='/control/skill-drafts/models'){
@@ -26,7 +30,7 @@ if(path==='/control/skills')return r.fulfill({json:{skills:[]}});
    if(path==='/control/skill-drafts'){calls.push(r.request().postDataJSON());return r.fulfill({status:202,json:{id:String(calls.length),status:'generating'}});}
    if(path.startsWith('/control/skill-drafts/'))return r.fulfill({json:{status:'ready',content:'# Draft',model:'selected-model',provider:'azure_foundry'}});
    if(path==='/control/playbooks'){
-    if(r.request().method()==='GET')return r.fulfill({json:{catalog,playbooks:catalog.map(s=>s.id),stages:roles,references:[]}});
+    if(r.request().method()==='GET')return r.fulfill({json:{catalog,playbooks:catalog.map(s=>s.id),stages:roles,references:[],corpus_skill_bindings:bindings}});
     const q=r.request().postDataJSON();saves.push(q);let title=q.display_name;let suffix=2;while(catalog.some(s=>s.stage===q.stage&&s.title===title))title=`${q.display_name} (${suffix++})`;const skill={...q,id:'user-'+q.stage+'-'+saves.length,title,hash:'hash-'+saves.length,source:'User'};catalog.push(skill);return r.fulfill({json:skill});
    }
    if(r.request().method()!=='GET')throw Error('Unexpected mutation '+path);
@@ -44,7 +48,7 @@ if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for t
   for(let i=0;i<roles.length;i++) {
    if(mode==='All Combinations'){
     await d.getByRole('navigation',{name:'Agent roles'}).getByRole('button',{name:new RegExp('^'+labels[i])}).click();
-    if(i<3)await d.getByRole('button',{name:/^Create with AI/}).click();
+    if(i<3){await d.getByLabel('Search skills').fill('unmatched old search');await d.getByRole('button',{name:/^Create with AI/}).click();}
    }
    if(i>=3){
     await expect(d.getByLabel('Custom skill Markdown file')).toHaveCount(0);
@@ -95,6 +99,14 @@ if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for t
    if(mode==='Selected Pipelines')await d.getByRole('button',{name:'Next',exact:true}).click();
   }
   if(mode==='Selected Pipelines')await expect(d.getByRole('textbox',{name:'Pipeline name',exact:true})).toBeVisible();
+  if(mode==='All Combinations'){
+   await d.getByRole('button',{name:'Close pipeline details',exact:true}).click();
+   await page.getByRole('button',{name:/Add experiment/i,exact:true}).click();
+   await d.getByRole('button',{name:'Use CI dataset',exact:true}).click();
+   await d.getByRole('button',{name:'Choose skills',exact:true}).click();
+   await expect(d.locator('.comb-skill-card strong').filter({hasText:'Clinical 연구 hypothesis (2)'})).toBeVisible();
+   await expect(d.getByLabel('Search skills')).toHaveValue('');
+  }
   if(errors.length)throw Error(errors.join('\n'));
   console.log(JSON.stringify({mode,editableRoles:3,suppliedOnlyRoles:2,generations:calls.length,saves:saves.length,responsiveChecks:30,errors}));
   await page.unrouteAll({behavior:'ignoreErrors'});await page.close();

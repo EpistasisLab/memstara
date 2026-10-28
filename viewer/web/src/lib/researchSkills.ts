@@ -24,10 +24,11 @@ export function compatibleResearchSkill(skill:{id:string;stage:string},form:Part
   if(skill.stage==='report')return explanationSkills.includes(id);
   if(id==='random_features'||id==='heart-failure-all')return false;
   if(skill.stage!=='hypothesis')return true;
+  // Match server validation: user-authored hypotheses are selectable with every corpus.
+  if(id.startsWith('user-hypothesis-'))return true;
   if(bindings.default==='legacy'&&!form.research_input_id&&form.knowledge_mode!=='llm_only'&&form.data_mode!=='proposal')return !id.startsWith('heart-failure-');
   const profile=researchSkillProfile(form);
-  return profile[skill.stage].includes(id) ||
-    (profile===general||profile===bindings.profiles.general)&&id.startsWith(`user-${skill.stage}-`);
+  return profile[skill.stage].includes(id);
 }
 export function resetResearchSkills(current?:Partial<RunRequest>,next?:Partial<RunRequest>):Partial<RunRequest> {
   const target={...current,...next};
