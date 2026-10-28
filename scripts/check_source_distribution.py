@@ -22,6 +22,8 @@ def verify(sdist):
     with tempfile.TemporaryDirectory(prefix='memstara-source-smoke-') as temporary:
         work = Path(temporary)
         with tarfile.open(sdist) as archive:
+            assert not any('photos' in Path(name).parts[1:2] for name in archive.getnames()), (
+                'Local design photos must not be included in a source release')
             archive.extractall(work, filter='data')
         roots = list(work.iterdir())
         assert len(roots) == 1 and roots[0].is_dir(), 'Expected one sdist root'
