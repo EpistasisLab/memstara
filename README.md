@@ -3,7 +3,7 @@
 A research workspace for generating hypotheses, training predictive models and exploring recorded results.
 
 **First MVP release: [v0.1.0](https://github.com/HyunjunA/memstara/releases/tag/v0.1.0).**
-See [release notes](CHANGELOG.md) for scope and validation limits.
+See [release notes](CHANGELOG.md) for the included features.
 
 ## Get started
 
