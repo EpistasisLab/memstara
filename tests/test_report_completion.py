@@ -12,6 +12,21 @@ from memstara.pipeline.board import save_report
 from types import SimpleNamespace
 
 
+def test_report_revision_uses_frozen_target_without_replaying_tools(monkeypatch):
+    monkeypatch.setattr('memstara.evaluation.active_plan', lambda: {'explanation_words': 100})
+    invoke = AsyncMock(side_effect=[
+        ('Short report.', {'status': 'completed', 'run_id': 'first'}),
+        ('word ' * 100, {'status': 'completed', 'run_id': 'second'}),
+    ])
+    monkeypatch.setattr(board, 'call_agent', invoke)
+    text, entry = asyncio.run(board._call_report_default('agent', 'Evidence', tools=['read'], registry=None))
+    assert text == 'word ' * 100
+    assert entry['explanation_length']['within_range']
+    assert invoke.await_args_list[1].kwargs['tools'] == []
+    assert 'Evidence' in invoke.await_args_list[1].args[1]
+    assert 'Short report.' in invoke.await_args_list[1].args[1]
+
+
 @pytest.mark.parametrize('raw', [None, (True, '{"tasks": [], "count": 0}'),
                                 (False, None), (False,), 'broken', 'null', '[]'])
 def test_driver_tool_rejects_unavailable_or_invalid_response(monkeypatch, raw):

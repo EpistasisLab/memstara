@@ -298,6 +298,33 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
                                     f"{stage}: model output remained invalid after five attempts"
                                 ) from error
                             payload["output_correction"] = str(error)
+                    length_audit = None
+                    if stage == 'report':
+                        from memstara.explanation_length import refine
+
+                        async def revise(previous, guidance):
+                            revised, revised_usage = await invoke(profile, system, {
+                                **payload, 'output_correction': guidance, 'previous_summary': previous,
+                            })
+                            atomic_json(io / f'report.length-revision-{len(revisions) + 1}.json', {
+                                'text': revised,
+                                'usage': (revised_usage.model_dump(mode='json')
+                                          if hasattr(revised_usage, 'model_dump') else revised_usage),
+                            })
+                            try:
+                                candidate = validate_output(revised, stage, source_ids)
+                            except (ValueError, TypeError):
+                                return '', {'status': 'failed'}
+                            revisions.append(candidate)
+                            return candidate['summary'], {'status': 'completed'}
+
+                        revisions = []
+                        summary, length_entry = await refine(
+                            value['summary'], {'status': 'completed'}, state.get('explanation_words'), revise)
+                        if revisions:
+                            value = revisions[-1]
+                        value['summary'] = summary
+                        length_audit = length_entry.get('explanation_length')
                     record.update(
                         {
                             "run_id": identifier,
@@ -314,6 +341,7 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
                             "execution_adapter": "proposal_text",
                             "core_run_id": None,
                             "output": value,
+                            **({'explanation_length': length_audit} if length_audit else {}),
                         }
                     )
                     atomic_json(io / f"{stage}.output.json", record)

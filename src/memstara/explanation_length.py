@@ -1,6 +1,50 @@
 """Per-execution Explanation narrative length; never edits contributed skills."""
+import math
+import re
+
 DEFAULT_WORDS = 250
 MAX_WORDS = 10000
+
+
+def assessment(text, words):
+    """Count narrative words, excluding fenced records and link destinations."""
+    if words is None:
+        return None
+    words = validate(words)
+    narrative = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+    narrative = re.sub(r'\[([^\]]+)\]\([^)]*\)', r'\1', narrative)
+    count = len(re.findall(r"\b\w+(?:['’\-]\w+)*\b", narrative))
+    lower, upper = max(1, math.floor(words * .8)), math.ceil(words * 1.2)
+    return {'target_words': words, 'actual_words': count, 'minimum_words': lower,
+            'maximum_words': upper, 'within_range': lower <= count <= upper}
+
+
+def correction(audit):
+    return (f"The previous narrative contained {audit['actual_words']} words. Revise it to "
+            f"approximately {audit['target_words']} words "
+            f"({audit['minimum_words']}–{audit['maximum_words']} words). "
+            "Preserve the supplied findings, uncertainty, limitations and evidence references. "
+            "Do not invent facts or cut sentences. Return the complete revised output "
+            "in the originally required format.")
+
+
+async def refine(text, entry, words, invoke):
+    """Bounded read-only revisions; every call remains visible to the normal recorder."""
+    audit = assessment(text, words)
+    if audit is None:
+        return text, entry
+    attempts = [dict(audit, run_id=entry.get('run_id'))]
+    for _ in range(2):
+        if audit['within_range']:
+            break
+        revised, revised_entry = await invoke(text, correction(audit))
+        if revised_entry.get('status') != 'completed' or not revised.strip():
+            attempts.append({'status': 'revision_unavailable', 'run_id': revised_entry.get('run_id')})
+            break
+        text, entry = revised, revised_entry
+        audit = assessment(text, words)
+        attempts.append(dict(audit, run_id=entry.get('run_id')))
+    return text, {**entry, 'explanation_length': {**audit, 'attempts': attempts}}
 
 
 def validate(value):

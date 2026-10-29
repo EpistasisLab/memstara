@@ -731,7 +731,14 @@ async def _call_report_default(*args, **kwargs) -> tuple[str, dict[str, Any]]:
         except Exception as exc:
             text, entry = "", {"status": "failed", "error": type(exc).__name__}
         if entry.get("status") == "completed" and text.strip():
-            return text, entry
+            from memstara.evaluation import active_plan
+            from memstara.explanation_length import refine
+
+            async def revise(previous, guidance):
+                prompt = args[1] + "\n\n" + guidance + "\n\nPrevious narrative:\n" + previous
+                return await call_agent(args[0], prompt, **{**kwargs, 'tools': []})
+
+            return await refine(text, entry, (active_plan() or {}).get('explanation_words'), revise)
         if attempt == 0:
             note("Report did not complete; retrying the read-only report once using saved results.")
     return text, entry
@@ -744,6 +751,8 @@ def save_report(run_dir: Path, text: str, entry: dict[str, Any]) -> bool:
               "error": None if complete else entry.get("error", "Explanation agent returned no report text")}
     if entry.get("specialist_explanation"):
         status["specialist_explanation"] = entry["specialist_explanation"]
+    if entry.get('explanation_length'):
+        status['explanation_length'] = entry['explanation_length']
     (run_dir / "report_status.json").write_text(json.dumps(status, indent=2), encoding="utf-8")
     if complete:
         temporary = run_dir / "report.md.tmp"

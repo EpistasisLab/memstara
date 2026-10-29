@@ -77,16 +77,19 @@ def test_no_csv_full_workflow_records_six_handoffs_and_no_empirical_metrics(
         activate(profile)
         assert asyncio.run(run(args,root,invoke=invoke,persist=persist)) == 0
     assert "approximately 375 words" in systems[-1]
-    assert all("Explanation report length:" not in system for system in systems[:-1])
+    assert all("Explanation report length:" not in system for system in systems[:5])
+    assert all("approximately 375 words" in system for system in systems[5:])
     assert json.loads((root/"config.json").read_text())["explanation_words"] == 375
-    assert len(requests)==6
-    assert [len(r['prior_stages']) for r in requests]==list(range(6))
+    assert len(requests)==8  # Six stages plus two bounded narrative revisions.
+    assert [len(r['prior_stages']) for r in requests]==list(range(6)) + [5, 5]
     state=json.loads((root/'pipeline_status.json').read_text())
     assert state['status']=='completed' and state['mode']=='proposal'
     assert state['empirical_evaluation']['metrics'] is None
     calls=json.loads((root/'execution.json').read_text())['calls']
     assert [c['stage'] for c in calls]==list(STAGES)
     assert all(c['computation_status']=='not_executed' for c in calls)
+    assert not calls[-1]['explanation_length']['within_range']
+    assert len(calls[-1]['explanation_length']['attempts']) == 3
     assert ('No external knowledge source' in (root/'report.md').read_text()) == (knowledge_mode=='llm_only')
     assert not (Path(profile['root'])/'derived/matcher_catalog.json').exists()
     assert (root/'proposal_io/loop-0001/report.output.json').exists()

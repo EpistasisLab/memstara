@@ -16,7 +16,7 @@ export default function ExplanationLengthSettings({value = 250, disabled, onChan
       value={Number.isFinite(value) ? value : ''} aria-invalid={!!error} aria-describedby={`${id}-help`}
       onChange={event => onChange(event.target.valueAsNumber)}
       className="mt-2 block w-full max-w-48 rounded-md border border-paper-line bg-paper p-2 text-ink"/>
-    <p id={`${id}-help`} className="mt-2 text-xs text-ink-muted">Default: 250 words. Approximate length of each Explanation report; sentences are not cut off.</p>
+    <p id={`${id}-help`} className="mt-2 text-xs text-ink-muted">Approximate words per report. Default: 250.</p>
     {error && <p className="mt-2 text-sm text-red-600" role="alert">{error}</p>}
   </section>;
 }
