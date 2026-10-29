@@ -110,7 +110,11 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
       <header className="output-detail-header">
         <button type="button" className="output-back" onClick={() => useOutputNavigation.getState().back()}><ArrowLeft size={17} aria-hidden="true"/>Back to {outputViewNames[view]}</button>
         <div><p className="output-eyebrow">{view === 'results' ? 'Interpretation agent output' : view === 'report' ? 'Explanation agent output' : 'Recorded usage'}</p><h3 ref={heading} tabIndex={-1}>{identityLabel(active)}</h3></div>
-        <nav aria-label="Related execution views">{views.filter(next => next !== view).map(next => <button type="button" key={next} disabled={!tileComplete(active, next)} title={tileComplete(active, next) ? undefined : 'Available when complete'} onClick={() => navigate(next, true)}>{outputViewNames[next]}<ArrowRight size={15} aria-hidden="true"/></button>)}</nav>
+        <nav aria-label="Related execution views">{views.filter(next => next !== view).map(next => <button type="button" key={next} disabled={!tileComplete(active, next)} title={tileComplete(active, next) ? undefined : 'Available when complete'} onClick={() => navigate(next, true)}>
+          {next === 'results' && <ArrowLeft size={15} aria-hidden="true"/>}
+          {outputViewNames[next]}
+          {next !== 'results' && <ArrowRight size={15} aria-hidden="true"/>}
+        </button>)}</nav>
       </header>
       {view !== 'agents' && <details className="output-data-details"><summary>Data columns & recorded metrics</summary>{active.results.length ? active.results.map(result => <section key={result.result_id}><h4>Analysis {result.result_id}</h4><ResultMetadata result={result}/></section>) : <p>No model or column record has been saved for this replicate yet.</p>}</details>}
       {view === 'results' && <div className="output-documents">{active.results.length ? active.results.map(result => <article key={result.result_id} aria-label={`Interpretation output for analysis ${result.result_id}`}><header className="output-document-header"><h4>Interpretation · Analysis {result.result_id}</h4></header><InterpretationOutput result={result} includeLimitations={false}/></article>) : <p className="output-empty">No Interpretation output has been saved for this replicate yet.</p>}</div>}
