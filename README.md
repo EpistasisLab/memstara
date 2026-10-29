@@ -2,7 +2,7 @@
 
 A research workspace for generating hypotheses, training predictive models and exploring recorded results.
 
-**First release: [v0.1.0](https://github.com/HyunjunA/memstara/releases/tag/v0.1.0).**
+**First release: [v0.1.0](https://github.com/EpistasisLab/memstara/releases/tag/v0.1.0).**
 See [release notes](CHANGELOG.md) for the included features.
 
 ## Get started
@@ -17,7 +17,7 @@ no separate Python, Node or database setup is needed.
 ### 1. Download
 
 ```bash
-git clone --branch v0.1.0 --depth 1 https://github.com/HyunjunA/memstara.git
+git clone --branch v0.1.0 --depth 1 https://github.com/EpistasisLab/memstara.git
 cd memstara
 cp .env.example .env
 ```
