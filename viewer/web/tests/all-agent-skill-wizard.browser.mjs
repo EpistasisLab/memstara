@@ -31,7 +31,7 @@ if(path==='/control/skills')return r.fulfill({json:{skills:[]}});
    if(path.startsWith('/control/skill-drafts/'))return r.fulfill({json:{status:'ready',content:'# Draft',model:'selected-model',provider:'azure_foundry'}});
    if(path==='/control/playbooks'){
     if(r.request().method()==='GET')return r.fulfill({json:{catalog,playbooks:catalog.map(s=>s.id),stages:roles,references:[],corpus_skill_bindings:bindings}});
-    const q=r.request().postDataJSON();saves.push(q);let title=q.display_name;let suffix=2;while(catalog.some(s=>s.stage===q.stage&&s.title===title))title=`${q.display_name} (${suffix++})`;const skill={...q,id:'user-'+q.stage+'-'+saves.length,title,hash:'hash-'+saves.length,source:'User'};catalog.push(skill);return r.fulfill({json:skill});
+    const q=r.request().postDataJSON();saves.push(q);let title=q.display_name||q.name;let suffix=2;while(catalog.some(s=>s.stage===q.stage&&s.title===title))title=`${q.display_name} (${suffix++})`;const skill={...q,id:'user-'+q.stage+'-'+saves.length,title,hash:'hash-'+saves.length,source:'User'};catalog.push(skill);return r.fulfill({json:skill});
    }
    if(r.request().method()!=='GET')throw Error('Unexpected mutation '+path);
    return r.fulfill({json:{}});
@@ -48,15 +48,9 @@ if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for t
   for(let i=0;i<roles.length;i++) {
    if(mode==='All Combinations'){
     await d.getByRole('navigation',{name:'Agent roles'}).getByRole('button',{name:new RegExp('^'+labels[i])}).click();
-    if(i<3){await d.getByLabel('Search skills').fill('unmatched old search');await d.getByRole('button',{name:/^Create with AI/}).click();}
+    {await d.getByLabel('Search skills').fill('unmatched old search');await d.getByRole('button',{name:/^Create with AI/}).click();}
    }
-   if(i>=3){
-    await expect(d.getByLabel('Custom skill Markdown file')).toHaveCount(0);
-    await expect(d.getByRole('button',{name:'Create a skill with AI',exact:true})).toHaveCount(0);
-    await expect(d.getByRole('button',{name:/^Upload or write/})).toHaveCount(0);
-    if(mode==='Selected Pipelines')await d.getByRole('button',{name:'Next',exact:true}).click();
-    continue;
-   }
+
    if(mode==='Selected Pipelines')await d.getByRole('button',{name:'Create a skill with AI',exact:true}).click();
    else await expect(d.getByRole('button',{name:'Create a skill with AI',exact:true})).toHaveCount(0);
    const assistant=d.locator('.hypothesis-skill-wizard:visible');
@@ -89,6 +83,20 @@ if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for t
     await expect(d.locator('.comb-skill-card strong').filter({hasText:'Clinical 연구 '+roles[i]+' (2)'})).toBeVisible();
     if(saves.at(-1).stage!==roles[i])throw Error('Second skill role mismatch');
    }
+   if(mode==='All Combinations'&&i>=3){
+    await d.getByRole('button',{name:'Upload or write',exact:true}).click();
+    await d.getByLabel('Custom skill Markdown file').setInputFiles({name:roles[i]+'-uploaded.md',mimeType:'text/markdown',buffer:Buffer.from('# Uploaded '+roles[i])});
+    await expect(d.getByText(roles[i]+'-uploaded.md · Uploaded to your skill library.')).toBeVisible();
+    if(saves.at(-1).stage!==roles[i]||saves.at(-1).content!=='# Uploaded '+roles[i])throw Error('Upload role/content mismatch');
+    await d.getByText('Write a custom skill',{exact:true}).click();
+    await d.getByLabel('New skill name').fill(roles[i]+'-written');
+    await d.getByLabel('New skill instructions').fill('# Written '+roles[i]);
+    await d.getByRole('button',{name:'Save and select skill',exact:true}).click();
+    await expect(d.getByText('Saved and selected. Apply the agent settings or finish creating the pipeline.',{exact:true})).toBeVisible();
+    if(saves.at(-1).stage!==roles[i]||saves.at(-1).content!=='# Written '+roles[i])throw Error('Written role/content mismatch');
+    await d.getByRole('button',{name:'Skill library',exact:true}).click();
+    for(const name of [roles[i]+'-uploaded',roles[i]+'-written'])await expect(d.locator('.comb-skill-card').filter({hasText:name}).locator('input[type=checkbox]')).toBeChecked();
+   }
    for(const theme of ['light','dark'])for(const width of [1440,390,320]){
     await page.setViewportSize({width,height:900});await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
     const v=await d.evaluate(el=>{const f=el.querySelector('footer,.comb-footer').getBoundingClientRect();const nav=el.querySelector('.comb-roles');return {overflow:el.scrollWidth>el.clientWidth+2,footer:f.bottom<=innerHeight,navGrid:!nav||innerWidth>640||getComputedStyle(nav).display==='grid'};});
@@ -108,7 +116,7 @@ if(mode==='Selected Pipelines'){await d.getByRole('checkbox',{name:/Use .* for t
    await expect(d.getByLabel('Search skills')).toHaveValue('');
   }
   if(errors.length)throw Error(errors.join('\n'));
-  console.log(JSON.stringify({mode,editableRoles:3,suppliedOnlyRoles:2,generations:calls.length,saves:saves.length,responsiveChecks:30,errors}));
+  console.log(JSON.stringify({mode,editableRoles:5,suppliedOnlyRoles:0,generations:calls.length,saves:saves.length,responsiveChecks:30,errors}));
   await page.unrouteAll({behavior:'ignoreErrors'});await page.close();
  }
 }finally{await browser.close();}

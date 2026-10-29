@@ -22,8 +22,8 @@ export function researchSkillProfile(form:Partial<RunRequest>):Profile {
 }
 export function compatibleResearchSkill(skill:{id:string;stage:string},form:Partial<RunRequest>):boolean {
   const id=skill.id??'';
-  if(skill.stage==='interpreter')return ['shared-shap','shared-lime'].includes(id);
-  if(skill.stage==='report')return explanationSkills.includes(id);
+  if(skill.stage==='interpreter')return id.startsWith('user-interpreter-')||['shared-shap','shared-lime'].includes(id);
+  if(skill.stage==='report')return id.startsWith('user-report-')||explanationSkills.includes(id);
   if(id==='random_features'||id==='heart-failure-all')return false;
   if(skill.stage!=='hypothesis')return true;
   // Match server validation: user-authored hypotheses are selectable with every corpus.

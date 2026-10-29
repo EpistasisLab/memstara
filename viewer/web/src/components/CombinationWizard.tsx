@@ -116,8 +116,8 @@ export default function CombinationWizard(){
      <div hidden={activeRole==='data'&&manualSplit}>
      <div className="comb-skill-methods" role="group" aria-label="How to add skills">
       <button aria-pressed={skillMode==='library'} disabled={busy||uploading} onClick={()=>setSkillMode('library')}>Skill library</button>
-      {activeRole!=='interpreter'&&activeRole!=='report'&&<button aria-pressed={skillMode==='custom'} disabled={busy||uploading} onClick={()=>setSkillMode('custom')}>Upload or write</button>}
-      {activeRole!=='interpreter'&&activeRole!=='report'&&<button aria-pressed={skillMode==='ai'} disabled={busy||uploading} onClick={()=>setSkillMode('ai')}>Create with AI</button>}
+      {<button aria-pressed={skillMode==='custom'} disabled={busy||uploading} onClick={()=>setSkillMode('custom')}>Upload or write</button>}
+      {<button aria-pressed={skillMode==='ai'} disabled={busy||uploading} onClick={()=>setSkillMode('ai')}>Create with AI</button>}
      </div>
      <div hidden={skillMode!=='library'}>
       <details className="comb-skill-picker" key={`picker-${activeRole}`} open><summary><span>Choose {flavorNames[activeRole]} skills</span><strong>{(selected[activeRole]??[]).length} selected</strong></summary>
@@ -129,8 +129,8 @@ export default function CombinationWizard(){
        </div>
       </details>
      </div>
-     {activeRole!=='interpreter'&&activeRole!=='report'&&<div hidden={skillMode!=='custom'}><CustomSkillUpload includeAssistant={false} multiple key={`custom-${activeRole}`} stage={activeRole} disabled={busy||uploading} onBusy={setUploading} onSelect={s=>{setSearch('');toggle(activeRole,s.id,true);}}/></div>}
-     {activeRole!=='interpreter'&&activeRole!=='report'&&<div hidden={skillMode!=='ai'} className="comb-ai-section"><HypothesisSkillWizard key={`${activeRole}:${connection?.id || "defaults"}`} stage={activeRole} expanded={skillMode==='ai'} modelConnectionId={connection?.id} multiple disabled={busy||uploading} onBusy={setUploading} onSelect={s=>{setSearch('');toggle(activeRole,s.id,true);}}/></div>}
+     {<div hidden={skillMode!=='custom'}><CustomSkillUpload includeAssistant={false} multiple key={`custom-${activeRole}`} stage={activeRole} disabled={busy||uploading} onBusy={setUploading} onSelect={s=>{setSearch('');toggle(activeRole,s.id,true);}}/></div>}
+     {<div hidden={skillMode!=='ai'} className="comb-ai-section"><HypothesisSkillWizard key={`${activeRole}:${connection?.id || "defaults"}`} stage={activeRole} expanded={skillMode==='ai'} modelConnectionId={connection?.id} multiple disabled={busy||uploading} onBusy={setUploading} onSelect={s=>{setSearch('');toggle(activeRole,s.id,true);}}/></div>}
      </div>
      {activeRole==='hypothesis'&&!selected.hypothesis?.length&&defaultHypothesis&&<p className="comb-review-hint">Default: {skillLabel(defaultHypothesis.id,defaultHypothesis.title)}. Select Next to use this skill.</p>}
      {(['interpreter','report'] as string[]).includes(activeRole)&&!selected[activeRole]?.length&&effectiveSelected[activeRole]?.length&&<p className="comb-review-hint">Default: {skillLabel(effectiveSelected[activeRole]![0],catalog.find(s=>s.id===effectiveSelected[activeRole]![0])?.title)}. Select Next to continue.</p>}

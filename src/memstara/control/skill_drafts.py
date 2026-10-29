@@ -19,10 +19,8 @@ def validate(body: dict) -> dict:
     stage = body.get('stage', 'hypothesis')
     if stage == 'explanation':
         stage = 'report'
-    if stage in ('interpreter', 'report'):
-        raise ValueError('Interpretation and Explanation use the supplied skills from the library.')
-    if not isinstance(stage, str) or stage not in ('hypothesis', 'data', 'ml'):
-        raise ValueError('Choose a Hypothesis, Data or ML agent role.')
+    if not isinstance(stage, str) or stage not in ('hypothesis', 'data', 'ml', 'interpreter', 'report'):
+        raise ValueError('Choose a Hypothesis, Data, ML, Interpretation or Explanation agent role.')
     data = {'stage': stage}
     from memstara.skill_bases import CHOICES, validate as validate_base
     if stage in CHOICES:

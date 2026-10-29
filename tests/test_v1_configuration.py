@@ -302,10 +302,6 @@ def test_custom_markdown_respects_configurable_and_supplied_only_roles(stage, tm
     monkeypatch.delenv('MEMSTARA_USER_SKILLS_DIR', raising=False)
     monkeypatch.setenv('MEMSTARA_OUTPUT_DIR', str(tmp_path))
     instructions = f'# Custom {stage}\nExplicit user instructions for the {stage} role.'
-    if stage in ('interpreter', 'report'):
-        with pytest.raises(ValueError, match='supplied skills'):
-            catalog.register({'stage': stage, 'name': 'uploaded-skill', 'content': instructions})
-        return
     item = catalog.register({'stage': stage, 'name': 'uploaded-skill', 'content': instructions})
     assert catalog.resolve(item['id'])['content'] == instructions
     catalog.validate_selection({f'playbook_{stage}': item['id']})

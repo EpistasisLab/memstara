@@ -75,12 +75,15 @@ def test_missing_pinned_connection_never_falls_back(store, monkeypatch):
 
 
 @pytest.mark.parametrize('stage', ['interpreter', 'report', 'explanation'])
-def test_supplied_only_roles_rejected_before_model_lookup(store, monkeypatch, stage):
-    lookup = Mock(side_effect=AssertionError('Must not look up a model'))
-    monkeypatch.setattr(drafts, 'models', lookup)
-    with pytest.raises(ValueError, match='supplied skills'):
-        drafts.start(body(stage))
-    lookup.assert_not_called()
+def test_final_roles_use_checked_model(store, monkeypatch, stage):
+    connection = save()
+    thread = Mock()
+    monkeypatch.setattr(drafts.threading, 'Thread', thread)
+    drafts.start(body(stage, model_connection_id=connection['id']))
+    request = thread.call_args.kwargs['args'][1]
+    assert request['stage'] == ('report' if stage == 'explanation' else stage)
+    assert request['model_connection_id'] == connection['id']
+    assert request['model'] == 'selected-deployment'
 
 
 def test_endpoint_uses_explicit_connection_and_reports_setup_errors(store):

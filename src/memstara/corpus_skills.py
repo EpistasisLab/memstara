@@ -99,9 +99,9 @@ def validate_hypotheses(books, profile=None, *, knowledge_mode='okf'):
                              'Review Knowledge sources and select a matching skill.')
     # Retain historical input validation; the new-execution catalog gate rejects retired choices.
     reports = set(EXPLANATION_SKILLS) | {'shared-addiction', 'shared-hiv'}
-    from memstara.control.catalog import canonical_name
+    from memstara.control.catalog import canonical_name, registered_user_skill
     for name in books.get('report', []):
-        if canonical_name(name) not in reports:
+        if canonical_name(name) not in reports and not registered_user_skill(name, 'report'):
             raise ValueError(f'{name}: select a supplied Explanation skill from the library.')
 
 

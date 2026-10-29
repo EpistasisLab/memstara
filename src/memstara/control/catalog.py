@@ -171,8 +171,6 @@ def _read_catalog(*, include_hidden: bool = False) -> list[dict]:
             raise ValueError('Invalid saved user skill record; restore the original '
                              'record or register a new version') from None
         item['stage_label'] = agent_label(item['stage'])
-        if not include_hidden and item['stage'] in FINAL_STAGE_SKILLS:
-            continue
         items.append(item)
     return items
 
@@ -220,8 +218,6 @@ def register(body: dict) -> dict:
     stage, name, content = body.get('stage'), body.get('name', ''), body.get('content', '')
     if stage not in ROLES:
         raise ValueError('Choose a Hypothesis, ML, Interpreter or Explanation agent skill')
-    if stage in FINAL_STAGE_SKILLS:
-        raise ValueError('Interpretation and Explanation use the supplied skills from the library.')
     display_name = body.get('display_name')
     if display_name is not None:
         if not isinstance(display_name, str) or any(unicodedata.category(c) in ('Cc', 'Cs') for c in display_name):
@@ -303,17 +299,28 @@ def _register_named(item, requested, directory):
         return _publish(item, directory)
 
 
+def registered_user_skill(name: str, stage: str) -> bool:
+    """Accept only a persisted custom skill belonging to the requested agent."""
+    name = canonical_name(name)
+    if not name.startswith(f'user-{stage}-'):
+        return False
+    item = resolve(name)
+    return bool(item and item.get('stage') == stage)
+
+
 def ensure_explanation_enabled(names) -> None:
     for name in names:
-        if name and canonical_name(name) not in FINAL_STAGE_SKILLS['report']:
+        if (name and canonical_name(name) not in FINAL_STAGE_SKILLS['report']
+                and not registered_user_skill(name, 'report')):
             raise ValueError(f'{name}: this Explanation skill is disabled for new execution. '
-                             'Select an supplied Explanation skill.')
+                             'Select a supplied or saved custom Explanation skill.')
 
 
 def ensure_interpretation_enabled(names) -> None:
     for name in names:
-        if name and canonical_name(name) not in FINAL_STAGE_SKILLS['interpreter']:
-            raise ValueError(f'{name}: select an supplied SHAP or LIME Interpretation skill.')
+        if (name and canonical_name(name) not in FINAL_STAGE_SKILLS['interpreter']
+                and not registered_user_skill(name, 'interpreter')):
+            raise ValueError(f'{name}: select supplied SHAP or LIME, or a saved custom Interpretation skill.')
 
 
 def ensure_hypothesis_enabled(names) -> None:

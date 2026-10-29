@@ -126,7 +126,7 @@ def test_http_routes_accept_and_poll_without_pipeline_mutation(monkeypatch):
     assert sent[-1][0] == 404
 
 
-@pytest.mark.parametrize('stage', ['hypothesis', 'data', 'ml'])
+@pytest.mark.parametrize('stage', ['hypothesis', 'data', 'ml', 'interpreter', 'report'])
 def test_role_survives_validation(stage):
     assert drafts.validate(body() | {'stage': stage})['stage'] == stage
 
@@ -134,8 +134,7 @@ def test_role_survives_validation(stage):
 def test_explanation_alias_and_role_boundaries():
     from memstara.control.skill_draft_worker import system_prompt
     for stage in ('interpreter', 'report', 'explanation'):
-        with pytest.raises(ValueError, match='supplied skills'):
-            drafts.validate(body() | {'stage': stage})
+        assert drafts.validate(body() | {'stage': stage})['stage'] == ('report' if stage == 'explanation' else stage)
     assert 'Avoid speculation, causal claims, recommendations' in system_prompt('interpreter')
     assert 'further validation' in system_prompt('report')
     assert 'Do not clean, impute' in system_prompt('data')
