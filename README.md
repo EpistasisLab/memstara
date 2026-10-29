@@ -91,7 +91,9 @@ Installation settings, such as the web port, remain in `.env`.
 ```
 
 Open **http://127.0.0.1:5173/**, or the URL printed by the script if you changed
-`MEMSTARA_WEB_PORT` in `.env`. The first build may take several minutes.
+`MEMSTARA_WEB_PORT` in `.env`. If that port is occupied by another app, the script
+chooses an available port and saves it in `.env`; use the printed URL.
+The first build may take several minutes.
 After the ready message, you can close the terminal.
 
 ## Configure and run a pipeline

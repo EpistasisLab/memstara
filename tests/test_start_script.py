@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def launcher(tmp_path, *, env=True):
     shutil.copy(ROOT / 'start.sh', tmp_path / 'start.sh')
     (tmp_path / 'deployment').mkdir()
-    for name in ('build-service.sh', 'mount_directories.py'):
+    for name in ('build-service.sh', 'mount_directories.py', 'select-web-port.sh'):
         shutil.copy(ROOT / 'deployment' / name, tmp_path / 'deployment' / name)
     (tmp_path / '.env.example').write_text('OPENAI_API_KEY=REPLACE_ME\n')
     if env:
@@ -23,9 +23,21 @@ def launcher(tmp_path, *, env=True):
     docker.write_text('''#!/bin/sh
 printf '%s\\n' "$*" >> "$CALLS"
 case "$*" in
+  *"web_port.py requested") echo 15999 ;;
+  "compose ps --status running -q web") echo this-project-web ;;
   "info") [ "$FAIL" != daemon ] ;;
   "compose run "*) [ "$FAIL" != preflight ] ;;
-  "compose up "*) [ "$FAIL" != startup ] ;;
+  "compose up "*)
+    if [ "$FAIL" = port_race ] && [ ! -f "$CALLS.race" ]; then
+      touch "$CALLS.race"
+      echo 'bind: address already in use' >&2
+      exit 1
+    fi
+    if [ "$FAIL" = ports_exhausted ]; then
+      echo 'port is already allocated' >&2
+      exit 1
+    fi
+    [ "$FAIL" != startup ] ;;
   "compose exec "*) [ "$FAIL" != readiness ] ;;
   "compose port web 80") echo '127.0.0.1:15999' ;;
   *) exit 0 ;;
@@ -88,7 +100,7 @@ def test_readiness_failure_is_not_reported_as_success(tmp_path):
     assert 'Memstara is ready' not in result.stdout
     calls = (tmp_path / 'calls').read_text()
     assert calls.count('compose exec') == 30
-    assert 'compose port' not in calls
+    assert calls.count('compose port') == 1  # Existing publisher check, not a ready announcement.
 
 
 def test_preflight_failure_does_not_build_or_restart_application(tmp_path):
@@ -102,3 +114,14 @@ def test_preflight_failure_does_not_build_or_restart_application(tmp_path):
     assert '--check' in calls
     assert 'compose up' not in calls
     assert 'compose exec' not in calls
+
+
+@pytest.mark.parametrize('failure,attempts,success', [('port_race', 2, True), ('ports_exhausted', 3, False)])
+def test_late_port_collision_rechecks_with_bounded_retries(tmp_path, failure, attempts, success):
+    environment = launcher(tmp_path)
+    environment['FAIL'] = failure
+    result = run(tmp_path, environment)
+    calls = (tmp_path / 'calls').read_text()
+    assert calls.count('compose up -d --no-build --force-recreate') == attempts
+    assert (result.returncode == 0) == success
+    assert ('Memstara is ready' in result.stdout) == success

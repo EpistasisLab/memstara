@@ -35,6 +35,13 @@ if ! docker run --rm --user "$(id -u):$(id -g)" --mount "type=bind,source=$(pwd)
     echo "Could not prepare local installation settings. Do not delete existing data volumes." >&2
     exit 1
 fi
+# Installation settings come from .env, including an automatically selected port.
+unset MEMSTARA_WEB_PORT
+preparer_image=$(cat "$bootstrap_image")
+if ! sh deployment/select-web-port.sh "$preparer_image"; then
+    echo "Could not select a web port. Existing application services were not restarted." >&2
+    exit 1
+fi
 rm -f "$bootstrap_image"
 
 # Create bind directories on the host, not through Docker Desktop's file-sharing VM.
@@ -83,11 +90,27 @@ for service in control initialize api web; do
         exit 1
     fi
 done
-if ! docker compose up -d --no-build --force-recreate; then
+startup_log=$(mktemp)
+trap 'rm -f "$mount_config" "$mount_paths" "$startup_log"' EXIT HUP INT TERM
+startup_attempt=0
+while :; do
+    if docker compose up -d --no-build --force-recreate >"$startup_log" 2>&1; then
+        cat "$startup_log"
+        break
+    fi
+    cat "$startup_log" >&2
+    startup_attempt=$((startup_attempt + 1))
+    # A different process can claim the tested port while images are building.
+    if [ "$startup_attempt" -lt 3 ] && grep -Eiq \
+        'address already in use|port is already allocated|port.*already.*use' "$startup_log"; then
+        if sh deployment/select-web-port.sh "$preparer_image"; then
+            continue
+        fi
+    fi
     echo "Startup failed. Correct the reported error, then run ./start.sh again." >&2
     echo "Inspect: docker compose logs --tail=80 configure initialize control api web" >&2
     exit 1
-fi
+done
 
 # Check both backends through the same proxy the browser uses, not just containers.
 echo "Checking the web application and backend connections..."
