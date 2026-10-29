@@ -2,7 +2,7 @@ import type {RunRequest} from '../store/control';
 
 type Profile={label:string;hypothesis:string[];report:string[]};
 type Bindings={profiles:Record<string,Profile>;default:string;research:Record<string,string>};
-const explanationSkills=['shared-addiction','shared-hiv','shared-heart-failure-cardiovascular','shared-heart-failure-comorbidity'];
+const explanationSkills=['shared-heart-failure-cardiovascular','shared-heart-failure-comorbidity'];
 const general:Profile={label:'General research',hypothesis:['hypothesis_general'],report:explanationSkills};
 let bindings:Bindings={profiles:{general},default:'legacy',research:{}};
 
@@ -16,7 +16,9 @@ export function setResearchCorpusProfile(id:string,profile:string):void {
 export function researchSkillProfile(form:Partial<RunRequest>):Profile {
   const key=form.knowledge_mode==='llm_only'?'general':form.research_input_id
     ?bindings.research[form.research_input_id]??'general':bindings.default;
-  return bindings.profiles[key]??general;
+  const profile=bindings.profiles[key]??general;
+  const reports=profile.report.filter(id=>explanationSkills.includes(id));
+  return {...profile,report:reports.length?reports:explanationSkills};
 }
 export function compatibleResearchSkill(skill:{id:string;stage:string},form:Partial<RunRequest>):boolean {
   const id=skill.id??'';

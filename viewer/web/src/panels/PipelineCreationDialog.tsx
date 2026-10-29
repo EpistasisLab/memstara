@@ -49,7 +49,7 @@ export function CreationWizard() {
       playbook_hypothesis: form.playbook_hypothesis.split(',')[0],
       playbook_data: form.playbook_data.split(',')[0],
       playbook_ml: form.playbook_ml.split(',')[0],
-      playbook_explanation: "shared-addiction",
+      playbook_explanation: "shared-heart-failure-cardiovascular",
       playbook_interpreter: "shared-shap" };
   });
   const sources = useControl(s => s.skills);

@@ -1,5 +1,5 @@
 import {createContext, useEffect, useRef, useState} from 'react';
-import {Check, ChevronDown, Eye, EyeOff, LoaderCircle, Cpu} from 'lucide-react';
+import {Check, Eye, EyeOff, LoaderCircle, Cpu} from 'lucide-react';
 import {stageModelRows} from '../lib/stageModels';
 import './experiment-model-settings.css';
 
@@ -107,21 +107,20 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
     return () => controller.abort();
   }, [catalogAttempt]);
   const providerInfo = catalog?.providers.find(row => row.id === form.provider);
-  const selected = providerInfo?.models.find(row => row.id === selection);
   function defaults(nextCaps: Capabilities) {
     return {max_tokens: catalog!.controls.max_tokens.default,
       ...(nextCaps.supports_temperature ? {temperature: nextCaps.default_temperature ?? catalog!.controls.temperature.default ?? undefined} : {}),
       ...(nextCaps.supports_effort ? {effort: nextCaps.default_effort ?? undefined} : {})};
   }
   useEffect(() => {
-    if (!catalog || caps || selected || selection.startsWith('provider:') || !form.model.trim()) return;
+    if (!catalog || caps || selection.startsWith('provider:') || !form.model.trim()) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       void fetch(`/control/model-capabilities?provider=${encodeURIComponent(form.provider)}&model=${encodeURIComponent(form.model.trim())}`,
         {signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)])})
         .then(async response => {if (!response.ok) throw Error(); return response.json();})
         .then(body => {if (!controller.signal.aborted) {setCaps(body.capabilities); setSettings(defaults(body.capabilities));}})
-        .catch(() => {if (!controller.signal.aborted) setError('Could not load model settings. Select a Motoro model or enter the model ID again.');});
+        .catch(() => {if (!controller.signal.aborted) setError('Could not load model settings. Enter the deployment name again to retry.');});
     }, 250);
     return () => {clearTimeout(timer); controller.abort();};
   }, [catalog, form.provider, form.model, selection, caps]);
@@ -132,8 +131,7 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
     setDefaultRole(profile.role); setUseServerKey(profile.credentials_available);
     setForm({...emptyForm, provider: profile.provider, model: profile.model, api_base: profile.api_base,
       region: profile.region, auth_type: profile.auth_type || 'api_key'});
-    const match = catalog?.providers.find(row => row.id === profile.provider)?.models.find(row => row.model === profile.model);
-    setSelection(match?.id || 'manual'); setCaps(profile.capabilities);
+    setSelection('manual'); setCaps(profile.capabilities);
     setSettings({...defaults(profile.capabilities),
       ...(profile.settings.max_tokens !== undefined ? {max_tokens: profile.settings.max_tokens} : {}),
       ...(profile.capabilities.supports_temperature && profile.settings.temperature !== undefined ? {temperature: profile.settings.temperature} : {}),
@@ -169,7 +167,7 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
       if (!response.ok) throw Error(body.error || 'Model list unavailable.');
       if (listingRequest.current !== controller) return;
       setListed(body.models);
-      setListMessage(`${body.models.length} models loaded${body.truncated ? ' (partial list)' : ''}. Choose one in the Model menu. Check & use model confirms compatibility.`);
+      setListMessage(`${body.models.length} models loaded${body.truncated ? ' (partial list)' : ''}. Choose one in the deployment menu. Check & use model confirms compatibility.`);
     } catch (reason) {
       if (listingRequest.current === controller && !controller.signal.aborted) setListMessage(reason instanceof Error ? reason.message : 'Model list unavailable.');
     } finally {if (listingRequest.current === controller) {setListing(false); listingRequest.current = null;}}
@@ -188,7 +186,7 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
     onValidityChange(next === 'current' ? defaultsPending ? 'Loading current model…' : currentAllowed === false ? providerNotice : '' : 'Enter your model connection and select Check & use model.');
   }
   function field(key: keyof typeof emptyForm, value: string) {
-    invalidate(); stopListing(); if (['api_base', 'region', 'auth_type'].includes(key)) setUseServerKey(false); if (key === 'model' && !selected) setCaps(null); setForm(previous => ({...previous, [key]: value}));
+    invalidate(); stopListing(); if (['api_base', 'region', 'auth_type'].includes(key)) setUseServerKey(false); if (key === 'model') {setSelection('manual'); setCaps(null);} setForm(previous => ({...previous, [key]: value}));
   }
   const configuredProfile = configured.find(profile => profile.role === defaultRole);
   const canReuseCredentials = !!configuredProfile?.credentials_available && form.provider === configuredProfile.provider && form.api_base.trim() === configuredProfile.api_base && form.region.trim() === configuredProfile.region && (form.provider !== 'bedrock' || form.auth_type === configuredProfile.auth_type);
@@ -203,7 +201,7 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
     const controller = new AbortController(); request.current = controller;
     setBusy(true); setError('');
     onValidityChange('Checking your model connection…');
-    const connectionPayload = {...payload(), settings, ...(selected ? {catalog_id: selected.id} : {})};
+    const connectionPayload = {...payload(), settings};
     try {
       const response = await fetch('/control/model-connections/check', {method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(connectionPayload), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(55000)])});
@@ -266,12 +264,9 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
       </div>}
       <div className="experiment-model-grid">
         <label htmlFor="experiment-model-provider">Provider<select id="experiment-model-provider" value="azure_foundry" disabled><option value="azure_foundry">Azure Foundry</option></select><small>Azure Foundry is fixed for this application.</small></label>
-        <label htmlFor="experiment-model-choice">{providerInfo?.custom_model_name ? 'Base model' : 'Model'}<div className="experiment-model-select"><select id="experiment-model-choice" aria-describedby="experiment-base-model-help" value={selection} onChange={e => selectModel(e.target.value)}>
-          <option value="">Choose a model</option><optgroup label="Motoro catalog">{providerInfo?.models.map(row => <option key={row.id} value={row.id}>{row.label}</option>)}</optgroup>
-          {listed.length > 0 && <optgroup label="From your provider">{listed.map(row => <option key={row.model} value={`provider:${row.model}`}>{row.label}</option>)}</optgroup>}
-          <option value="manual">Not listed — enter deployment name</option></select><ChevronDown size={16} aria-hidden="true"/></div><small id="experiment-base-model-help">Select the model behind your Azure deployment. This determines which settings are available.<span className="experiment-field-example">Example: <code>GPT-4.1</code>. This catalog is not your Azure deployment list.</span></small></label>
+
       </div>
-      {(providerInfo?.custom_model_name || selection === 'manual') && <label htmlFor="experiment-model-id">{form.provider === 'azure_foundry' ? 'Azure deployment name' : 'Model ID'}<input id="experiment-model-id" aria-describedby="experiment-deployment-help" value={form.model} autoComplete="off" spellCheck={false} placeholder={form.provider === 'azure_foundry' ? 'Your Azure deployment name' : 'Exact model ID from your provider'} onChange={e => field('model', e.target.value)}/><small id="experiment-deployment-help">Copy the exact deployment name from Azure Foundry. This is the name used for requests.<span className="experiment-field-example">Example: <code>research-model</code> could be your deployment of GPT-4.1. Use your own deployment name; it may differ from the base model.</span></small></label>}
+      {(providerInfo?.custom_model_name || selection === 'manual') && <label htmlFor="experiment-model-id">{form.provider === 'azure_foundry' ? 'Azure deployment name' : 'Model ID'}<input id="experiment-model-id" aria-describedby="experiment-deployment-help" value={form.model} autoComplete="off" spellCheck={false} placeholder={form.provider === 'azure_foundry' ? 'Your Azure deployment name' : 'Exact model ID from your provider'} onChange={e => field('model', e.target.value)}/><small id="experiment-deployment-help">Copy the exact deployment name from Azure Foundry. This is the name used for requests.<span className="experiment-field-example">Example: <code>research-model</code> could be your deployment of GPT-4.1. Use your own deployment name; use the exact name shown in Azure.</span></small></label>}
       {!catalog && <p className="experiment-model-notice" role="status">{catalogError || 'Loading model options from Motoro…'}{catalogError && <button type="button" onClick={() => setCatalogAttempt(value => value + 1)}>Retry</button>}</p>}
 
       {hasEndpoint && <label htmlFor="experiment-model-endpoint">Endpoint URL<input id="experiment-model-endpoint" aria-describedby="experiment-endpoint-help" type="url" value={form.api_base} placeholder={form.provider === 'azure_foundry' ? 'https://your-resource.services.ai.azure.com' : 'http://host.docker.internal:8000/v1'} onChange={e => field('api_base', e.target.value)}/><small id="experiment-endpoint-help">Paste the endpoint from the Azure resource that hosts your deployment.<span className="experiment-field-example">Example: <code>https://your-resource.services.ai.azure.com</code>. Copy your actual endpoint, including any required path.</span></small></label>}
@@ -292,6 +287,7 @@ export default function ExperimentModelSettings({onChange, onValidityChange}: {
         <button type="button" disabled={listing || (hasEndpoint && !form.api_base.trim()) || (!reuseCredentials && form.provider !== 'local' && !form.api_key.trim())} onClick={() => void loadModels()}>{listing ? 'Loading models…' : 'Load provider models'}</button>
         <p role="status">{listMessage || 'Optional — use your connection to load the provider’s model list.'}</p>
       </div>}
+      {listed.length > 0 && <label htmlFor="experiment-provider-model">Available deployments<select id="experiment-provider-model" value={selection} onChange={e => selectModel(e.target.value)}><option value="manual">Enter a deployment name</option>{listed.map(row => <option key={row.model} value={`provider:${row.model}`}>{row.label}</option>)}</select></label>}
       {caps && catalog && <details className="experiment-model-advanced"><summary>Advanced model settings <span>Optional · settings from Motoro</span></summary>
         <div className="experiment-model-advanced-body">
           <p>These settings apply to every agent in this experiment. Provider limits may be lower than Motoro’s allowed range.</p>

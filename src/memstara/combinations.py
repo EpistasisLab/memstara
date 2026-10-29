@@ -4,7 +4,7 @@ import secrets
 
 STAGES = ('hypothesis', 'data', 'ml', 'interpreter', 'report')
 DEFAULT_SKILLS = dict(zip(STAGES, ('hypothesis_general', 'data_manual_split',
-    'ml_default_logistic_regression', 'shared-shap', 'shared-addiction'), strict=True))
+    'ml_default_logistic_regression', 'shared-shap', 'shared-heart-failure-cardiovascular'), strict=True))
 
 
 def execution_label(position, plan=None):

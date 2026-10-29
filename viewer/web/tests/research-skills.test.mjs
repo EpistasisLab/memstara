@@ -13,12 +13,12 @@ for(const id of ['hiv','heart'])test(`registered ${id} hides Random even when an
  for(const skill of [...other,'hypothesis_general'])assert(!compatibleResearchSkill({stage:'hypothesis',id:skill},form));
  assert(compatibleResearchSkill({stage:'interpreter',id:'shared-shap'},form));
 });
-test('source switch maps hypotheses while preserving the explicitly selected Explanation skill',()=>{
+test('source switch maps hypotheses while replacing retired Explanation choices',()=>{
  const current={research_input_id:'hiv',playbook_hypothesis:'addiction-psychiatric',playbook_explanation:'shared-hiv',combination_skills:{hypothesis:['addiction-psychiatric','random_features'],data:['data_training_heavy'],ml:['ml_xgboost'],interpreter:['shared-shap'],report:['shared-hiv']}};
  const reset=resetResearchSkills(current,{research_input_id:'heart'});
  assert.deepEqual(reset.combination_skills.hypothesis,corpusSkillBindings.profiles.heart_failure.hypothesis.slice(0,1));
- assert.deepEqual(reset.combination_skills.report,['shared-hiv']);
- assert.equal(reset.playbook_explanation,'shared-hiv');
+ assert.deepEqual(reset.combination_skills.report,['shared-heart-failure-cardiovascular']);
+ assert.equal(reset.playbook_explanation,'shared-heart-failure-cardiovascular');
  assert.deepEqual(reset.combination_skills.ml,['ml_xgboost']);
  assert.deepEqual(reset.combination_skills.data,['data_training_heavy']);
  assert.deepEqual(reset.combination_skills.interpreter,['shared-shap']);
@@ -32,7 +32,8 @@ test('selecting the same corpus preserves the specialty and removes Random witho
  const current={research_input_id:'hiv',playbook_hypothesis:'addiction-psychiatric',playbook_explanation:'shared-hiv',combination_skills:{hypothesis:['addiction-psychiatric','random_features'],report:['shared-hiv']}};
  const reset=resetResearchSkills(current,{research_input_id:'hiv'});
  assert.equal(reset.playbook_hypothesis,'addiction-psychiatric');
- assert.deepEqual(reset.combination_skills,{hypothesis:['addiction-psychiatric'],report:['shared-hiv']});
+ assert.deepEqual(reset.combination_skills,{hypothesis:['addiction-psychiatric'],report:['shared-heart-failure-cardiovascular']});
+ assert.deepEqual(current.combination_skills.report,['shared-hiv']);
  reset.combination_skills.hypothesis.push('changed');
  assert.equal(current.combination_skills.hypothesis.length,2);
 });

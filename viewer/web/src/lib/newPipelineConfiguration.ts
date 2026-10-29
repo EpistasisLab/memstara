@@ -28,7 +28,7 @@ export function newPipelineConfiguration(configuration: RunRequest): RunRequest 
   if (['shared-ml-results','report_clinical_explanations','report_clinician_summary',
     'report_evidence','report_loop_learning','report_ml_results','report_research_priority',
     'report_team_briefing','report_validation_audit'].includes(draft.playbook_explanation)) {
-    draft.playbook_explanation = 'shared-addiction';
+    draft.playbook_explanation = 'shared-heart-failure-cardiovascular';
   }
   if (!compatibleResearchSkill({id:draft.playbook_hypothesis,stage:'hypothesis'},draft)) draft.playbook_hypothesis=researchSkillProfile(draft).hypothesis[0];
   if (!compatibleResearchSkill({id:draft.playbook_explanation,stage:'report'},draft)) draft.playbook_explanation=researchSkillProfile(draft).report[0];

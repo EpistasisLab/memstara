@@ -44,9 +44,9 @@ test('new drafts avoid hidden Interpretation choices without editing saved ones'
 
 test('new drafts replace disabled Explanation choices without editing saved ones',()=>{
  const saved={playbook_explanation:'shared-ml-results'};
- assert.equal(newPipelineConfiguration(saved).playbook_explanation,'shared-addiction');
+ assert.equal(newPipelineConfiguration(saved).playbook_explanation,'shared-heart-failure-cardiovascular');
  assert.equal(saved.playbook_explanation,'shared-ml-results');
- assert.equal(newPipelineConfiguration({playbook_explanation:'shared-hiv'}).playbook_explanation,'shared-hiv');
+ assert.equal(newPipelineConfiguration({playbook_explanation:'shared-hiv'}).playbook_explanation,'shared-heart-failure-cardiovascular');
 });
 
 test('new drafts avoid disabled hypothesis choices and preserve saved selections',()=>{
@@ -61,7 +61,7 @@ test('new study drafts replace incompatible hypothesis skills and preserve suppl
  const saved={research_input_id:'heart-failure',playbook_hypothesis:'addiction-psychiatric',playbook_explanation:'shared-hiv'};
  const draft=newPipelineConfiguration(saved);
  assert.equal(draft.playbook_hypothesis,'hypothesis_general');
- assert.equal(draft.playbook_explanation,'shared-hiv');
+ assert.equal(draft.playbook_explanation,'shared-heart-failure-cardiovascular');
  assert.equal(saved.playbook_hypothesis,'addiction-psychiatric');
  assert.equal(saved.playbook_explanation,'shared-hiv');
 });

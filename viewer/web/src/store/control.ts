@@ -117,7 +117,7 @@ export const DEFAULT_REQUEST: RunRequest = {
   playbook_data: "",
   playbook_ml: "ml_logistic_regression",
   playbook_interpreter: "shared-shap",
-  playbook_explanation: "shared-addiction",
+  playbook_explanation: "shared-heart-failure-cardiovascular",
 };
 
 interface ControlState {

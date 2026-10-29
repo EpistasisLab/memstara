@@ -45,7 +45,7 @@ try {for(const width of [320,390,768,1280]) {
  await expect(dialog.getByRole('button',{name:'Choose skills',exact:true})).toBeEnabled();
  await settings.getByRole('radio',{name:/Set up a model/}).check();
  await expect(settings.locator('#experiment-model-provider')).toHaveValue('azure_foundry');
- await expect(settings.locator('#experiment-model-choice')).toHaveValue('openai:gpt-4o');
+ await expect(settings.locator('#experiment-model-choice')).toHaveCount(0);
  await expect(settings.getByRole('checkbox',{name:/Use configured credentials/})).toBeChecked();
  await expect(settings.locator('#experiment-api-key')).toHaveCount(0);
  await settings.locator('.experiment-model-advanced summary').click();

@@ -14,7 +14,7 @@ try {for(const width of [320,390,768,1280]) {
  page.on('pageerror',error=>errors.push(error.message));
  await page.route('**/control/**',async route=>{
   if(route.request().url().endsWith('/model-catalog'))return route.fulfill({json:catalog});
-  if(route.request().url().includes('/model-capabilities?'))return route.fulfill({json:{capabilities:temperature,source:'motoro'}});
+  if(route.request().url().includes('/model-capabilities?'))return route.fulfill({json:{capabilities:route.request().url().includes('reasoning-deployment')?reasoning:route.request().url().includes('opus-deployment')?fullReasoning:temperature,source:'motoro'}});
   if(route.request().url().endsWith('/model-connections/models'))return route.fulfill({json:{models:[{model:'account-model',label:'account-model',capabilities:{supports_temperature:null,supports_effort:true,effort_levels:null,default_effort:null}}],truncated:false}});
   if(route.request().url().endsWith('/model-connections/check')){
    const data=route.request().postDataJSON();submitted.push(data);
@@ -35,24 +35,26 @@ try {for(const width of [320,390,768,1280]) {
  await expect(settings.locator('#experiment-model-provider')).toHaveValue('azure_foundry');
  assert.deepEqual(await settings.locator('#experiment-model-provider option').evaluateAll(nodes=>nodes.map(n=>n.value)),['azure_foundry']);
  await expect(settings.locator('#experiment-model-region')).toHaveCount(0);
- await expect(settings).toContainText('Base model');
+ await expect(settings.locator('#experiment-model-choice')).toHaveCount(0);
  await expect(settings).toContainText('Azure deployment name');
- await expect(settings.locator('#experiment-base-model-help')).toContainText('not your Azure deployment list');
  await expect(settings.locator('#experiment-deployment-help')).toContainText('research-model');
  await expect(settings.locator('#experiment-endpoint-help')).toContainText('https://your-resource.services.ai.azure.com');
  await expect(settings.locator('#experiment-model-id')).toHaveValue(''); // Examples are not submitted as values.
  await settings.locator('#experiment-model-endpoint').fill('https://clinical.example');
  await settings.locator('#experiment-model-id').fill('chosen-model');
- await settings.locator('#experiment-model-choice').selectOption('openai:gpt-5');
+ await settings.locator('#experiment-model-id').fill('reasoning-deployment');
+ await expect(settings.locator('.experiment-model-advanced')).toBeVisible();
  await expect(settings.locator('.experiment-model-advanced')).not.toHaveAttribute('open','');
  if(!await settings.locator('.experiment-model-advanced').evaluate(e=>e.open))await settings.locator('.experiment-model-advanced summary').click();
  assert.deepEqual(await settings.locator('#experiment-effort option').evaluateAll(nodes=>nodes.map(n=>n.value)),['','low','medium','high']);
  await expect(settings.locator('#experiment-temperature')).toHaveCount(0);
  await settings.locator('#experiment-effort').selectOption('high');
- await settings.locator('#experiment-model-choice').selectOption('anthropic:claude-opus-5');
+ await settings.locator('#experiment-model-id').fill('opus-deployment');
+ await expect(settings.locator('.experiment-model-advanced')).toBeVisible();
  if(!await settings.locator('.experiment-model-advanced').evaluate(e=>e.open))await settings.locator('.experiment-model-advanced summary').click();
  assert.deepEqual(await settings.locator('#experiment-effort option').evaluateAll(nodes=>nodes.map(n=>n.value)),['','low','medium','high','xhigh','max']);
- await settings.locator('#experiment-model-choice').selectOption('openai:gpt-4o');
+ await settings.locator('#experiment-model-id').fill('chosen-model');
+ await expect(settings.locator('.experiment-model-advanced')).toBeVisible();
  if(!await settings.locator('.experiment-model-advanced').evaluate(e=>e.open))await settings.locator('.experiment-model-advanced summary').click();
  await expect(settings.locator('#experiment-effort')).toHaveCount(0);
  await expect(settings.locator('#experiment-temperature')).toHaveValue('0.7');
@@ -62,7 +64,6 @@ try {for(const width of [320,390,768,1280]) {
  await settings.getByRole('button',{name:'Reset to Motoro defaults'}).click();
  await expect(settings.locator('#experiment-temperature')).toHaveValue('0.7');
  await expect(settings.getByRole('button',{name:'Load provider models'})).toHaveCount(0);
- await settings.locator('#experiment-model-choice').selectOption('manual');
  await settings.locator('#experiment-model-id').fill('chosen-model');
  await expect(settings.locator('#experiment-temperature')).toHaveCount(1);
  if(!await settings.locator('.experiment-model-advanced').evaluate(e=>e.open))await settings.locator('.experiment-model-advanced summary').click();

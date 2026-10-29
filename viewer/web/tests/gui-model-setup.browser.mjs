@@ -12,6 +12,7 @@ try {for(const width of [390,1280]) {
     const path=new URL(route.request().url()).pathname;
     if(path==='/control/model-defaults')return route.fulfill({json:{profiles:[],current_allowed:!!saved&&!unavailable,setup_required:!saved||unavailable,...(unavailable?{current_error:'Saved current model is unavailable. Set up and check a model again.'}:saved?{source:'saved_connection',connection:saved}:{})}});
     if(path==='/control/model-catalog')return route.fulfill({json:{source:'motoro',version:'test',providers:[{id:'azure_foundry',label:'Azure Foundry',custom_model_name:true,can_list_models:false,models:[{id:'openai:gpt-4o',model:'gpt-4o',label:'GPT-4o',capabilities:caps}]}],controls:{temperature:{default:.7,minimum:0,maximum:2},max_tokens:{default:4096,exclusiveMinimum:0,maximum:200000}}}});
+    if(path==='/control/model-capabilities')return route.fulfill({json:{capabilities:caps}});
     if(path==='/control/model-connections/check'){
       const body=route.request().postDataJSON();submitted.push(body);
       if(body.api_key==='bad-key')return route.fulfill({status:400,json:{error:'Authentication failed'}});
@@ -27,7 +28,7 @@ try {for(const width of [390,1280]) {
   await expect(settings).toContainText('No server model is ready');
   await dialog.getByRole('button',{name:'Use Manual dataset',exact:true}).click();
   await expect(dialog.getByRole('button',{name:'Choose skills',exact:true})).toBeDisabled();
-  await settings.locator('#experiment-model-choice').selectOption('openai:gpt-4o');
+  await expect(settings.locator('#experiment-model-choice')).toHaveCount(0);
   await settings.locator('#experiment-model-id').fill('my-deployment');
   await settings.locator('#experiment-model-endpoint').fill('https://fixture.services.ai.azure.com');
   await expect(settings.getByRole('button',{name:'Check & use model'})).toBeDisabled();
@@ -49,7 +50,7 @@ try {for(const width of [390,1280]) {
   assert.equal(submitted.length,1); // Restoring a model makes no extra provider check.
   // A failed replacement leaves the last checked model usable.
   await settings.getByRole('radio',{name:/Set up a model/}).check();
-  await settings.locator('#experiment-model-choice').selectOption('openai:gpt-4o');
+  await expect(settings.locator('#experiment-model-choice')).toHaveCount(0);
   await settings.locator('#experiment-model-id').fill('bad-deployment');
   await settings.locator('#experiment-model-endpoint').fill('https://fixture.services.ai.azure.com');
   await settings.locator('#experiment-api-key').fill('bad-key');

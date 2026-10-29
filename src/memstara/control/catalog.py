@@ -20,7 +20,7 @@ ROLES = ('hypothesis', 'data', 'ml', 'interpreter', 'report')
 
 FINAL_STAGE_SKILLS = {
     'interpreter': ('shared-shap', 'shared-lime'),
-    'report': ('shared-addiction', 'shared-hiv', 'shared-heart-failure-cardiovascular',
+    'report': ('shared-heart-failure-cardiovascular',
                'shared-heart-failure-comorbidity'),
 }
 
@@ -144,7 +144,8 @@ def catalog(*, include_hidden: bool = False) -> list[dict]:
 
 
 def _read_catalog(*, include_hidden: bool = False) -> list[dict]:
-    items = specialist_skills()
+    items = [item for item in specialist_skills()
+             if include_hidden or item['id'] in FINAL_STAGE_SKILLS[item['stage']]]
     path = document_path('MEMSTARA_RESULTS_SKILL_PATH', 'ml-results.md')
     if include_hidden and path is not None and path.is_file():
         items.append(_external_entry('shared-ml-results', path, 'report'))

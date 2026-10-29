@@ -12,7 +12,7 @@ PROFILES = {
     "hiv": {
         "label": "HIV / Addiction knowledge corpus",
         "hypothesis": ["addiction-substance-use", "addiction-sdoh", "addiction-psychiatric", "random_features"],
-        "report": ["shared-addiction", "shared-hiv"],
+        "report": ["shared-heart-failure-cardiovascular", "shared-heart-failure-comorbidity"],
     },
     "heart_failure": {
         "label": "HeartFailure knowledge corpus",
@@ -29,13 +29,12 @@ PROFILES = {
     "general": {
         "label": "General research corpus / model knowledge",
         "hypothesis": ["hypothesis_general", "random_features"],
-        "report": ["shared-addiction", "shared-hiv"],
+        "report": ["shared-heart-failure-cardiovascular", "shared-heart-failure-comorbidity"],
     },
 }
-# Explanation perspectives are selectable independently of the corpus. Keep the
-# corpus-specific ordering so existing defaults do not change.
+# Active Explanation perspectives are selectable independently of the corpus.
+# Historical identifiers are retained only for saved-record resolution.
 EXPLANATION_SKILLS = (
-    'shared-addiction', 'shared-hiv',
     'shared-heart-failure-cardiovascular', 'shared-heart-failure-comorbidity',
 )
 for _profile in PROFILES.values():
@@ -98,7 +97,8 @@ def validate_hypotheses(books, profile=None, *, knowledge_mode='okf'):
         if name not in permitted and not name.startswith('user-hypothesis-'):
             raise ValueError(f'{name}: Hypothesis skill does not match the selected corpus ({scope}). '
                              'Review Knowledge sources and select a matching skill.')
-    reports = set(EXPLANATION_SKILLS)
+    # Retain historical input validation; the new-execution catalog gate rejects retired choices.
+    reports = set(EXPLANATION_SKILLS) | {'shared-addiction', 'shared-hiv'}
     from memstara.control.catalog import canonical_name
     for name in books.get('report', []):
         if canonical_name(name) not in reports:

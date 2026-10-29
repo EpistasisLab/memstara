@@ -12,7 +12,9 @@ from memstara.pipeline import prompts
 def shared(tmp_path, monkeypatch):
     monkeypatch.setattr(catalog, 'specialist_dir', lambda: tmp_path)
     monkeypatch.setenv('MEMSTARA_USER_SKILLS_DIR', str(tmp_path / 'users'))
-    for filename in ('Addiction-Expert-Explanation.md', 'HIV-Expert-Explanation.md'):
+    for filename, stage, _ in catalog.SPECIALIST_SKILLS.values():
+        if stage != 'report':
+            continue
         (tmp_path / filename).write_text('# Synthetic shared expert\nExplain measured results.')
     presenter = tmp_path / 'presenter.md'
     presenter.write_text('# Synthetic presenter\nReport metrics.')
@@ -22,8 +24,8 @@ def shared(tmp_path, monkeypatch):
 
 def test_only_available_supplied_explanations_visible(shared):
     assert {i['id'] for i in catalog.catalog() if i['stage'] == 'report'} == {
-        'shared-addiction', 'shared-hiv'}
-    for name in ('shared-addiction', 'shared-hiv'):
+        'shared-heart-failure-cardiovascular', 'shared-heart-failure-comorbidity'}
+    for name in catalog.FINAL_STAGE_SKILLS['report']:
         catalog.validate_selection({'playbook_explanation': name})
 
 
@@ -45,3 +47,11 @@ def test_board_rejects_disabled_skill_before_execution(tmp_path, combination, mo
     with pytest.raises(ValueError, match='disabled for new execution'):
         asyncio.run(run(args, tmp_path))
     assert list(tmp_path.iterdir()) == []
+
+@pytest.mark.parametrize('name', ['shared-addiction', 'shared-hiv'])
+def test_retired_explanation_stays_readable_but_cannot_be_selected(shared, name):
+    assert catalog.resolve(name)['stage'] == 'report'
+    with pytest.raises(ValueError, match='disabled for new execution'):
+        catalog.validate_selection({'playbook_explanation': name})
+    from memstara.corpus_skills import menu_bindings
+    assert all(name not in profile['report'] for profile in menu_bindings()['profiles'].values())
