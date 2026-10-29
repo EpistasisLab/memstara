@@ -114,6 +114,8 @@ def freeze(args, root, books):
     from memstara.stage_models import resolve_run_profiles
 
     prior = json.loads((root / "config.json").read_text()) if args.resume else None
+    from memstara.explanation_length import frozen_words
+    explanation_words = frozen_words(args, prior)
     profiles = resolve_run_profiles(args.stage_models, recovering=args.resume, frozen=prior)
     args.stage_models = profiles
     source = evidence_for(args) if not prior else prior["knowledge_evidence"]
@@ -139,6 +141,7 @@ def freeze(args, root, books):
                 skills[name] = {"stage": stage, "content": item["content"], "hash": item["hash"]}
     state = {
         "schema_version": 1,
+        **({"explanation_words": explanation_words} if explanation_words is not None else {}),
         "mode": "proposal",
         "data_mode": "proposal",
         "knowledge_mode": "llm_only" if args.ablate_okf else "okf",
@@ -233,7 +236,11 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
                     else {"provider": args.provider, "model": args.model}
                 )
                 names = books.get(role, [])
-                system = POLICY + TASKS[stage] + "\n" + "\n".join(state["prompts"][n]["content"] for n in names if n)
+                from memstara.explanation_length import instruction
+                system = POLICY + TASKS[stage] + "\n" + "\n".join(
+                    state["prompts"][n]["content"] for n in names if n)
+                if stage == "report":
+                    system += instruction(state.get("explanation_words"))
                 payload = {
                     'fixed_ml_settings': state.get('ml_overrides', {}),
                     "objective": state["research_objective"],

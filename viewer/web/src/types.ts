@@ -313,6 +313,7 @@ export interface Health {
 }
 
 export interface RunConfiguration {
+  explanation_words?: number;
   combination_plan?: import("./lib/replicateIdentity").Schedule | null;
   ml_overrides?: import("./lib/mlOverrides").MlOverrides;
   knowledge_mode?: 'okf'|'llm_only';

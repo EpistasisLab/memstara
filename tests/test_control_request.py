@@ -41,7 +41,8 @@ def flags(argv: list[str]) -> dict[str, str]:
 def test_an_empty_body_is_the_default_run():
     """A form nobody touched starts what the CLI with no flags would start."""
     got = flags(build_argv({}, OFFERED))
-    assert got == {"--trials": "3", "--waves": "1", "--hypothesis-agents": "1", "--interpret-agents": "1",
+    assert got == {"--explanation-words": "250", "--trials": "3", "--waves": "1",
+                   "--hypothesis-agents": "1", "--interpret-agents": "1",
                    "--y-column": "outcome", "--provider": "openai",
                    "--model": "test-deployment", "--skill": ""}
 
@@ -367,3 +368,7 @@ def test_server_owned_retry_metadata_reaches_driver():
     assert got["--start-loop"] == "6"
     assert got["--waves"] == "10"
     assert got["--retry-source-run"] == "original-run"
+
+
+def test_custom_explanation_length_reaches_cli():
+    assert flags(build_argv({'explanation_words': 375}, OFFERED))['--explanation-words'] == '375'

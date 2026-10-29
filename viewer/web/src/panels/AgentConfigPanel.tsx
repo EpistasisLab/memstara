@@ -1,3 +1,4 @@
+import ExplanationLengthSettings, {explanationLengthError} from '../components/ExplanationLengthSettings';
 import { displayText, skillLabel } from '../lib/displayText';
 import {mlOverridesError,overridesForSkills,type MlOverrides} from '../lib/mlOverrides';
 import {evaluationPlanError} from '../lib/evaluationPlan';
@@ -134,6 +135,7 @@ function Editor({ close }: { close: () => void }) {
 
       {coach===1&&selected&&<button type="button" className="mt-3 rounded border border-paper-line px-3 py-2 text-xs font-semibold text-ink" onClick={()=>setCoach(2)}>Keep this skill · review next</button>}
 
+    {stage==='report'&&<ExplanationLengthSettings value={form.explanation_words} disabled={!!running||busy||saving} onChange={value=>setForm(f=>({...f,explanation_words:value}))}/>}
     {<section className="mt-4 border-t border-paper-line pt-3" aria-label="Upload a custom skill" aria-busy={saving}>
       <h3 className="text-sm font-semibold">Use your own instructions</h3>
       <p id="custom-skill-help" className="mt-1 text-xs leading-relaxed text-ink-soft">
@@ -186,7 +188,7 @@ function Editor({ close }: { close: () => void }) {
       <div className="agent-save-target">
       {coach===3&&<p className="agent-click-hint" role="status"><ArrowDown size={17} aria-hidden="true"/>{invalidPlan?'Fix the evaluation values above first.':duplicate?'Choose a different skill above first.':saving||busy?'Wait for the current operation to finish.':'Click here to apply your settings.'}</p>}
       <button ref={saveTarget} className={`rounded bg-accent px-3 py-2 text-sm font-bold text-accent-contrast disabled:opacity-40 ${coach===3?'agent-click-target':''}`} onClick={commit}
-        disabled={!selected || !!duplicate || invalidPlan || saving || !!running || busy}>{add ? `Add ${agentStageLabel(stage)}` : "Save settings"}</button>
+        disabled={(stage==='report'&&!!explanationLengthError(form.explanation_words)) || !selected || !!duplicate || invalidPlan || saving || !!running || busy}>{add ? `Add ${agentStageLabel(stage)}` : "Save settings"}</button>
       </div>
     </div>
   </dialog>;

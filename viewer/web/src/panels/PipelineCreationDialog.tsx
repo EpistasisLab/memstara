@@ -1,3 +1,4 @@
+import ExplanationLengthSettings, {explanationLengthError} from '../components/ExplanationLengthSettings';
 import { displayText, skillLabel } from '../lib/displayText';
 import MLAdvancedSettings from '../components/MLAdvancedSettings';
 import {mlOverridesError,overridesForSkills,overrideCount} from '../lib/mlOverrides';
@@ -77,10 +78,10 @@ export function CreationWizard() {
   const complete = setupStages.every(s => catalog.some(c => compatibleResearchSkill(c,draft) && c.stage === s && c.id === draft[`playbook_${s === "report" ? "explanation" : s}`]));
   const validName = Boolean(name.trim()) && name.length <= 80;
   const advancedError=mlOverridesError(draft.ml_overrides,[draft.playbook_ml],draft.evaluation.replicates);
-  const validModel = evaluationPlanError(draft.evaluation) === null && !advancedError;
+  const validModel = evaluationPlanError(draft.evaluation) === null && !advancedError && !explanationLengthError(draft.explanation_words);
   const validSource = !sourceError && sourceReviewed && (draft.skill === '' || sources.some(s => s.skill === draft.skill));
   const sourceLabel = draft.research_input_id ? `Saved research ${draft.research_input_id.slice(0,8)} · target ${draft.y_column}` : draft.knowledge_mode==='llm_only' ? 'LLM knowledge only (no corpus)' : draft.skill === '' ? 'All available knowledge' : sources.find(s => s.skill === draft.skill)?.label || 'Unavailable source';
-  const valid = step === 0 ? validSource : step === 6 ? validName : step === 7 ? validSource && validName && complete && validModel && Number.isInteger(draft.waves) && draft.waves >= 1 && draft.waves <= 10 : Boolean(skill) && (stage !== 'ml' || validModel);
+  const valid = step === 0 ? validSource : step === 6 ? validName : step === 7 ? validSource && validName && complete && validModel && Number.isInteger(draft.waves) && draft.waves >= 1 && draft.waves <= 10 : Boolean(skill) && (stage !== 'ml' || validModel) && (stage !== 'report' || !explanationLengthError(draft.explanation_words));
   return <dialog ref={dialog} aria-labelledby="pipeline-create-title" aria-describedby="pipeline-create-description"
     onCancel={event => { event.preventDefault(); if (!busy && !uploading) closeCreation(); }}
     onKeyDown={event => {
@@ -139,6 +140,7 @@ export function CreationWizard() {
             }}><option value="" disabled>{loading ? 'Loading skills…' : 'Select a skill'}</option>
               {catalog.filter(s => compatibleResearchSkill(s,draft) && s.stage === stage).map(s => <option key={s.id} value={s.id} className={addictionSkills.has(s.id) ? 'font-bold' : 'font-normal'}>{skillLabel(s.id,s.title)}</option>)}
             </select></label>
+          {stage==='report'&&<ExplanationLengthSettings value={draft.explanation_words} disabled={busy||uploading} onChange={value=>setDraft(d=>({...d,explanation_words:value}))}/>}
           {stage==='ml'&&<MLAdvancedSettings skills={[draft.playbook_ml]} value={draft.ml_overrides} replicates={draft.evaluation.replicates} proposal={draft.data_mode==='proposal'} disabled={busy||loading||uploading} onChange={ml_overrides=>setDraft(d=>({...d,ml_overrides}))}/>}
           {!loading && !catalog.some(s => s.stage === stage) && <div role="alert" className="text-sm">Skills are unavailable. <button type="button" onClick={() => void reload()} className="underline">Try again</button></div>}
           {<CustomSkillUpload key={stage} stage={stage} disabled={busy}

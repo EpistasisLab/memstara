@@ -16,6 +16,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     previous = None
     if getattr(args, 'resume', False) and (run_dir / 'config.json').exists():
         previous = json.loads((run_dir / 'config.json').read_text())
+    from memstara.explanation_length import frozen_words, instruction
+    explanation_words = frozen_words(args, previous)
     from memstara.data_allocation import TWO_WAY_VERSION
     # Historical resumes and explicitly frozen comparison protocols retain their
     # original partition contract. New ordinary MVP runs use the entire cohort.
@@ -43,6 +45,8 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
             key = f"board/{stage}:{book}"
             stored = (previous or {}).get('prompts', {}).get(key)
             resolved[key] = dict(stored) if stored else load_prompt(f"board/{stage}", book)
+            if stage == "report" and not stored:
+                resolved[key]["system_prompt"] += instruction(explanation_words)
     if two_way and previous is None:
         from memstara.paths import PROMPTS_DIR
         contract = (PROMPTS_DIR / 'board/_two_way_data.md').read_text()
@@ -109,6 +113,7 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
         "pause_policy": "fresh_request_and_ml_restart_v2",
         "pause_recovery_policy": "durable_paused_agents_v1",
         "schema_version": 1,
+        **({"explanation_words": explanation_words} if explanation_words is not None else {}),
         "critic_policy": {"version": "deterministic_feasibility_v1", "extra_llm_calls": 0},
         "knowledge_policy": {"mode": "no_okf" if ablate_okf else "okf", "retrieval_enabled": not ablate_okf},
         "agent_labels": dict(AGENT_LABELS),

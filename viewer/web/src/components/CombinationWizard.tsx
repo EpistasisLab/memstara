@@ -1,3 +1,4 @@
+import ExplanationLengthSettings, {explanationLengthError} from './ExplanationLengthSettings';
 import { displayText, skillLabel } from '../lib/displayText';
 import {overridesForSkills} from '../lib/mlOverrides';
 import {compatibleResearchSkill,researchSkillProfile} from '../lib/researchSkills';
@@ -55,7 +56,8 @@ export default function CombinationWizard(){
  const executionOrderLabel=executionOrder==='all_pipelines_first'?'All pipelines first':'One pipeline all replicates first';
  function toggle(stage:PlaybookStage,id:string,checked:boolean){setReviewed(false);setDraft(d=>{const choices=checked?[...new Set([...(d.combination_skills?.[stage]??selected[stage]??[]),id])]:(d.combination_skills?.[stage]??selected[stage]??[]).filter(x=>x!==id);return {...d,combination_skills:{...d.combination_skills,[stage]:choices},ml_overrides:stage==='ml'?overridesForSkills(d.ml_overrides,choices):d.ml_overrides};});}
  const modelError=evaluationPlanError(draft.evaluation);
- const valid=!sourceError&&name.trim()&&name.length<=80&&count>0&&Number.isInteger(repetitions)&&repetitions>=1&&repetitions<=100&&Number.isInteger(total)&&total>=1&&total<=10000&&!modelError&&reviewed;
+ const reportError=explanationLengthError(draft.explanation_words);
+ const valid=!sourceError&&name.trim()&&name.length<=80&&count>0&&Number.isInteger(repetitions)&&repetitions>=1&&repetitions<=100&&Number.isInteger(total)&&total>=1&&total<=10000&&!modelError&&!reportError&&reviewed;
  const activeIndex=PLAYBOOK_STAGES.indexOf(activeRole);
  const lastRole=activeIndex===PLAYBOOK_STAGES.length-1;
  const roleHeading=useRef<HTMLHeadingElement>(null);
@@ -63,15 +65,15 @@ export default function CombinationWizard(){
  function moveRole(index:number){setActiveRole(PLAYBOOK_STAGES[index]);setSearch('');setSkillMode('library');}
  function next(){
   if(step===0&&!sourceError){moveRole(0);setStep(1);}
-  else if(step===1&&counts[activeIndex]>0&&!((activeRole==='ml'||activeRole==='data')&&modelError)){if(lastRole){if(count)setStep(2);}else moveRole(activeIndex+1);}
+  else if(step===1&&counts[activeIndex]>0&&!(activeRole==='report'&&reportError)&&!((activeRole==='ml'||activeRole==='data')&&modelError)){if(lastRole){if(count)setStep(2);}else moveRole(activeIndex+1);}
  }
  function back(){if(step===1&&activeIndex>0)moveRole(activeIndex-1);else setStep(step-1);}
  const missingAgents=PLAYBOOK_STAGES.filter((_,i)=>!counts[i]).map(stage=>flavorNames[stage]);
  const nextLabel=step===0?'Choose skills':lastRole?'Review plan':`Next: ${flavorNames[PLAYBOOK_STAGES[activeIndex+1]]}`;
  const blocker=uploading?'Wait for your skill to finish saving.':busy?'Saving your pipeline…':
   step===0?sourceError:
-  step===1?(!counts[activeIndex]?`Select at least one ${flavorNames[activeRole]} skill.`:(activeRole==='ml'||activeRole==='data')&&modelError?modelError:lastRole&&!count?`Choose skills for: ${missingAgents.join(', ')}.`:''):
-  sourceError||(!count?`Choose skills for: ${missingAgents.join(', ')}.`:'')||modelError||(!name.trim()?'Enter a name for your pipeline.':name.length>80?'Use a name with 80 characters or fewer.':!Number.isInteger(repetitions)||repetitions<1||repetitions>100?'Enter 1–100 replicates per pipeline.':total>10000?'Choose at most 10,000 total runs.':!reviewed?'Check the confirmation box after reviewing your settings.':'');
+  step===1?(activeRole==='report'&&reportError?reportError:!counts[activeIndex]?`Select at least one ${flavorNames[activeRole]} skill.`:(activeRole==='ml'||activeRole==='data')&&modelError?modelError:lastRole&&!count?`Choose skills for: ${missingAgents.join(', ')}.`:''):
+  sourceError||reportError||(!count?`Choose skills for: ${missingAgents.join(', ')}.`:'')||modelError||(!name.trim()?'Enter a name for your pipeline.':name.length>80?'Use a name with 80 characters or fewer.':!Number.isInteger(repetitions)||repetitions<1||repetitions>100?'Enter 1–100 replicates per pipeline.':total>10000?'Choose at most 10,000 total runs.':!reviewed?'Check the confirmation box after reviewing your settings.':'');
  const instruction=step===0?'Choose a prepared dataset or bring your own. Then configure your agents.':step===1&&activeRole==='data'?`Choose a split method, then select ${nextLabel}.`:step===1?
   skillMode==='library'?`Keep the default or choose skills, then select ${nextLabel}.`:
   skillMode==='custom'?'Upload or write a skill, then save and select it to continue.':'Create a skill with AI, then save and select it to continue.':
@@ -113,6 +115,7 @@ export default function CombinationWizard(){
        <p className="comb-split-note">Seed {Number.isFinite(draft.evaluation.seed)?draft.evaluation.seed:'—'} stays fixed for every pipeline and replicate. The split and model use this same seed.</p>
       </div>:<p className="comb-split-note">Select data skills below to set the split. Every replicate across all pipelines gets its own automatically generated seed. No two executions in this experiment share a seed. Each execution uses the same seed for its data split and model; retries keep that seed.</p>}
      </fieldset>}
+     {activeRole==='report'&&<ExplanationLengthSettings value={draft.explanation_words} disabled={busy||uploading} onChange={value=>{setDraft(d=>({...d,explanation_words:value}));setReviewed(false);}}/>}
      <div hidden={activeRole==='data'&&manualSplit}>
      <div className="comb-skill-methods" role="group" aria-label="How to add skills">
       <button aria-pressed={skillMode==='library'} disabled={busy||uploading} onClick={()=>setSkillMode('library')}>Skill library</button>
@@ -150,6 +153,7 @@ export default function CombinationWizard(){
       <details className="comb-review-rules"><summary>How execution works</summary><p>{draft.combination_execution_order==='pipeline_replicates_first'?'Complete every replicate of one pipeline before moving to the next pipeline.':'All pipelines complete their first replicate before the next replicate cycle begins.'} The schedule contains {Number.isInteger(total)?total.toLocaleString():'—'} total runs. A blocked attempt is recorded separately from successful completion; retries stay attached to the same scheduled replicate. Resume preserves the schedule.</p></details>
      </section>
      <section className="comb-review-card"><h4>AI model</h4><p className="break-words text-sm">{connection?`${connection.provider.replace(/_/g,' ')} · ${connection.model}`:'Current configured model'}</p><button type="button" className="mt-2 text-sm underline" onClick={()=>setStep(0)}>Edit model</button></section>
+     <section className="comb-review-card"><h4>Explanation report</h4><p>Target length: {draft.explanation_words??250} words per report.</p></section>
      <section className="comb-review-card" aria-labelledby="comb-agents-heading"><h4 id="comb-agents-heading">Your agents</h4><ol className="comb-review-agents">{PLAYBOOK_STAGES.map((stage,i)=>{const Icon=icons[stage];return <li key={stage}>
       <div className="comb-review-agent-heading"><Icon size={18} aria-hidden="true"/><h5>{flavorNames[stage]}</h5><span>{stage==='data'&&manualSplit?'Manual split':`${counts[i]} ${counts[i]===1?'skill':'skills'}`}</span><button type="button" aria-label={stage==='data'?'Edit Data settings':`Edit ${flavorNames[stage]} skills`} disabled={busy||uploading} onClick={()=>{moveRole(i);setStep(1);}}>Edit</button></div>
       <ul>{stage==='data'&&manualSplit&&<li>Train {Math.round((1-draft.evaluation.test_size)*100)}% / Test {Math.round(draft.evaluation.test_size*100)}% · Fixed seed {draft.evaluation.seed}</li>}{stage==='ml'&&!selected.ml?.length&&<li>Default scikit-learn Logistic Regression</li>}{(effectiveSelected[stage]??[]).map(id=><li key={id}>{skillLabel(id,catalog.find(s=>s.id===id)?.title)}</li>)}</ul>

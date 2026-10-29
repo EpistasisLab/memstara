@@ -137,3 +137,11 @@ def test_interrupted_loop_retry_preserves_completed_loops_and_evidence(source):
     path.write_text(json.dumps(outcomes))
     with pytest.raises(ValueError, match='unique interrupted'):
         configuration_for_retry(record, config, 'p')
+
+
+def test_retry_preserves_frozen_explanation_length(source):
+    from pathlib import Path
+    record, config = source
+    (Path(record['run_dir']) / 'config.json').write_text(json.dumps({'explanation_words': 375}))
+    result = configuration_for_retry(record, {**config, 'explanation_words': 900}, 'p')
+    assert result['explanation_words'] == 375

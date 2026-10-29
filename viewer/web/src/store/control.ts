@@ -72,6 +72,7 @@ export type RunRequest = {
   knowledge_mode?: 'okf'|'llm_only';
   data_mode?: 'dataset'|'proposal';
   research_objective?: string;
+  explanation_words?: number;
   stage_models?: import("../lib/stageModels").StageProfiles;
   combination_plan?: import("../lib/replicateIdentity").Schedule | null;
   combination_skills?: Partial<Record<PlaybookStage,string[]>>;
@@ -101,6 +102,7 @@ export type RunRequest = {
 /** New drafts have no disease-specific target. Select a research contract before execution. */
 export const DEFAULT_REQUEST: RunRequest = {
   model_connection_id: '',
+  explanation_words: 250,
   baseline_columns: [],
   question: "",
   evaluation: { engine: "xgboost", seed: 42, test_size: .25, folds: 0, replicates: 1, search_trials: 1 },
@@ -206,7 +208,7 @@ async function readError(res: Response): Promise<string> {
 }
 
 export function applyRunConfiguration(form: RunRequest, config: RunConfiguration): RunRequest {
-  return { ...form, ml_overrides:structuredClone(config.ml_overrides??{}), research_input_id:config.research_profile?.id??'', knowledge_mode:config.knowledge_mode??'okf', data_mode:config.data_mode??'dataset', research_objective:config.research_objective??'', question: "", ...Object.fromEntries(["skill", "y_column", "provider", "model"].flatMap(k => {
+  return { ...form, explanation_words:config.explanation_words??250, ml_overrides:structuredClone(config.ml_overrides??{}), research_input_id:config.research_profile?.id??'', knowledge_mode:config.knowledge_mode??'okf', data_mode:config.data_mode??'dataset', research_objective:config.research_objective??'', question: "", ...Object.fromEntries(["skill", "y_column", "provider", "model"].flatMap(k => {
     const value = config[k as keyof RunConfiguration]; return typeof value === "string" ? [[k, value]] : [];
   })), hypothesis_agents: config.hypotheses, interpret_agents: config.interpreters ?? 1, trials: config.trials, waves: config.waves, continuous: config.continuous ?? false,
     baseline_columns: config.comparison_policy?.baseline_columns ?? [],

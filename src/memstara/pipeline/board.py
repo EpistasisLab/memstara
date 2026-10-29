@@ -2563,6 +2563,8 @@ async def main() -> int:
                  f".md — the prompt must carry a {{{{playbook}}}} line to receive it "
                  f"(default: the prompt as written)",
         )
+    ap.add_argument("--explanation-words", type=int, default=250,
+                    help="Target word count for each Explanation narrative (default 250)")
     ap.add_argument("--combination-plan", default="", help="Frozen Cartesian skill schedule")
     ap.add_argument("--specialist-pilot-config", type=Path,
                     help="Complete isolated paired-model specialist study configuration")

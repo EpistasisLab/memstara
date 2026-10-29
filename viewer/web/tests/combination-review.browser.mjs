@@ -15,6 +15,12 @@ try{for(const [width,height,theme] of [[1440,900,'light'],[390,700,'light'],[390
   await expect(dialog.locator('.comb-guidance')).toContainText(`Agent ${i+1} of 5`);
   await expect(dialog.locator('#comb-next-help')).toContainText('Ready to continue');
   await expect(dialog.getByRole('button',{name:i===4?'Review plan':'Next: '+stages[i+1],exact:true})).toBeEnabled();
+  if(i===4){
+   const words=dialog.getByRole('spinbutton',{name:'Report length (words)',exact:true});
+   await expect(words).toHaveValue('250');
+   await words.fill('0');await expect(dialog.getByRole('button',{name:'Review plan',exact:true})).toBeDisabled();
+   await words.fill('375');await expect(dialog.getByRole('button',{name:'Review plan',exact:true})).toBeEnabled();
+  }
   await dialog.locator('.comb-skill-card input').first().waitFor({state:'visible'});await dialog.locator('.comb-skill-card input').first().check();await expect(dialog.locator('#comb-next-help')).toContainText('Ready to continue');
   await dialog.getByRole('button',{name:i===4?'Review plan':'Next: '+stages[i+1],exact:true}).click();
  }
@@ -51,6 +57,6 @@ try{for(const [width,height,theme] of [[1440,900,'light'],[390,700,'light'],[390
  await dialog.locator('.comb-execution-order').screenshot({path:join(tmpdir(),`execution-order-${width}-${height}-${theme}.png`)});
  await create.focus();await expect(create).toBeInViewport();await page.keyboard.press('Enter');
  const saved=JSON.parse(await page.locator('body').getAttribute('data-created'));
- assert.equal(saved.name,'Reviewed design');assert.equal(saved.configuration.waves,8);assert.equal(saved.configuration.combination_random_start,false);assert.equal(saved.configuration.combination_execution_order,'pipeline_replicates_first');assert.equal(saved.configuration.combination_skills.data.length,2);
+ assert.equal(saved.configuration.explanation_words,375);assert.equal(saved.name,'Reviewed design');assert.equal(saved.configuration.waves,8);assert.equal(saved.configuration.combination_random_start,false);assert.equal(saved.configuration.combination_execution_order,'pipeline_replicates_first');assert.equal(saved.configuration.combination_skills.data.length,2);
  assert.deepEqual(errors,[]);console.log(JSON.stringify({width,height,theme,review:true,editRetainsSettings:true,confirmation:true,savedConfiguration:true}));await page.close();
 }}finally{await browser.close();}

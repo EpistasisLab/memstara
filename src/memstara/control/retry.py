@@ -45,6 +45,8 @@ def configuration_for_retry(record, configuration, pipeline_id):
     for key in tuple(result):
         if key in saved:
             result[key] = copy.deepcopy(saved[key])
+    if 'explanation_words' in frozen:
+        result['explanation_words'] = frozen['explanation_words']
     # CLI snapshots encode structured flags as JSON strings; restore HTTP types.
     defaults: dict[str, Any] = {'evaluation': {}, 'ml_overrides': {},
                                 'controlled_comparison': {}, 'baseline_columns': [], 'stage_models': {}}

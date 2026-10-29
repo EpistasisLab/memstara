@@ -209,6 +209,8 @@ class PipelineWorkspace:
         value = with_default_hypothesis(value)
         if not isinstance(value, dict) or set(value) - set(DEFAULTS):
             raise ValueError("Invalid pipeline configuration fields")
+        from memstara.explanation_length import validate as validate_explanation_words
+        validate_explanation_words(value.get('explanation_words', 250))
         config = {
             **copy.deepcopy(DEFAULTS),
             "playbook_interpreter": "shared-shap",

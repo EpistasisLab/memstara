@@ -113,6 +113,7 @@ DEFAULTS: dict[str, Any] = {
     # the flag being absent.
     **{playbook_field(stage): "" for stage in PLAYBOOK_STAGES if stage != "report"},
     "playbook_explanation": "",
+    "explanation_words": 250,
 }
 
 
@@ -154,6 +155,8 @@ def build_argv(
 ) -> list[str]:
     """The arguments for one run, or `ValueError` saying which field was wrong."""
     body = normalize_agent_configuration(body)
+    from memstara.explanation_length import validate as validate_explanation_words
+    explanation_words = validate_explanation_words(body.get('explanation_words', 250))
     from memstara.corpus_skills import with_default_hypothesis
     body = with_default_hypothesis(body)
     # The HTTP boundary rejects these fields from callers; workspace retry owns them.
@@ -310,6 +313,7 @@ def build_argv(
     # this function's contract *the tail of a command line* rather than a second encoding
     # the driver would have to learn.
     argv = [
+        "--explanation-words", str(explanation_words),
         "--trials", str(trials),
         "--waves", str(waves),
         "--hypothesis-agents", str(hypothesis_agents),

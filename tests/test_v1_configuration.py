@@ -319,3 +319,23 @@ def test_model_skill_enables_paired_policy_without_all_combinations(clean_data, 
     assert enabled(snapshot)
     prompt = snapshot['prompts'][f'board/ml:{skill}']['system_prompt']
     assert 'Common training, evaluation and result contract' in prompt
+
+
+def test_explanation_length_is_frozen_in_custom_prompt_and_resume(clean_data, tmp_path):
+    skill = catalog.register({'stage': 'report', 'name': 'length-test',
+                              'content': '# Custom Explanation\nExplain measured findings.'})
+    args = SimpleNamespace(run_tag='length', question='', hypothesis_agents=1,
+                           y_column='outcome', evaluation='{}', trials=1, waves=1,
+                           explanation_words=375)
+    books = {'report': [skill['id']]}
+    state = freeze(args, tmp_path, books)
+    prompt = state['prompts'][f"board/report:{skill['id']}"]['system_prompt']
+    assert state['explanation_words'] == 375
+    assert 'approximately 375 words' in prompt
+    assert skill['content'] in prompt
+    assert catalog.resolve(skill['id'])['content'] == skill['content']
+    args.resume = True
+    args.explanation_words = 900
+    resumed = freeze(args, tmp_path, books)
+    assert resumed == state
+    assert load_prompt('board/report', skill['id'])['system_prompt'] == prompt
