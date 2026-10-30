@@ -1,3 +1,4 @@
+import {validateTelemetryResponse} from '../lib/telemetryResponse';
 import {useLoopLabel} from '../lib/useLoopLabel';
 import type {ReplicateIdentity} from '../lib/replicateIdentity';
 import {controlResponse} from '../lib/controlResponse';
@@ -19,7 +20,7 @@ export function useTelemetryTotals(enabled=true){
   const refresh=useCallback(()=>setRevision(n=>n+1),[]);
   useEffect(()=>{if(!enabled)return;let disposed=false;let timer:ReturnType<typeof setTimeout>;let controller:AbortController;
     const poll=async()=>{controller=new AbortController();setRefreshing(true);const deadline=setTimeout(()=>controller.abort(),6500);
-      try{const r=await fetch('/api/telemetry/totals',{signal:controller.signal});const body=await controlResponse(r);if(!r.ok)throw Error(body.detail||'Totals unavailable');if(!disposed){setData(body);setError('');}}
+      try{const r=await fetch('/api/telemetry/totals',{signal:controller.signal});const body=await controlResponse(r);if(!r.ok)throw Error(body.detail||'Totals unavailable');validateTelemetryResponse(body);if(!disposed){setData(body);setError('');}}
       catch(e){if(!disposed)setError(e instanceof Error?e.message:'Totals unavailable');}
       finally{clearTimeout(deadline);if(!disposed){setRefreshing(false);timer=setTimeout(poll,6000);}}};
     void poll();return()=>{disposed=true;clearTimeout(timer);controller?.abort();};},[revision,enabled]);

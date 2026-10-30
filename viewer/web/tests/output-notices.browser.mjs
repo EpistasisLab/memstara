@@ -6,7 +6,7 @@ const metric={calls:2,tokens:1234,tokens_status:'complete',cost:{usd:.1,status:'
 const snapshot={run_tag:'selected',run_configuration:{trials:1,waves:2},stale:false,health:{memstara:{up:true},core:{up:true}},results:[],board:{tasks:[]},
   report:{status:'running',text:'',explanation_outputs:[{loop:1,result_id:1,status:'completed',text:'# Saved explanation'},{loop:2,result_id:2,status:'running',text:'Partial text'}]},
   agents:[],scene:{places:[],agents:[],flashes:[]},feed:[],access:{rows:[],windows:[]},runs:[]};
-const totals={updated_at:'2026-10-28T01:00:00Z',executions:[{run_tag:'selected',model:'Fixture',provider:'test',loops:[{...metric,number:1},{...metric,number:2,status:'running'}],loop_summary:{},unassigned:{...metric,calls:0}}],pipelines:[],total:metric};
+const totals={updated_at:'2026-10-28T01:00:00Z',executions:[{...metric,run_tag:'selected',model:'Fixture',provider:'test',loops:[{...metric,number:1},{...metric,number:2,status:'running'}],loop_summary:{},unassigned:{...metric,calls:0}}],pipelines:[],total:metric};
 const browser=await launchResponsiveBrowser();
 try {for(const width of [390,1440]) {
   const page=await browser.newPage({viewport:{width,height:1000},reducedMotion:'reduce'});

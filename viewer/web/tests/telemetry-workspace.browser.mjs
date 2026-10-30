@@ -18,7 +18,7 @@ function snapshot(tag,loop){
     feed:[{key:'call',at:totals.updated_at,name:`${label}-ml`,label:`${label} ML`,agent:'ml',tool:'train_and_score',server:'ml',store:'results',path:'board'}],
     telemetry:{loop,loops:loops.map(l=>({...l,tasks:0,results:0})),legacy_attribution:false,unassigned_calls:0},loop_log:{lines:[`${label} recorded console line`],note:'Saved console',truncated:false}};
 }
-let totalsFail=false,scopeFail=false,slowAlpha=false,pending=false,registryReads=0,costReads=0;
+let totalsMalformed=false,totalsFail=false,scopeFail=false,slowAlpha=false,pending=false,registryReads=0,costReads=0;
 const errors=[],writes=[],billing=[];
 let page;
 try{
@@ -34,7 +34,7 @@ try{
       {id:'beta',name:'Second pipeline',latest:{run_tag:'telemetry-beta'},running:null,configuration:{},progress:{}},
       {id:'pending',name:'Not started',latest:null,running:null,configuration:{},progress:{}},
     ]}});
-    if(path==='/api/telemetry/totals')return r.fulfill(totalsFail?{status:503,json:{detail:'Fixture unavailable'}}:{json:totals});
+    if(path==='/api/telemetry/totals')return r.fulfill(totalsMalformed?{json:{}}:totalsFail?{status:503,json:{detail:'Fixture unavailable'}}:{json:totals});
     const tag=u.searchParams.get('run_tag'),loop=u.searchParams.has('loop')?Number(u.searchParams.get('loop')):null;
     if(path==='/api/telemetry'){
       if(scopeFail)return r.fulfill({status:503,json:{detail:'Fixture scoped records unavailable'}});
@@ -127,6 +127,14 @@ try{
   await page.getByText('Updates delayed',{exact:true}).waitFor();
   await expect(cards).toBeVisible();
   totalsFail=false;
+  await page.getByRole('button',{name:'Retry',exact:true}).click();
+  await expect(page.getByText('Updates delayed',{exact:true})).toHaveCount(0);
+  totalsMalformed=true;
+  await page.getByRole('button',{name:'Refresh telemetry'}).click();
+  await page.getByText('Updates delayed',{exact:true}).waitFor();
+  await expect(cards).toBeVisible();
+  await expect(cards.getByText('Not available',{exact:true})).toHaveCount(2);
+  totalsMalformed=false;
   await page.getByRole('button',{name:'Retry',exact:true}).click();
   await expect(page.getByText('Updates delayed',{exact:true})).toHaveCount(0);
   await page.getByRole('combobox',{name:'Detailed records'}).selectOption('Experiments');
