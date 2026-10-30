@@ -10,7 +10,7 @@ Describe the trigger and the before/after behavior.
 - Unchanged dependencies inspected:
 - Excluded scope and reason:
 
-See [review workflow](https://github.com/HyunjunA/memstara/blob/experiment/agent-combinations-pilot/REVIEW_GUIDE.md).
+See [review workflow](https://github.com/EpistasisLab/memstara/blob/main/REVIEW_GUIDE.md).
 
 ## Verification
 

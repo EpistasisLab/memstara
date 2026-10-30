@@ -1,0 +1,73 @@
+{
+  "name": "Main pull requests and required CI",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": [
+        "refs/heads/main"
+      ],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 1,
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": false,
+        "require_last_push_approval": true,
+        "required_review_thread_resolution": true
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {
+            "context": "Isolated container recovery",
+            "integration_id": 15368
+          },
+          {
+            "context": "Python tests (3.12)",
+            "integration_id": 15368
+          },
+          {
+            "context": "Python tests (3.13)",
+            "integration_id": 15368
+          },
+          {
+            "context": "Python type and formatting diagnostics",
+            "integration_id": 15368
+          },
+          {
+            "context": "PostgreSQL integration",
+            "integration_id": 15368
+          },
+          {
+            "context": "Frontend unit, type, lint and browser tests",
+            "integration_id": 15368
+          },
+          {
+            "context": "Responsive UI across browsers and zoom levels",
+            "integration_id": 15368
+          },
+          {
+            "context": "Distribution build and installed version",
+            "integration_id": 15368
+          }
+        ]
+      }
+    }
+  ]
+}
