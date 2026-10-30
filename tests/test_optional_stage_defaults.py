@@ -11,7 +11,7 @@ def test_all_unselected_stages_are_executable_and_frozen():
     assert plan['combinations'] == 1
     assert validate_plan(plan) == plan
     assert plan['skills']['interpreter'][0]['id'] == 'shared-shap'
-    assert plan['skills']['report'][0]['id'] == 'shared-addiction'
+    assert plan['skills']['report'][0]['id'] == 'shared-heart-failure-cardiovascular'
 
 
 def test_console_identity_follows_both_execution_orders():

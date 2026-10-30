@@ -1,4 +1,4 @@
-"""Final-stage writing rules come only from the supplied skill library."""
+"""Final-stage instructions support supplied and registered custom skills."""
 import pytest
 from memstara.control import catalog
 from memstara.pipeline.prompts import load_prompt
@@ -7,8 +7,8 @@ from memstara.pipeline.prompts import load_prompt
 @pytest.mark.parametrize('role,book', [
     ('interpreter', 'shared-shap'),
     ('interpreter', 'shared-lime'),
-    ('report', 'shared-addiction'),
-    ('report', 'shared-hiv'),
+    ('report', 'shared-heart-failure-cardiovascular'),
+    ('report', 'shared-heart-failure-comorbidity'),
 ])
 def test_current_skill_is_selectable_and_reaches_prompt(role, book, monkeypatch):
     monkeypatch.setattr('memstara.evaluation.active_plan', lambda: None)
@@ -19,13 +19,14 @@ def test_current_skill_is_selectable_and_reaches_prompt(role, book, monkeypatch)
 
 
 @pytest.mark.parametrize('role', ['interpreter', 'report'])
-def test_custom_final_stage_skills_are_not_registered(role, tmp_path, monkeypatch):
+def test_custom_final_stage_skills_are_registered_and_selectable(role, tmp_path, monkeypatch):
     monkeypatch.setattr(catalog, 'user_dir', lambda: tmp_path)
     monkeypatch.setattr('memstara.evaluation.active_plan', lambda: None)
-    with pytest.raises(ValueError, match='library'):
-        catalog.register({'stage': role, 'name': 'my-instructions',
-                          'content': '# Custom instructions\nCUSTOM_EVIDENCE_SENTINEL'})
-    assert not list(tmp_path.glob('*.json'))
+    item = catalog.register({'stage': role, 'name': 'my-instructions',
+                             'content': '# Custom instructions\nCUSTOM_EVIDENCE_SENTINEL'})
+    catalog.validate_selection({f'playbook_{role}': item['id']})
+    assert 'CUSTOM_EVIDENCE_SENTINEL' in load_prompt(f'board/{role}', item['id'])['system_prompt']
+    assert list(tmp_path.glob('*.json'))
 
 
 @pytest.mark.parametrize('book', ['shared-shap', 'shared-lime'])

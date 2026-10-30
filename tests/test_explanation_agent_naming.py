@@ -46,7 +46,7 @@ def test_role_prompt_and_catalog_use_explanation(monkeypatch):
 def test_new_workspace_uses_final_stage_defaults():
     config = PipelineWorkspace.configuration({})
     assert config['playbook_interpreter'] == 'shared-shap'
-    assert config['playbook_explanation'] == 'shared-addiction'
+    assert config['playbook_explanation'] == 'shared-heart-failure-cardiovascular'
 
 
 def test_conflicting_legacy_and_new_settings_rejected():

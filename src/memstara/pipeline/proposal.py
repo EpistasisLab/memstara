@@ -318,7 +318,7 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
                             revisions.append(candidate)
                             return candidate['summary'], {'status': 'completed'}
 
-                        revisions = []
+                        revisions: list[dict[str, Any]] = []
                         summary, length_entry = await refine(
                             value['summary'], {'status': 'completed'}, state.get('explanation_words'), revise)
                         if revisions:

@@ -411,10 +411,11 @@ def test_unbound_profiles_do_not_silently_apply_domain_skills(monkeypatch):
     from memstara.research_inputs import validate_skills
     monkeypatch.delenv('AGENTIC_OKF_BUNDLE_DIR', raising=False)
     validate_skills({'hypothesis':['hypothesis_general', 'random_features'],
-                     'report':['shared-addiction']})
+                     'report':['shared-heart-failure-cardiovascular']})
     with pytest.raises(ValueError, match='disabled'):
         validate_skills({'hypothesis':['comorbidity']})
-    validate_skills({'report':['shared-hiv']})
+    with pytest.raises(ValueError, match='disabled for new execution'):
+        validate_skills({'report':['shared-hiv']})
     with pytest.raises(ValueError, match='disabled for new execution'):
         validate_skills({'report':['report_general']})
 

@@ -23,19 +23,19 @@ MODES = [(knowledge, data) for knowledge in ('okf', 'llm_only') for data in ('da
 @pytest.fixture
 def study(tmp_path, monkeypatch):
     from memstara.paths import REPO_ROOT
-    from memstara import stage_models
     from memstara.pipeline.llm import PipelineLLMService
     for method in ('complete', 'complete_text', 'complete_with_tools'):
         monkeypatch.setattr(PipelineLLMService, method,
                             AsyncMock(side_effect=AssertionError('Unexpected real provider call')))
-    monkeypatch.setattr(stage_models, 'deployment_profiles', lambda: {})
     for role in ('QUESTION', 'HYPOTHESIS', 'DATA', 'ML', 'INTERPRETATION', 'EXPLANATION'):
-        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'openai')
+        monkeypatch.setenv(f'MEMSTARA_{role}_PROVIDER', 'azure_foundry')
+        monkeypatch.setenv(f'MEMSTARA_{role}_API_BASE', 'https://fixture.services.ai.azure.com')
         monkeypatch.setenv(f'MEMSTARA_{role}_MODEL', 'offline-fixture')
     monkeypatch.setenv('MEMSTARA_DATABASE_URL', 'postgresql://test:secret@localhost:15501/board')
     monkeypatch.setenv('MOTORO_DATABASE_URL', 'postgresql://test:secret@localhost:15502/runtime')
     monkeypatch.setenv('MOTORO_REDIS_URL', 'redis://localhost:16380/0')
-    monkeypatch.setenv('OPENAI_API_KEY', 'fixture-key')
+    monkeypatch.setenv('MEMSTARA_AZURE_FOUNDRY_API_KEY', 'fixture-key')
+    monkeypatch.setenv('ANTHROPIC_FOUNDRY_API_KEY', 'fixture-key')
     monkeypatch.setenv('MEMSTARA_RESEARCH_INPUTS_DIR', str(tmp_path / 'registry'))
     cfg = json.loads((REPO_ROOT / 'examples/research-inputs/research.json').read_text())
     dataset = tmp_path / 'source.csv'
