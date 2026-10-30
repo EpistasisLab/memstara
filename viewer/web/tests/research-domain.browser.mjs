@@ -46,6 +46,6 @@ try {
  const report=dialog.getByRole('combobox',{name:'Explanation skill',exact:true});
  assert.equal(await report.inputValue(),corpusSkillBindings.profiles.heart_failure.report[0]);
  assert.deepEqual((await report.locator('option').evaluateAll(options=>options.map(o=>o.value).filter(Boolean))).sort(),corpusSkillBindings.profiles.heart_failure.report.slice().sort());
- assert.equal(await report.locator('option[value="shared-hiv"]').count(),1);
+ assert.equal(await report.locator('option[value="shared-hiv"]').count(),0);
  console.log('HIV and HeartFailure hide Random even with an older server catalog; switching updates target and skills; source-bound skill menus remain compatible. Mocked HTTP, no execution.');
 } finally {await browser.close();}

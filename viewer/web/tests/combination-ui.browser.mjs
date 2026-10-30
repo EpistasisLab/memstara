@@ -10,6 +10,7 @@ try{
  let rows=[],posted=null,runPosts=0;
  await page.route('**/control/**',async r=>{
   const path=new URL(r.request().url()).pathname;
+  if(path==='/control/model-defaults')return r.fulfill({json:{profiles:[{provider:'azure_foundry',model:'fixture',role:'question',settings:{},capabilities:{},api_base:'https://fixture.services.ai.azure.com',region:'',auth_type:'api_key',roles:['question','hypothesis','data','ml','interpreter','report'],credentials_available:true}],current_allowed:true,setup_required:false}});
   if(path==='/control/research-inputs')return r.fulfill({json:preparedInputs});
   if(path==='/control/playbooks'&&r.request().method()==='GET')return r.fulfill({json:{catalog:skills,playbooks:skills.map(s=>s.id),stages:roles,references:[],max_hypotheses:4}});
   if(path==='/control/pipelines'){

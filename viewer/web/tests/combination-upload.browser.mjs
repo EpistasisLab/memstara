@@ -4,8 +4,11 @@ import {chromium,expect} from '@playwright/test';
 const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
 try {
  const page=await browser.newPage({viewport:{width:1300,height:900}});let uploads=[],skills=['interpreter','report'].map(stage=>({id:fixtureSkillId(stage),stage,title:stage,hash:stage,content:'# Supplied test skill',source:'Fixture'}));
+ page.on('pageerror',e=>console.error(e));
+ page.on('console',m=>{if(m.type()==='error')console.error(m.text());});
  await page.route('**/control/**',async r=>{
   const path=new URL(r.request().url()).pathname;
+  if(path==='/control/model-defaults')return r.fulfill({json:{profiles:[{provider:'azure_foundry',model:'fixture',role:'question',settings:{},capabilities:{},api_base:'https://fixture.services.ai.azure.com',region:'',auth_type:'api_key',roles:['question','hypothesis','data','ml','interpreter','report'],credentials_available:true}],current_allowed:true,setup_required:false}});
   if(path==='/control/research-inputs')return r.fulfill({json:preparedInputs});
   if(path==='/control/pipelines')return r.fulfill({json:{pipelines:[]}});
   if(path==='/control/health')return r.fulfill({json:{input_defaults:{dataset_available:true,knowledge_available:true}}});
@@ -24,7 +27,6 @@ try {
  await d.getByRole('button',{name:'Choose skills'}).click();
  for(let i=0;i<5;i++){
   await d.getByRole('navigation',{name:'Agent roles'}).getByRole('button').nth(i).click();
-  if(i>=3){await expect(d.getByRole('button',{name:/^Upload or write/})).toHaveCount(0);continue;}
   if(i===1)await d.getByRole('radio',{name:'Use data skills',exact:true}).check();
   for(const box of await d.locator('.comb-skill-card input:checked').all())await box.uncheck();
   await d.getByRole('button',{name:/^Upload or write/}).click();
@@ -38,7 +40,7 @@ try {
   if(!await d.locator('.comb-skill-card').filter({hasText:'alpha'}).locator('input[type=checkbox]').isChecked()||!await d.locator('.comb-skill-card').filter({hasText:'beta'}).locator('input[type=checkbox]').isChecked())throw Error('Successes not selected');
   await d.getByRole('alert').filter({hasText:'Test upload rejected'}).waitFor();
  }
- if(uploads.length!==9||uploads.some(x=>x.name==='bad'))throw Error('Wrong upload validation');
- await d.getByRole('button',{name:'Review plan'}).click();await d.getByLabel('Replicates per pipeline').fill('1');await d.getByText('How execution works',{exact:true}).click();await d.getByText(/The schedule contains 8 total runs\./).waitFor();
- console.log('Three editable roles; two supplied-only roles: multiple files selected, invalid extension rejected locally, server failure shown, later successes retained; 8 combinations. No real writes.');
+ if(uploads.length!==15||uploads.some(x=>x.name==='bad'))throw Error('Wrong upload validation');
+ await d.getByRole('button',{name:'Review plan'}).click();await d.getByLabel('Replicates per pipeline').fill('1');await d.getByText('How execution works',{exact:true}).click();await d.getByText(/The schedule contains 32 total runs\./).waitFor();
+ console.log('Five editable roles: multiple files selected, invalid extension rejected locally, server failure shown, later successes retained; 32 combinations. No real writes.');
 } finally {await browser.close();}

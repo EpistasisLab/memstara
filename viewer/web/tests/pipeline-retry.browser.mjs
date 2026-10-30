@@ -5,6 +5,8 @@ try{for(const width of [390,1440]){
  const page=await browser.newPage({viewport:{width,height:1000}});
  const items=['Paused','Checkpoint','Failed','Unknown','Completed'].map((name,i)=>({id:name,number:i+1,name,configuration:{waves:10},progress:{},running:i===0?{run_tag:'paused',execution_state:'paused'}:null,latest:{run_tag:name,recoverable:i===1},failure:i===2||i===3?{code:'agent_execution_failed',loop:i===2?3:null}:null}));
  const requests=[];
+ page.on('pageerror', error => console.error('Browser error:', error.message));
+ page.on('console', message => {if(message.type()==='error')console.error('Browser console:',message.text());});
  await page.route('**/api/**',r=>r.fulfill({json:{}}));
  await page.route('**/control/**',r=>{
   const path=new URL(r.request().url()).pathname;

@@ -4,6 +4,8 @@ try {for(const width of [1440,390]){
  const page=await browser.newPage({viewport:{width,height:1000}});
  const run={run_tag:'activity-test',exit_code:0,configuration:{waves:1}};
  const p={id:'p',number:1,name:'Activity study',configuration:{waves:1},latest:run,running:null,progress:{iteration:1,stage:'report'}};
+ page.on('pageerror', error => console.error('Browser error:', error.message));
+ page.on('console', message => {if(message.type()==='error')console.error('Browser console:',message.text());});
  await page.route('**/control/**',r=>{if(r.request().method()!=='GET')throw Error('Unexpected mutation');return r.fulfill({json:new URL(r.request().url()).pathname==='/control/pipelines'?{pipelines:[p]}:{}});});
  await page.route('**/api/**',r=>{const url=new URL(r.request().url());
  if(url.pathname==='/api/telemetry')return r.fulfill({json:{run_tag:run.run_tag,telemetry:{loop:null},feed:[{key:'call',agent:'ml',name:'MLAgent',label:'ML',tool:'train_and_score',server:'ml',store:'board',at:'2026-10-21T12:00:00Z'}]}});

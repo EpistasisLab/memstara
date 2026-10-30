@@ -10,7 +10,7 @@ try{
  page=await browser.newPage({viewport:{width:1440,height:1000}});page.setDefaultTimeout(8000);const errors=[];let items=[],starts=0;
  page.on('console',message=>{if(message.type()==='error'&&!message.text().includes('503'))console.error('UI console:',message.text());});
  page.on('pageerror',e=>{errors.push(e.message);console.log('Browser error:',e.message);});
- const catalog=[['hypothesis_general','hypothesis','General hypothesis'],['data_training_heavy','data','Training-heavy'],['ml_logistic_regression','ml','Logistic Regression (LR)'],['ml_xgboost','ml','XGBoost'],['shared-shap','interpreter','SHAP'],['shared-addiction','report','General explanation']].map(([id,stage,title])=>({id,stage,title,hash:id,content:'# Synthetic fixture',description:'Synthetic instructions',source:'Fixture'}));
+ const catalog=[['hypothesis_general','hypothesis','General hypothesis'],['data_training_heavy','data','Training-heavy'],['ml_logistic_regression','ml','Logistic Regression (LR)'],['ml_xgboost','ml','XGBoost'],['shared-shap','interpreter','SHAP'],['shared-heart-failure-cardiovascular','report','General explanation']].map(([id,stage,title])=>({id,stage,title,hash:id,content:'# Synthetic fixture',description:'Synthetic instructions',source:'Fixture'}));
  await page.route('**/control/**',async r=>{
   const path=new URL(r.request().url()).pathname;
   if(path==='/control/research-inputs')return r.fulfill({json:preparedInputs});
@@ -48,7 +48,7 @@ try{
  await dialog.getByLabel('Logistic Regression (LR) solver',{exact:true}).selectOption(JSON.stringify('liblinear'));
  await dialog.getByLabel('Logistic Regression (LR) prediction threshold',{exact:true}).fill('.6');
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
- for(const role of ['Interpretation','Explanation']){const choice=dialog.getByRole('combobox',{name:role+' skill',exact:true});if(!await choice.inputValue())await choice.selectOption(role==='Interpretation'?'shared-shap':'shared-addiction');await dialog.getByRole('button',{name:'Next',exact:true}).click();}
+ for(const role of ['Interpretation','Explanation']){const choice=dialog.getByRole('combobox',{name:role+' skill',exact:true});if(!await choice.inputValue())await choice.selectOption(role==='Interpretation'?'shared-shap':'shared-heart-failure-cardiovascular');await dialog.getByRole('button',{name:'Next',exact:true}).click();}
  await dialog.getByLabel('Pipeline name',{exact:true}).fill('Advanced LR fixture');await dialog.getByRole('button',{name:'Next',exact:true}).click();await dialog.getByRole('button',{name:'Create pipeline',exact:true}).click();await dialog.waitFor({state:'hidden'});
  assert.equal(items[0].configuration.ml_overrides.models.logistic_regression.parameters.C,.25);
  await page.goto(retainedWorkspaceUrl);await page.getByRole('navigation').getByRole('button',{name:'Experiments',exact:true}).first().click();await page.waitForFunction(()=>typeof window.openMLSettings==='function');await page.evaluate(()=>window.openMLSettings());

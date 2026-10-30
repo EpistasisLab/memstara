@@ -43,7 +43,7 @@ try{
  assert.equal(selected.y_column,'new_target');assert.equal(selected.skill,'');assert.deepEqual(selected.baseline_columns,[]);
  assert.equal(selected.playbook_hypothesis,'hypothesis_general');
  assert.equal(selected.playbook_data,'data_training_heavy');
- assert.equal(selected.playbook_explanation,'shared-addiction');
+ assert.equal(selected.playbook_explanation,'shared-heart-failure-cardiovascular');
  assert.deepEqual(selected.combination_skills,{});
  await page.getByText('Change dataset',{exact:false}).click();
  assert.equal(await page.getByRole('button',{name:'Review Incomplete study',exact:true}).count(),1);

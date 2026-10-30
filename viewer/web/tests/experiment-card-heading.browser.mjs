@@ -6,6 +6,8 @@ try{for(const width of [390,1440]){
  let liveReads=0;
  let events=[];
  const hypothesis='Blood pressure and exercise predict the recorded outcome. '.repeat(5);
+ page.on('pageerror', error => console.error('Browser error:', error.message));
+ page.on('console', message => {if(message.type()==='error')console.error('Browser console:',message.text());});
  await page.route('**/control/**',r=>r.fulfill({json:new URL(r.request().url()).pathname==='/control/pipelines'?{pipelines:items}:{}}));
  await page.route('**/api/**',r=>{if(new URL(r.request().url()).pathname==='/api/discovery/live'&&++liveReads===1)return r.fulfill({status:202,json:{status:'loading'}});return r.fulfill({json:new URL(r.request().url()).pathname==='/api/discovery/live'?{events,questions:[],results:[{result_id:1,trial:1,iteration:2,run_tag:'a',hypothesis},{result_id:2,trial:1,run_tag:'unrelated',hypothesis:'Unrelated finding'}],reports:{},generated_at:new Date().toISOString(),record_limit:200}:{}});});
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');

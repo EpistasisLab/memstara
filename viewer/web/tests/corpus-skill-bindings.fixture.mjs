@@ -9,8 +9,6 @@ export const corpusSkillBindings={
         "addiction-psychiatric"
       ],
       "report": [
-        "shared-addiction",
-        "shared-hiv",
         "shared-heart-failure-cardiovascular",
         "shared-heart-failure-comorbidity"
       ]
@@ -23,8 +21,6 @@ export const corpusSkillBindings={
         "heart-failure-lifestyle-social"
       ],
       "report": [
-        "shared-addiction",
-        "shared-hiv",
         "shared-heart-failure-cardiovascular",
         "shared-heart-failure-comorbidity"
       ]
@@ -35,8 +31,6 @@ export const corpusSkillBindings={
         "hypothesis_general"
       ],
       "report": [
-        "shared-addiction",
-        "shared-hiv",
         "shared-heart-failure-cardiovascular",
         "shared-heart-failure-comorbidity"
       ]

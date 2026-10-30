@@ -11,6 +11,8 @@ try {
  const item={id:'recovery-fixture',number:1,name:'Recovery fixture',configuration:{waves:3},
   running:run,latest:run,progress:{stage:'ml',iteration:2}};
  const posts=[];
+ page.on('pageerror', error => console.error('Browser error:', error.message));
+ page.on('console', message => {if(message.type()==='error')console.error('Browser console:',message.text());});
  await page.route('**/control/**',async route=>{
   const path=new URL(route.request().url()).pathname;
   if(route.request().method()==='POST') {

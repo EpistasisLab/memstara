@@ -6,7 +6,7 @@ export const preparedInputs={inputs:[{id:'ci-data',input_checks_passed:true,conf
 }}]};
 export function fixtureSkillId(stage,index=0){
  if(stage==='interpreter')return ['shared-shap','shared-lime'][index];
- if(stage==='report')return ['shared-addiction','shared-hiv','shared-heart-failure-cardiovascular','shared-heart-failure-comorbidity'][index];
+ if(stage==='report')return ['shared-heart-failure-cardiovascular','shared-heart-failure-comorbidity'][index];
  if(stage==='hypothesis')return index?'user-hypothesis-fixture-'+index:'hypothesis_general';
  return stage+'_'+index;
 }

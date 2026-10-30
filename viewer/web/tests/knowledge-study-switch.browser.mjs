@@ -43,7 +43,7 @@ try {
  assert.equal(writes.length,1);
  assert.equal(item.configuration.research_input_id,'heart');assert.equal(item.configuration.y_column,'chronic_heart_failure');
  assert.deepEqual(item.configuration.baseline_columns,[]);
- if(combined){assert.deepEqual(item.configuration.combination_skills.hypothesis,[corpusSkillBindings.profiles.heart_failure.hypothesis[0]]);assert.deepEqual(item.configuration.combination_skills.report,['shared-hiv']);assert.deepEqual(item.configuration.combination_skills.ml,['ml_logistic_regression']);assert.equal(item.configuration.combination_max_loops,2);}else assert.deepEqual(item.configuration.combination_skills,{});
+ if(combined){assert.deepEqual(item.configuration.combination_skills.hypothesis,[corpusSkillBindings.profiles.heart_failure.hypothesis[0]]);assert.deepEqual(item.configuration.combination_skills.report,['shared-heart-failure-cardiovascular']);assert.deepEqual(item.configuration.combination_skills.ml,['ml_logistic_regression']);assert.equal(item.configuration.combination_max_loops,2);}else assert.deepEqual(item.configuration.combination_skills,{});
  await page.reload();await page.waitForFunction(()=>typeof window.openStudySettings==='function');await page.getByRole('button',{name:'Select pipeline 1: Study switch fixture',exact:true}).waitFor();await page.evaluate(()=>window.openStudySettings());
  const savedInputs=page.getByRole('dialog',{name:/Data & target$/});
  assert.match(await savedInputs.getByLabel('Selected dataset').innerText(),/HeartFailure study/);

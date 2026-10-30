@@ -9,6 +9,8 @@ try{
   latest:{run_tag:'fixture-'+i,exit_code,recoverable,configuration:{waves:4}},
   progress:{stage:'report',iteration:4,exploration:{attempted:4,completed,skipped,blocked:exit_code,outcome:exit_code?'blocked':completed?'completed':'skipped'}}
  }));
+ page.on('pageerror', error => console.error('Browser error:', error.message));
+ page.on('console', message => {if(message.type()==='error')console.error('Browser console:',message.text());});
  await page.route('**/control/**',r=>r.fulfill({json:new URL(r.request().url()).pathname==='/control/pipelines'?{pipelines:items}:{}}));
  await page.route('**/api/**',r=>r.fulfill({json:{runs:[],results:[],questions:[],events:[],reports:{}}}));
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');

@@ -35,8 +35,8 @@ try {
   }
   await p.getByRole('button',{name:'Edit interpretation',exact:true}).click();
   const editor=p.getByRole('dialog');
-  await expect(editor.getByLabel('Custom skill Markdown file')).toHaveCount(0);
-  await expect(editor.getByRole('button',{name:'Write a custom skill'})).toHaveCount(0);
+  await expect(editor.getByLabel('Custom skill Markdown file')).toHaveCount(1);
+  await expect(editor.locator('summary').filter({hasText:'Write a custom skill'})).toHaveCount(1);
   await editor.getByLabel('Choose a skill').selectOption('shared-lime');
   await editor.getByText('Read full instructions and source',{exact:true}).click();
   await assertNeutral();
