@@ -1,4 +1,5 @@
 """Memstara package metadata and logging initialization."""
+
 from __future__ import annotations
 
 import os

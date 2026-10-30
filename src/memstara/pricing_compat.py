@@ -1,4 +1,5 @@
 """Legacy import compatibility; pricing is owned exclusively by Motoro."""
+
 from motoro.services import pricing_service
 
 

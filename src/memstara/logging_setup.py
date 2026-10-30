@@ -56,6 +56,7 @@ _NOISY_LOGGERS = {
     "sentence_transformers": logging.WARNING,
 }
 
+
 # Someone who set `LITELLM_LOG=DEBUG` turned litellm's chatter on **deliberately.** But
 # the table above pins that logger to WARNING, so turning it on produces nothing.
 #
@@ -150,9 +151,9 @@ class _LLMRequestGate(logging.Filter):
         if _LLM_REQUEST_MARK in msg:
             # Strip the colour codes, so it can be written to a file as it is.
             from memstara.pipeline.diagnostics import call_context
+
             context = call_context.get()
-            destination = (_llm_requests_by_run.setdefault(context[1], [])
-                           if context else _llm_requests)
+            destination = _llm_requests_by_run.setdefault(context[1], []) if context else _llm_requests
             destination.append(re.sub(r"\x1b\[[0-9;]*m", "", msg))
         return False
 
@@ -261,8 +262,9 @@ def setup_logging(*, level: str = "INFO", log_file: Path | str | None = None) ->
             # the request bodies — without it the screen becomes 4,000 lines.
             #
             # `hide_on_console` comes off only with --verbose. That means you want all of it.
-            "filters": (["llm_request_only"] if console_level <= logging.DEBUG
-                        else ["hide_on_console", "llm_request_only"]),
+            "filters": (
+                ["llm_request_only"] if console_level <= logging.DEBUG else ["hide_on_console", "llm_request_only"]
+            ),
         }
     }
     formatters: dict[str, Any] = {
@@ -310,8 +312,7 @@ def setup_logging(*, level: str = "INFO", log_file: Path | str | None = None) ->
             # handler applies its own floor.
             "root": {"level": logging.DEBUG, "handlers": list(handlers)},
             # The litellm levels decided at call time override the table's defaults.
-            "loggers": {name: {"level": lvl}
-                        for name, lvl in {**_NOISY_LOGGERS, **_litellm_levels()}.items()},
+            "loggers": {name: {"level": lvl} for name, lvl in {**_NOISY_LOGGERS, **_litellm_levels()}.items()},
         }
     )
 

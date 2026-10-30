@@ -35,6 +35,7 @@ Y = os.environ.get("MEMSTARA_TARGET_COLUMN", "Y")
 def feature_columns() -> list[str]:
     """Read sample feature columns from the configured dataset header."""
     import csv
+
     with Path(os.environ["MEMSTARA_DATASET_PATH"]).open(newline="") as stream:
         return [name for name in next(csv.reader(stream)) if name != Y][:5]
 

@@ -30,8 +30,11 @@ def freeze_feature_context(
         entries = [entry for entry in entries if entry.feature_name not in excluded_set]
         eligibility = {
             "version": "complete_predictors_v1",
-            "rule": ("User-approved training-only imputation" if missing_policy == "impute_train_v1"
-                     else "Complete predictors required without imputation"),
+            "rule": (
+                "User-approved training-only imputation"
+                if missing_policy == "impute_train_v1"
+                else "Complete predictors required without imputation"
+            ),
             "excluded_columns": excluded,
             "excluded_count": len(excluded),
             "eligible_count": len(entries),

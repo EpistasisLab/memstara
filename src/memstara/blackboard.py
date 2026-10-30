@@ -3,15 +3,15 @@
 
 from __future__ import annotations
 
-import argparse      # reads the command-line arguments (--create, --drop, --show)
-import asyncio        # asyncpg is async, so the CLI wraps calls in asyncio.run
-import contextlib     # what makes run_lock usable with `with`
-import os             # reads the database address from the environment
-import re             # tidies up the postgresql+asyncpg:// form
-import zlib           # holds crc32, which turns a run_tag into a lock number (an integer)
+import argparse  # reads the command-line arguments (--create, --drop, --show)
+import asyncio  # asyncpg is async, so the CLI wraps calls in asyncio.run
+import contextlib  # what makes run_lock usable with `with`
+import os  # reads the database address from the environment
+import re  # tidies up the postgresql+asyncpg:// form
+import zlib  # holds crc32, which turns a run_tag into a lock number (an integer)
 from collections.abc import AsyncIterator
 
-import asyncpg        # the async PostgreSQL driver
+import asyncpg  # the async PostgreSQL driver
 
 # Every state a task can be in.
 #
@@ -387,8 +387,12 @@ async def run_lock(run_tag: str, *, on_lost=None, on_health=None) -> AsyncIterat
     # moment the block ends — or the process dies and the connection closes — the lock
     # is released with it.
     from memstara.pipeline.run_ownership import (
-        RunLease, RunOwnershipLost, RunLockCleanupError, _current,
+        RunLease,
+        RunOwnershipLost,
+        RunLockCleanupError,
+        _current,
     )
+
     conn = await asyncpg.connect(dsn(), timeout=5, command_timeout=3)
     lease = None
     token = None
@@ -451,7 +455,7 @@ async def create() -> None:
         # in PostgreSQL's FIFO lock queue and block every viewer SELECT behind it.
         await conn.execute("SET lock_timeout = '3s'")
         await conn.execute("SET statement_timeout = '10s'")
-        await conn.execute(SCHEMA)   # run the whole SCHEMA above
+        await conn.execute(SCHEMA)  # run the whole SCHEMA above
     finally:
         await conn.close()
 
@@ -492,9 +496,7 @@ async def show() -> None:
     conn = await asyncpg.connect(dsn())
     try:
         # pg_tables is the "list of tables" table PostgreSQL keeps for itself.
-        rows = await conn.fetch(
-            "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename"
-        )
+        rows = await conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename")
         names = [r["tablename"] for r in rows]
         ours = [n for n in names if n.startswith("memstara_")]
         theirs = [n for n in names if not n.startswith("memstara_")]
@@ -559,8 +561,10 @@ async def orphans() -> int:
     total = sum(r["n"] for r in rows)
     print(f"unfinished tasks: {total}")
     for r in rows:
-        print(f"   {r['run_tag']:<22} {r['task_type']:<10} {r['status']:<12} "
-              f"{r['n']:>3}   last {r['last']:%Y-%m-%d %H:%M}")
+        print(
+            f"   {r['run_tag']:<22} {r['task_type']:<10} {r['status']:<12} "
+            f"{r['n']:>3}   last {r['last']:%Y-%m-%d %H:%M}"
+        )
     print("\n   put them back in the queue with --reclaim TAG, or close them with --close TAG")
     return total
 
@@ -694,6 +698,7 @@ async def close_run(run_tag: str) -> int:
 def main() -> int:
     """The entry point when called from the command line. Returning 0 means fine, 1 means cancelled."""
     from memstara.env import load_env
+
     load_env()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     # **Exactly one** of these has to be chosen. Choosing none is not allowed either.
@@ -701,16 +706,14 @@ def main() -> int:
     g.add_argument("--create", action="store_true", help="create the tables (idempotent)")
     g.add_argument("--drop", action="store_true", help="drop them — asks first")
     g.add_argument("--show", action="store_true", help="what exists and what is on the board")
-    g.add_argument("--drop-questions", action="store_true",
-                   help="empty the question bank — separate from --drop on purpose")
+    g.add_argument(
+        "--drop-questions", action="store_true", help="empty the question bank — separate from --drop on purpose"
+    )
     # The three below handle **one run's worth only**, not the whole board. Unlike the
     # --drop family they do not touch rows belonging to another tag.
-    g.add_argument("--orphans", action="store_true",
-                   help="list tasks left unfinished by runs that ended, per run_tag")
-    g.add_argument("--reclaim", metavar="TAG",
-                   help="put that run's in_progress tasks back in the queue")
-    g.add_argument("--close", metavar="TAG",
-                   help="mark that run's unfinished tasks failed — the rows stay")
+    g.add_argument("--orphans", action="store_true", help="list tasks left unfinished by runs that ended, per run_tag")
+    g.add_argument("--reclaim", metavar="TAG", help="put that run's in_progress tasks back in the queue")
+    g.add_argument("--close", metavar="TAG", help="mark that run's unfinished tasks failed — the rows stay")
     ap.add_argument("--yes", action="store_true", help="skip the question on --drop")
     args = ap.parse_args()
 

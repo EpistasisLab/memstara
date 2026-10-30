@@ -14,9 +14,9 @@ from memstara.pipeline.core import COLUMN_COUNT_MIN
 
 # Ordered worst-first: the verdict is the first one whose condition holds. Turn the
 # order around and a failed run settles down into "warning".
-VERDICT_FAIL = "failed"    # not one trial succeeded
-VERDICT_WARN = "warning"   # it ran, but something was caught
-VERDICT_OK = "normal"      # nothing at all was caught
+VERDICT_FAIL = "failed"  # not one trial succeeded
+VERDICT_WARN = "warning"  # it ran, but something was caught
+VERDICT_OK = "normal"  # nothing at all was caught
 
 
 def _read_json(path: Path, default: Any) -> Any:
@@ -56,10 +56,10 @@ def collect(run_dir: Path) -> dict[str, Any]:
     It does not judge — that is judge()'s job. Keeping gathering and judging apart means
     the reading side does not have to be touched when the criteria change.
     """
-    manifest = _read_json(run_dir / "manifest.json", {})   # what was run, and how
-    rows = _read_json(run_dir / "todo_rows.json", [])      # the per-trial results
-    summary = _read_json(run_dir / "summary.json", {})     # the overall summary
-    records = _read_jsonl(run_dir / "run.jsonl")           # the structured log in full
+    manifest = _read_json(run_dir / "manifest.json", {})  # what was run, and how
+    rows = _read_json(run_dir / "todo_rows.json", [])  # the per-trial results
+    summary = _read_json(run_dir / "summary.json", {})  # the overall summary
+    records = _read_jsonl(run_dir / "run.jsonl")  # the structured log in full
 
     # Kept whole, not counted. A count tells you something happened; the text tells you
     # what, and that is the part that was missed last time. So the report carries the
@@ -67,8 +67,7 @@ def collect(run_dir: Path) -> dict[str, Any]:
     problems = [r for r in records if r.get("level") in ("warning", "error", "critical")]
 
     executed = [r for r in records if r.get("event") == "mcp.tool.executed"]
-    by_adapter = [r for r in executed
-                  if str(r.get("logger", "")).endswith(".mcp.adapters")]
+    by_adapter = [r for r in executed if str(r.get("logger", "")).endswith(".mcp.adapters")]
     # A log with no adapter side at all (an older run with a different setting) is
     # counted as it stands.
     executed = by_adapter or executed  # a log without the adapter side is counted as it is
@@ -229,9 +228,7 @@ def render(run_dir: Path, data: dict[str, Any], verdict: str, reasons: list[str]
         L.append("**The text in full.** Nothing is cut.")
         L.append("")
         for p in data["problems"]:
-            where = " · ".join(
-                str(p[k]) for k in ("trial", "stage") if k in p and p[k] is not None
-            )
+            where = " · ".join(str(p[k]) for k in ("trial", "stage") if k in p and p[k] is not None)
             L.append(f"- `{p.get('level')}` **{p.get('event')}**" + (f" — trial {where}" if where else ""))
             for key in ("tool", "server", "content", "error", "reason"):
                 if p.get(key):

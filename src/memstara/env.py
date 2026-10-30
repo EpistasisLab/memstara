@@ -81,19 +81,20 @@ def load_env() -> list[Path]:
     """Load one explicit source once, before clients are initialized."""
     global _loaded_source, _provenance
     from memstara.operational import managed, resolve
-    mode = os.environ.get('MEMSTARA_CONFIG_MODE', 'project')
-    path = Path(os.environ.get('MEMSTARA_ENV_FILE') or ENV_FILES[0]).expanduser().resolve()
+
+    mode = os.environ.get("MEMSTARA_CONFIG_MODE", "project")
+    path = Path(os.environ.get("MEMSTARA_ENV_FILE") or ENV_FILES[0]).expanduser().resolve()
     identity = (mode, str(path))
     if identity == _loaded_source:
-        return [path] if mode == 'project' else []
+        return [path] if mode == "project" else []
     values, provenance = resolve(file=path)
-    if mode == 'project':
+    if mode == "project":
         for name in list(os.environ):
             if managed(name):
                 os.environ.pop(name, None)
     os.environ.update(values)
     _loaded_source, _provenance = identity, provenance
-    return [path] if mode == 'project' else []
+    return [path] if mode == "project" else []
 
 
 def configuration_source() -> dict:
@@ -107,16 +108,18 @@ def missing_vars(provider: str = "", *, knowledge_mode: str = "okf", data_mode: 
     Reported together so that fixing one and re-running does not simply reveal the
     next one.
     """
-    if knowledge_mode not in ('okf', 'llm_only') or data_mode not in ('dataset', 'proposal'):
-        raise ValueError('Select supported knowledge and data modes')
+    if knowledge_mode not in ("okf", "llm_only") or data_mode not in ("dataset", "proposal"):
+        raise ValueError("Select supported knowledge and data modes")
     omitted = set()
-    if knowledge_mode == 'llm_only':
-        omitted.add('AGENTIC_OKF_BUNDLE_DIR')
-    if data_mode == 'proposal':
-        omitted.add('MEMSTARA_DATASET_PATH')
-    problems = [f"{name} is not set — {hint}"
-                for name, hint in BASE_VARS.items()
-                if name not in omitted and not os.environ.get(name, "").strip()]
+    if knowledge_mode == "llm_only":
+        omitted.add("AGENTIC_OKF_BUNDLE_DIR")
+    if data_mode == "proposal":
+        omitted.add("MEMSTARA_DATASET_PATH")
+    problems = [
+        f"{name} is not set — {hint}"
+        for name, hint in BASE_VARS.items()
+        if name not in omitted and not os.environ.get(name, "").strip()
+    ]
     if provider:
         problems += model_environment_errors(provider)
     return problems
@@ -129,21 +132,23 @@ def model_environment_errors(provider: str = "", profiles=None) -> list[str]:
     Supplied frozen profiles take precedence over today's deployment on recovery.
     """
     from memstara.stage_models import deployment_profiles, validate_profiles
+
     problems = []
     try:
         selected = deployment_profiles() if profiles is None else validate_profiles(profiles)
     except ValueError as exc:
         selected = {}
         problems.append(str(exc))
-    providers = {p['provider'] for p in selected.values()} or ({provider} if provider else set())
+    providers = {p["provider"] for p in selected.values()} or ({provider} if provider else set())
     for name in sorted({key for p in providers for key in PROVIDER_KEYS.get(p, ())}):
-        if not os.environ.get(name, '').strip():
-            problems.append(f'{name} is not set — configure the matching provider credential in .env')
+        if not os.environ.get(name, "").strip():
+            problems.append(f"{name} is not set — configure the matching provider credential in .env")
     from memstara.operational import provider_errors
+
     problems.extend(provider_errors(os.environ, selected))
     for role, profile in selected.items():
-        if profile['provider'] in ('azure_foundry', 'local') and not profile.get('api_base'):
-            problems.append(f'{role}: an explicit model API_BASE is required')
+        if profile["provider"] in ("azure_foundry", "local") and not profile.get("api_base"):
+            problems.append(f"{role}: an explicit model API_BASE is required")
     return problems
 
 
@@ -199,11 +204,13 @@ def allowlist_gaps() -> list[str]:
 def configured_llm(provider: str, model: str) -> tuple[str, str]:
     """Explicit hypothesis selection for legacy scalar metadata; never a shared default."""
     from memstara.control.request import configured_llm as deployment_llm
+
     return deployment_llm()
 
 
-def configured_api_base(provider: str, stage: str = 'hypothesis') -> str | None:
+def configured_api_base(provider: str, stage: str = "hypothesis") -> str | None:
     """Read an explicit role endpoint; never consult a common endpoint."""
     from memstara.operational import agent_profile
+
     profile = agent_profile(stage)
-    return profile.get('api_base') if profile['provider'] == provider else None
+    return profile.get("api_base") if profile["provider"] == provider else None

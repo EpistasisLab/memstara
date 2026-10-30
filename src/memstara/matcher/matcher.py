@@ -1,3 +1,5 @@
+# PORT NOTE: Repository Ruff formatting was applied for CI; upstream logic and text are unchanged.
+# Byte-identical claims below describe the port before this whitespace-only normalization.
 # SOURCE: PORTED FROM afc-forge — NOT sandbox-authored code.
 #   upstream: afc-forge/ade_forge/tools/impl/matcher.py (490 lines)
 # --- PORT NOTE (memstara) -------------------------------------
@@ -204,8 +206,7 @@ class Matcher:
         )
         if stale_matrix:
             raise RuntimeError(
-                f"{stale_matrix}. Build the vectors before running: "
-                f"`python scripts/build_matcher_cache.py`."
+                f"{stale_matrix}. Build the vectors before running: `python scripts/build_matcher_cache.py`."
             )
         return cls(entries, load_embeddings(catalog_json), encoder=encoder, config=config)
 
@@ -218,9 +219,7 @@ class Matcher:
         top_k: int | None = None,
         threshold: float | None = None,
     ) -> MatchResult:
-        return self.match_many(
-            [concept], feature_type=feature_type, top_k=top_k, threshold=threshold
-        )[0]
+        return self.match_many([concept], feature_type=feature_type, top_k=top_k, threshold=threshold)[0]
 
     def match_many(
         self,
@@ -249,8 +248,7 @@ class Matcher:
         by_text = {text: vectors[i] for i, text in enumerate(to_embed)}
 
         return [
-            self._match_one(c, by_text.get(c), feature_type=feature_type, top_k=k, threshold=floor)
-            for c in cleaned
+            self._match_one(c, by_text.get(c), feature_type=feature_type, top_k=k, threshold=floor) for c in cleaned
         ]
 
     # -- one concept ----------------------------------------------------------
@@ -288,9 +286,7 @@ class Matcher:
         #    prefix-matches every child at one identical score, so a ranked cut would
         #    truncate the family in catalog order rather than by any judgment.
         kept = [
-            (i, s)
-            for i, s in injected.items()
-            if feature_type is None or self.entries[i].feature_type == feature_type
+            (i, s) for i, s in injected.items() if feature_type is None or self.entries[i].feature_type == feature_type
         ]
         seen = {i for i, _ in kept}
         ranked_cosine = [(i, s) for i, s in ranked_cosine if i not in seen]
@@ -303,9 +299,7 @@ class Matcher:
                 kept + ranked_cosine, ranked_cosine, cos, top_k=top_k, threshold=threshold
             )
 
-        ranked = sorted(
-            kept + ranked_cosine, key=lambda t: (-t[1], self.entries[t[0]].feature_name)
-        )
+        ranked = sorted(kept + ranked_cosine, key=lambda t: (-t[1], self.entries[t[0]].feature_name))
         matches = tuple(
             Match(
                 feature_name=self.entries[i].feature_name,

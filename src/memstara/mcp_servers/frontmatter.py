@@ -94,11 +94,8 @@ def merge_locked(locked: Mapping[str, str], asked: Mapping[str, str]) -> dict[st
     for key, value in asked.items():
         if key in merged:
             if merged[key].casefold() != value.casefold():
-                raise ValueError(
-                    f"field {key!r} is locked to {merged[key]!r} for this run; "
-                    f"{value!r} is outside it"
-                )
-            continue   # the same constraint written twice — the lock's spelling stands
+                raise ValueError(f"field {key!r} is locked to {merged[key]!r} for this run; {value!r} is outside it")
+            continue  # the same constraint written twice — the lock's spelling stands
         merged[key] = value
     return merged
 

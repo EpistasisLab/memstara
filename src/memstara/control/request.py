@@ -63,6 +63,7 @@ PLAYBOOK_STAGES = ("hypothesis", "data", "ml", "interpreter", "report")
 #: the check below does not change shape.
 MULTI_PLAYBOOK_STAGES = ("hypothesis", "interpreter")
 
+
 def playbook_field(stage):
     return "playbook_explanation" if stage in ("report", "explanation") else f"playbook_{stage}"
 
@@ -117,13 +118,14 @@ DEFAULTS: dict[str, Any] = {
 }
 
 
-def configured_llm(stage: str = 'hypothesis') -> tuple[str, str]:
+def configured_llm(stage: str = "hypothesis") -> tuple[str, str]:
     """Legacy scalar metadata for the specified agent, never a deployment default."""
     from memstara.operational import agent_profile
+
     profile = agent_profile(stage)
-    if not _MODEL.fullmatch(profile['model']):
-        raise ValueError(f'{stage}: model is not a model identifier')
-    return profile['provider'], profile['model']
+    if not _MODEL.fullmatch(profile["model"]):
+        raise ValueError(f"{stage}: model is not a model identifier")
+    return profile["provider"], profile["model"]
 
 
 def _whole_number(body: Mapping[str, Any], key: str, ceiling: int) -> int:
@@ -156,55 +158,66 @@ def build_argv(
     """The arguments for one run, or `ValueError` saying which field was wrong."""
     body = normalize_agent_configuration(body)
     from memstara.explanation_length import validate as validate_explanation_words
-    explanation_words = validate_explanation_words(body.get('explanation_words', 250))
+
+    explanation_words = validate_explanation_words(body.get("explanation_words", 250))
     from memstara.corpus_skills import with_default_hypothesis
+
     body = with_default_hypothesis(body)
     # The HTTP boundary rejects these fields from callers; workspace retry owns them.
-    retry_fields = {"_retry_from_loop", "_retry_source_run", "_retry_combination_plan", "_retry_seed_schedule",
-                    "_retry_experiment_policy"}
+    retry_fields = {
+        "_retry_from_loop",
+        "_retry_source_run",
+        "_retry_combination_plan",
+        "_retry_seed_schedule",
+        "_retry_experiment_policy",
+    }
     unknown = sorted(set(body) - set(DEFAULTS) - retry_fields)
     if unknown:
         raise ValueError(
-            f"not something a run takes: {', '.join(unknown)}. "
-            f"The fields are {', '.join(sorted(DEFAULTS))}"
+            f"not something a run takes: {', '.join(unknown)}. The fields are {', '.join(sorted(DEFAULTS))}"
         )
 
-    research_id = _text(body, 'research_input_id')
+    research_id = _text(body, "research_input_id")
     if research_id:
         from memstara.research_inputs import load
+
         profile = load(research_id)
-        config = profile['configuration']
-        body = {**body, 'knowledge_mode': config['knowledge_mode'], 'data_mode': config['data_mode'],
-                'research_objective': config['target']['description'],
-                'y_column': config['target']['column'] or 'outcome'}
-    knowledge_mode, data_mode = _text(body, 'knowledge_mode'), _text(body, 'data_mode')
-    if knowledge_mode not in ('okf', 'llm_only') or data_mode not in ('dataset', 'proposal'):
-        raise ValueError('Select supported knowledge and data modes')
-    objective = _text(body, 'research_objective')
-    if len(objective) > 8000 or (data_mode == 'proposal' and not objective):
-        raise ValueError('Proposal mode requires a research objective (at most 8000 characters)')
-    if knowledge_mode == 'llm_only' and _text(body, 'skill'):
-        raise ValueError('Clear knowledge filters in LLM-only mode')
-    if data_mode == 'proposal' and body.get('baseline_columns'):
-        raise ValueError('Proposal mode cannot bind fixed baseline columns without a dataset')
+        config = profile["configuration"]
+        body = {
+            **body,
+            "knowledge_mode": config["knowledge_mode"],
+            "data_mode": config["data_mode"],
+            "research_objective": config["target"]["description"],
+            "y_column": config["target"]["column"] or "outcome",
+        }
+    knowledge_mode, data_mode = _text(body, "knowledge_mode"), _text(body, "data_mode")
+    if knowledge_mode not in ("okf", "llm_only") or data_mode not in ("dataset", "proposal"):
+        raise ValueError("Select supported knowledge and data modes")
+    objective = _text(body, "research_objective")
+    if len(objective) > 8000 or (data_mode == "proposal" and not objective):
+        raise ValueError("Proposal mode requires a research objective (at most 8000 characters)")
+    if knowledge_mode == "llm_only" and _text(body, "skill"):
+        raise ValueError("Clear knowledge filters in LLM-only mode")
+    if data_mode == "proposal" and body.get("baseline_columns"):
+        raise ValueError("Proposal mode cannot bind fixed baseline columns without a dataset")
     from memstara.evaluation import validate
+
     evaluation = body.get("evaluation", {})
     if not isinstance(evaluation, dict):
         raise ValueError("evaluation must be an object")
     validate(evaluation)
     from memstara.controlled_comparison import validate as validate_controls
-    controls = validate_controls(body.get('controlled_comparison', {}))
+
+    controls = validate_controls(body.get("controlled_comparison", {}))
     from memstara.comparisons import validate_baseline
+
     baseline = validate_baseline(body.get("baseline_columns", []), body.get("y_column", DEFAULTS["y_column"]))
     question = _text(body, "question")
     if len(question) > 8000:
         raise ValueError("Research question must be at most 8000 characters")
     skill = _text(body, "skill")
     if skill and skill not in set(offered):
-        raise ValueError(
-            f"{skill!r} is not one of the branches this bundle has. "
-            f"Ask GET /control/skills for the list"
-        )
+        raise ValueError(f"{skill!r} is not one of the branches this bundle has. Ask GET /control/skills for the list")
 
     y_column = _text(body, "y_column")
     if data_mode == "proposal" and not y_column:
@@ -221,12 +234,13 @@ def build_argv(
         raise ValueError(f"provider must be one of {', '.join(PROVIDERS)}")
     if requested_model and not _MODEL.fullmatch(requested_model):
         raise ValueError("model is not a model identifier")
-    connection_id = _text(body, 'model_connection_id')
+    connection_id = _text(body, "model_connection_id")
     connection = None
     if connection_id:
         from memstara.model_connections import load
-        connection = load(connection_id)['connection']
-        provider, model = connection['provider'], connection['model']
+
+        connection = load(connection_id)["connection"]
+        provider, model = connection["provider"], connection["model"]
     else:
         provider, model = configured_llm()
 
@@ -240,25 +254,30 @@ def build_argv(
         if baseline:
             raise ValueError("All Combinations uses 4–20 hypothesis predictors; clear fixed baseline columns")
         from memstara.combinations import build_plan
-        combination_plan = build_plan(body["combination_skills"], body.get("combination_repetitions", 1),
-                                      random_start=body.get('combination_random_start', False),
-                                      execution_order=body.get('combination_execution_order', 'all_pipelines_first'),
-                                      max_loops=body.get('combination_max_loops'))
+
+        combination_plan = build_plan(
+            body["combination_skills"],
+            body.get("combination_repetitions", 1),
+            random_start=body.get("combination_random_start", False),
+            execution_order=body.get("combination_execution_order", "all_pipelines_first"),
+            max_loops=body.get("combination_max_loops"),
+        )
         continuous = False
-        if combination_plan['total_loops'] > 10000:
-            raise ValueError('Choose at most 10000 total replicates')
-    if body.get('_retry_combination_plan'):
+        if combination_plan["total_loops"] > 10000:
+            raise ValueError("Choose at most 10000 total replicates")
+    if body.get("_retry_combination_plan"):
         from memstara.combinations import validate_plan
-        combination_plan = validate_plan(body['_retry_combination_plan'])
-    waves = combination_plan['total_loops'] if combination_plan else _whole_number(body, "waves", _MAX_WAVES)
+
+        combination_plan = validate_plan(body["_retry_combination_plan"])
+    waves = combination_plan["total_loops"] if combination_plan else _whole_number(body, "waves", _MAX_WAVES)
     hypothesis_agents = _whole_number(body, "hypothesis_agents", _MAX_HYPOTHESIS_AGENTS)
     interpret_agents = _whole_number(body, "interpret_agents", 4)
 
     # Retired skills may still appear in trusted saved runs. New API designs
     # are rejected by validate_new_design before reaching this execution adapter.
-    known = set(playbooks) | {'random_features', 'heart-failure-all'}
+    known = set(playbooks) | {"random_features", "heart-failure-all"}
     if combination_plan:
-        known.update(item['id'] for entries in combination_plan['skills'].values() for item in entries)
+        known.update(item["id"] for entries in combination_plan["skills"].values() for item in entries)
     markable = set(playbook_stages)
     chosen: list[tuple[str, str]] = []
     for stage in PLAYBOOK_STAGES:
@@ -278,8 +297,7 @@ def build_argv(
         for book in books:
             if book not in known:
                 raise ValueError(
-                    f"{book!r} is not a playbook this checkout has. "
-                    f"Ask GET /control/playbooks for the list"
+                    f"{book!r} is not a playbook this checkout has. Ask GET /control/playbooks for the list"
                 )
         if len(books) > 1:
             if stage not in MULTI_PLAYBOOK_STAGES:
@@ -313,78 +331,99 @@ def build_argv(
     # this function's contract *the tail of a command line* rather than a second encoding
     # the driver would have to learn.
     argv = [
-        "--explanation-words", str(explanation_words),
-        "--trials", str(trials),
-        "--waves", str(waves),
-        "--hypothesis-agents", str(hypothesis_agents),
-        "--interpret-agents", str(interpret_agents),
-        "--y-column", y_column,
-        "--provider", provider,
-        "--model", model,
-        "--skill", skill,
+        "--explanation-words",
+        str(explanation_words),
+        "--trials",
+        str(trials),
+        "--waves",
+        str(waves),
+        "--hypothesis-agents",
+        str(hypothesis_agents),
+        "--interpret-agents",
+        str(interpret_agents),
+        "--y-column",
+        y_column,
+        "--provider",
+        provider,
+        "--model",
+        model,
+        "--skill",
+        skill,
     ]
     from memstara.corpus_skills import corpus_profile
-    if research_id or knowledge_mode == 'llm_only' or data_mode == 'proposal' or corpus_profile() != 'general':
+
+    if research_id or knowledge_mode == "llm_only" or data_mode == "proposal" or corpus_profile() != "general":
         from memstara.research_inputs import validate_skills
-        selected_books = {stage: value.split(',') for stage, value in chosen}
+
+        selected_books = {stage: value.split(",") for stage, value in chosen}
         if combination_plan:
-            selected_books = {stage: [item['id'] for item in entries]
-                              for stage, entries in combination_plan['skills'].items()}
+            selected_books = {
+                stage: [item["id"] for item in entries] for stage, entries in combination_plan["skills"].items()
+            }
         validate_skills(selected_books, profile if research_id else None, knowledge_mode=knowledge_mode)
         if research_id:
-            argv += ['--research-input-id', research_id]
-    if knowledge_mode != 'okf':
-        argv += ['--knowledge-mode', knowledge_mode]
-    if data_mode != 'dataset':
-        argv += ['--data-mode', data_mode]
+            argv += ["--research-input-id", research_id]
+    if knowledge_mode != "okf":
+        argv += ["--knowledge-mode", knowledge_mode]
+    if data_mode != "dataset":
+        argv += ["--data-mode", data_mode]
     if objective:
-        argv += ['--research-objective', objective]
+        argv += ["--research-objective", objective]
     from memstara.stage_models import resolve_run_profiles
+
     if connection is not None:
         from memstara.model_connections import profiles
+
         stage_models = profiles(connection)
-        supplied = body.get('stage_models')
+        supplied = body.get("stage_models")
         if supplied and supplied != stage_models:
-            raise ValueError('Model settings differ from the checked connection')
-        argv += ['--model-connection-id', connection_id]
+            raise ValueError("Model settings differ from the checked connection")
+        argv += ["--model-connection-id", connection_id]
     else:
         stage_models = resolve_run_profiles(body.get("stage_models"))
     if stage_models:
         import json
         from memstara.stage_models import validate_profiles
+
         argv += ["--stage-models", json.dumps(validate_profiles(stage_models))]
     if controls:
         import json
-        argv += ['--controlled-comparison', json.dumps(controls)]
+
+        argv += ["--controlled-comparison", json.dumps(controls)]
     if continuous:
         argv += ["--continuous"]
     for stage, book in chosen:
-        argv += [f"--playbook-{"explanation" if stage == "report" else stage}", book]
+        argv += [f"--playbook-{'explanation' if stage == 'report' else stage}", book]
     import json
     from memstara.ml_configuration import validate_overrides
-    ml_skills = (body.get('combination_skills', {}).get('ml', []) if body.get('combination_skills')
-                 else str(body.get('playbook_ml', '')).split(','))
-    overrides = validate_overrides(body.get('ml_overrides', {}), ml_skills, replicates=evaluation.get('replicates', 1))
+
+    ml_skills = (
+        body.get("combination_skills", {}).get("ml", [])
+        if body.get("combination_skills")
+        else str(body.get("playbook_ml", "")).split(",")
+    )
+    overrides = validate_overrides(body.get("ml_overrides", {}), ml_skills, replicates=evaluation.get("replicates", 1))
     if overrides:
         if controls:
-            raise ValueError('Controlled comparisons cannot also use advanced ML overrides')
-        argv += ['--ml-overrides', json.dumps(overrides, allow_nan=False)]
+            raise ValueError("Controlled comparisons cannot also use advanced ML overrides")
+        argv += ["--ml-overrides", json.dumps(overrides, allow_nan=False)]
     if "baseline_columns" in body:
         argv += ["--baseline-columns", json.dumps(baseline)]
     if "evaluation" in body:
         import json
+
         argv += ["--evaluation", json.dumps(evaluation)]
     if question:
         argv += ["--question", question]
     if combination_plan:
         argv += ["--combination-plan", json.dumps(combination_plan)]
-    if body.get('_retry_from_loop'):
-        start = body['_retry_from_loop']
+    if body.get("_retry_from_loop"):
+        start = body["_retry_from_loop"]
         if type(start) is not int or not 1 <= start <= waves:
-            raise ValueError('The requested replicate is outside the saved schedule')
-        argv += ['--start-loop', str(start), '--retry-source-run', body['_retry_source_run']]
-        if body.get('_retry_seed_schedule'):
-            argv += ['--retry-seed-schedule', json.dumps(body['_retry_seed_schedule'], allow_nan=False)]
-        if body.get('_retry_experiment_policy') is not None:
-            argv += ['--retry-experiment-policy', json.dumps(body['_retry_experiment_policy'], allow_nan=False)]
+            raise ValueError("The requested replicate is outside the saved schedule")
+        argv += ["--start-loop", str(start), "--retry-source-run", body["_retry_source_run"]]
+        if body.get("_retry_seed_schedule"):
+            argv += ["--retry-seed-schedule", json.dumps(body["_retry_seed_schedule"], allow_nan=False)]
+        if body.get("_retry_experiment_policy") is not None:
+            argv += ["--retry-experiment-policy", json.dumps(body["_retry_experiment_policy"], allow_nan=False)]
     return argv

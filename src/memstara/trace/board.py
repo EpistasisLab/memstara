@@ -60,8 +60,7 @@ async def window_for(run_tag: str) -> tuple[object, object]:
     conn = await asyncpg.connect(dsn())
     try:
         row = await conn.fetchrow(
-            "SELECT min(created_at) AS lo, max(updated_at) AS hi "
-            "FROM memstara_blackboard WHERE run_tag = $1",
+            "SELECT min(created_at) AS lo, max(updated_at) AS hi FROM memstara_blackboard WHERE run_tag = $1",
             run_tag,
         )
     finally:
@@ -94,7 +93,8 @@ async def runs_between(lo: object, hi: object) -> list[tuple[str, uuid.UUID]]:
         rows = await conn.fetch(
             "SELECT id, status, left(coalesce(input,''), 70) AS head, created_at "
             "FROM agent_runs WHERE created_at BETWEEN $1 AND $2 ORDER BY created_at",
-            lo, hi,
+            lo,
+            hi,
         )
     finally:
         await conn.close()
@@ -111,8 +111,7 @@ async def latest(n: int) -> list[tuple[str, uuid.UUID]]:
     import os
     import re
 
-    url = re.sub(r"^postgresql\+\w+://", "postgresql://",
-                 os.environ.get("MOTORO_DATABASE_URL", "").strip())
+    url = re.sub(r"^postgresql\+\w+://", "postgresql://", os.environ.get("MOTORO_DATABASE_URL", "").strip())
     if not url:
         sys.exit("no MOTORO_DATABASE_URL.")
     conn = await asyncpg.connect(url)
@@ -126,8 +125,10 @@ async def latest(n: int) -> list[tuple[str, uuid.UUID]]:
         await conn.close()
     # They arrive newest-first; reverse into time order so they read naturally.
     return [
-        (f"{r['created_at']:%m-%d %H:%M:%S} {r['status']:<9} {r['head']}",
-         r["id"] if isinstance(r["id"], uuid.UUID) else uuid.UUID(str(r["id"])))
+        (
+            f"{r['created_at']:%m-%d %H:%M:%S} {r['status']:<9} {r['head']}",
+            r["id"] if isinstance(r["id"], uuid.UUID) else uuid.UUID(str(r["id"])),
+        )
         for r in reversed(rows)
     ]
 
@@ -144,7 +145,7 @@ async def main() -> int:
     ap.add_argument("--clip", action="store_true", help="cut long values (by default nothing is cut)")
     args = ap.parse_args()
 
-    configure(Settings())   # hand core its database URL and the rest
+    configure(Settings())  # hand core its database URL and the rest
 
     if args.run_id:
         picked = [("run", uuid.UUID(args.run_id))]
@@ -153,8 +154,10 @@ async def main() -> int:
     else:
         lo, hi = await window_for(args.run_tag)
         picked = await runs_between(lo, hi)
-        print(f"time window of '{args.run_tag}': {lo:%m-%d %H:%M:%S} ~ {hi:%m-%d %H:%M:%S} "
-              f"({MARGIN.seconds // 60} min of slack at each end)")
+        print(
+            f"time window of '{args.run_tag}': {lo:%m-%d %H:%M:%S} ~ {hi:%m-%d %H:%M:%S} "
+            f"({MARGIN.seconds // 60} min of slack at each end)"
+        )
         print(f"{len(picked)} runs inside it — another run from the same time may be mixed in\n")
 
     if not picked:

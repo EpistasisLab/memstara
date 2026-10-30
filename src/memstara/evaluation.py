@@ -1,4 +1,5 @@
 """Deterministic binary-classification evaluation, shared by the MCP tool and controls."""
+
 from __future__ import annotations
 
 import hashlib
@@ -8,123 +9,140 @@ import time
 from pathlib import Path
 from typing import Any
 
-MODELS = ('xgboost', 'random_forest', 'logistic_regression')
-DEFAULTS = {'engine': 'xgboost', 'seed': 42, 'test_size': 0.25, 'folds': 0, 'replicates': 1, 'search_trials': 1}
+MODELS = ("xgboost", "random_forest", "logistic_regression")
+DEFAULTS = {"engine": "xgboost", "seed": 42, "test_size": 0.25, "folds": 0, "replicates": 1, "search_trials": 1}
 
 
 class DataQualityError(ValueError):
     """A safe, aggregate-only diagnostic for input that cannot be evaluated."""
 
 
-CLASSIFIER_SEED_POLICY = 'split_seed_v1'
-LEGACY_CLASSIFIER_SEED_POLICY = 'configured_seed_v1'
+CLASSIFIER_SEED_POLICY = "split_seed_v1"
+LEGACY_CLASSIFIER_SEED_POLICY = "configured_seed_v1"
 
 
 def classifier_seed_policy(snapshot=None):
     """Missing policy in a saved run retains its historical model seed behavior."""
     if snapshot is None:
         snapshot = active_plan()
-    return (snapshot.get('classifier_seed_policy', LEGACY_CLASSIFIER_SEED_POLICY)
-            if snapshot else CLASSIFIER_SEED_POLICY)
+    return snapshot.get("classifier_seed_policy", LEGACY_CLASSIFIER_SEED_POLICY) if snapshot else CLASSIFIER_SEED_POLICY
 
 
 def validate(plan: dict) -> dict:
     unknown = set(plan) - set(DEFAULTS)
     if unknown:
-        raise ValueError(f'Unknown evaluation options: {sorted(unknown)}')
+        raise ValueError(f"Unknown evaluation options: {sorted(unknown)}")
     out = {**DEFAULTS, **plan}
-    if out['engine'] not in MODELS:
+    if out["engine"] not in MODELS:
         raise ValueError(f"Unknown model {out['engine']!r}; model must be one of {MODELS}")
-    for key, lo, hi in [('seed', 0, 2147483647), ('folds', 0, 10), ('replicates', 1, 10), ('search_trials', 1, 10)]:
+    for key, lo, hi in [("seed", 0, 2147483647), ("folds", 0, 10), ("replicates", 1, 10), ("search_trials", 1, 10)]:
         if type(out[key]) is not int or not lo <= out[key] <= hi:
-            raise ValueError(f'{key} must be an integer in [{lo}, {hi}]')
-    if out['folds'] == 1:
-        raise ValueError('Cross-validation needs at least 2 folds (0 disables it)')
-    if type(out['test_size']) not in (int, float) or not 0.1 <= out['test_size'] <= 0.5:
-        raise ValueError('Hold-out fraction must be between 0.1 and 0.5')
+            raise ValueError(f"{key} must be an integer in [{lo}, {hi}]")
+    if out["folds"] == 1:
+        raise ValueError("Cross-validation needs at least 2 folds (0 disables it)")
+    if type(out["test_size"]) not in (int, float) or not 0.1 <= out["test_size"] <= 0.5:
+        raise ValueError("Hold-out fraction must be between 0.1 and 0.5")
     return out
 
 
 def active_plan() -> dict | None:
-    source = os.environ.get('MEMSTARA_RUN_CONFIG', '')
+    source = os.environ.get("MEMSTARA_RUN_CONFIG", "")
     if not source:
         return None
     path = Path(source)
     plan = json.loads(path.read_text())
-    if plan.get('validation_partition_policy') == 'data_agent_seed_v1':
-        partition_path = path.parent / 'validation_partition.json'
+    if plan.get("validation_partition_policy") == "data_agent_seed_v1":
+        partition_path = path.parent / "validation_partition.json"
         try:
-            plan['validation_partition'] = json.loads(partition_path.read_text())
+            plan["validation_partition"] = json.loads(partition_path.read_text())
         except (OSError, ValueError):
             # The independent reserve does not exist until the first Data Agent
             # accepts its run-level seed. Evaluation remains blocked until then.
-            plan['validation_partition'] = None
-    override_path = path.parent / 'ml_resource_override.json'
+            plan["validation_partition"] = None
+    override_path = path.parent / "ml_resource_override.json"
     if override_path.exists():
         override = json.loads(override_path.read_text())
-        if (override.get('version') != 1 or override.get('run_tag') != plan.get('run_tag')
-                or override.get('config_hash') != plan.get('config_hash')):
-            raise ValueError('ML resource override does not match the frozen execution')
-        keys = {'memory_bytes', 'wall_seconds', 'max_fits', 'max_csv_bytes',
-                'max_dense_cells', 'max_encoded_columns'}
-        limits = override.get('limits')
+        if (
+            override.get("version") != 1
+            or override.get("run_tag") != plan.get("run_tag")
+            or override.get("config_hash") != plan.get("config_hash")
+        ):
+            raise ValueError("ML resource override does not match the frozen execution")
+        keys = {"memory_bytes", "wall_seconds", "max_fits", "max_csv_bytes", "max_dense_cells", "max_encoded_columns"}
+        limits = override.get("limits")
         if not isinstance(limits, dict) or set(limits) != keys or any(v is not None for v in limits.values()):
-            raise ValueError('Invalid explicit unlimited ML resource override')
-        plan['ml_configuration_policy'] = {**plan['ml_configuration_policy'], **limits}
-        plan['ml_resource_override'] = override
+            raise ValueError("Invalid explicit unlimited ML resource override")
+        plan["ml_configuration_policy"] = {**plan["ml_configuration_policy"], **limits}
+        plan["ml_resource_override"] = override
     return plan
 
 
 def model_for(engine: str, seed: int, trial: int = 0):
     from sklearn.ensemble import RandomForestClassifier
     from sklearn.linear_model import LogisticRegression
-    if engine == 'xgboost':
+
+    if engine == "xgboost":
         from xgboost import XGBClassifier
-        return XGBClassifier(n_estimators=200 + 100 * (trial // 4), max_depth=(4, 3, 5, 6)[trial % 4],
-                             eval_metric='logloss', random_state=seed, n_jobs=1)
-    if engine == 'random_forest':
-        return RandomForestClassifier(n_estimators=200 + 100 * (trial // 4), max_depth=(None, 4, 8, 12)[trial % 4],
-                                      random_state=seed, n_jobs=1)
-    if engine == 'logistic_regression':
-        return LogisticRegression(C=(1., .1, 10., .01, 100., .001, 1000., .0001, 10000., .00001)[trial % 10],
-                                  max_iter=2000, random_state=seed)
-    raise ValueError(f'Unsupported model: {engine}')
+
+        return XGBClassifier(
+            n_estimators=200 + 100 * (trial // 4),
+            max_depth=(4, 3, 5, 6)[trial % 4],
+            eval_metric="logloss",
+            random_state=seed,
+            n_jobs=1,
+        )
+    if engine == "random_forest":
+        return RandomForestClassifier(
+            n_estimators=200 + 100 * (trial // 4), max_depth=(None, 4, 8, 12)[trial % 4], random_state=seed, n_jobs=1
+        )
+    if engine == "logistic_regression":
+        return LogisticRegression(
+            C=(1.0, 0.1, 10.0, 0.01, 100.0, 0.001, 1000.0, 0.0001, 10000.0, 0.00001)[trial % 10],
+            max_iter=2000,
+            random_state=seed,
+        )
+    raise ValueError(f"Unsupported model: {engine}")
 
 
-def validate_clean_dataset(path: Path, target: str, *, allow_missing: bool = False,
-                           missing_policy=None, require_numeric=None):
+def validate_clean_dataset(
+    path: Path, target: str, *, allow_missing: bool = False, missing_policy=None, require_numeric=None
+):
     """Validate the MVP input contract without repairing or dropping any values."""
     import numpy as np
     import pandas as pd
     import csv
+
     try:
-        with path.open(newline='', encoding='utf-8-sig') as stream:
+        with path.open(newline="", encoding="utf-8-sig") as stream:
             headers = next(csv.reader(stream), [])
         if not headers or any(not c.strip() for c in headers) or len(set(headers)) != len(headers):
-            raise DataQualityError('Dataset columns must have non-empty, unique names.')
+            raise DataQualityError("Dataset columns must have non-empty, unique names.")
         from memstara.research_inputs import MISSING
+
         df = pd.read_csv(path, na_values=list(MISSING))
-        df = df.replace(r'^\s*$', float('nan'), regex=True)
+        df = df.replace(r"^\s*$", float("nan"), regex=True)
         for column in df:
             if not pd.api.types.is_numeric_dtype(df[column]):
-                df[column] = df[column].map(lambda value: float('nan')
-                    if isinstance(value, str) and value.strip().lower() in MISSING else value)
+                df[column] = df[column].map(
+                    lambda value: float("nan") if isinstance(value, str) and value.strip().lower() in MISSING else value
+                )
                 try:
                     df[column] = pd.to_numeric(df[column])
                 except (ValueError, TypeError):
                     pass
     except (OSError, UnicodeError, pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
-        raise DataQualityError('Cannot read the configured dataset as CSV. Check the file and its format.') from exc
+        raise DataQualityError("Cannot read the configured dataset as CSV. Check the file and its format.") from exc
     if target not in df:
-        raise DataQualityError('The selected target is not a column in the configured dataset.')
+        raise DataQualityError("The selected target is not a column in the configured dataset.")
     if df[target].isna().any():
-        raise DataQualityError('Target labels are missing; labels cannot be imputed')
+        raise DataQualityError("Target labels are missing; labels cannot be imputed")
     if set(df[target].unique()) != {0, 1}:
-        raise DataQualityError('The target must contain both binary classes 0 and 1')
+        raise DataQualityError("The target must contain both binary classes 0 and 1")
     if len(df.columns) < 2:
-        raise DataQualityError('No predictor features are available')
+        raise DataQualityError("No predictor features are available")
     missing = df.drop(columns=[target]).isna()
     from memstara.missing_values import resolve_policy
+
     missing_policy = missing_policy or resolve_policy()
     if missing_policy not in ("reject", "native_xgboost", "impute_train_v1"):
         raise DataQualityError("Unsupported missing-value policy")
@@ -132,92 +150,142 @@ def validate_clean_dataset(path: Path, target: str, *, allow_missing: bool = Fal
         raise DataQualityError("A predictor has no observed values; exclude it or supply observed data")
     if missing.any().any() and missing_policy != "impute_train_v1":
         raise DataQualityError(
-            f'AI-ready input required: {int(missing.sum().sum()):,} missing predictor values '
-            f'across {int(missing.any().sum()):,} columns. '
-            'The current policy rejects missing values and does not clean or impute data. '
-            'Correct the CSV and upload it again before starting; '
-            'no values or rows were changed.')
+            f"AI-ready input required: {int(missing.sum().sum()):,} missing predictor values "
+            f"across {int(missing.any().sum()):,} columns. "
+            "The current policy rejects missing values and does not clean or impute data. "
+            "Correct the CSV and upload it again before starting; "
+            "no values or rows were changed."
+        )
     from memstara.preprocessing_policy import requires_numeric
+
     if require_numeric is None:
         require_numeric = requires_numeric()
     if require_numeric:
         unsupported = [c for c in df if c != target and not pd.api.types.is_numeric_dtype(df[c])]
         if unsupported:
-            raise DataQualityError('Prepare numeric predictors before running; automatic encoding is disabled. '
-                                   'Encode or exclude columns: ' + ', '.join(unsupported))
-    numeric = df.select_dtypes(include='number')
+            raise DataQualityError(
+                "Prepare numeric predictors before running; automatic encoding is disabled. "
+                "Encode or exclude columns: " + ", ".join(unsupported)
+            )
+    numeric = df.select_dtypes(include="number")
     if np.isinf(numeric.to_numpy(dtype=float)).any():
-        raise DataQualityError('AI-ready input required: non-finite values must be resolved before upload. '
-                               'The MVP does not clean or impute data.')
+        raise DataQualityError(
+            "AI-ready input required: non-finite values must be resolved before upload. "
+            "The MVP does not clean or impute data."
+        )
     return df
 
 
-def discovery_partition(y, seed, fraction=.2):
+def discovery_partition(y, seed, fraction=0.2):
     """Reserve a stratified cohort before adaptive exploration; never score the reserve here."""
     import numpy as np
     from sklearn.model_selection import train_test_split
+
     if y.value_counts().min() < 4:
-        raise DataQualityError('Iterative discovery needs at least four samples in each target class '
-                               'to reserve validation data.')
-    exploration, reserved = train_test_split(np.arange(len(y)), test_size=fraction,
-                                             random_state=seed, stratify=y)
-    return {'version': 'reserved_validation_v1', 'seed': seed, 'row_count': len(y),
-            'exploration_rows': sorted(exploration.tolist()), 'reserved_count': len(reserved),
-            'reserved_split_id': hashlib.sha256(np.sort(reserved).tobytes()).hexdigest(),
-            'status': 'reserved_not_evaluated', 'fraction': fraction}
+        raise DataQualityError(
+            "Iterative discovery needs at least four samples in each target class to reserve validation data."
+        )
+    exploration, reserved = train_test_split(np.arange(len(y)), test_size=fraction, random_state=seed, stratify=y)
+    return {
+        "version": "reserved_validation_v1",
+        "seed": seed,
+        "row_count": len(y),
+        "exploration_rows": sorted(exploration.tolist()),
+        "reserved_count": len(reserved),
+        "reserved_split_id": hashlib.sha256(np.sort(reserved).tobytes()).hexdigest(),
+        "status": "reserved_not_evaluated",
+        "fraction": fraction,
+    }
 
 
 def evaluation_splits(y, plan: dict, partition=None):
     """Check every requested hold-out before fitting or provisioning paid agents."""
     import numpy as np
     from sklearn.model_selection import train_test_split
+
     if y.value_counts().min() < 2:
-        raise DataQualityError('Each target class needs at least two samples for a stratified hold-out')
+        raise DataQualityError("Each target class needs at least two samples for a stratified hold-out")
     if partition is None:
         snapshot = active_plan() or {}
-        partition = snapshot.get('validation_partition')
-        if (snapshot.get('hypothesis_policy', {}).get('version') == 'iterative_discovery_v1'
-                and snapshot.get('partition_policy') != 'two_way_stratified_v1' and not partition):
-            raise DataQualityError('Iterative discovery requires a reserved validation partition')
+        partition = snapshot.get("validation_partition")
+        if (
+            snapshot.get("hypothesis_policy", {}).get("version") == "iterative_discovery_v1"
+            and snapshot.get("partition_policy") != "two_way_stratified_v1"
+            and not partition
+        ):
+            raise DataQualityError("Iterative discovery requires a reserved validation partition")
     indices = np.arange(len(y))
     if partition:
-        rows = partition.get('exploration_rows', [])
-        if (partition.get('row_count') != len(y) or not rows or
-                any(type(i) is not int or i < 0 or i >= len(y) for i in rows) or
-                len(set(rows)) != len(rows) or len(rows) + partition.get('reserved_count', 0) != len(y)):
-            raise DataQualityError('Dataset rows do not match the reserved validation partition')
+        rows = partition.get("exploration_rows", [])
+        if (
+            partition.get("row_count") != len(y)
+            or not rows
+            or any(type(i) is not int or i < 0 or i >= len(y) for i in rows)
+            or len(set(rows)) != len(rows)
+            or len(rows) + partition.get("reserved_count", 0) != len(y)
+        ):
+            raise DataQualityError("Dataset rows do not match the reserved validation partition")
         indices = np.asarray(rows)
     labels = y.iloc[indices]
     if labels.nunique() != 2 or labels.value_counts().min() < 2:
-        raise DataQualityError('Exploration partition needs both classes and at least two samples per class')
-    n_test = max(2, min(len(indices) - 2, int(np.ceil(len(indices) * plan['test_size']))))
+        raise DataQualityError("Exploration partition needs both classes and at least two samples per class")
+    n_test = max(2, min(len(indices) - 2, int(np.ceil(len(indices) * plan["test_size"]))))
     splits = []
-    for rep in range(plan['replicates']):
-        seed = plan['seed'] + rep
+    for rep in range(plan["replicates"]):
+        seed = plan["seed"] + rep
         if seed > 2147483647:
-            raise DataQualityError('Seed plus replicate index exceeds the supported random-state range.')
+            raise DataQualityError("Seed plus replicate index exceeds the supported random-state range.")
         train, test = train_test_split(indices, test_size=n_test, random_state=seed, stratify=labels)
         if y.iloc[train].nunique() < 2 or y.iloc[test].nunique() < 2:
-            raise DataQualityError('Stratified hold-out cannot represent both classes; '
-                                   'more minority samples or a different hold-out fraction are required')
+            raise DataQualityError(
+                "Stratified hold-out cannot represent both classes; "
+                "more minority samples or a different hold-out fraction are required"
+            )
         splits.append((seed, train, test))
     return splits
 
 
-def preflight(path: Path, target: str, plan: dict, *, reserve_validation: bool = False,
-              allow_missing: bool | None = None, missing_policy=None, require_numeric=None) -> None:
+def preflight(
+    path: Path,
+    target: str,
+    plan: dict,
+    *,
+    reserve_validation: bool = False,
+    allow_missing: bool | None = None,
+    missing_policy=None,
+    require_numeric=None,
+) -> None:
     plan = validate(plan)
-    frame = validate_clean_dataset(path, target, allow_missing=(
-        plan['engine'] == 'xgboost' if allow_missing is None else allow_missing),
-        missing_policy=missing_policy, require_numeric=require_numeric)
+    frame = validate_clean_dataset(
+        path,
+        target,
+        allow_missing=(plan["engine"] == "xgboost" if allow_missing is None else allow_missing),
+        missing_policy=missing_policy,
+        require_numeric=require_numeric,
+    )
     partition = discovery_partition(frame[target], plan["seed"]) if reserve_validation else None
     evaluation_splits(frame[target], plan, partition=partition)
 
 
-def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=None, explain=True,
-          persist=True, partition=None, configuration=None, xai_request=None, missing_policy=None,
-          imputation_categories=None, preprocessing_policy=None, seed_policy=None, predictor_types=None,
-          metrics_policy=None) -> dict:
+def score(
+    path: Path,
+    target: str,
+    plan: dict,
+    *,
+    predictors=None,
+    fixed_trials=None,
+    explain=True,
+    persist=True,
+    partition=None,
+    configuration=None,
+    xai_request=None,
+    missing_policy=None,
+    imputation_categories=None,
+    preprocessing_policy=None,
+    seed_policy=None,
+    predictor_types=None,
+    metrics_policy=None,
+) -> dict:
     import numpy as np
     import sklearn
     from sklearn.metrics import roc_auc_score, average_precision_score, balanced_accuracy_score, confusion_matrix
@@ -228,9 +296,10 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
 
     from memstara.missing_values import resolve_policy, TrainingImputer, imputation_record
     from memstara import performance_metrics as performance
-    metrics_policy = metrics_policy or (active_plan() or {}).get('metrics_policy', performance.LEGACY)
+
+    metrics_policy = metrics_policy or (active_plan() or {}).get("metrics_policy", performance.LEGACY)
     if metrics_policy not in (performance.VERSION, performance.LEGACY):
-        raise DataQualityError('Unsupported performance metrics policy')
+        raise DataQualityError("Unsupported performance metrics policy")
     detailed_metrics = metrics_policy == performance.VERSION
     missing_policy = missing_policy or resolve_policy()
     if missing_policy not in ("reject", "native_xgboost", "impute_train_v1"):
@@ -242,7 +311,8 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     if imputation_categories is None:
         imputation_categories = research.get("categorical_columns", [])
     from memstara.preprocessing_policy import analysis_ready, typed_predictors, resolve as preprocessing_version
-    policy_snapshot = {'preprocessing_policy': preprocessing_policy} if preprocessing_policy else None
+
+    policy_snapshot = {"preprocessing_policy": preprocessing_policy} if preprocessing_policy else None
     prepared_input = analysis_ready(policy_snapshot)
     typed_input = typed_predictors(policy_snapshot)
     continuous_columns = [c for c, kind in predictor_types.items() if kind == "continuous"]
@@ -252,46 +322,57 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
     seed_policy = seed_policy or classifier_seed_policy()
     if seed_policy not in (CLASSIFIER_SEED_POLICY, LEGACY_CLASSIFIER_SEED_POLICY):
         raise DataQualityError("Unsupported classifier seed policy")
-    if prepared_input and configuration and configuration.get('scale_numeric'):
-        raise DataQualityError('Automatic scaling is disabled; scale_numeric must be false')
+    if prepared_input and configuration and configuration.get("scale_numeric"):
+        raise DataQualityError("Automatic scaling is disabled; scale_numeric must be false")
     began = time.time()
     source_bytes = path.read_bytes()
     if partition is None:
         snapshot = active_plan() or {}
-        partition = snapshot.get('validation_partition') or {}
-        if (snapshot.get('hypothesis_policy', {}).get('version') == 'iterative_discovery_v1'
-                and snapshot.get('partition_policy') != 'two_way_stratified_v1' and not partition):
-            raise DataQualityError('Iterative discovery requires a reserved validation partition')
+        partition = snapshot.get("validation_partition") or {}
+        if (
+            snapshot.get("hypothesis_policy", {}).get("version") == "iterative_discovery_v1"
+            and snapshot.get("partition_policy") != "two_way_stratified_v1"
+            and not partition
+        ):
+            raise DataQualityError("Iterative discovery requires a reserved validation partition")
     plan = validate(plan)
-    df = validate_clean_dataset(path, target, allow_missing=plan['engine'] == 'xgboost',
-                                missing_policy=missing_policy, require_numeric=prepared_input and not typed_input)
+    df = validate_clean_dataset(
+        path,
+        target,
+        allow_missing=plan["engine"] == "xgboost",
+        missing_policy=missing_policy,
+        require_numeric=prepared_input and not typed_input,
+    )
     X, y = df.drop(columns=[target]), df[target]
     if predictors is not None:
         if target in predictors or any(c not in X for c in predictors):
             raise DataQualityError("Invalid comparison predictors")
         X = X[list(dict.fromkeys(predictors))]
     if X.empty:
-        raise DataQualityError('No predictor features are available')
+        raise DataQualityError("No predictor features are available")
     if y.isna().any():
-        raise DataQualityError('Target labels are missing; labels cannot be imputed')
+        raise DataQualityError("Target labels are missing; labels cannot be imputed")
     counts = y.value_counts()
     if counts.min() < 2:
-        raise DataQualityError('Each target class needs at least two samples for a stratified hold-out')
+        raise DataQualityError("Each target class needs at least two samples for a stratified hold-out")
     warnings = []
-    if counts.min() / len(y) < .1:
-        warnings.append('Rare positive or negative class: inspect average precision and class counts; '
-                        'AUC alone is insufficient.')
-    numeric = X.select_dtypes(include='number').columns.tolist()
+    if counts.min() / len(y) < 0.1:
+        warnings.append(
+            "Rare positive or negative class: inspect average precision and class counts; AUC alone is insufficient."
+        )
+    numeric = X.select_dtypes(include="number").columns.tolist()
     categorical = [c for c in X if c not in numeric or (typed_input and c in imputation_categories)]
     numeric = [c for c in numeric if c not in categorical]
     missing_cells = int(X.isna().sum().sum())
     if missing_cells and not use_imputation:
-        warnings.append('Missing numeric predictors are retained as NaN for XGBoost tree routing; '
-                        'categorical missingness is encoded as a category when observed in training. '
-                        'Missingness may reflect measurement practices; review before clinical interpretation.')
+        warnings.append(
+            "Missing numeric predictors are retained as NaN for XGBoost tree routing; "
+            "categorical missingness is encoded as a category when observed in training. "
+            "Missingness may reflect measurement practices; review before clinical interpretation."
+        )
     if (X.nunique(dropna=True) <= 1).any():
-        warnings.append('Some predictors are constant or entirely missing and provide little or no information.')
-    threshold = configuration['threshold'] if configuration else .5
+        warnings.append("Some predictors are constant or entirely missing and provide little or no information.")
+    threshold = configuration["threshold"] if configuration else 0.5
     runs: list[dict[str, Any]] = []
     artifacts = []
     cv_artifacts = []
@@ -320,26 +401,28 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                 verbose_feature_names_out=False,
             )
         )
-        best, best_cv, best_params, selected_trial = None, float('-inf'), None, 0
+        best, best_cv, best_params, selected_trial = None, float("-inf"), None, 0
         best_cv_record, best_cv_evidence = None, None
-        fold_count = plan['folds'] or (3 if plan['search_trials'] > 1 else 0)
+        fold_count = plan["folds"] or (3 if plan["search_trials"] > 1 else 0)
         requested_folds = fold_count
         fold_count = min(fold_count, int(y.iloc[train].value_counts().min()))
         if fold_count < 2:
             fold_count = 0
         if configuration and fold_count != requested_folds:
-            raise DataQualityError('Requested training CV exceeds the available training class count')
+            raise DataQualityError("Requested training CV exceeds the available training class count")
         if fold_count != requested_folds:
-            warnings.append('CV folds reduced to match training minority count; '
-                            'search is disabled when CV is unavailable.')
-        candidates = ([fixed_trials[len(runs)]] if fixed_trials is not None
-                      else range(plan['search_trials'] if fold_count else 1))
+            warnings.append(
+                "CV folds reduced to match training minority count; search is disabled when CV is unavailable."
+            )
+        candidates = (
+            [fixed_trials[len(runs)]] if fixed_trials is not None else range(plan["search_trials"] if fold_count else 1)
+        )
         for trial in candidates:
-            model = model_for(plan['engine'], seed, trial)
+            model = model_for(plan["engine"], seed, trial)
             if configuration:
-                parameters = dict(configuration['parameters'])
-                if parameters.get('missing') == 'NaN':
-                    parameters['missing'] = float('nan')
+                parameters = dict(configuration["parameters"])
+                if parameters.get("missing") == "NaN":
+                    parameters["missing"] = float("nan")
                 model.set_params(**parameters)
             # Reconcile the proposal before CV or fitting; never allow model settings
             # to replace the Data Agent split seed for a new execution.
@@ -356,7 +439,7 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                         ),
                     )
                 )
-            steps.extend([('encode', pre), ('model', model)])
+            steps.extend([("encode", pre), ("model", model)])
             pipe = Pipeline(steps)
             cv_scores = None
             cv_record, cv_evidence = None, None
@@ -364,11 +447,13 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                 cv = StratifiedKFold(n_splits=fold_count, shuffle=True, random_state=seed)
                 if detailed_metrics:
                     cv_record, cv_evidence = performance.cross_validation(
-                        pipe, X.iloc[train], y.iloc[train], cv, threshold, missing_policy)
-                    cv_scores = [row['metrics']['auroc'] for row in cv_record['folds']]
+                        pipe, X.iloc[train], y.iloc[train], cv, threshold, missing_policy
+                    )
+                    cv_scores = [row["metrics"]["auroc"] for row in cv_record["folds"]]
                 else:
-                    cv_scores = cross_val_score(pipe, X.iloc[train], y.iloc[train], cv=cv, scoring='roc_auc',
-                                                n_jobs=1, error_score='raise')
+                    cv_scores = cross_val_score(
+                        pipe, X.iloc[train], y.iloc[train], cv=cv, scoring="roc_auc", n_jobs=1, error_score="raise"
+                    )
             avg = float(np.mean(cv_scores)) if cv_scores is not None else 0.0
             if best is None or avg > best_cv:
                 best, best_cv, selected_trial = pipe, avg, trial
@@ -377,7 +462,7 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
                 # PostgreSQL JSONB and browser JSON require finite JSON numbers.
                 best_params = json.loads(json.dumps(model.get_params(), default=str), parse_constant=str)
         if best is None or best_params is None:
-            raise DataQualityError('Evaluation requires at least one candidate model')
+            raise DataQualityError("Evaluation requires at least one candidate model")
         best.fit(X.iloc[train], y.iloc[train])
         probability = best.predict_proba(X.iloc[test])[:, 1]
         artifacts.append((best, train.copy(), test.copy(), probability.copy()))
@@ -386,130 +471,201 @@ def score(path: Path, target: str, plan: dict, *, predictors=None, fixed_trials=
         matrix = confusion_matrix(y.iloc[test], probability >= threshold, labels=[0, 1])
         tn, fp, fn, tp = (int(n) for n in matrix.ravel())
         operating_point = {
-            'probability_cutoff': threshold, 'selection': 'fixed before evaluation; not optimized on hold-out',
-            'sensitivity': tp / (tp + fn), 'specificity': tn / (tn + fp),
-            'precision': tp / (tp + fp) if tp + fp else None,
-            'precision_reason': ('No positive predictions at the fixed cutoff: TP + FP = 0, '
-                                 'so precision is undefined (0/0).') if tp + fp == 0 else None,
-            'negative_predictive_value': tn / (tn + fn) if tn + fn else None,
-            'true_positive': tp, 'false_positive': fp, 'true_negative': tn, 'false_negative': fn,
-            'status': 'model operating point; not a validated clinical intervention threshold',
+            "probability_cutoff": threshold,
+            "selection": "fixed before evaluation; not optimized on hold-out",
+            "sensitivity": tp / (tp + fn),
+            "specificity": tn / (tn + fp),
+            "precision": tp / (tp + fp) if tp + fp else None,
+            "precision_reason": (
+                "No positive predictions at the fixed cutoff: TP + FP = 0, so precision is undefined (0/0)."
+            )
+            if tp + fp == 0
+            else None,
+            "negative_predictive_value": tn / (tn + fn) if tn + fn else None,
+            "true_positive": tp,
+            "false_positive": fp,
+            "true_negative": tn,
+            "false_negative": fn,
+            "status": "model operating point; not a validated clinical intervention threshold",
         }
-        runs.append({'seed': seed, 'auc': auc, 'split_id': hashlib.sha256(test.tobytes()).hexdigest(),
-                     'train_split_id': hashlib.sha256(train.tobytes()).hexdigest(),
-                     'prediction_sha256': hashlib.sha256(probability.tobytes()).hexdigest(),
-                     'selected_trial': selected_trial, 'operating_point': operating_point,
-                     'classifier_seed_policy': seed_policy,
-                     'requested_random_state': (configuration['parameters'].get('random_state')
-                                                if configuration else seed),
-                     'effective_random_state': best_params.get('random_state'),
-                     'n_train': len(train), 'n_test': len(test), 'parameters': best_params,
-                     'imputation': imputation_record(best, missing_policy),
-                     'average_precision': float(average_precision_score(y.iloc[test], probability)),
-                     'balanced_accuracy_at_0_5': float(balanced_accuracy_score(y.iloc[test], probability >= .5)),
-                     'train_class_counts': {str(k): int(v) for k, v in y.iloc[train].value_counts().items()},
-                     'test_class_counts': {str(k): int(v) for k, v in y.iloc[test].value_counts().items()},
-                     'cv_auc': best_cv if fold_count else None, 'cv_folds': fold_count})
+        runs.append(
+            {
+                "seed": seed,
+                "auc": auc,
+                "split_id": hashlib.sha256(test.tobytes()).hexdigest(),
+                "train_split_id": hashlib.sha256(train.tobytes()).hexdigest(),
+                "prediction_sha256": hashlib.sha256(probability.tobytes()).hexdigest(),
+                "selected_trial": selected_trial,
+                "operating_point": operating_point,
+                "classifier_seed_policy": seed_policy,
+                "requested_random_state": (configuration["parameters"].get("random_state") if configuration else seed),
+                "effective_random_state": best_params.get("random_state"),
+                "n_train": len(train),
+                "n_test": len(test),
+                "parameters": best_params,
+                "imputation": imputation_record(best, missing_policy),
+                "average_precision": float(average_precision_score(y.iloc[test], probability)),
+                "balanced_accuracy_at_0_5": float(balanced_accuracy_score(y.iloc[test], probability >= 0.5)),
+                "train_class_counts": {str(k): int(v) for k, v in y.iloc[train].value_counts().items()},
+                "test_class_counts": {str(k): int(v) for k, v in y.iloc[test].value_counts().items()},
+                "cv_auc": best_cv if fold_count else None,
+                "cv_folds": fold_count,
+            }
+        )
         if configuration:
             from sklearn.metrics import brier_score_loss, f1_score, log_loss, precision_recall_curve, auc as area
+
             precision, recall, _ = precision_recall_curve(y.iloc[test], probability)
-            runs[-1].update(brier_score=float(brier_score_loss(y.iloc[test], probability)),
-                            log_loss=float(log_loss(y.iloc[test], probability, labels=[0, 1])),
-                            f1=float(f1_score(y.iloc[test], probability >= threshold, zero_division=0)),
-                            pr_auc=float(area(recall, precision)))
+            runs[-1].update(
+                brier_score=float(brier_score_loss(y.iloc[test], probability)),
+                log_loss=float(log_loss(y.iloc[test], probability, labels=[0, 1])),
+                f1=float(f1_score(y.iloc[test], probability >= threshold, zero_division=0)),
+                pr_auc=float(area(recall, precision)),
+            )
         if detailed_metrics:
             measured_test = performance.binary_metrics(y.iloc[test], probability, threshold)
-            measured_test.update(scope='held_out_test', uncertainty=performance.bootstrap_intervals(
-                y.iloc[test], probability, threshold, seed))
-            runs[-1]['performance'] = {
-                'training': {'n': len(train), 'purpose': 'model fitting', 'metrics_status': 'not_computed',
-                             'reason': 'Training performance is not used as a generalization estimate.'},
-                'cross_validation': best_cv_record or {
-                    'status': 'not_performed', 'fold_count': 0,
-                    'requested_folds': requested_folds,
-                    'reason': ('Insufficient training class counts for CV.' if requested_folds else
-                               'Training CV is disabled for this evaluation.')},
-                'test': measured_test,
+            measured_test.update(
+                scope="held_out_test",
+                uncertainty=performance.bootstrap_intervals(y.iloc[test], probability, threshold, seed),
+            )
+            runs[-1]["performance"] = {
+                "training": {
+                    "n": len(train),
+                    "purpose": "model fitting",
+                    "metrics_status": "not_computed",
+                    "reason": "Training performance is not used as a generalization estimate.",
+                },
+                "cross_validation": best_cv_record
+                or {
+                    "status": "not_performed",
+                    "fold_count": 0,
+                    "requested_folds": requested_folds,
+                    "reason": (
+                        "Insufficient training class counts for CV."
+                        if requested_folds
+                        else "Training CV is disabled for this evaluation."
+                    ),
+                },
+                "test": measured_test,
             }
         last = (best, train, test)
     if last is None:
-        raise DataQualityError('Evaluation requires at least one train/test split')
+        raise DataQualityError("Evaluation requires at least one train/test split")
     best, train, test = last
     try:
-        importance, explanation = (_explain(best, X, y, train, test, numeric, plan, runs) if explain else
-                                   ({}, {'status': 'completed', 'scope': 'Auxiliary comparison only'}))
+        importance, explanation = (
+            _explain(best, X, y, train, test, numeric, plan, runs)
+            if explain
+            else ({}, {"status": "completed", "scope": "Auxiliary comparison only"})
+        )
     except Exception as exc:
         # Library messages may contain data values. Persist only safe exception metadata.
         importance = {}
         explanation = {
-            'status': 'failed', 'error_type': type(exc).__name__,
-            'reason': 'Supplementary explanation failed; model evaluation metrics are retained.',
-            'partial_dependence': [], 'feature_effects': [], 'exploratory_transitions': [],
-            'shap': {'status': 'not_available'},
-            'operating_point': runs[-1]['operating_point'],
-            'clinical_threshold': None,
-            'actionability': 'Explanation unavailable. Do not infer feature effects or clinical actionability.',
+            "status": "failed",
+            "error_type": type(exc).__name__,
+            "reason": "Supplementary explanation failed; model evaluation metrics are retained.",
+            "partial_dependence": [],
+            "feature_effects": [],
+            "exploratory_transitions": [],
+            "shap": {"status": "not_available"},
+            "operating_point": runs[-1]["operating_point"],
+            "clinical_threshold": None,
+            "actionability": "Explanation unavailable. Do not infer feature effects or clinical actionability.",
         }
-    if explanation['status'] != 'completed':
-        warnings.append('Explanation is incomplete; inspect explanation status before interpreting feature effects.')
+    if explanation["status"] != "completed":
+        warnings.append("Explanation is incomplete; inspect explanation status before interpreting feature effects.")
     reserve = partition
-    result = {'auc': float(np.mean([r['auc'] for r in runs])),
-              'auc_std': float(np.std([r['auc'] for r in runs])), 'features': list(X.columns),
-              'feature_importance': importance, 'model': plan['engine'], 'seed': plan['seed'],
-              'test_size': plan['test_size'], 'n_train': len(train), 'n_test': len(test),
-              'data_quality': {'missing_predictor_cells': missing_cells,
-                               'imputation_categories': list(imputation_categories),
-                               'predictor_types': dict(predictor_types),
-                               'missing_value_policy': missing_policy,
-                               'warnings': list(dict.fromkeys(warnings)),
-                               'preprocessing': ('User-approved training-only imputation. '
-                                                 if use_imputation else 'No cleaning or imputation. ') +
-                                                'Training-fold one-hot encoding; numeric passthrough for XGBoost, '
-                                                'training-fold scaling for other models.',
-                               'source_preserved': True, 'target_imputed': False},
-              'evaluation': {'plan': plan, 'replicates': runs,
-                             'classifier_seed_policy': seed_policy, 'replicate_seeds': replicate_seeds,
-                             'sklearn_version': sklearn.__version__,
-                             'dataset_sha256': hashlib.sha256(source_bytes).hexdigest(),
-                             'started_at': began, 'duration_seconds': time.time() - began,
-                             'score_scope': ('two_way_test' if (active_plan() or {}).get('partition_policy')
-                                             == 'two_way_stratified_v1' else
-                                             'adaptive_exploration' if reserve else 'exploratory_holdout'),
-                             'validation_reserve': {k:v for k,v in reserve.items()
-                                                    if k != 'exploration_rows'}},
-              'explanation': explanation}
+    result = {
+        "auc": float(np.mean([r["auc"] for r in runs])),
+        "auc_std": float(np.std([r["auc"] for r in runs])),
+        "features": list(X.columns),
+        "feature_importance": importance,
+        "model": plan["engine"],
+        "seed": plan["seed"],
+        "test_size": plan["test_size"],
+        "n_train": len(train),
+        "n_test": len(test),
+        "data_quality": {
+            "missing_predictor_cells": missing_cells,
+            "imputation_categories": list(imputation_categories),
+            "predictor_types": dict(predictor_types),
+            "missing_value_policy": missing_policy,
+            "warnings": list(dict.fromkeys(warnings)),
+            "preprocessing": (
+                "User-approved training-only imputation. " if use_imputation else "No cleaning or imputation. "
+            )
+            + "Training-fold one-hot encoding; numeric passthrough for XGBoost, "
+            "training-fold scaling for other models.",
+            "source_preserved": True,
+            "target_imputed": False,
+        },
+        "evaluation": {
+            "plan": plan,
+            "replicates": runs,
+            "classifier_seed_policy": seed_policy,
+            "replicate_seeds": replicate_seeds,
+            "sklearn_version": sklearn.__version__,
+            "dataset_sha256": hashlib.sha256(source_bytes).hexdigest(),
+            "started_at": began,
+            "duration_seconds": time.time() - began,
+            "score_scope": (
+                "two_way_test"
+                if (active_plan() or {}).get("partition_policy") == "two_way_stratified_v1"
+                else "adaptive_exploration"
+                if reserve
+                else "exploratory_holdout"
+            ),
+            "validation_reserve": {k: v for k, v in reserve.items() if k != "exploration_rows"},
+        },
+        "explanation": explanation,
+    }
     if detailed_metrics:
-        result['evaluation']['metrics_policy'] = metrics_policy
+        result["evaluation"]["metrics_policy"] = metrics_policy
     if configuration:
-        result['ml_configuration'] = configuration
-        result['data_quality']['preprocessing'] = (
-            'Training-fold one-hot encoding; numeric ' +
-            ('standard scaling.' if configuration['scale_numeric'] else 'passthrough.') +
-            ' No cleaning, imputation or row changes.')
-    result['data_quality']['preprocessing_policy'] = preprocessing_version(policy_snapshot)
+        result["ml_configuration"] = configuration
+        result["data_quality"]["preprocessing"] = (
+            "Training-fold one-hot encoding; numeric "
+            + ("standard scaling." if configuration["scale_numeric"] else "passthrough.")
+            + " No cleaning, imputation or row changes."
+        )
+    result["data_quality"]["preprocessing_policy"] = preprocessing_version(policy_snapshot)
     if prepared_input:
-        result['data_quality']['preprocessing'] = (
-            'Numeric predictors unchanged: no encoding, scaling, row removal or resampling. '
-            + ('User-approved training-only imputation.' if use_imputation else 'No imputation.'))
+        result["data_quality"]["preprocessing"] = (
+            "Numeric predictors unchanged: no encoding, scaling, row removal or resampling. "
+            + ("User-approved training-only imputation." if use_imputation else "No imputation.")
+        )
     if typed_input:
         result["data_quality"]["preprocessing"] = (
             "Numeric measurements unchanged; categorical encoding fitted on training folds only. "
             + ("User-approved training-only mean/mode imputation." if use_imputation else "No imputation.")
         )
     if path.read_bytes() != source_bytes:
-        raise DataQualityError('Input changed during evaluation; results cannot be reproduced.')
+        raise DataQualityError("Input changed during evaluation; results cannot be reproduced.")
     if persist:
         from memstara.reproducibility import save_bundle
-        comparison_path = path.with_suffix('.comparison.json')
+
+        comparison_path = path.with_suffix(".comparison.json")
         handoff = json.loads(comparison_path.read_text()) if comparison_path.exists() else {}
-        selection = handoff.get('feature_selection')
-        result['evaluation']['reproducibility'] = save_bundle(
-            source_bytes, target, plan, list(X.columns), fixed_trials, partition, artifacts, result,
-            feature_selection=selection, data_allocation=handoff.get('data_allocation'),
-            configuration=configuration, xai_request=xai_request,
+        selection = handoff.get("feature_selection")
+        result["evaluation"]["reproducibility"] = save_bundle(
+            source_bytes,
+            target,
+            plan,
+            list(X.columns),
+            fixed_trials,
+            partition,
+            artifacts,
+            result,
+            feature_selection=selection,
+            data_allocation=handoff.get("data_allocation"),
+            configuration=configuration,
+            xai_request=xai_request,
             agent_plan=json.loads(path.with_suffix(".ml-plan.json").read_text())
-            if path.with_suffix(".ml-plan.json").exists() else None,
-            cv_artifacts=cv_artifacts if detailed_metrics else None)
+            if path.with_suffix(".ml-plan.json").exists()
+            else None,
+            cv_artifacts=cv_artifacts if detailed_metrics else None,
+        )
     return result
 
 
@@ -519,8 +675,9 @@ def _explain(best, X, y, train, test, numeric, plan, runs):
     from sklearn.inspection import permutation_importance
 
     # Consistent importance units across all selectable engines, measured on hold-out.
-    imp = permutation_importance(best, X.iloc[test], y.iloc[test], n_repeats=3,
-                                 random_state=plan['seed'], scoring='roc_auc', n_jobs=1)
+    imp = permutation_importance(
+        best, X.iloc[test], y.iloc[test], n_repeats=3, random_state=plan["seed"], scoring="roc_auc", n_jobs=1
+    )
     importance = {str(c): float(v) for c, v in zip(X.columns, imp.importances_mean, strict=True)}
     curves = []
     skipped = []
@@ -528,82 +685,104 @@ def _explain(best, X, y, train, test, numeric, plan, runs):
         # Build the grid from observed TRAINING values, never from held-out values.
         observed = X.iloc[train][c].dropna()
         if observed.nunique() < 2:
-            skipped.append({'feature': c, 'reason': 'Fewer than two observed training values'})
+            skipped.append({"feature": c, "reason": "Fewer than two observed training values"})
             continue
         unique = np.sort(observed.unique())
         # Enumerate low-cardinality predictors so rare binary indicators retain both states.
-        grid = unique if len(unique) <= 8 else np.unique(np.quantile(observed, np.linspace(.05, .95, 8)))
+        grid = unique if len(unique) <= 8 else np.unique(np.quantile(observed, np.linspace(0.05, 0.95, 8)))
         if len(grid) < 2:
-            skipped.append({'feature': c, 'reason': 'Training percentile grid has fewer than two distinct values'})
+            skipped.append({"feature": c, "reason": "Training percentile grid has fewer than two distinct values"})
             continue
         probabilities = []
         for value in grid:
             reference = X.iloc[train].copy()
             reference[c] = value
             probabilities.append(float(best.predict_proba(reference)[:, 1].mean()))
-        pdp = {'grid_values': [grid], 'average': [np.asarray(probabilities)]}
-        curves.append({'feature': c, 'values': pdp['grid_values'][0].tolist(),
-                       'predicted_probability': pdp['average'][0].tolist()})
-    explanation = {'status': 'partial' if skipped else 'completed', 'skipped_response_curves': skipped,
-                   'method': 'holdout_permutation_auc', 'partial_dependence': curves,
-                   'operating_point': runs[-1]['operating_point'],
-                   'scope': 'Explanation of the final replicate; AUC summary spans all replicates.',
-                   'evaluated_replicate': len(runs), 'total_replicates': len(runs),
-                   'evaluated_seed': runs[-1]['seed'], 'evaluation_rows': len(test),
-                   'permutation': {
-                       'n_repeats': int(imp.importances.shape[1]),
-                       'random_state': plan['seed'], 'scoring': 'roc_auc',
-                       'standard_deviation': dict(zip(map(str, X.columns), imp.importances_std.tolist(), strict=True)),
-                       'repeat_values': {str(c): values.tolist() for c, values in
-                                         zip(X.columns, imp.importances, strict=True)},
-                       'scope': 'Repeated shuffles of the same held-out data, not independent train/test splits.',
-                   },
-                   'clinical_threshold': None,
-                   'review_status': 'Review required — provisional implementation, not independently reviewed',
-                   'actionability': 'Exploratory model associations only. Clinical thresholds and interventions '
-                                    'require domain review and independent validation.'}
-    explanation['exploratory_transitions'] = [
-        {'feature': c['feature'], 'value': float(c['values'][int(np.argmax(
-             np.abs(np.diff(c['predicted_probability']))))]),
-         'status': 'largest model-response step on training grid; not a validated clinical cutoff'}
-        for c in curves if len(c['values']) > 1
+        pdp = {"grid_values": [grid], "average": [np.asarray(probabilities)]}
+        curves.append(
+            {
+                "feature": c,
+                "values": pdp["grid_values"][0].tolist(),
+                "predicted_probability": pdp["average"][0].tolist(),
+            }
+        )
+    explanation = {
+        "status": "partial" if skipped else "completed",
+        "skipped_response_curves": skipped,
+        "method": "holdout_permutation_auc",
+        "partial_dependence": curves,
+        "operating_point": runs[-1]["operating_point"],
+        "scope": "Explanation of the final replicate; AUC summary spans all replicates.",
+        "evaluated_replicate": len(runs),
+        "total_replicates": len(runs),
+        "evaluated_seed": runs[-1]["seed"],
+        "evaluation_rows": len(test),
+        "permutation": {
+            "n_repeats": int(imp.importances.shape[1]),
+            "random_state": plan["seed"],
+            "scoring": "roc_auc",
+            "standard_deviation": dict(zip(map(str, X.columns), imp.importances_std.tolist(), strict=True)),
+            "repeat_values": {str(c): values.tolist() for c, values in zip(X.columns, imp.importances, strict=True)},
+            "scope": "Repeated shuffles of the same held-out data, not independent train/test splits.",
+        },
+        "clinical_threshold": None,
+        "review_status": "Review required — provisional implementation, not independently reviewed",
+        "actionability": "Exploratory model associations only. Clinical thresholds and interventions "
+        "require domain review and independent validation.",
+    }
+    explanation["exploratory_transitions"] = [
+        {
+            "feature": c["feature"],
+            "value": float(c["values"][int(np.argmax(np.abs(np.diff(c["predicted_probability"]))))]),
+            "status": "largest model-response step on training grid; not a validated clinical cutoff",
+        }
+        for c in curves
+        if len(c["values"]) > 1
     ]
-    explanation['feature_effects'] = []
+    explanation["feature_effects"] = []
     for curve in curves:
-        if len(curve['values']) < 2:
+        if len(curve["values"]) < 2:
             continue
-        delta = np.diff(curve['predicted_probability'])
+        delta = np.diff(curve["predicted_probability"])
         index = int(np.argmax(np.abs(delta)))
-        explanation['feature_effects'].append({
-            'feature': curve['feature'],
-            'range_start': curve['values'][index], 'range_end': curve['values'][index + 1],
-            'probability_before': curve['predicted_probability'][index],
-            'probability_after': curve['predicted_probability'][index + 1],
-            'direction': 'increase' if delta[index] > 0 else 'decrease' if delta[index] < 0 else 'unchanged',
-            'probability_change': float(delta[index]),
-            'evidence': 'largest adjacent response change on the training-data grid; conditional model experiment',
-            'validation_needed': 'Confirm feature meaning and units, correlated-feature effects, external validity '
-                                 'and whether changing this feature is feasible. '
-                                 'This is not a treatment recommendation.',
-        })
-    if plan['engine'] == 'xgboost':
+        explanation["feature_effects"].append(
+            {
+                "feature": curve["feature"],
+                "range_start": curve["values"][index],
+                "range_end": curve["values"][index + 1],
+                "probability_before": curve["predicted_probability"][index],
+                "probability_after": curve["predicted_probability"][index + 1],
+                "direction": "increase" if delta[index] > 0 else "decrease" if delta[index] < 0 else "unchanged",
+                "probability_change": float(delta[index]),
+                "evidence": "largest adjacent response change on the training-data grid; conditional model experiment",
+                "validation_needed": "Confirm feature meaning and units, correlated-feature effects, external validity "
+                "and whether changing this feature is feasible. "
+                "This is not a treatment recommendation.",
+            }
+        )
+    if plan["engine"] == "xgboost":
         try:
             import xgboost as xgb
+
             observed = X.iloc[test]
-            if 'impute' in best.named_steps:
-                observed = best.named_steps['impute'].transform(observed)
-            encoded = best.named_steps['encode'].transform(observed)
-            contributions = best.named_steps['model'].get_booster().predict(xgb.DMatrix(encoded), pred_contribs=True)
-            names = best.named_steps['encode'].get_feature_names_out()
-            explanation['shap'] = {'method': 'XGBoost TreeSHAP', 'units': 'log-odds',
-                                   'mean_absolute': dict(zip(names, np.abs(contributions[:, :-1]).mean(axis=0).tolist(),
-                                                             strict=True)),
-                                   'mean_signed': dict(zip(names, contributions[:, :-1].mean(axis=0).tolist(),
-                                                           strict=True))}
+            if "impute" in best.named_steps:
+                observed = best.named_steps["impute"].transform(observed)
+            encoded = best.named_steps["encode"].transform(observed)
+            contributions = best.named_steps["model"].get_booster().predict(xgb.DMatrix(encoded), pred_contribs=True)
+            names = best.named_steps["encode"].get_feature_names_out()
+            explanation["shap"] = {
+                "method": "XGBoost TreeSHAP",
+                "units": "log-odds",
+                "mean_absolute": dict(zip(names, np.abs(contributions[:, :-1]).mean(axis=0).tolist(), strict=True)),
+                "mean_signed": dict(zip(names, contributions[:, :-1].mean(axis=0).tolist(), strict=True)),
+            }
         except Exception as exc:
-            explanation['status'] = 'partial'
-            explanation['shap'] = {'status': 'not_available', 'error_type': type(exc).__name__,
-                                   'reason': 'TreeSHAP calculation failed; no SHAP evidence is available.'}
+            explanation["status"] = "partial"
+            explanation["shap"] = {
+                "status": "not_available",
+                "error_type": type(exc).__name__,
+                "reason": "TreeSHAP calculation failed; no SHAP evidence is available.",
+            }
     else:
-        explanation['shap'] = {'status': 'not_available', 'reason': 'Use permutation importance and response curves.'}
+        explanation["shap"] = {"status": "not_available", "reason": "Use permutation importance and response curves."}
     return importance, explanation

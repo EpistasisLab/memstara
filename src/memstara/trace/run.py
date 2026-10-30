@@ -108,8 +108,7 @@ _SEEN_ELSEWHERE = {
     # sense: the system prompt, the tool specs and the conversation history all sit whole
     #        inside the request sent to the model. That text is in `NN_stage.llm.txt` in
     #        the same folder, so here only its size is mentioned.
-    "sense": {"user_input", "agent_goal", "system_prompt", "conversation_history",
-              "available_tools", "memories"},
+    "sense": {"user_input", "agent_goal", "system_prompt", "conversation_history", "available_tools", "memories"},
     # reason: thought and final_answer are printed below in full. tool_calls are shown,
     #         arguments included, by **the TOOL line of the very next act phase.**
     # `pattern` and `step` are bookkeeping rather than content — which step number it is
@@ -118,8 +117,16 @@ _SEEN_ELSEWHERE = {
     "reason": {"thought", "action", "tool_calls", "final_answer", "pattern", "step"},
     # act: results holds the same content as the `->` on the TOOL line above. This
     #      duplication was most of the file size (209KB in one run).
-    "act": {"results", "final_response", "should_continue", "steps",
-            "is_complete", "completion_reason", "action", "pattern"},
+    "act": {
+        "results",
+        "final_response",
+        "should_continue",
+        "steps",
+        "is_complete",
+        "completion_reason",
+        "action",
+        "pattern",
+    },
 }
 
 
@@ -153,8 +160,7 @@ def _dump_leftovers(emit: Any, data: Any, phase: str, tag: str) -> None:
             for line in _lines(data, "       "):
                 emit(line)
         return
-    rest = {k: v for k, v in data.items()
-            if k not in _SEEN_ELSEWHERE.get(phase, ()) and v not in (None, "", [], {})}
+    rest = {k: v for k, v in data.items() if k not in _SEEN_ELSEWHERE.get(phase, ()) and v not in (None, "", [], {})}
     if rest:
         emit(f"     {tag}")
         for line in _lines(rest, "       "):
@@ -164,8 +170,7 @@ def _dump_leftovers(emit: Any, data: Any, phase: str, tag: str) -> None:
 def _load_rows(rows_file: Path = ROWS_FILE) -> list[dict[str, Any]]:
     """Read the trial list file. If it is not there, say what to run first and stop."""
     if not rows_file.is_file():
-        print(f"!! {rows_file} not found — run `python -m memstara.pipeline.mvp` first",
-              file=sys.stderr)
+        print(f"!! {rows_file} not found — run `python -m memstara.pipeline.mvp` first", file=sys.stderr)
         raise SystemExit(1)
     return json.loads(rows_file.read_text(encoding="utf-8"))
 
@@ -256,7 +261,7 @@ async def render(
     def emit(text: str = "") -> None:
         print(text, file=out)
 
-    run = await get_run(run_id)          # the summary of one run — status, tokens, cost
+    run = await get_run(run_id)  # the summary of one run — status, tokens, cost
     steps = await get_run_steps(run_id)  # the steps that run went through, in order
 
     # ---- header ------------------------------------------------------
@@ -347,8 +352,10 @@ async def render(
                 sp = len(str(res.get("system_prompt") or ""))
                 tools_n = len(res.get("available_tools") or [])
                 mem_n = len(res.get("memories") or [])
-                emit(f"     kit     role brief {sp:,} chars · {tools_n} tools available · "
-                     f"{mem_n} memories   (the text itself is in the .llm.txt beside this)")
+                emit(
+                    f"     kit     role brief {sp:,} chars · {tools_n} tools available · "
+                    f"{mem_n} memories   (the text itself is in the .llm.txt beside this)"
+                )
 
             elif phase == "reason":
                 if res.get("thought"):

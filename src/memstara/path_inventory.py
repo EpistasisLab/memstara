@@ -1,4 +1,5 @@
 """Inventory explicit Markdown instance rows without inferring edge provenance."""
+
 from __future__ import annotations
 
 import hashlib
@@ -59,14 +60,22 @@ def path_inventory(body: str) -> dict[str, Any]:
         if row_id in seen:
             diagnostics.append("duplicate_instance_identifier")
         seen.add(row_id)
-        rows.append({"local_id": row_id, "body_line": line_number,
-                     "row_sha256": hashlib.sha256(line.strip().encode()).hexdigest(),
-                     "evidence_status": "unknown"})
+        rows.append(
+            {
+                "local_id": row_id,
+                "body_line": line_number,
+                "row_sha256": hashlib.sha256(line.strip().encode()).hexdigest(),
+                "evidence_status": "unknown",
+            }
+        )
     return {
         "version": "path_inventory_v1",
         "status": "partial" if diagnostics else "recorded" if rows else "unavailable",
         "format": "numbered_markdown_instances_table" if rows else None,
-        "row_count": len(rows), "rows": rows[:25], "truncated": len(rows) > 25,
+        "row_count": len(rows),
+        "rows": rows[:25],
+        "truncated": len(rows) > 25,
         "diagnostics": sorted(set(diagnostics)),
-        "hypothesis_use": "not_assessed", "edge_provenance": "not_assessed",
+        "hypothesis_use": "not_assessed",
+        "edge_provenance": "not_assessed",
     }

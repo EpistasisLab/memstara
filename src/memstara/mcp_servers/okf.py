@@ -4,14 +4,14 @@
 from __future__ import annotations
 
 import dataclasses  # used to make _Doc a fixed box that only carries values
-import json         # every tool returns a JSON string
-import math         # the word weight (idf) uses a logarithm
-import os           # one variable is read: the branch a run is confined to
-import pathlib      # file paths. Used in place of os.path
-import re           # used for splitting words and for frontmatter patterns
+import json  # every tool returns a JSON string
+import math  # the word weight (idf) uses a logarithm
+import os  # one variable is read: the branch a run is confined to
+import pathlib  # file paths. Used in place of os.path
+import re  # used for splitting words and for frontmatter patterns
 from typing import Any, Literal
 
-import yaml         # the frontmatter is YAML
+import yaml  # the frontmatter is YAML
 
 # The `fields=` predicate lives in its own module so it can be tested. This file cannot
 # be imported on a CI runner — `yaml` above and `motoro` below are both absent there —
@@ -49,7 +49,7 @@ def disable_yaml_timestamps() -> int:
 # the file would satisfy the linter and break what the ordering is for.
 from memstara.mcp_servers.debug_hook import quiet_child, wait_for_debugger  # noqa: E402
 
-quiet_child()          # silences the three startup messages a child prints
+quiet_child()  # silences the three startup messages a child prints
 wait_for_debugger("okf")
 
 # Before importing core's server: it parses nothing at import time, but ordering this
@@ -175,9 +175,9 @@ def _text(value: Any) -> str:
     shape therefore comes back as an empty string.
     """
     if value is None:
-        return ""          # no value -> blank
+        return ""  # no value -> blank
     if isinstance(value, (list, dict)):
-        return ""          # a list or a table does not belong here -> blank
+        return ""  # a list or a table does not belong here -> blank
     return str(value).strip()
 
 
@@ -241,7 +241,7 @@ def _signature(root: pathlib.Path) -> tuple[tuple[str, int], ...]:
     stamps = []
     for folder in sorted(p for p in root.iterdir() if p.is_dir()):
         if folder.name.startswith((".", "_")):
-            continue   # skip hidden folders and scratch folders beginning with `_`
+            continue  # skip hidden folders and scratch folders beginning with `_`
         for md in sorted(folder.glob("*.md")):
             # st_mtime_ns is the modification time in nanoseconds. Finer than whole
             # seconds, so two edits inside the same second are still told apart.
@@ -260,16 +260,16 @@ def _load(root: pathlib.Path) -> tuple[list[_Doc], list[dict[str, str]]]:
     sig = _signature(root)
     cached = _CACHE.get(key)
     if cached is not None and cached[0] == sig:
-        return cached[1], cached[2]   # same stamp -> done without touching a file
+        return cached[1], cached[2]  # same stamp -> done without touching a file
 
-    docs: list[_Doc] = []                  # the documents accepted as evidence
-    skipped: list[dict[str, str]] = []     # files that could not be read, or broke a rule
+    docs: list[_Doc] = []  # the documents accepted as evidence
+    skipped: list[dict[str, str]] = []  # files that could not be read, or broke a rule
 
     for folder in sorted(p for p in root.iterdir() if p.is_dir()):
         if folder.name.startswith((".", "_")):
             continue
         for md in sorted(folder.rglob("*.md")):  # rglob: descends into subfolders too
-            rel = md.relative_to(root).as_posix()   # short path, for error messages
+            rel = md.relative_to(root).as_posix()  # short path, for error messages
             if md.name == _DOMAIN_INDEX:
                 continue  # the shelf label, not evidence
             try:
@@ -316,7 +316,7 @@ def _load(root: pathlib.Path) -> tuple[list[_Doc], list[dict[str, str]]]:
     if not docs:
         for md in sorted(root.glob("*.md")):
             if md.stem in _ROOT_RESERVED:
-                continue   # a structure file, not evidence
+                continue  # a structure file, not evidence
             rel = md.name
             try:
                 fields, body = _parse_concept_file(md)
@@ -334,7 +334,7 @@ def _load(root: pathlib.Path) -> tuple[list[_Doc], list[dict[str, str]]]:
                 _Doc(
                     path=md,
                     domain=domain,
-                    address=md.stem,        # flat, so the plain name, not `domain/name`
+                    address=md.stem,  # flat, so the plain name, not `domain/name`
                     fields=fields,
                     body=body,
                     field_tokens={
@@ -363,8 +363,8 @@ def _idf(docs: list[_Doc]) -> dict[str, float]:
     This is the common method known in information retrieval as idf (inverse document
     frequency).
     """
-    n = len(docs) or 1          # at least 1, so as never to divide by zero
-    df: dict[str, int] = {}     # word -> how many documents it appeared in
+    n = len(docs) or 1  # at least 1, so as never to divide by zero
+    df: dict[str, int] = {}  # word -> how many documents it appeared in
     for doc in docs:
         # The words of the four fields (title, tags, description, journal) are merged
         # and then counted. A word in several fields of one document still counts as
@@ -400,7 +400,7 @@ def _index(docs: list[_Doc]) -> dict[str, list[_Doc]]:
             _text(doc.fields.get("id")).lower(),
             _text(doc.fields.get("pmid")).lower(),
         }:
-            if key:   # no id or pmid in the frontmatter gives "", which is filtered out
+            if key:  # no id or pmid in the frontmatter gives "", which is filtered out
                 by_ref.setdefault(key, []).append(doc)
     return by_ref
 
@@ -440,7 +440,7 @@ def okf_list_domains() -> str:
         total is the whole bundle.
     """
     try:
-        root = _bundle_root()          # the bundle location the env var points at
+        root = _bundle_root()  # the bundle location the env var points at
         docs, skipped = _load(root)
         locked = _locked_filter()
         if locked:
@@ -466,15 +466,19 @@ def okf_list_domains() -> str:
                 fields, _ = _parse_concept_file(index)
                 title = _text(fields.get("domain_title")) or _text(fields.get("title"))
             except (OKFError, OSError, UnicodeDecodeError):
-                title = ""   # an unreadable cover still leaves the list itself usable
+                title = ""  # an unreadable cover still leaves the list itself usable
         domains.append({"slug": slug, "title": title or slug, "documents": counts[slug]})
 
-    out: dict[str, Any] = {"domains": domains, "total": len(docs),
-                           "filter_options": _filter_options(docs),
-                           "filter_guidance": ("Use only listed filters. Put topics such as HIV in queries; "
-                                               "omit filters for no additional restriction.")}
+    out: dict[str, Any] = {
+        "domains": domains,
+        "total": len(docs),
+        "filter_options": _filter_options(docs),
+        "filter_guidance": (
+            "Use only listed filters. Put topics such as HIV in queries; omit filters for no additional restriction."
+        ),
+    }
     if skipped:
-        out["skipped"] = skipped   # included only when something was passed over
+        out["skipped"] = skipped  # included only when something was passed over
     return json.dumps(out)
 
 
@@ -521,14 +525,20 @@ def _render(wanted: dict[str, str]) -> str:
 
 def _filter_options(docs: list[_Doc]) -> dict[str, list[str]]:
     """Branch choices from accessible documents, never an invented vocabulary."""
-    return {key: values_for((doc.fields for doc in docs), key)
-            for key in ("terminus_kind", "mechanism_family")
-            if any(key in doc.fields for doc in docs)}
+    return {
+        key: values_for((doc.fields for doc in docs), key)
+        for key in ("terminus_kind", "mechanism_family")
+        if any(key in doc.fields for doc in docs)
+    }
 
 
 @mcp.tool()
 def okf_search(
-    queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = "", fields: str = "",
+    queries: str,
+    k: int = _DEFAULT_K,
+    domain: str = "",
+    tags: str = "",
+    fields: str = "",
     filters: dict[str, str] | None = None,
 ) -> str:
     """Search the bundle by what its authors said each document is about.
@@ -593,9 +603,7 @@ def okf_search(
         pool = [d for d in pool if d.domain == domain]
         if not pool:
             # When the domain name was mistyped, hand back the list of real names too.
-            return json.dumps(
-                {"error": f"no domain {domain!r}", "domains": sorted({d.domain for d in accessible})}
-            )
+            return json.dumps({"error": f"no domain {domain!r}", "domains": sorted({d.domain for d in accessible})})
     keep_tags = {t.lower() for t in _split(tags)}
     if keep_tags:
         # Kept when the intersection is not empty = ANY one tag in common passes (not AND).
@@ -611,19 +619,27 @@ def okf_search(
                 raise ValueError(f"conflicting legacy and structured filter for {key!r}")
             asked[key] = value
         wanted_fields = merge_locked(locked, asked)
-        invalid = {key: value for key, value in asked.items()
-                   if value.casefold() not in {
-                       item.casefold() for item in values_for((doc.fields for doc in accessible), key)}}
+        invalid = {
+            key: value
+            for key, value in asked.items()
+            if value.casefold() not in {item.casefold() for item in values_for((doc.fields for doc in accessible), key)}
+        }
         if invalid:
-            return json.dumps({
-                "error": "Unknown filter value; search was not executed.",
-                "code": "invalid_filter", "requested_filters": asked,
-                "invalid_filters": invalid,
-                "values": {key: values_for((doc.fields for doc in accessible), key) for key in asked},
-                "filter_options": _filter_options(accessible), "searched": 0,
-                "guidance": ("Choose an available value or explicitly omit the filter. "
-                             "Put topics such as HIV in queries. No filter was changed automatically."),
-            })
+            return json.dumps(
+                {
+                    "error": "Unknown filter value; search was not executed.",
+                    "code": "invalid_filter",
+                    "requested_filters": asked,
+                    "invalid_filters": invalid,
+                    "values": {key: values_for((doc.fields for doc in accessible), key) for key in asked},
+                    "filter_options": _filter_options(accessible),
+                    "searched": 0,
+                    "guidance": (
+                        "Choose an available value or explicitly omit the filter. "
+                        "Put topics such as HIV in queries. No filter was changed automatically."
+                    ),
+                }
+            )
     except (OKFError, ValueError) as e:
         # A malformed filter is not an empty one. Narrowing to nothing and reporting
         # zero hits would look exactly like a question the bundle cannot answer.
@@ -635,8 +651,7 @@ def okf_search(
             # Said out loud for the same reason the clamped `k` is: a caller that is not
             # told how much was withheld will read a small result as a small literature.
             notes.append(
-                f"confined to {_render(locked)} for this run — "
-                f"{len(pool)} of the bundle's {len(docs)} documents."
+                f"confined to {_render(locked)} for this run — {len(pool)} of the bundle's {len(docs)} documents."
             )
         if not pool:
             # Same distinction the `no domain` branch above draws, for the same reason:
@@ -647,25 +662,22 @@ def okf_search(
             return json.dumps(
                 {
                     "error": f"no document matches {_render(wanted_fields)!r}",
-                    "values": {
-                        key: values_for((d.fields for d in accessible), key)
-                        for key in wanted_fields
-                    },
+                    "values": {key: values_for((d.fields for d in accessible), key) for key in wanted_fields},
                 }
             )
 
     idf = _idf(docs)  # weights come from the whole bundle, not the filtered slice
-                      # Taken from the filtered slice instead, the same word would be
-                      # worth something different on every narrowing, and the scores of
-                      # two searches could no longer be compared.
+    # Taken from the filtered slice instead, the same word would be
+    # worth something different on every narrowing, and the scores of
+    # two searches could no longer be compared.
     results = []
     for query in wanted:
-        q = _tokens(query)   # the query is split into words exactly as a document is
+        q = _tokens(query)  # the query is split into words exactly as a document is
         scored = []
         for doc in pool:
             score = 0.0
             for field, weight in _FIELD_WEIGHTS.items():
-                hits = q & doc.field_tokens[field]   # the words in common
+                hits = q & doc.field_tokens[field]  # the words in common
                 if hits:
                     score += weight * sum(idf.get(t, 0.0) for t in hits)
             if score > 0.0:
@@ -685,8 +697,12 @@ def okf_search(
 
     # searched = how many documents were actually swept this time (the count after
     # narrowing by domain, tags and fields).
-    out: dict[str, Any] = {"results": results, "searched": len(pool),
-                           "requested_filters": asked, "applied_filters": wanted_fields}
+    out: dict[str, Any] = {
+        "results": results,
+        "searched": len(pool),
+        "requested_filters": asked,
+        "applied_filters": wanted_fields,
+    }
     if notes:
         out["notes"] = notes
     return json.dumps(out)
@@ -722,7 +738,7 @@ def _read_documents(refs: str, section: str = "", max_chars: int = 0) -> str:
     except OKFError as e:
         return json.dumps({"error": str(e)})
 
-    by_ref = _index(docs)      # the phone book of names
+    by_ref = _index(docs)  # the phone book of names
     wanted = _split(refs)
     if not wanted:
         return json.dumps({"error": "refs must not be empty"})
@@ -750,13 +766,11 @@ def _read_documents(refs: str, section: str = "", max_chars: int = 0) -> str:
         if len(found) > 1:
             # Two or more documents answer to the same name. Rather than pick one at
             # random, show the candidates.
-            out.append(
-                {"ref": ref, "error": "ambiguous", "candidates": [d.address for d in found]}
-            )
+            out.append({"ref": ref, "error": "ambiguous", "candidates": [d.address for d in found]})
             continue
         doc = found[0]
         sections = _sections(doc.body)
-        headings = [name for name, _ in sections]   # the section names this document has
+        headings = [name for name, _ in sections]  # the section names this document has
 
         selected_section = section
         if section == "auto":
@@ -776,15 +790,15 @@ def _read_documents(refs: str, section: str = "", max_chars: int = 0) -> str:
                 )
                 continue
         else:
-            text = doc.body          # no section named -> the whole body
+            text = doc.body  # no section named -> the whole body
 
         truncated = False
         if max_chars and len(text) > max_chars:
             text, truncated = text[:max_chars], True
 
         entry = {
-            **doc.summary,           # the catalogue row (title, tags, journal, PMID ...) laid on as is
-            "ref": ref,              # exactly the name the caller used — easy to pair an answer to its request
+            **doc.summary,  # the catalogue row (title, tags, journal, PMID ...) laid on as is
+            "ref": ref,  # exactly the name the caller used — easy to pair an answer to its request
             "section": selected_section or None,
             "text": text,
             "sections": headings,
@@ -798,7 +812,7 @@ def _read_documents(refs: str, section: str = "", max_chars: int = 0) -> str:
             "knowledge_provenance": document_provenance(doc.fields, doc.body),
         }
         if truncated:
-            entry["truncated"] = True   # a truncation is always announced
+            entry["truncated"] = True  # a truncation is always announced
         out.append(entry)
 
     # default=str is the last safety net. Even with a value in the frontmatter that
@@ -825,11 +839,19 @@ def okf_read(refs: str, section: str = "", max_chars: int = 0) -> str:
     payload = json.loads(result)
     records = payload.get("documents", [payload])
     audit = {
-        "tool": "okf_read", "refs": refs, "section": section,
-        "results": [{"ref": row.get("ref", refs), "id": row.get("id"),
-                     "status": "failed" if "error" in row else "read",
-                     "error": row.get("error"),
-                     "knowledge_provenance": row.get("knowledge_provenance")} for row in records],
+        "tool": "okf_read",
+        "refs": refs,
+        "section": section,
+        "results": [
+            {
+                "ref": row.get("ref", refs),
+                "id": row.get("id"),
+                "status": "failed" if "error" in row else "read",
+                "error": row.get("error"),
+                "knowledge_provenance": row.get("knowledge_provenance"),
+            }
+            for row in records
+        ],
     }
     try:
         # One append syscall per event avoids interleaving between MCP processes.
@@ -861,32 +883,36 @@ def register_search_schema() -> None:
     locked = _locked_filter()
     docs = [doc for doc in docs if matches(doc.fields, locked)]
     options = _filter_options(docs)
-    definitions: dict[str, Any] = {
-        key: (Literal[tuple(values)] | None, None) for key, values in options.items()
-    }
+    definitions: dict[str, Any] = {key: (Literal[tuple(values)] | None, None) for key, values in options.items()}
     filter_model = create_model(
-        "KnowledgeFilters", __config__=ConfigDict(extra="forbid"),
+        "KnowledgeFilters",
+        __config__=ConfigDict(extra="forbid"),
         **definitions,
     )
 
-    def search(queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = "",
-               filters=None, fields: Literal[""] = "") -> str:
+    def search(
+        queries: str, k: int = _DEFAULT_K, domain: str = "", tags: str = "", filters=None, fields: Literal[""] = ""
+    ) -> str:
         selected = filters.model_dump(exclude_none=True) if filters is not None else {}
         return okf_search(queries, k, domain, tags, filters=selected)
 
     search.__annotations__["filters"] = filter_model | None
     mcp.remove_tool("okf_search")
-    mcp.add_tool(search, name="okf_search", description=(
-        "Search knowledge document metadata using topic words in queries (comma-separated). "
-        "Use okf_list_domains first. Optional filters select ONLY the corpus categories "
-        "listed in this schema; omit filters for no additional restriction. The retired fields "
-        "argument accepts only an empty string; use filters instead. HIV can be a "
-        "query word without being a category. Never guess category values. All supplied "
-        "filters must match the same document; run confinement is always enforced. "
-        "k limits results per query (maximum 20); domain and tags optionally narrow further. "
-        "After a rejected request, correct it using the returned choices; do not repeat "
-        "the same invalid request. Existing agent step limits still apply."
-    ))
+    mcp.add_tool(
+        search,
+        name="okf_search",
+        description=(
+            "Search knowledge document metadata using topic words in queries (comma-separated). "
+            "Use okf_list_domains first. Optional filters select ONLY the corpus categories "
+            "listed in this schema; omit filters for no additional restriction. The retired fields "
+            "argument accepts only an empty string; use filters instead. HIV can be a "
+            "query word without being a category. Never guess category values. All supplied "
+            "filters must match the same document; run confinement is always enforced. "
+            "k limits results per query (maximum 20); domain and tags optionally narrow further. "
+            "After a rejected request, correct it using the returned choices; do not repeat "
+            "the same invalid request. Existing agent step limits still apply."
+        ),
+    )
 
 
 if __name__ == "__main__":

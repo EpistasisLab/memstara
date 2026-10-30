@@ -1,3 +1,5 @@
+# PORT NOTE: Repository Ruff formatting was applied for CI; upstream logic and text are unchanged.
+# Byte-identical claims below describe the port before this whitespace-only normalization.
 # SOURCE: PORTED FROM afc-forge — NOT sandbox-authored code.
 #   upstream: afc-forge/ade_forge/tools/impl/vocab.py (260 lines)
 #   The only edit is at line ~43: one import is replaced by the four-line
@@ -166,8 +168,7 @@ VOCABULARIES: dict[str, Vocabulary] = {
         system="RxNorm",
         recognizer=re.compile(r"[0-9]{1,8}"),
         hierarchy_note=(
-            "RXCUIs are opaque integers; ingredient/brand relationships come from the "
-            "RxNorm release, not from the code"
+            "RXCUIs are opaque integers; ingredient/brand relationships come from the RxNorm release, not from the code"
         ),
     ),
     "NDC": Vocabulary(

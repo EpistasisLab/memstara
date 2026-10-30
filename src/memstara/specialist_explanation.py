@@ -13,6 +13,8 @@ from memstara.specialist_xai import digest
 
 VERSION = "scoped_explanation_v1"
 SKILLS = {"shared-addiction": "addiction", "shared-hiv": "hiv"}
+
+
 def normalize_report_output(text: str) -> tuple[str, list[str]]:
     """Compatibility entry point: agent output must remain unchanged."""
     return text, []
@@ -55,6 +57,7 @@ def freeze(books, prompts):
     inline = os.environ.get("MEMSTARA_EXPLANATION_SOURCES_JSON", "").strip()
     if not location and not inline:
         from memstara.okf_expert import freeze as freeze_okf
+
         bindings = {SKILLS[name]: freeze_okf(SKILLS[name]) for name in selected}
     else:
         try:
@@ -133,13 +136,13 @@ def receipt_path(value):
     path = Path(value).resolve()
     if path.is_relative_to(output_dir().resolve()):
         return path
-    source = os.environ.get('MEMSTARA_RUN_CONFIG', '')
+    source = os.environ.get("MEMSTARA_RUN_CONFIG", "")
     if source and Path(source).is_file():
-        root = Path(source).resolve().parent / 'explanation_io'
+        root = Path(source).resolve().parent / "explanation_io"
         # Do not resolve root: a symlink must not enlarge the authorized boundary.
         if path.is_relative_to(root):
             return path
-    raise ValueError('Specialist receipt is outside the active execution and derived-data directories')
+    raise ValueError("Specialist receipt is outside the active execution and derived-data directories")
 
 
 def read_receipt(receipt):
@@ -261,8 +264,7 @@ async def prepare(snapshot, rows, loop, directory):
     }
     # No credentials, connection names, or raw dataset rows are put in the model message.
     visible = {k: payload[k] for k in ("run_tag", "loop", "expert", "results")}
-    message = ("Input for the selected Explanation skill:\n"
-               + json.dumps(visible, ensure_ascii=False, default=str))
+    message = "Input for the selected Explanation skill:\n" + json.dumps(visible, ensure_ascii=False, default=str)
     payload["user_prompt"] = message
     receipt = write_record(directory, "input", payload)
     return {"payload": payload, "receipt": receipt, "prompt": message}

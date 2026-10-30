@@ -27,16 +27,26 @@ class PreparedExecution:
 
 def normalize_random_selection(args: argparse.Namespace, books: dict[str, list[str]]) -> None:
     """A random skill must use the server-sampled contract even outside the wizard."""
-    if (getattr(args, 'combination_plan', '') or args.report_only
-            or 'random_features' not in books.get('hypothesis', [])):
+    if (
+        getattr(args, "combination_plan", "")
+        or args.report_only
+        or "random_features" not in books.get("hypothesis", [])
+    ):
         return
     if args.resume:
-        raise ValueError('Legacy random execution has no frozen sampling policy; start a new execution')
+        raise ValueError("Legacy random execution has no frozen sampling policy; start a new execution")
     from memstara.combinations import STAGES, build_plan
-    if (any(len(books.get(stage, [])) != 1 for stage in STAGES)
-            or args.trials != 1 or args.hypothesis_agents != 1 or args.interpret_agents != 1):
-        raise ValueError('Standalone random selection requires one skill per stage and one trial per Loop; '
-                         'use an explicit combination plan for multiple skills')
+
+    if (
+        any(len(books.get(stage, [])) != 1 for stage in STAGES)
+        or args.trials != 1
+        or args.hypothesis_agents != 1
+        or args.interpret_agents != 1
+    ):
+        raise ValueError(
+            "Standalone random selection requires one skill per stage and one trial per Loop; "
+            "use an explicit combination plan for multiple skills"
+        )
     normalize_budget(args)
     args.combination_plan = json.dumps(build_plan(books, max_loops=args.waves))
 
@@ -45,9 +55,9 @@ def normalize_budget(args: argparse.Namespace) -> dict[str, Any] | None:
     """Apply the existing frozen combination and ordinary pipeline loop limits."""
     plan = json.loads(getattr(args, "combination_plan", "") or "null")
     if plan:
-        limit = plan.get('total_loops')
+        limit = plan.get("total_loops")
         if type(limit) is not int or not 1 <= limit <= 10000:
-            raise ValueError('Invalid frozen combination Loop limit')
+            raise ValueError("Invalid frozen combination Loop limit")
         args.waves = limit
         args.continuous = False
         args.trials = args.hypothesis_agents = args.interpret_agents = 1
@@ -68,8 +78,9 @@ def frozen_model_source(args: argparse.Namespace, run_dir: Path) -> dict[str, An
         from memstara.paths import RUNS_DIR
 
         originals = [json.loads(path.read_text()) for path in RUNS_DIR.glob("*/config.json")]
-        originals = [item for item in originals if item.get("run_tag") == args.run_tag
-                     and item.get("mode") != "report_only"]
+        originals = [
+            item for item in originals if item.get("run_tag") == args.run_tag and item.get("mode") != "report_only"
+        ]
         if len(originals) != 1:
             raise ValueError("Report recovery requires one unambiguous frozen source execution")
         return originals[0]
@@ -77,7 +88,9 @@ def frozen_model_source(args: argparse.Namespace, run_dir: Path) -> dict[str, An
 
 
 async def prepare_execution(
-    args: argparse.Namespace, run_dir: Path, books: dict[str, list[str]],
+    args: argparse.Namespace,
+    run_dir: Path,
+    books: dict[str, list[str]],
 ) -> PreparedExecution:
     """Preserve preflight ordering and let errors stop the driver before execution."""
     from memstara.pipeline.runtime import runtime_timeouts
@@ -88,14 +101,14 @@ async def prepare_execution(
     args.runtime_timeouts = runtime_timeouts(args.model)
     settings = Settings()
     if args.runtime_timeouts:
-        settings = settings.model_copy(update={
-            key: value for key, value in args.runtime_timeouts.items()
-            if key != 'agent_timeout_seconds'})
+        settings = settings.model_copy(
+            update={key: value for key, value in args.runtime_timeouts.items() if key != "agent_timeout_seconds"}
+        )
     from memstara.pipeline.pause_runtime import pause_wrapper_settings
-    previous = run_dir / 'config.json'
-    original = (json.loads(previous.read_text())
-                if getattr(args, 'resume', False) and previous.exists() else None)
-    pause_policy = original.get('pause_policy') if original is not None else 'fresh_request_and_ml_restart_v2'
+
+    previous = run_dir / "config.json"
+    original = json.loads(previous.read_text()) if getattr(args, "resume", False) and previous.exists() else None
+    pause_policy = original.get("pause_policy") if original is not None else "fresh_request_and_ml_restart_v2"
     configure(pause_wrapper_settings(settings, pause_policy))
     from memstara.pipeline.diagnostics import install
 
@@ -108,18 +121,23 @@ async def prepare_execution(
         frozen=frozen_model_source(args, run_dir),
     )
     args.stage_models = models
-    if getattr(args, 'research_profile', None):
+    if getattr(args, "research_profile", None):
         from memstara.research_inputs import ensure_matcher, verify_materialized
         from memstara.evaluation import preflight as data_preflight, validate as validate_evaluation
 
         verify_materialized(args.research_profile)
-        data_preflight(Path(os.environ['MEMSTARA_DATASET_PATH']), args.y_column,
-                       validate_evaluation(json.loads(args.evaluation)),
-                       reserve_validation=(original.get('partition_policy') != 'two_way_stratified_v1'
-                                           if original is not None else bool(json.loads(
-                                               getattr(args, 'controlled_comparison', '{}') or '{}'))),
-                       missing_policy=args.research_profile.get("configuration", {}).get("missing_policy", "reject"),
-                       require_numeric="predictor_types" not in args.research_profile.get("configuration", {}))
+        data_preflight(
+            Path(os.environ["MEMSTARA_DATASET_PATH"]),
+            args.y_column,
+            validate_evaluation(json.loads(args.evaluation)),
+            reserve_validation=(
+                original.get("partition_policy") != "two_way_stratified_v1"
+                if original is not None
+                else bool(json.loads(getattr(args, "controlled_comparison", "{}") or "{}"))
+            ),
+            missing_policy=args.research_profile.get("configuration", {}).get("missing_policy", "reject"),
+            require_numeric="predictor_types" not in args.research_profile.get("configuration", {}),
+        )
         ensure_matcher(args.research_profile)
     if models:
         from memstara.stage_models import preflight_profiles

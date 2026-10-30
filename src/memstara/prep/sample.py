@@ -28,17 +28,17 @@ Y_COLUMN = "outcome"
 # file plants, and the standard the pipeline is scored against. A larger weight means
 # a stronger hand in Y — LBXGH (1.10) is the strongest, BPXSY1 (0.60) the weakest.
 TRUE_SIGNAL: dict[str, float] = {
-    "LBXGH": 1.10,      # glycated haemoglobin
-    "BMXBMI": 0.90,     # body mass index
-    "RIDAGEYR": 0.70,   # age in years
-    "BPXSY1": 0.60,     # systolic blood pressure
+    "LBXGH": 1.10,  # glycated haemoglobin
+    "BMXBMI": 0.90,  # body mass index
+    "RIDAGEYR": 0.70,  # age in years
+    "BPXSY1": 0.60,  # systolic blood pressure
 }
 # Contribute only weakly — there to see whether the aggregate separates strong from
 # weak rather than merely present from absent. They should be picked up, but they
 # should rank below the four in TRUE_SIGNAL.
 WEAK_SIGNAL: dict[str, float] = {
-    "LBDLDL": 0.25,     # LDL cholesterol
-    "LBXCRP": 0.20,     # C-reactive protein
+    "LBDLDL": 0.25,  # LDL cholesterol
+    "LBXCRP": 0.20,  # C-reactive protein
 }
 
 # Non-predictive, but indistinguishable from the above by name. Each is drawn from a
@@ -50,24 +50,24 @@ WEAK_SIGNAL: dict[str, float] = {
 # Read one row like this: BPXDI1 is drawn from a normal distribution with mean 74 and
 # standard deviation 11, clipped so it never leaves 40-120, and rounded to 0 decimals.
 DECOY_COLUMNS: dict[str, tuple[float, float, float, float, int]] = {
-    "BPXDI1": (74, 11, 40, 120, 0),        # diastolic blood pressure
-    "BMXWAIST": (98, 15, 55, 160, 1),      # waist circumference
-    "BMXHT": (167, 10, 140, 200, 1),       # standing height
-    "LBXTC": (190, 38, 90, 340, 0),        # total cholesterol
-    "LBDHDD": (53, 15, 20, 120, 0),        # HDL cholesterol
-    "LBXTR": (135, 70, 30, 600, 0),        # triglycerides
-    "LBXSAL": (4.2, 0.35, 2.5, 5.5, 2),    # serum albumin
-    "LBXSATSI": (24, 11, 5, 120, 0),       # alanine aminotransferase
-    "LBXSASSI": (23, 9, 6, 110, 0),        # aspartate aminotransferase
-    "LBXSCR": (0.9, 0.25, 0.3, 3.0, 2),    # serum creatinine
-    "LBXSUA": (5.5, 1.4, 2.0, 12.0, 1),    # uric acid
+    "BPXDI1": (74, 11, 40, 120, 0),  # diastolic blood pressure
+    "BMXWAIST": (98, 15, 55, 160, 1),  # waist circumference
+    "BMXHT": (167, 10, 140, 200, 1),  # standing height
+    "LBXTC": (190, 38, 90, 340, 0),  # total cholesterol
+    "LBDHDD": (53, 15, 20, 120, 0),  # HDL cholesterol
+    "LBXTR": (135, 70, 30, 600, 0),  # triglycerides
+    "LBXSAL": (4.2, 0.35, 2.5, 5.5, 2),  # serum albumin
+    "LBXSATSI": (24, 11, 5, 120, 0),  # alanine aminotransferase
+    "LBXSASSI": (23, 9, 6, 110, 0),  # aspartate aminotransferase
+    "LBXSCR": (0.9, 0.25, 0.3, 3.0, 2),  # serum creatinine
+    "LBXSUA": (5.5, 1.4, 2.0, 12.0, 1),  # uric acid
     "LBXWBCSI": (7.2, 2.0, 2.0, 18.0, 1),  # white blood cell count
-    "LBXHGB": (14.0, 1.5, 8.0, 19.0, 1),   # haemoglobin
-    "LBXPLTSI": (250, 60, 80, 500, 0),     # platelet count
-    "LBXSNASI": (139, 2.5, 128, 150, 0),   # serum sodium
-    "LBXSKSI": (4.1, 0.4, 2.8, 6.0, 1),    # serum potassium
-    "URXUMA": (18, 45, 1, 900, 1),         # urinary albumin
-    "LBXSTB": (0.7, 0.3, 0.1, 3.0, 2),     # total bilirubin
+    "LBXHGB": (14.0, 1.5, 8.0, 19.0, 1),  # haemoglobin
+    "LBXPLTSI": (250, 60, 80, 500, 0),  # platelet count
+    "LBXSNASI": (139, 2.5, 128, 150, 0),  # serum sodium
+    "LBXSKSI": (4.1, 0.4, 2.8, 6.0, 1),  # serum potassium
+    "URXUMA": (18, 45, 1, 900, 1),  # urinary albumin
+    "LBXSTB": (0.7, 0.3, 0.1, 3.0, 2),  # total bilirubin
 }
 
 # Extra unnamed noise, to keep the column count up without inventing more codes that
@@ -284,8 +284,7 @@ _CONCEPTS: list[tuple[str, str, str, list[str], list[str], str, str]] = [
         ["anthropometric"],
         ["BMXHT"],
         "Standing height, a component of body mass index.",
-        "Height is recorded as a component of body mass index. On its own it is rarely treated "
-        "as a risk factor.",
+        "Height is recorded as a component of body mass index. On its own it is rarely treated as a risk factor.",
     ),
     (
         "total_cholesterol",
@@ -314,8 +313,7 @@ _CONCEPTS: list[tuple[str, str, str, list[str], list[str], str, str]] = [
         ["metabolic", "laboratory"],
         ["LBXTR"],
         "Triglycerides reflect recent dietary intake as much as chronic state.",
-        "Triglycerides vary strongly with fasting status and recent meals, so a single "
-        "measurement is noisy.",
+        "Triglycerides vary strongly with fasting status and recent meals, so a single measurement is noisy.",
     ),
     (
         "serum_albumin",
@@ -324,8 +322,7 @@ _CONCEPTS: list[tuple[str, str, str, list[str], list[str], str, str]] = [
         ["laboratory", "nutrition"],
         ["LBXSAL"],
         "Albumin is used as a nutritional and hepatic synthetic marker.",
-        "Albumin falls in inflammation and in liver disease, so it is nonspecific as a marker of "
-        "any one condition.",
+        "Albumin falls in inflammation and in liver disease, so it is nonspecific as a marker of any one condition.",
     ),
     (
         "liver_enzymes",
@@ -374,8 +371,7 @@ _CONCEPTS: list[tuple[str, str, str, list[str], list[str], str, str]] = [
         ["laboratory", "haematology"],
         ["LBXHGB"],
         "Haemoglobin defines anaemia and varies with sex.",
-        "Haemoglobin is used to define anaemia. Thresholds differ by sex, so an unadjusted value "
-        "is hard to interpret.",
+        "Haemoglobin is used to define anaemia. Thresholds differ by sex, so an unadjusted value is hard to interpret.",
     ),
     (
         "platelets",
@@ -404,8 +400,7 @@ _CONCEPTS: list[tuple[str, str, str, list[str], list[str], str, str]] = [
         ["laboratory", "renal"],
         ["URXUMA"],
         "Urinary albumin indicates glomerular leakage.",
-        "Urinary albumin is highly variable between collections, so single untimed samples are "
-        "unreliable.",
+        "Urinary albumin is highly variable between collections, so single untimed samples are unreliable.",
     ),
     (
         "bilirubin",
@@ -571,8 +566,7 @@ def write_okf_bundle(okf_dir: Path, stamp: str) -> None:
         encoding="utf-8",
     )
     (okf_dir / "log.md").write_text(
-        f"# Change log\n\n- {stamp} · process:make_sample_data · bundle created "
-        f"({len(_CONCEPTS)} concepts)\n",
+        f"# Change log\n\n- {stamp} · process:make_sample_data · bundle created ({len(_CONCEPTS)} concepts)\n",
         encoding="utf-8",
     )
 

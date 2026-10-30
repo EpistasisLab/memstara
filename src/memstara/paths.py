@@ -1,4 +1,5 @@
 """Central paths for package resources, dependencies and generated artifacts."""
+
 from __future__ import annotations
 
 import os
@@ -25,6 +26,7 @@ ENV_FILES = (
     REPO_ROOT / ".env",
     MOTORO_ROOT / ".env",
 )
+
 
 def output_dir() -> Path:
     """Resolve the configured directory for generated artifacts at call time."""

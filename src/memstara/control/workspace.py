@@ -48,10 +48,16 @@ class PipelineWorkspace:
             if not isinstance(data, list):
                 raise ValueError("Invalid pipeline workspace; preserve the file and repair it")
             from memstara.control.catalog import catalog_snapshot
+
             with catalog_snapshot():
-                self.items = [{**item, "agent_labels": dict(AGENT_LABELS),
-                               "configuration": self.read_configuration(item.get("configuration", {}))[0]}
-                              for item in data]
+                self.items = [
+                    {
+                        **item,
+                        "agent_labels": dict(AGENT_LABELS),
+                        "configuration": self.read_configuration(item.get("configuration", {}))[0],
+                    }
+                    for item in data
+                ]
             if self.items != data:
                 self._save()
         else:
@@ -70,6 +76,7 @@ class PipelineWorkspace:
 
     def list(self):
         from memstara.control.catalog import catalog_snapshot
+
         with self.lock, catalog_snapshot():
             out = []
             removed = []
@@ -95,25 +102,48 @@ class PipelineWorkspace:
                     # even after the user changes the next execution's settings.
                     try:
                         frozen = json.loads((Path(latest["run_dir"]) / "config.json").read_text())
-                        latest = {**latest, "configuration": {
-                            "waves": frozen.get("waves"), "continuous": frozen.get("continuous", False),
-                            "combination_plan": frozen.get("combination_plan")}}
+                        latest = {
+                            **latest,
+                            "configuration": {
+                                "waves": frozen.get("waves"),
+                                "continuous": frozen.get("continuous", False),
+                                "combination_plan": frozen.get("combination_plan"),
+                            },
+                        }
                         if current:
-                            current = {**current, "configuration": {**current.get("configuration", {}),
-                                       **latest["configuration"]}}
+                            current = {
+                                **current,
+                                "configuration": {**current.get("configuration", {}), **latest["configuration"]},
+                            }
                     except (OSError, ValueError):
                         pass
                 configuration, configuration_error = self.read_configuration(item["configuration"])
                 from memstara.pipeline.failures import visible_failure
-                failure = visible_failure(latest["run_dir"], include_legacy=(
-                    not current and latest.get("exit_code") not in (None, 0))) if latest else None
-                out.append({**copy.deepcopy(item), "configuration": configuration,
-                            "failure": failure,
-                            "configuration_error": configuration_error,
-                            "running": current, "latest": latest, "progress": progress,
-                            "deleting": bool(item.get("deleting")),
-                            "loop_totals": loop_totals(manager.history_records() if hasattr(manager, "history_records")
-                                                       else [*history, *([current] if current else [])])})
+
+                failure = (
+                    visible_failure(
+                        latest["run_dir"], include_legacy=(not current and latest.get("exit_code") not in (None, 0))
+                    )
+                    if latest
+                    else None
+                )
+                out.append(
+                    {
+                        **copy.deepcopy(item),
+                        "configuration": configuration,
+                        "failure": failure,
+                        "configuration_error": configuration_error,
+                        "running": current,
+                        "latest": latest,
+                        "progress": progress,
+                        "deleting": bool(item.get("deleting")),
+                        "loop_totals": loop_totals(
+                            manager.history_records()
+                            if hasattr(manager, "history_records")
+                            else [*history, *([current] if current else [])]
+                        ),
+                    }
+                )
             if removed:
                 for item in removed:
                     self.items.remove(item)
@@ -138,6 +168,7 @@ class PipelineWorkspace:
                 if not isinstance(configuration, dict):
                     raise ValueError("Invalid pipeline configuration fields")
                 from memstara.control.catalog import validate_new_design
+
                 validate_new_design(configuration)
                 configuration.update(provider="", model="", stage_models={})
                 item = {
@@ -167,8 +198,7 @@ class PipelineWorkspace:
                             manager.stop(current["run_tag"])
                         item["deleting"] = True
                         self._save()
-                        return {**copy.deepcopy(item), "deleting": True,
-                                "run_tag": current.get("run_tag")}
+                        return {**copy.deepcopy(item), "deleting": True, "run_tag": current.get("run_tag")}
                     self.items.remove(item)
                     self.managers.pop(item["id"], None)
                     self._save()
@@ -179,9 +209,10 @@ class PipelineWorkspace:
                 if self.manager(item["id"]).running() and not name_only:
                     raise ValueError("Stop this pipeline before changing its configuration or removing it")
                 if action == "update":
-                    if isinstance(body.get('configuration'), dict):
+                    if isinstance(body.get("configuration"), dict):
                         from memstara.control.catalog import validate_new_design
-                        validate_new_design(body['configuration'])
+
+                        validate_new_design(body["configuration"])
                     if "name" in body:
                         name = body["name"]
                         if not isinstance(name, str) or not name.strip() or len(name) > 80:
@@ -206,11 +237,13 @@ class PipelineWorkspace:
     def configuration(value):
         value = normalize_agent_configuration(value)
         from memstara.corpus_skills import with_default_hypothesis
+
         value = with_default_hypothesis(value)
         if not isinstance(value, dict) or set(value) - set(DEFAULTS):
             raise ValueError("Invalid pipeline configuration fields")
         from memstara.explanation_length import validate as validate_explanation_words
-        validate_explanation_words(value.get('explanation_words', 250))
+
+        validate_explanation_words(value.get("explanation_words", 250))
         config = {
             **copy.deepcopy(DEFAULTS),
             "playbook_interpreter": "shared-shap",
@@ -223,65 +256,84 @@ class PipelineWorkspace:
             "continuous": value.get("continuous", False),
             "question": "",
         }
-        if config.get('research_input_id'):
+        if config.get("research_input_id"):
             from memstara.research_inputs import load
-            research = load(config['research_input_id'])['configuration']
-            config.update(knowledge_mode=research['knowledge_mode'], data_mode=research['data_mode'],
-                          research_objective=research['target']['description'],
-                          y_column=research['target']['column'] or 'outcome')
-        if (config.get('knowledge_mode') not in ('okf', 'llm_only')
-                or config.get('data_mode') not in ('dataset', 'proposal')):
-            raise ValueError('Select supported knowledge and data modes')
-        if config.get('data_mode') == 'proposal' and not str(config.get('research_objective', '')).strip():
-            raise ValueError('Proposal mode requires a research objective')
+
+            research = load(config["research_input_id"])["configuration"]
+            config.update(
+                knowledge_mode=research["knowledge_mode"],
+                data_mode=research["data_mode"],
+                research_objective=research["target"]["description"],
+                y_column=research["target"]["column"] or "outcome",
+            )
+        if config.get("knowledge_mode") not in ("okf", "llm_only") or config.get("data_mode") not in (
+            "dataset",
+            "proposal",
+        ):
+            raise ValueError("Select supported knowledge and data modes")
+        if config.get("data_mode") == "proposal" and not str(config.get("research_objective", "")).strip():
+            raise ValueError("Proposal mode requires a research objective")
         from memstara.stage_models import validate_profiles
+
         # Design persistence validates supplied identities but does not require a live deployment.
-        connection_id = config.get('model_connection_id', '')
+        connection_id = config.get("model_connection_id", "")
         if not isinstance(connection_id, str):
-            raise ValueError('Invalid model connection ID')
+            raise ValueError("Invalid model connection ID")
         if connection_id:
             from memstara.model_connections import load, profiles
-            connection_profiles = profiles(load(connection_id)['connection'])
-            if config.get('stage_models') and config['stage_models'] != connection_profiles:
-                raise ValueError('Model settings differ from the checked connection')
-            config['stage_models'] = connection_profiles
-        if config.get('stage_models') != {}:
-            config['stage_models'] = validate_profiles(config['stage_models'])
+
+            connection_profiles = profiles(load(connection_id)["connection"])
+            if config.get("stage_models") and config["stage_models"] != connection_profiles:
+                raise ValueError("Model settings differ from the checked connection")
+            config["stage_models"] = connection_profiles
+        if config.get("stage_models") != {}:
+            config["stage_models"] = validate_profiles(config["stage_models"])
         from memstara.control.request import _MAX_WAVES
-        if config.get('combination_skills'):
+
+        if config.get("combination_skills"):
             from memstara.combinations import build_plan
-            plan = build_plan(config['combination_skills'], config['combination_repetitions'],
-                              random_start=config['combination_random_start'],
-                              execution_order=config['combination_execution_order'],
-                              max_loops=config['combination_max_loops'], start_index=0)
-            if plan['total_loops'] > 10000:
-                raise ValueError('At most 10000 total replicates are supported')
-            config['waves'] = plan['total_loops']
-            config['continuous'] = False
-            for stage, entries in plan['skills'].items():
-                config[playbook_field(stage)] = entries[0]['id']
-        maximum = 10000 if config.get('combination_skills') else _MAX_WAVES
-        if type(config['waves']) is not int or not 1 <= config['waves'] <= maximum:
-            raise ValueError(f'Total replicates must be between 1 and {maximum}')
-        if type(config['continuous']) is not bool:
-            raise ValueError('Continuous must be a boolean')
+
+            plan = build_plan(
+                config["combination_skills"],
+                config["combination_repetitions"],
+                random_start=config["combination_random_start"],
+                execution_order=config["combination_execution_order"],
+                max_loops=config["combination_max_loops"],
+                start_index=0,
+            )
+            if plan["total_loops"] > 10000:
+                raise ValueError("At most 10000 total replicates are supported")
+            config["waves"] = plan["total_loops"]
+            config["continuous"] = False
+            for stage, entries in plan["skills"].items():
+                config[playbook_field(stage)] = entries[0]["id"]
+        maximum = 10000 if config.get("combination_skills") else _MAX_WAVES
+        if type(config["waves"]) is not int or not 1 <= config["waves"] <= maximum:
+            raise ValueError(f"Total replicates must be between 1 and {maximum}")
+        if type(config["continuous"]) is not bool:
+            raise ValueError("Continuous must be a boolean")
         # Older workspace definitions used continuous=True with a dummy waves=1.
         # Migrate these to the explicit MVP ceiling before display or launch.
-        if config['continuous']:
-            config['waves'] = 10
-        config['continuous'] = False
+        if config["continuous"]:
+            config["waves"] = 10
+        config["continuous"] = False
         for key in ("playbook_hypothesis", "playbook_interpreter"):
             if not isinstance(config[key], str) or "," in config[key]:
                 raise ValueError("Each pipeline has one hypothesis and one interpreter skill")
         from memstara.ml_configuration import validate_overrides
-        ml_skills = (config.get('combination_skills', {}).get('ml', []) if config.get('combination_skills')
-                     else str(config.get('playbook_ml', '')).split(','))
-        if not isinstance(config.get('evaluation'), dict):
-            raise ValueError('ML evaluation settings must be an object')
-        config['ml_overrides'] = validate_overrides(
-            config.get('ml_overrides', {}), ml_skills, replicates=config.get('evaluation', {}).get('replicates', 1))
-        if config['ml_overrides'] and config.get('controlled_comparison'):
-            raise ValueError('Controlled comparisons cannot also use advanced ML overrides')
+
+        ml_skills = (
+            config.get("combination_skills", {}).get("ml", [])
+            if config.get("combination_skills")
+            else str(config.get("playbook_ml", "")).split(",")
+        )
+        if not isinstance(config.get("evaluation"), dict):
+            raise ValueError("ML evaluation settings must be an object")
+        config["ml_overrides"] = validate_overrides(
+            config.get("ml_overrides", {}), ml_skills, replicates=config.get("evaluation", {}).get("replicates", 1)
+        )
+        if config["ml_overrides"] and config.get("controlled_comparison"):
+            raise ValueError("Controlled comparisons cannot also use advanced ML overrides")
         return config
 
     def start(self, key, launch, *, mode="initial", additional_loops=None, expected_run_tag=None):
@@ -299,8 +351,9 @@ class PipelineWorkspace:
             if mode not in ("initial", "additional", "fresh", "retry"):
                 raise ValueError("Invalid execution mode")
             if latest and mode == "initial":
-                raise ValueError("Choose additional analysis and a total replicate count, "
-                                 "or explicitly start a new execution")
+                raise ValueError(
+                    "Choose additional analysis and a total replicate count, or explicitly start a new execution"
+                )
             if mode in ("additional", "fresh", "retry"):
                 if not latest or expected_run_tag != latest.get("run_tag"):
                     raise ValueError("Execution history changed. Refresh and review before starting")
@@ -309,6 +362,7 @@ class PipelineWorkspace:
                 raise ValueError("All Combinations restarts the full reviewed schedule; use a new execution")
             if mode == "additional":
                 from memstara.control.request import _MAX_WAVES
+
                 if type(additional_loops) is not int or not 1 <= additional_loops <= _MAX_WAVES:
                     raise ValueError(f"Additional total replicates must be between 1 and {_MAX_WAVES}")
                 configuration.update(waves=additional_loops, continuous=False)
@@ -316,6 +370,7 @@ class PipelineWorkspace:
                 raise ValueError("Additional replicates require additional analysis mode")
             if mode == "retry":
                 from memstara.control.retry import configuration_for_retry
+
                 configuration = configuration_for_retry(latest, configuration, key)
             return launch(manager, {**copy.deepcopy(item), "configuration": configuration})
 
@@ -324,16 +379,16 @@ class PipelineWorkspace:
         with self.lock:
             stopped, errors = [], []
             for item in self.items:
-                manager = self.manager(item['id'])
+                manager = self.manager(item["id"])
                 run = manager.running()
                 if not run:
                     continue
                 try:
-                    manager.stop(run['run_tag'])
-                    stopped.append(run['run_tag'])
+                    manager.stop(run["run_tag"])
+                    stopped.append(run["run_tag"])
                 except (RuntimeError, OSError) as exc:
-                    errors.append({'pipeline': item['name'], 'error': str(exc)})
-            return {'stopping': stopped, 'errors': errors}
+                    errors.append({"pipeline": item["name"], "error": str(exc)})
+            return {"stopping": stopped, "errors": errors}
 
     def locate_manager(self, tag):
         with self.lock:

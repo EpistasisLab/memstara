@@ -10,27 +10,61 @@ from pathlib import Path
 from memstara.paths import PLAYBOOKS_DIR, PROMPTS_DIR
 
 # Retained only to load historical configurations; not offered in new skill menus.
-LEGACY_PLAYBOOKS = {'data_exact_features': 'legacy/data_exact_features.md'}
-LEGACY_PLAYBOOKS.update({name: f'legacy/{name}.md' for name in (
-    'ml_governance', 'ml_pilot_lr_focus', 'ml_pilot_xgb_focus',
-    'ml_reporting', 'ml_results_presenter', 'ml_scikit_knowledge')})
+LEGACY_PLAYBOOKS = {"data_exact_features": "legacy/data_exact_features.md"}
+LEGACY_PLAYBOOKS.update(
+    {
+        name: f"legacy/{name}.md"
+        for name in (
+            "ml_governance",
+            "ml_pilot_lr_focus",
+            "ml_pilot_xgb_focus",
+            "ml_reporting",
+            "ml_results_presenter",
+            "ml_scikit_knowledge",
+        )
+    }
+)
 
 # Temporarily hidden from selection only. Keep files and saved configurations intact.
-HIDDEN_PLAYBOOKS = frozenset({
-    'ml_default_logistic_regression', 'random_features', 'heart-failure-all',
-    'interpreter_actionability', 'interpreter_attribution', 'interpreter_clinical',
-    'interpreter_factual_observations', 'interpreter_review_pending', 'interpreter_robustness',
-})
-DISABLED_EXPLANATION_SKILLS = frozenset({
-    'shared-ml-results', 'report_clinical_explanations', 'report_clinician_summary',
-    'report_evidence', 'report_loop_learning', 'report_ml_results',
-    'report_research_priority', 'report_team_briefing', 'report_validation_audit',
-})
+HIDDEN_PLAYBOOKS = frozenset(
+    {
+        "ml_default_logistic_regression",
+        "random_features",
+        "heart-failure-all",
+        "interpreter_actionability",
+        "interpreter_attribution",
+        "interpreter_clinical",
+        "interpreter_factual_observations",
+        "interpreter_review_pending",
+        "interpreter_robustness",
+    }
+)
+DISABLED_EXPLANATION_SKILLS = frozenset(
+    {
+        "shared-ml-results",
+        "report_clinical_explanations",
+        "report_clinician_summary",
+        "report_evidence",
+        "report_loop_learning",
+        "report_ml_results",
+        "report_research_priority",
+        "report_team_briefing",
+        "report_validation_audit",
+    }
+)
 HIDDEN_PLAYBOOKS = HIDDEN_PLAYBOOKS | DISABLED_EXPLANATION_SKILLS
-DISABLED_HYPOTHESIS_SKILLS = frozenset({
-    'hypothesis_research', 'comorbidity', 'drug-class-effect', 'shared-anatomy',
-    'shared-pharmacology', 'symptom-bridge', 'taxonomic', 'treatment-toxicity',
-})
+DISABLED_HYPOTHESIS_SKILLS = frozenset(
+    {
+        "hypothesis_research",
+        "comorbidity",
+        "drug-class-effect",
+        "shared-anatomy",
+        "shared-pharmacology",
+        "symptom-bridge",
+        "taxonomic",
+        "treatment-toxicity",
+    }
+)
 HIDDEN_PLAYBOOKS = HIDDEN_PLAYBOOKS | DISABLED_HYPOTHESIS_SKILLS
 
 #: A whole `<!-- ... -->` block plus the newlines directly after it. Removing the
@@ -93,12 +127,11 @@ def _split_front_matter(text: str, path: Path) -> tuple[dict[str, str], str]:
         key = key.strip()
         if key not in _FRONT_MATTER_KEYS:
             raise ValueError(
-                f"{path}: unknown front matter key {key!r}. "
-                f"Known keys: {', '.join(sorted(_FRONT_MATTER_KEYS))}"
+                f"{path}: unknown front matter key {key!r}. Known keys: {', '.join(sorted(_FRONT_MATTER_KEYS))}"
             )
         front[key] = value.strip()
 
-    return front, text[end + len("\n---\n"):]
+    return front, text[end + len("\n---\n") :]
 
 
 def _body(text: str) -> str:
@@ -173,10 +206,12 @@ def load_prompt(name: str, playbook: str = "") -> dict[str, str]:
             given to a prompt with nowhere to put it.
     """
     from memstara.evaluation import active_plan
+
     snapshot = active_plan()
     if snapshot and f"{name}:{playbook}" in snapshot.get("prompts", {}):
         return dict(snapshot["prompts"][f"{name}:{playbook}"])
     from memstara.control.catalog import canonical_name
+
     playbook = canonical_name(playbook) if playbook else playbook
     path = (PROMPTS_DIR / name).with_suffix(".md")
     front, body = _read(path)
@@ -187,17 +222,19 @@ def load_prompt(name: str, playbook: str = "") -> dict[str, str]:
     if playbook:
         if not _PLAYBOOK.search(body):
             raise ValueError(
-                f"{path}: asked for the {playbook!r} playbook and has no "
-                f"{{{{playbook}}}} line to put it on"
+                f"{path}: asked for the {playbook!r} playbook and has no {{{{playbook}}}} line to put it on"
             )
-        book = (PLAYBOOKS_DIR / LEGACY_PLAYBOOKS[playbook] if playbook in LEGACY_PLAYBOOKS
-                else (PLAYBOOKS_DIR / playbook).with_suffix(".md"))
+        book = (
+            PLAYBOOKS_DIR / LEGACY_PLAYBOOKS[playbook]
+            if playbook in LEGACY_PLAYBOOKS
+            else (PLAYBOOKS_DIR / playbook).with_suffix(".md")
+        )
         from memstara.control.catalog import resolve
+
         item = resolve(playbook)
         if playbook == "shared-ml-reference":
             raise ValueError(
-                "ML reference knowledge is not a selectable skill. "
-                "Select an ML skill such as ml_logistic_regression."
+                "ML reference knowledge is not a selectable skill. Select an ML skill such as ml_logistic_regression."
             )
         if playbook == "shared-ml-results" and name != "board/report":
             raise ValueError(
@@ -232,9 +269,10 @@ def load_prompt(name: str, playbook: str = "") -> dict[str, str]:
         raise ValueError(f"{path}: the prompt body is empty")
 
     if name == "board/ml":
-        if playbook in ('ml_logistic_regression', 'ml_xgboost'):
-            body += '\n\n' + _read(PROMPTS_DIR / 'board/_ml_common.md')[1]
+        if playbook in ("ml_logistic_regression", "ml_xgboost"):
+            body += "\n\n" + _read(PROMPTS_DIR / "board/_ml_common.md")[1]
         from memstara.control.catalog import reference_knowledge
+
         for reference in reference_knowledge():
             body += (
                 "\n\n## ML tool reference knowledge (not a behavioral skill)\n"
@@ -243,8 +281,7 @@ def load_prompt(name: str, playbook: str = "") -> dict[str, str]:
                 "data policy, fixed target, tool contracts, and selected ML skill. "
                 "Examples of preprocessing or tuning do not authorize those operations. "
                 "This document does not install or enable an MCP server.\n"
-                f"Source: {reference['source']}\nContent SHA-256: {reference['hash']}\n\n"
-                + reference["content"]
+                f"Source: {reference['source']}\nContent SHA-256: {reference['hash']}\n\n" + reference["content"]
             )
 
     return {"goal": front["goal"], "system_prompt": body}
@@ -293,6 +330,5 @@ def prompt_digest(name: str, playbook: str = "") -> dict[str, str]:
         FileNotFoundError, ValueError: Whatever `load_prompt` raises, unchanged.
     """
     return {
-        field: hashlib.sha256(text.encode("utf-8")).hexdigest()
-        for field, text in load_prompt(name, playbook).items()
+        field: hashlib.sha256(text.encode("utf-8")).hexdigest() for field, text in load_prompt(name, playbook).items()
     }

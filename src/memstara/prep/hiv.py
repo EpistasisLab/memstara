@@ -24,7 +24,7 @@ from memstara.paths import DEFAULT_OUTPUT_DIR
 
 DEFAULT_OUT = DEFAULT_OUTPUT_DIR / "hiv_cohort.csv"
 
-OUTCOME = "HIV_DETECTABLE"   # what we are trying to predict — is the virus detectable
+OUTCOME = "HIV_DETECTABLE"  # what we are trying to predict — is the virus detectable
 
 # Columns that already hold one value per patient. Nothing to unpack, so they are
 # carried across untouched.
@@ -113,12 +113,12 @@ def build(source: Path, top: int) -> tuple[pd.DataFrame, dict[str, list[tuple[st
     #     get present/absent (1/0) columns for the `top` most common entries.
     chosen: dict[str, list[tuple[str, int]]] = {}
     for src, count_col, prefix in LISTS:
-        parsed = raw[src].map(items)          # each cell becomes a list
-        out[count_col] = parsed.map(len)      # the length of that list = the count
+        parsed = raw[src].map(items)  # each cell becomes a list
+        out[count_col] = parsed.map(len)  # the length of that list = the count
         if prefix is None:
             continue
-        freq = Counter(v for lst in parsed for v in lst)   # how many patients had it at all
-        picked = freq.most_common(top)                     # the `top` most common
+        freq = Counter(v for lst in parsed for v in lst)  # how many patients had it at all
+        picked = freq.most_common(top)  # the `top` most common
         chosen[src] = picked
         # `bound=label` pins the value down here and now. Without it only the value
         # label holds after the loop ends is used, and every flag column would point
@@ -156,8 +156,10 @@ def main() -> int:
     print(f"source: {source}")
     print("        (read only — nothing is written back there)\n")
     print(f"rows    {len(df):,}   ({dropped} dropped: label was not 0/1)")
-    print(f"columns {len(df.columns)}   = {len(FLAT)} as-is + {len(LISTS)} counts "
-          f"+ {sum(len(v) for v in chosen.values())} flags + outcome")
+    print(
+        f"columns {len(df.columns)}   = {len(FLAT)} as-is + {len(LISTS)} counts "
+        f"+ {sum(len(v) for v in chosen.values())} flags + outcome"
+    )
     print(f"outcome {OUTCOME}: {pos} positive / {len(df) - pos} negative  ({pos / len(df) * 100:.1f}%)\n")
 
     for src, picked in chosen.items():

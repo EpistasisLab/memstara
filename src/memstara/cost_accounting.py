@@ -19,6 +19,7 @@ def catalog_path():
     if value:
         return Path(value)
     from memstara.manual_pricing import path
+
     return path() if path().is_file() else None
 
 
@@ -77,6 +78,7 @@ def estimate(profile, prompt, output, cached=0, written=0):
 
 def record_attempt(context, loop, config, record=None, error=False, interrupted=False):
     from memstara.pipeline.diagnostics import request_id
+
     if not context:
         return
     receipt = None  # New request costs come only from the Motoro record.

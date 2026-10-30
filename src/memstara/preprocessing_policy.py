@@ -3,20 +3,22 @@
 Historical frozen runs retain their original transformation contract. This does
 not change saved models. Missing values are rejected independently of this version.
 """
-VERSION = 'analysis_ready_v1'
-LEGACY = 'legacy_encoding_v1'
-TYPED = 'typed_predictors_v1'
+
+VERSION = "analysis_ready_v1"
+LEGACY = "legacy_encoding_v1"
+TYPED = "typed_predictors_v1"
 
 
 def resolve(snapshot=None):
     if snapshot is None:
         from memstara.evaluation import active_plan
+
         snapshot = active_plan()
     if not snapshot:
         return VERSION
-    value = snapshot.get('preprocessing_policy', LEGACY)
+    value = snapshot.get("preprocessing_policy", LEGACY)
     if value not in (VERSION, LEGACY, TYPED):
-        raise ValueError('Unsupported feature preprocessing policy')
+        raise ValueError("Unsupported feature preprocessing policy")
     return value
 
 

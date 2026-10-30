@@ -5,13 +5,14 @@ Review boundaries:
 * TrainingImputer.fit sees only the rows supplied by sklearn's training/CV fit.
 * transform reuses those values without modifying its input or learning from it.
 """
+
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 
-TRAINING_IMPUTATION = 'impute_train_v1'
+TRAINING_IMPUTATION = "impute_train_v1"
 # Stable identifier used in previously recorded configuration and artifacts.
 POLICY = TRAINING_IMPUTATION
 
@@ -20,21 +21,22 @@ def resolve_policy(snapshot: dict[str, Any] | None = None) -> str:
     """Resolve registered consent before the legacy run-level fallback."""
     if snapshot is None:
         from memstara.evaluation import active_plan
+
         snapshot = active_plan() or {}
-    configuration = snapshot.get('research_profile', {}).get('configuration', {})
-    return configuration.get('missing_policy') or snapshot.get('missing_value_policy', 'reject')
+    configuration = snapshot.get("research_profile", {}).get("configuration", {})
+    return configuration.get("missing_policy") or snapshot.get("missing_value_policy", "reject")
 
 
 def imputation_record(model: Any, policy_name: str, *, fit_scope: str = "training_partition") -> dict[str, Any] | None:
     """Record the fitted training values, rather than recomputing statistics."""
-    imputer = model.named_steps.get('impute')
+    imputer = model.named_steps.get("impute")
     if imputer is None:
         return None
     return {
-        'policy': policy_name,
-        'fit_scope': fit_scope,
-        'strategies': imputer.strategies_,
-        'fill_values': imputer.fill_values_,
+        "policy": policy_name,
+        "fit_scope": fit_scope,
+        "strategies": imputer.strategies_,
+        "fill_values": imputer.fill_values_,
     }
 
 
@@ -61,14 +63,14 @@ class TrainingImputer(TransformerMixin, BaseEstimator):
             observed = X[column].dropna()
             if observed.empty:
                 raise ValueError(
-                    f'No observed training values for predictor {column}; '
-                    'exclude it or supply complete data'
+                    f"No observed training values for predictor {column}; exclude it or supply complete data"
                 )
             numeric = pd.api.types.is_numeric_dtype(observed)
             binary = numeric and set(observed.unique()).issubset({0, 1})
-            categorical = (not numeric or column in self.categorical_columns
-                           or (binary and column not in self.continuous_columns))
-            strategy = 'most_frequent' if categorical else 'mean'
+            categorical = (
+                not numeric or column in self.categorical_columns or (binary and column not in self.continuous_columns)
+            )
+            strategy = "most_frequent" if categorical else "mean"
             value = observed.mode().iloc[0] if categorical else observed.mean()
             self.fill_values_[column] = value.item() if isinstance(value, np.generic) else value
             self.strategies_[column] = strategy
@@ -76,7 +78,7 @@ class TrainingImputer(TransformerMixin, BaseEstimator):
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         if list(X.columns) != list(self.feature_names_in_):
-            raise ValueError('Imputation feature order differs from the fitted schema')
+            raise ValueError("Imputation feature order differs from the fitted schema")
         return X.copy().fillna(self.fill_values_)
 
     def get_feature_names_out(self, input_features=None):

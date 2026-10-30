@@ -3,6 +3,7 @@
 No provisioning, container replacement, migration, volume mutation or .env output.
 This is a compatibility path for the legacy host, not a new-host installer.
 """
+
 import argparse
 import json
 import subprocess
@@ -18,7 +19,11 @@ DATA_PATH = "/var/lib/postgresql/data"
 
 def docker(*args):
     result = subprocess.run(
-        ["docker", *args], capture_output=True, text=True, timeout=30, check=False,
+        ["docker", *args],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
     )
     if result.returncode:
         # Do not echo arbitrary Docker diagnostics or configuration values.
@@ -75,7 +80,8 @@ def check(start=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--start-existing", action="store_true",
+        "--start-existing",
+        action="store_true",
         help="Start stopped named containers after checking all pinned volumes; never create or replace",
     )
     args = parser.parse_args()

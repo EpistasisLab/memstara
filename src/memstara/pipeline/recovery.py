@@ -1,4 +1,5 @@
 """Bounded recovery driven by persisted artifacts, never by agent prose."""
+
 import asyncio
 from memstara.pipeline.failures import PipelineExecutionFailure
 
@@ -36,6 +37,13 @@ def complete_interpretation(text):
     if not isinstance(text, str) or len(text.strip()) < 200:
         return False
     lowered = text.casefold().replace("**", "")
-    return all(label in lowered for label in (
-        "assessment:", "biological/clinical meaning:", "how the model uses the features:",
-        "actionability and threshold:", "limitations and next validation:"))
+    return all(
+        label in lowered
+        for label in (
+            "assessment:",
+            "biological/clinical meaning:",
+            "how the model uses the features:",
+            "actionability and threshold:",
+            "limitations and next validation:",
+        )
+    )

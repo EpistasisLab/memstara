@@ -91,10 +91,14 @@ _ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "host.docker.internal", "[
 #: (`viewer/docker-compose.yml`, `viewer/web/vite.config.ts:23`). A request with no
 #: `Origin` at all — curl, or a same-origin fetch through the proxy — is allowed; one
 #: that names a different site is not.
-_ALLOWED_ORIGINS = frozenset({
-    "http://localhost:8070", "http://127.0.0.1:8070",
-    "http://localhost:5173", "http://127.0.0.1:5173",
-})
+_ALLOWED_ORIGINS = frozenset(
+    {
+        "http://localhost:8070",
+        "http://127.0.0.1:8070",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    }
+)
 
 #: How many finished runs `GET /control/runs` remembers. This is a convenience for the
 #: screen, not a record — the record is `outputs/runs/`.
@@ -156,11 +160,27 @@ class _Runs:
                         if original.get("run_tag") == record["run_tag"] and original.get("mode") != "report_only":
                             config = original
                             break
-                record["configuration"] = {k: config.get(k) for k in
-                                           ("hypotheses", "interpreters", "interpretation_mode",
-                                            "books", "evaluation", "comparison_policy", "trials", "waves", "continuous",
-                                            "question", "y_column", "provider", "model", "ml_overrides")}
+                record["configuration"] = {
+                    k: config.get(k)
+                    for k in (
+                        "hypotheses",
+                        "interpreters",
+                        "interpretation_mode",
+                        "books",
+                        "evaluation",
+                        "comparison_policy",
+                        "trials",
+                        "waves",
+                        "continuous",
+                        "question",
+                        "y_column",
+                        "provider",
+                        "model",
+                        "ml_overrides",
+                    )
+                }
                 from memstara.stage_models import public_profiles
+
                 record["configuration"]["stage_models"] = public_profiles(config.get("stage_models"))
             except (OSError, ValueError):
                 pass
@@ -174,15 +194,16 @@ class _Runs:
                 pass
             record["resumable"] = bool(record.get("resumable") or control.get("resumable"))
             from memstara.pipeline.pause_runtime import ml_pause_count
-            paused_ml = ml_pause_count(record['run_dir'])
-            pending = control.get('active_calls', 1) > control.get('paused_model_calls', 0) + paused_ml
+
+            paused_ml = ml_pause_count(record["run_dir"])
+            pending = control.get("active_calls", 1) > control.get("paused_model_calls", 0) + paused_ml
             record["execution_state"] = (
-                ('stopping' if pending else 'paused')
-                if record['pause_requested'] else 'running'
+                ("stopping" if pending else "paused") if record["pause_requested"] else "running"
             )
-            record["active_calls"] = control.get('active_calls')
-            record["paused_model_calls"] = control.get('paused_model_calls', 0)
+            record["active_calls"] = control.get("active_calls")
+            record["paused_model_calls"] = control.get("paused_model_calls", 0)
             from memstara.pipeline.run_ownership import infrastructure_status
+
             record.update(infrastructure_status(record["run_dir"]))
             return record
 
@@ -191,9 +212,15 @@ class _Runs:
             self._reap()
             from memstara.pipeline.checkpoint import recovery_status
             from memstara.pipeline.run_ownership import infrastructure_status
-            return [{**{k: v for k, v in record.items() if k != "process_identity"},
-                     **recovery_status(record["run_dir"]),
-                     **infrastructure_status(record["run_dir"])} for record in self._done]
+
+            return [
+                {
+                    **{k: v for k, v in record.items() if k != "process_identity"},
+                    **recovery_status(record["run_dir"]),
+                    **infrastructure_status(record["run_dir"]),
+                }
+                for record in self._done
+            ]
 
     def history_records(self):
         """All owned executions for cumulative counts, beyond the recent-runs menu."""
@@ -259,24 +286,31 @@ class _Runs:
         with self._lock:
             self._reap()
             if self._live is not None:
-                raise RuntimeError(
-                    f"'{self._live['run_tag']}' is already running. "
-                    f"One run at a time — stop it first"
-                )
+                raise RuntimeError(f"'{self._live['run_tag']}' is already running. One run at a time — stop it first")
             if self.pipeline_id:
                 argv = [*argv, "--pipeline-id", self.pipeline_id]
             log = (run_dir / "control.log").open("wb")
             from memstara.model_connections import execution_environment
-            connection_id = argv[argv.index('--model-connection-id') + 1] if '--model-connection-id' in argv else ''
+
+            connection_id = argv[argv.index("--model-connection-id") + 1] if "--model-connection-id" in argv else ""
             popen = subprocess.Popen(
-                [sys.executable, "-u", "-m", "memstara.pipeline.board",
-                 "--run-tag", run_tag, "--run-dir", str(run_dir), *argv],
+                [
+                    sys.executable,
+                    "-u",
+                    "-m",
+                    "memstara.pipeline.board",
+                    "--run-tag",
+                    run_tag,
+                    "--run-dir",
+                    str(run_dir),
+                    *argv,
+                ],
                 cwd=REPO_ROOT,
                 env=execution_environment(connection_id),
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL,
-                start_new_session=True,   # see note 3 in the header
+                start_new_session=True,  # see note 3 in the header
             )
             log.close()
             self._live = {
@@ -311,6 +345,7 @@ class _Runs:
     def _resume_checkpoint(self, run_tag):
         """Caller holds the manager lock; never accept a client-supplied path."""
         from memstara.pipeline.checkpoint import recovery_status
+
         record = next((r for r in self._done if r["run_tag"] == run_tag), None)
         if record is None:
             raise RuntimeError("No saved execution belongs to this pipeline")
@@ -323,17 +358,37 @@ class _Runs:
             raise RuntimeError("Checkpoint ownership does not match this pipeline")
         (root / "pause.request").touch()
         from memstara.model_connections import execution_environment
-        child_env = execution_environment(saved.get('model_connection_id', ''))
+
+        child_env = execution_environment(saved.get("model_connection_id", ""))
         with (root / "control.log").open("ab") as log:
             popen = subprocess.Popen(
-                [sys.executable, "-u", "-m", "memstara.pipeline.board", "--resume",
-                 "--run-tag", run_tag, "--run-dir", str(root)], cwd=REPO_ROOT,
+                [
+                    sys.executable,
+                    "-u",
+                    "-m",
+                    "memstara.pipeline.board",
+                    "--resume",
+                    "--run-tag",
+                    run_tag,
+                    "--run-dir",
+                    str(root),
+                ],
+                cwd=REPO_ROOT,
                 env=child_env,
-                stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
-        self._live = {k: v for k, v in record.items()
-                      if k not in ("exit_code", "ended", "recoverable", "recovery_blocked")}
-        self._live.update(pid=popen.pid, popen=popen, process_identity=identity(popen.pid),
-                          resumed_at=datetime.now().isoformat(timespec="seconds"))
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        self._live = {
+            k: v for k, v in record.items() if k not in ("exit_code", "ended", "recoverable", "recovery_blocked")
+        }
+        self._live.update(
+            pid=popen.pid,
+            popen=popen,
+            process_identity=identity(popen.pid),
+            resumed_at=datetime.now().isoformat(timespec="seconds"),
+        )
         save_record(self._live)
         self._done = [r for r in self._done if r["run_tag"] != run_tag]
         # The restored driver waits on this marker until ownership is recorded.
@@ -344,14 +399,14 @@ class _Runs:
         """Request resumable stop for new drivers; interrupt legacy drivers."""
         with self._lock:
             self._reap()
-            if self._live is None or self._live['run_tag'] != run_tag:
+            if self._live is None or self._live["run_tag"] != run_tag:
                 raise RuntimeError("this run is not running")
-            directory = Path(self._live['run_dir'])
-            if self._live.get('resumable') or (directory / 'execution_control.json').exists():
-                (directory / 'pause.request').touch()
-                return {'stopping': run_tag, 'resumable': True}
-            self._live['popen'].send_signal(signal.SIGINT)
-            return {'stopping': run_tag, 'resumable': False}
+            directory = Path(self._live["run_dir"])
+            if self._live.get("resumable") or (directory / "execution_control.json").exists():
+                (directory / "pause.request").touch()
+                return {"stopping": run_tag, "resumable": True}
+            self._live["popen"].send_signal(signal.SIGINT)
+            return {"stopping": run_tag, "resumable": False}
 
     def terminate(self, run_tag: str) -> dict[str, Any]:
         """Ask the running child to wind up, or raise `RuntimeError` saying why not."""
@@ -360,10 +415,8 @@ class _Runs:
             if self._live is None:
                 raise RuntimeError("nothing is running")
             if self._live["run_tag"] != run_tag:
-                raise RuntimeError(
-                    f"'{run_tag}' is not the run that is going; '{self._live['run_tag']}' is"
-                )
-            self._live["popen"].send_signal(signal.SIGINT)   # see note 2 in the header
+                raise RuntimeError(f"'{run_tag}' is not the run that is going; '{self._live['run_tag']}' is")
+            self._live["popen"].send_signal(signal.SIGINT)  # see note 2 in the header
             return {"stopping": run_tag, "pid": self._live["pid"]}
 
 
@@ -388,8 +441,7 @@ def skills(root=None) -> list[dict[str, Any]]:
         for value in values_for(fields, key):
             n = sum(1 for f in fields if matches(f, {key: value}))
             if n:
-                out.append({"skill": f"{key}={value}", "label": value,
-                            "field": key, "documents": n})
+                out.append({"skill": f"{key}={value}", "label": value, "field": key, "documents": n})
 
     # The crossings, in the order `--skill` wants them written. Both keys in one
     # expression is how a run gets down to single figures, which is the whole point of
@@ -399,8 +451,14 @@ def skills(root=None) -> list[dict[str, Any]]:
             wanted = {"mechanism_family": mech, "terminus_kind": kind}
             n = sum(1 for f in fields if matches(f, wanted))
             if n:
-                out.append({"skill": f"mechanism_family={mech},terminus_kind={kind}",
-                            "label": f"{mech} × {kind}", "field": "both", "documents": n})
+                out.append(
+                    {
+                        "skill": f"mechanism_family={mech},terminus_kind={kind}",
+                        "label": f"{mech} × {kind}",
+                        "field": "both",
+                        "documents": n,
+                    }
+                )
     return out
 
 
@@ -422,6 +480,7 @@ def playbooks() -> dict[str, Any]:
     entries = catalog()
     from memstara.corpus_skills import menu_bindings
     from memstara.ml_configuration import override_schema
+
     return {
         "ml_settings": override_schema(),
         "corpus_skill_bindings": menu_bindings(),
@@ -473,8 +532,7 @@ def read_log(run_dir: Path, offset: int) -> dict[str, Any]:
         handle.seek(start)
         raw = handle.read(size - start)
 
-    return {"offset": size, "size": size, "skipped": skipped,
-            "text": raw.decode("utf-8", errors="replace")}
+    return {"offset": size, "size": size, "skipped": skipped, "text": raw.decode("utf-8", errors="replace")}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -506,8 +564,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(403, {"error": f"this service does not answer to the name {host!r}"})
             return True
         origin = self.headers.get("Origin")
-        configured_origins = {f'http://{host}:{os.environ.get("MEMSTARA_WEB_PORT", "5173")}'
-                              for host in ('localhost', '127.0.0.1')}
+        configured_origins = {
+            f"http://{host}:{os.environ.get('MEMSTARA_WEB_PORT', '5173')}" for host in ("localhost", "127.0.0.1")
+        }
         if origin is not None and origin not in (_ALLOWED_ORIGINS | configured_origins):
             self._send(403, {"error": f"{origin} is not the viewer"})
             return True
@@ -528,6 +587,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             raise ValueError("Content-Length is not a number") from None
         from memstara.dataset_upload import MAX_REQUEST_BYTES
+
         uploading = urlsplit(self.path).path.rstrip("/") == "/control/research-inputs/upload"
         limit = MAX_REQUEST_BYTES if uploading else 64_000
         if length < 0 or length > limit:
@@ -543,27 +603,37 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- the routes ------------------------------------------------------ #
 
-    def do_GET(self) -> None:      # noqa: N802 - the name http.server dispatches on
+    def do_GET(self) -> None:  # noqa: N802 - the name http.server dispatches on
         if self._refuse_stranger():
             return
         path = urlsplit(self.path).path.rstrip("/")
 
         if path == "/control/pricing":
-            self._send(200, {"models": [], "read_only": True, "basis": "motoro",
-                             "note": "Motoro owns execution cost estimates. Local rates are not applied."})
+            self._send(
+                200,
+                {
+                    "models": [],
+                    "read_only": True,
+                    "basis": "motoro",
+                    "note": "Motoro owns execution cost estimates. Local rates are not applied.",
+                },
+            )
             return
 
         if path == "/control/model-defaults":
             from memstara.model_defaults import experiment_defaults
+
             self._send(200, experiment_defaults())
             return
 
         if path == "/control/model-catalog":
             from memstara.model_catalog import catalog
+
             try:
                 from memstara.control.model_policy import PROVIDER
+
                 options = catalog()
-                options['providers'] = [row for row in options['providers'] if row['id'] == PROVIDER]
+                options["providers"] = [row for row in options["providers"] if row["id"] == PROVIDER]
                 self._send(200, options)
             except Exception:
                 self._send(503, {"error": "Motoro model options are unavailable. Please retry."})
@@ -571,14 +641,16 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/control/model-capabilities":
             from memstara.model_catalog import capabilities
+
             query = parse_qs(urlsplit(self.path).query)
             try:
-                provider = query.get('provider', [''])[0]
-                model = query.get('model', [''])[0]
+                provider = query.get("provider", [""])[0]
+                model = query.get("model", [""])[0]
                 from memstara.control.model_policy import require_provider
+
                 require_provider(provider)
                 if len(model) > 200:
-                    raise ValueError('Choose a provider and model')
+                    raise ValueError("Choose a provider and model")
                 self._send(200, {"capabilities": capabilities(provider, model), "source": "motoro"})
             except ValueError as exc:
                 self._send(400, {"error": str(exc)})
@@ -587,15 +659,23 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/control/research-inputs":
             from memstara.research_inputs import list_inputs
             from memstara.corpus_skills import corpus_profile
+
             try:
-                self._send(200, {"inputs": [{**record, 'corpus_skill_profile': corpus_profile(record)}
-                                           for record in list_inputs()]})
+                self._send(
+                    200,
+                    {
+                        "inputs": [
+                            {**record, "corpus_skill_profile": corpus_profile(record)} for record in list_inputs()
+                        ]
+                    },
+                )
             except (OSError, ValueError):
                 self._send(503, {"error": "Registered research inputs could not be read"})
             return
 
         if path == "/control/question-memory":
             from memstara.control.question_memory import handle
+
             try:
                 self._send(200, handle(WORKSPACE, RUNS))
             except Exception:
@@ -604,14 +684,16 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/control/skill-drafts/models":
             from memstara.control.skill_drafts import models
+
             try:
-                connection_id = parse_qs(urlsplit(self.path).query).get('model_connection_id', [''])[0]
+                connection_id = parse_qs(urlsplit(self.path).query).get("model_connection_id", [""])[0]
                 self._send(200, models(connection_id))
             except ValueError:
                 self._send(400, {"error": "Set up or select a valid model before generating a skill."})
             return
         if path.startswith("/control/skill-drafts/"):
             from memstara.control.skill_drafts import get
+
             draft = get(path.rsplit("/", 1)[-1])
             self._send(200 if draft else 404, draft or {"error": "Draft expired or server restarted. Generate again."})
             return
@@ -624,10 +706,14 @@ class Handler(BaseHTTPRequestHandler):
             except OKFError as e:
                 # Registered studies carry their own corpus. An absent deployment
                 # default is normal; an explicitly configured broken corpus is not.
-                bundle = ({"configured": False, "documents": 0}
-                          if not os.environ.get('AGENTIC_OKF_BUNDLE_DIR') else {"error": str(e)})
+                bundle = (
+                    {"configured": False, "documents": 0}
+                    if not os.environ.get("AGENTIC_OKF_BUNDLE_DIR")
+                    else {"error": str(e)}
+                )
             llm = {"source": "project .env agent assignments", "restart_required_after_edit": True}
             from memstara.stage_models import deployment_profiles, public_profiles
+
             try:
                 stage_models = public_profiles(deployment_profiles())
                 stage_model_error = None
@@ -636,17 +722,27 @@ class Handler(BaseHTTPRequestHandler):
                 stage_model_error = "Deployment stage model profiles are missing or invalid"
             from memstara.env import configuration_source
             from memstara.operational import check
-            self._send(200, {"ok": True, "bundle": bundle, "running": RUNS.running(), "llm": llm,
-                             "configuration_source": configuration_source(),
-                             "configuration_check": check(dict(os.environ)),
-                             "stage_models": stage_models, "stage_model_error": stage_model_error,
-                             "input_defaults": {
-                                 "dataset_available": bool(os.environ.get('MEMSTARA_DATASET_PATH')) and
-                                     Path(os.environ['MEMSTARA_DATASET_PATH']).is_file(),
-                                 "knowledge_available": bool(os.environ.get('AGENTIC_OKF_BUNDLE_DIR')) and
-                                     (Path(os.environ['AGENTIC_OKF_BUNDLE_DIR']) / 'index.md').is_file(),
-                                 "target_column": "",
-                             }})
+
+            self._send(
+                200,
+                {
+                    "ok": True,
+                    "bundle": bundle,
+                    "running": RUNS.running(),
+                    "llm": llm,
+                    "configuration_source": configuration_source(),
+                    "configuration_check": check(dict(os.environ)),
+                    "stage_models": stage_models,
+                    "stage_model_error": stage_model_error,
+                    "input_defaults": {
+                        "dataset_available": bool(os.environ.get("MEMSTARA_DATASET_PATH"))
+                        and Path(os.environ["MEMSTARA_DATASET_PATH"]).is_file(),
+                        "knowledge_available": bool(os.environ.get("AGENTIC_OKF_BUNDLE_DIR"))
+                        and (Path(os.environ["AGENTIC_OKF_BUNDLE_DIR"]) / "index.md").is_file(),
+                        "target_column": "",
+                    },
+                },
+            )
             return
 
         if path.startswith("/control/pipelines/") and path.endswith("/combinations"):
@@ -659,24 +755,43 @@ class Handler(BaseHTTPRequestHandler):
                 if not latest:
                     self._send(200, {"planned": None, "calls": []})
                     return
-                root = Path(latest['run_dir'])
+                root = Path(latest["run_dir"])
                 from memstara.combinations import loop_flavors
-                if not (root / 'config.json').exists():
+
+                if not (root / "config.json").exists():
                     from memstara.pipeline.failures import visible_failure
+
                     failure = None if running else visible_failure(root)
-                    self._send(200, {"run_tag": latest['run_tag'], "preparing": bool(running), "failure": failure,
-                                     "planned": None, "executed": None, "calls": []})
+                    self._send(
+                        200,
+                        {
+                            "run_tag": latest["run_tag"],
+                            "preparing": bool(running),
+                            "failure": failure,
+                            "planned": None,
+                            "executed": None,
+                            "calls": [],
+                        },
+                    )
                     return
-                plan = json.loads((root / 'config.json').read_text()).get('combination_plan')
+                plan = json.loads((root / "config.json").read_text()).get("combination_plan")
                 planned = loop_flavors(plan, loop) if plan else None
                 flavor_file = root / f"loop_{loop}_flavors.json"
                 executed = json.loads(flavor_file.read_text()) if flavor_file.exists() else None
-                execution_path = root / 'execution.json'
+                execution_path = root / "execution.json"
                 manifest = json.loads(execution_path.read_text()) if execution_path.exists() else {}
-                calls = [c for c in manifest.get('calls', []) if c.get('loop') == loop]
-                self._send(200, {"run_tag": latest['run_tag'], "planned": planned, "executed": executed,
-                                 "total_loops": plan['total_loops'] if plan else 0,
-                                 "combination_plan": plan, "calls": calls})
+                calls = [c for c in manifest.get("calls", []) if c.get("loop") == loop]
+                self._send(
+                    200,
+                    {
+                        "run_tag": latest["run_tag"],
+                        "planned": planned,
+                        "executed": executed,
+                        "total_loops": plan["total_loops"] if plan else 0,
+                        "combination_plan": plan,
+                        "calls": calls,
+                    },
+                )
             except (ValueError, OSError, TypeError, KeyError) as exc:
                 self._send(400, {"error": str(exc)})
             return
@@ -688,9 +803,15 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/control/skills":
-            if not os.environ.get('AGENTIC_OKF_BUNDLE_DIR'):
-                self._send(200, {"skills": [], "configured": False,
-                                 "note": "Select a registered research input to use its corpus."})
+            if not os.environ.get("AGENTIC_OKF_BUNDLE_DIR"):
+                self._send(
+                    200,
+                    {
+                        "skills": [],
+                        "configured": False,
+                        "note": "Select a registered research input to use its corpus.",
+                    },
+                )
                 return
             try:
                 self._send(200, {"skills": skills()})
@@ -702,8 +823,13 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 self._send(200, playbooks())
             except (ValueError, OSError):
-                self._send(503, {"error": "Skill catalog is unavailable. Check saved user skills "
-                                 "and configured shared files; restore invalid records before retrying."})
+                self._send(
+                    503,
+                    {
+                        "error": "Skill catalog is unavailable. Check saved user skills "
+                        "and configured shared files; restore invalid records before retrying."
+                    },
+                )
             return
 
         if path == "/control/runs":
@@ -711,7 +837,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/control/runs/") and path.endswith("/log"):
-            found = RUNS.locate(path[len("/control/runs/"):-len("/log")])
+            found = RUNS.locate(path[len("/control/runs/") : -len("/log")])
             if found is None:
                 # 404 rather than an empty log: "this service did not start that run" and
                 # "that run has printed nothing yet" are different answers, and a screen
@@ -729,7 +855,7 @@ class Handler(BaseHTTPRequestHandler):
 
         self._send(404, {"error": f"no route {path}", "routes": _ROUTES})
 
-    def do_POST(self) -> None:     # noqa: N802 - the name http.server dispatches on
+    def do_POST(self) -> None:  # noqa: N802 - the name http.server dispatches on
         if self._refuse_stranger():
             return
         path = urlsplit(self.path).path.rstrip("/")
@@ -746,9 +872,11 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/control/model-connections/models":
             from memstara.model_catalog import list_provider_models
+
             try:
                 from memstara.control.model_policy import require_provider
-                require_provider(body.get('provider'))
+
+                require_provider(body.get("provider"))
                 self._send(200, list_provider_models(body))
             except ValueError as exc:
                 self._send(400, {"error": str(exc)})
@@ -758,9 +886,11 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/control/model-connections/check":
             from memstara.model_connections import check_and_save
+
             try:
                 from memstara.control.model_policy import require_provider
-                require_provider(body.get('provider'))
+
+                require_provider(body.get("provider"))
                 self._send(201, {"connection": check_and_save(body, make_default=True)})
             except ValueError as exc:
                 self._send(400, {"error": str(exc)})
@@ -770,6 +900,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/control/research-inputs/check-csv":
             from memstara.dataset_upload import check_csv
+
             try:
                 self._send(200, check_csv(body))
             except ValueError as exc:
@@ -780,6 +911,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/control/research-inputs/upload":
             from memstara.dataset_upload import upload
+
             try:
                 self._send(201, upload(body))
             except ValueError as exc:
@@ -790,8 +922,9 @@ class Handler(BaseHTTPRequestHandler):
 
         if path in ("/control/research-inputs/inspect", "/control/research-inputs/register"):
             from memstara.research_inputs import inspect, register as register_research_inputs
+
             try:
-                result = (register_research_inputs if path.endswith('/register') else inspect)(body)
+                result = (register_research_inputs if path.endswith("/register") else inspect)(body)
                 self._send(200, result)
             except ValueError as exc:
                 self._send(400, {"error": str(exc)})
@@ -801,6 +934,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/control/question-memory/clear":
             from memstara.control.question_memory import handle, MemoryConflict
+
             try:
                 self._send(200, handle(WORKSPACE, RUNS, body))
             except MemoryConflict as exc:
@@ -813,6 +947,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/control/skill-drafts":
             from memstara.control.skill_drafts import start
+
             try:
                 self._send(202, start(body))
             except ValueError as exc:
@@ -821,18 +956,26 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/control/llm/key":
             if body.get("reveal") is not True or body.get("stage") not in (
-                    "question", "hypothesis", "data", "ml", "interpretation", "explanation"):
-
+                "question",
+                "hypothesis",
+                "data",
+                "ml",
+                "interpretation",
+                "explanation",
+            ):
                 self._send(400, {"error": "Explicit reveal request required"})
                 return
             from memstara.control.request import configured_llm
             from memstara.config import Settings
+
             try:
                 provider, _ = configured_llm(body["stage"])
                 settings = Settings()
-                key = {"openai": settings.openai_api_key,
-                       "azure_foundry": settings.anthropic_foundry_api_key,
-                       "anthropic": settings.anthropic_api_key}.get(provider, "")
+                key = {
+                    "openai": settings.openai_api_key,
+                    "azure_foundry": settings.anthropic_foundry_api_key,
+                    "anthropic": settings.anthropic_api_key,
+                }.get(provider, "")
                 if not key:
                     self._send(404, {"error": "No API key is configured for this provider"})
                     return
@@ -851,8 +994,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/control/pipelines":
             try:
                 from memstara.control.model_policy import require_selection
-                if body.get('action') in ('add', 'update') and isinstance(body.get('configuration'), dict):
-                    require_selection(body['configuration'])
+
+                if body.get("action") in ("add", "update") and isinstance(body.get("configuration"), dict):
+                    require_selection(body["configuration"])
                 self._send(200, WORKSPACE.mutate(body))
             except (ValueError, OSError) as e:
                 self._send(409, {"error": str(e)})
@@ -863,10 +1007,10 @@ class Handler(BaseHTTPRequestHandler):
             legacy = RUNS.running()
             if legacy:
                 try:
-                    RUNS.stop(legacy['run_tag'])
-                    result['stopping'].append(legacy['run_tag'])
+                    RUNS.stop(legacy["run_tag"])
+                    result["stopping"].append(legacy["run_tag"])
                 except (RuntimeError, OSError) as exc:
-                    result['errors'].append({'pipeline': 'Standalone execution', 'error': str(exc)})
+                    result["errors"].append({"pipeline": "Standalone execution", "error": str(exc)})
             self._send(200, result)
             return
 
@@ -876,7 +1020,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path.startswith("/control/runs/") and path.rsplit("/", 1)[-1] in ("pause", "resume"):
             prefix, action = path.rsplit("/", 1)
-            tag = prefix[len("/control/runs/"):]
+            tag = prefix[len("/control/runs/") :]
             try:
                 self._send(200, (WORKSPACE.locate_manager(tag) or RUNS).pause(tag, action == "pause"))
             except RuntimeError as e:
@@ -884,7 +1028,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/control/runs/") and path.endswith("/end"):
-            tag = path[len("/control/runs/"):-len("/end")]
+            tag = path[len("/control/runs/") : -len("/end")]
             try:
                 self._send(200, (WORKSPACE.locate_manager(tag) or RUNS).terminate(tag))
             except RuntimeError as e:
@@ -892,7 +1036,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/control/runs/") and path.endswith("/stop"):
-            tag = path[len("/control/runs/"):-len("/stop")]
+            tag = path[len("/control/runs/") : -len("/stop")]
             try:
                 self._send(200, (WORKSPACE.locate_manager(tag) or RUNS).stop(tag))
             except RuntimeError as e:
@@ -902,7 +1046,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, {"error": f"no route {path}", "routes": _ROUTES})
 
     def _start(self, body: dict[str, Any]) -> None:
-        if any(key.startswith('_retry_') for key in body):
+        if any(key.startswith("_retry_") for key in body):
             self._send(400, {"error": "Retry source metadata is server-owned"})
             return
         pipeline_id = body.pop("pipeline_id", None)
@@ -912,6 +1056,7 @@ class Handler(BaseHTTPRequestHandler):
                 limit = body.pop("iteration_limit", None)
                 if limit is not None and (type(limit) is not int or not 1 <= limit <= 10):
                     raise ValueError("iteration_limit must be an integer from 1 to 10")
+
                 def launch(manager, item):
                     configuration = dict(item["configuration"])
                     if limit is not None and configuration.get("combination_skills"):
@@ -919,47 +1064,63 @@ class Handler(BaseHTTPRequestHandler):
                     if limit is not None:
                         configuration.update(continuous=False, waves=limit)
                     return self._launch(configuration, manager, item["name"])
+
                 mode = body.pop("execution_mode", "initial")
                 additional = body.pop("additional_loops", None)
                 expected = body.pop("expected_run_tag", None)
                 if mode == "additional" and limit is not None:
                     raise ValueError("Use additional_loops alone for additional analysis")
-                return WORKSPACE.start(pipeline_id, launch, mode=mode,
-                                       additional_loops=additional, expected_run_tag=expected)
+                return WORKSPACE.start(
+                    pipeline_id, launch, mode=mode, additional_loops=additional, expected_run_tag=expected
+                )
             except (ValueError, RuntimeError) as e:
                 self._send(409, {"error": str(e)})
                 return
         try:
             from memstara.control.catalog import validate_new_design
+
             validate_new_design(body)
         except ValueError as exc:
-            self._send(400, {'error': str(exc)})
+            self._send(400, {"error": str(exc)})
             return
         return self._launch(body, RUNS)
 
     def _launch(self, body, manager, pipeline_name=""):
         # The web control surface always imposes a finite ceiling, including older clients.
         body = dict(body)
-        if body.get('continuous') is True:
+        if body.get("continuous") is True:
             body.update(continuous=False, waves=10)
         research = None
         try:
-            if body.get('research_input_id'):
+            if body.get("research_input_id"):
                 from memstara.research_inputs import prepare
-                research = prepare(body['research_input_id'])
-                config = research['configuration']
-                body.update(knowledge_mode=config['knowledge_mode'], data_mode=config['data_mode'],
-                            research_objective=config['target']['description'],
-                            y_column=config['target']['column'] or 'outcome')
+
+                research = prepare(body["research_input_id"])
+                config = research["configuration"]
+                body.update(
+                    knowledge_mode=config["knowledge_mode"],
+                    data_mode=config["data_mode"],
+                    research_objective=config["target"]["description"],
+                    y_column=config["target"]["column"] or "outcome",
+                )
             if not research:
-                if body.get('knowledge_mode', 'okf') == 'okf' and not os.environ.get('AGENTIC_OKF_BUNDLE_DIR'):
-                    raise ValueError('Select a saved research input with an OKF corpus in Data & target settings, '
-                                     'or explicitly choose LLM knowledge only. No deployment corpus is configured.')
-                if body.get('data_mode', 'dataset') == 'dataset' and not os.environ.get('MEMSTARA_DATASET_PATH'):
-                    raise ValueError('Select a saved research input with a CSV and target definition in Data & target '
-                                     'settings, or explicitly choose proposal mode. No deployment CSV is configured.')
-            available = ([] if body.get('knowledge_mode') == 'llm_only' else
-                         skills(Path(research['root']) / 'okf') if research else skills())
+                if body.get("knowledge_mode", "okf") == "okf" and not os.environ.get("AGENTIC_OKF_BUNDLE_DIR"):
+                    raise ValueError(
+                        "Select a saved research input with an OKF corpus in Data & target settings, "
+                        "or explicitly choose LLM knowledge only. No deployment corpus is configured."
+                    )
+                if body.get("data_mode", "dataset") == "dataset" and not os.environ.get("MEMSTARA_DATASET_PATH"):
+                    raise ValueError(
+                        "Select a saved research input with a CSV and target definition in Data & target "
+                        "settings, or explicitly choose proposal mode. No deployment CSV is configured."
+                    )
+            available = (
+                []
+                if body.get("knowledge_mode") == "llm_only"
+                else skills(Path(research["root"]) / "okf")
+                if research
+                else skills()
+            )
             offered = [s["skill"] for s in available]
         except (OKFError, ValueError, OSError) as e:
             self._send(422, {"error": f"Run not started. {e}", "code": "input_validation_failed"})
@@ -971,8 +1132,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             menu = playbooks()
         except (ValueError, OSError):
-            self._send(503, {"error": "Run not started. Skill catalog is unavailable; "
-                             "check saved user skills and configured shared files."})
+            self._send(
+                503,
+                {
+                    "error": "Run not started. Skill catalog is unavailable; "
+                    "check saved user skills and configured shared files."
+                },
+            )
             return
         try:
             argv = build_argv(body, offered, menu["playbooks"], menu["stages"])
@@ -985,21 +1151,31 @@ class Handler(BaseHTTPRequestHandler):
         # only aggregate diagnostics, never dataset values, headers or file paths.
         from memstara.evaluation import DataQualityError, preflight, validate
         from memstara.control.catalog import resolve
+
         try:
-            if body.get('data_mode', 'dataset') == 'dataset':
-                dataset = (str(Path(research['root']) / 'dataset.csv') if research
-                           else os.environ.get("MEMSTARA_DATASET_PATH", ""))
+            if body.get("data_mode", "dataset") == "dataset":
+                dataset = (
+                    str(Path(research["root"]) / "dataset.csv")
+                    if research
+                    else os.environ.get("MEMSTARA_DATASET_PATH", "")
+                )
                 if not dataset:
-                    raise DataQualityError('No dataset is configured. Configure a curated CSV before starting.')
+                    raise DataQualityError("No dataset is configured. Configure a curated CSV before starting.")
                 book = body.get("playbook_ml", "")
                 policy = resolve(book).get("evaluation", {}) if book else {}
                 plan = validate({**policy, **body.get("evaluation", {})})
-                input_policy = (research or {}).get('configuration', {}).get('missing_policy', 'reject')
-                preflight(Path(dataset), argv[argv.index("--y-column") + 1], plan,
-                          reserve_validation=bool(body.get('controlled_comparison')), missing_policy=input_policy,
-                          require_numeric='predictor_types' not in (research or {}).get('configuration', {}))
+                input_policy = (research or {}).get("configuration", {}).get("missing_policy", "reject")
+                preflight(
+                    Path(dataset),
+                    argv[argv.index("--y-column") + 1],
+                    plan,
+                    reserve_validation=bool(body.get("controlled_comparison")),
+                    missing_policy=input_policy,
+                    require_numeric="predictor_types" not in (research or {}).get("configuration", {}),
+                )
                 if body.get("combination_skills"):
                     from memstara.pipeline.feature_context import freeze_feature_context
+
                     freeze_feature_context(
                         Path(dataset),
                         argv[argv.index("--y-column") + 1],
@@ -1007,6 +1183,7 @@ class Handler(BaseHTTPRequestHandler):
                         require_numeric="predictor_types" not in (research or {}).get("configuration", {}),
                     )
                 from memstara.comparisons import validate_baseline
+
                 validate_baseline(body.get("baseline_columns", []), argv[argv.index("--y-column") + 1], Path(dataset))
         except ValueError as e:
             self._send(422, {"error": f"Run not started. {e}", "code": "input_validation_failed"})
@@ -1017,21 +1194,24 @@ class Handler(BaseHTTPRequestHandler):
         # inputs supersede unused legacy dataset/corpus defaults.
         from memstara.operational import check
         from memstara.model_connections import execution_environment
+
         try:
             from memstara.control.model_policy import require_selection
+
             require_selection(body, use_defaults=True)
-            effective = execution_environment(body.get('model_connection_id', ''))
+            effective = execution_environment(body.get("model_connection_id", ""))
         except ValueError as exc:
-            self._send(422, {'error': str(exc)})
+            self._send(422, {"error": str(exc)})
             return
-        if research or body.get('data_mode') == 'proposal':
-            effective.pop('MEMSTARA_DATASET_PATH', None)
-        if research or body.get('knowledge_mode') == 'llm_only':
-            effective.pop('AGENTIC_OKF_BUNDLE_DIR', None)
+        if research or body.get("data_mode") == "proposal":
+            effective.pop("MEMSTARA_DATASET_PATH", None)
+        if research or body.get("knowledge_mode") == "llm_only":
+            effective.pop("AGENTIC_OKF_BUNDLE_DIR", None)
         readiness = check(effective)
-        if not readiness['configuration_valid']:
-            self._send(422, {'error': 'Run not started. ' + '; '.join(readiness['errors']),
-                             'code': 'configuration_invalid'})
+        if not readiness["configuration_valid"]:
+            self._send(
+                422, {"error": "Run not started. " + "; ".join(readiness["errors"]), "code": "configuration_invalid"}
+            )
             return
 
         started = datetime.now()
@@ -1042,8 +1222,8 @@ class Handler(BaseHTTPRequestHandler):
         run_tag = started.strftime("board_%Y%m%dT%H%M%S_%f")
         # Match the driver's knowledge-mode suffix before persisting ownership.
         # Otherwise saved results and Resume refer to a different execution ID.
-        if body.get('knowledge_mode') == 'llm_only':
-            run_tag += '_ablate_okf'
+        if body.get("knowledge_mode") == "llm_only":
+            run_tag += "_ablate_okf"
         trials = argv[argv.index("--trials") + 1]
         run_dir = new_run_dir(f"board_{trials}trials", started.strftime("%Y-%m-%dT%H%M%S_%f"))
         skill = argv[argv.index("--skill") + 1]
@@ -1061,9 +1241,14 @@ class Handler(BaseHTTPRequestHandler):
 _ROUTES = [
     "GET  /control/question-memory",
     "POST /control/question-memory/clear",
-    "GET /control/health", "GET /control/skills", "GET /control/playbooks",
-    "POST /control/playbooks", "POST /control/runs",
-    "GET /control/runs", "GET /control/runs/{tag}/log", "POST /control/runs/{tag}/stop",
+    "GET /control/health",
+    "GET /control/skills",
+    "GET /control/playbooks",
+    "POST /control/playbooks",
+    "POST /control/runs",
+    "GET /control/runs",
+    "GET /control/runs/{tag}/log",
+    "POST /control/runs/{tag}/stop",
 ]
 
 
@@ -1077,7 +1262,7 @@ def serve(port: int = 8072) -> None:
     load_env()
     # Container listener is private to the Compose network. Compose publishes only
     # the loopback web proxy; Host/Origin checks remain enforced by Handler.
-    host = "0.0.0.0" if os.environ.get('MEMSTARA_CONTAINER_MODE') == '1' else '127.0.0.1'
+    host = "0.0.0.0" if os.environ.get("MEMSTARA_CONTAINER_MODE") == "1" else "127.0.0.1"
     server = ThreadingHTTPServer((host, port), Handler)
     print(f"control service on http://{host}:{port}")
     for route in _ROUTES:

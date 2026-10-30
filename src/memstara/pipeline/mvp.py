@@ -151,8 +151,7 @@ def check_environment(provider: str = "") -> list[str]:
     okf = os.environ.get("AGENTIC_OKF_BUNDLE_DIR", "").strip()
     if not okf:
         problems.append(
-            "AGENTIC_OKF_BUNDLE_DIR is not set — export AGENTIC_OKF_BUNDLE_DIR="
-            f'"{OUT_DIR / "okf_synthetic_sample"}"'
+            f'AGENTIC_OKF_BUNDLE_DIR is not set — export AGENTIC_OKF_BUNDLE_DIR="{OUT_DIR / "okf_synthetic_sample"}"'
         )
     elif not Path(okf).is_dir():
         problems.append(f"AGENTIC_OKF_BUNDLE_DIR does not exist: {okf}")
@@ -320,17 +319,14 @@ async def main() -> int:
     ap.add_argument("--run-dir", default=None, help="where to write this run's records (default: a new one)")
     args = ap.parse_args()
     from memstara.env import configured_llm
+
     args.provider, args.model = configured_llm(args.provider, args.model)
 
     started = datetime.now()
     # The tag that goes on the folder name. An ablation gets `_ablate`, so a normal run
     # and an ablation can be told apart from the folder listing alone.
     tag = f"mvp_{args.trials}trials{'_ablate' if args.ablate_okf else ''}"
-    run_dir = (
-        Path(args.run_dir)
-        if args.run_dir
-        else new_run_dir(tag, started.strftime("%Y-%m-%dT%H%M%S"))
-    )
+    run_dir = Path(args.run_dir) if args.run_dir else new_run_dir(tag, started.strftime("%Y-%m-%dT%H%M%S"))
     run_dir.mkdir(parents=True, exist_ok=True)
 
     # The tee goes on first: dictConfig's StreamHandler binds sys.stderr when it is

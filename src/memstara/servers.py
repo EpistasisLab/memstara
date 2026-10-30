@@ -65,18 +65,15 @@ SERVERS: tuple[Server, ...] = (
     # bundles core did not write — this synthetic bundle, for one. Core's tools
     # themselves are unchanged; they are only wrapped. See mcp_servers/okf.py.
     Server("okf", "memstara.mcp_servers.okf", "knowledge lookup over the OKF bundle"),
-    Server("memstara-data", "memstara.mcp_servers.data",
-           "the cohort CSV: describe it, slice columns out of it"),
+    Server("memstara-data", "memstara.mcp_servers.data", "the cohort CSV: describe it, slice columns out of it"),
     Server("memstara-ml", "memstara.mcp_servers.ml", "train a model on a subset and score it"),
-    Server("memstara-blackboard", "memstara.mcp_servers.blackboard",
-           "the shared work board the agents read and write"),
+    Server("memstara-blackboard", "memstara.mcp_servers.blackboard", "the shared work board the agents read and write"),
     # PROTOTYPE semantic matcher: OKF concept name -> EcoXAI column name. Without it
     # the hypothesis agent picks column names by eye off `describe_dataset`, which is
     # the thing the matcher was built to replace — and the two pipelines then choose
     # columns by different means, so their AUCs are not comparable.
     # Needs the cache: `python scripts/build_matcher_cache.py`.
-    Server("semantic-matcher", "memstara.mcp_servers.matcher",
-           "OKF concept name -> cohort column name"),
+    Server("semantic-matcher", "memstara.mcp_servers.matcher", "OKF concept name -> cohort column name"),
 )
 
 #: `name -> Server`, for the callers that hold a name and want the rest.
@@ -96,9 +93,7 @@ def launch_table() -> list[tuple[str, str]]:
 #: debug hook, which is not a server but is loaded into every one of them and reads
 #: `MEMSTARA_DEBUGPY` itself. Leaving it out is exactly the omission that made the
 #: debugger silently never open its port.
-SCANNED_MODULES: tuple[str, ...] = (
-    tuple(s.module for s in SERVERS) + ("memstara.mcp_servers.debug_hook",)
-)
+SCANNED_MODULES: tuple[str, ...] = tuple(s.module for s in SERVERS) + ("memstara.mcp_servers.debug_hook",)
 
 
 def source_of(module: str) -> Path:
@@ -120,5 +115,5 @@ def source_of(module: str) -> Path:
     prefix = f"{__package__}."
     if not module.startswith(prefix):
         raise ValueError(f"not a {__package__} module: {module!r}")
-    relative = module[len(prefix):].split(".")
+    relative = module[len(prefix) :].split(".")
     return PACKAGE_ROOT.joinpath(*relative).with_suffix(".py")

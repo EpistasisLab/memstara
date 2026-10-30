@@ -64,7 +64,10 @@ class VerifiedMatcher(Matcher):
 
     def match_many(self, concepts, *, feature_type=None, top_k=None, threshold=None):
         results = super().match_many(
-            concepts, feature_type=feature_type, top_k=top_k, threshold=threshold,
+            concepts,
+            feature_type=feature_type,
+            top_k=top_k,
+            threshold=threshold,
         )
         medications: dict[str, list[CatalogEntry]] = {}
         for entry in self.entries:
@@ -168,12 +171,14 @@ def get_matcher() -> Matcher:
     rules = load_rules()
     fingerprint = current_fingerprint(rules=rules)
     import fcntl
+
     # Coordinate with automatic builders so multi-file publication is never read
     # halfway through. Cached matchers remain valid for their own fingerprint.
-    with (cfg_mod.CATALOG_JSON.parent / '.matcher.lock').open('a') as lock:
+    with (cfg_mod.CATALOG_JSON.parent / ".matcher.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_SH)
-        return _get_matcher_cached(json.dumps(fingerprint, sort_keys=True),
-                                   rules.model_dump_json() if rules is not None else None)
+        return _get_matcher_cached(
+            json.dumps(fingerprint, sort_keys=True), rules.model_dump_json() if rules is not None else None
+        )
 
 
 @lru_cache(maxsize=1)
@@ -182,6 +187,7 @@ def _get_matcher_cached(fingerprint_json, rules_json) -> Matcher:
     on every call."""
     from memstara.matcher.rules import RuleSet
     from memstara.matcher.catalog import meta_path
+
     rules = RuleSet.model_validate_json(rules_json) if rules_json is not None else None
     fingerprint = json.loads(fingerprint_json)
     # Legacy unstamped caches remain eligible only for policies with no exclusions.
@@ -189,8 +195,8 @@ def _get_matcher_cached(fingerprint_json, rules_json) -> Matcher:
     # the existing artifacts. Nonempty policies always require a matching stamp.
     metadata = meta_path(cfg_mod.CATALOG_JSON)
     if (rules is None or not rules.exclusions) and metadata.exists():
-        if 'leakage_rules_sha1' not in json.loads(metadata.read_text()):
-            fingerprint.pop('leakage_rules_sha1', None)
+        if "leakage_rules_sha1" not in json.loads(metadata.read_text()):
+            fingerprint.pop("leakage_rules_sha1", None)
     run_config = build_run_config()
     matcher = VerifiedMatcher.from_catalog(
         cfg_mod.CATALOG_JSON,
@@ -202,7 +208,7 @@ def _get_matcher_cached(fingerprint_json, rules_json) -> Matcher:
     # at build time; this is an invariant that must also hold for a catalog someone
     # hand-edited or copied in from another build.
     if rules is not None and any(e.feature_name in rules.excluded for e in matcher.entries):
-        raise RuntimeError('Catalog contains study-excluded features; rebuild the matcher cache')
+        raise RuntimeError("Catalog contains study-excluded features; rebuild the matcher cache")
     outcome = outcome_column()
     if any(e.feature_name == outcome for e in matcher.entries):
         raise RuntimeError(

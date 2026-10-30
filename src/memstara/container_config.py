@@ -61,8 +61,9 @@ def provision_viewers(values: dict[str, str], previous: dict[str, str]) -> dict[
         if owner["POSTGRES_USER"] == role:
             role = "memstara_readonly"
         parsed = urlsplit(mapped)
-        result[reader_key] = urlunsplit(("postgresql", role + ":" + secrets.token_urlsafe(32)
-                                        + "@" + host + ":5432", parsed.path, "", ""))
+        result[reader_key] = urlunsplit(
+            ("postgresql", role + ":" + secrets.token_urlsafe(32) + "@" + host + ":5432", parsed.path, "", "")
+        )
     return result
 
 

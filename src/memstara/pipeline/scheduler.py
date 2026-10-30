@@ -1,4 +1,5 @@
 """Bounded stage workers with completion-driven handoffs and cancellation cleanup."""
+
 import asyncio
 
 
@@ -20,8 +21,9 @@ class StageWorkers:
             active.add("hypothesis")
         if active:
             return next(stage for stage in order if stage in active)
-        observed = ([task for task in tasks if task.get("status") == "in_progress"]
-                    or [task for task in tasks if task.get("status") == "ready"])
+        observed = [task for task in tasks if task.get("status") == "in_progress"] or [
+            task for task in tasks if task.get("status") == "ready"
+        ]
         if observed:
             stage = observed[0]["task_type"]
             return "interpreter" if stage == "interpret" else stage
@@ -35,8 +37,7 @@ class StageWorkers:
         # skills do not starve behind the first slot. Busy slots are skipped.
         start = self.last_slot.get(stage, 0)
         order = [(start + offset) % capacity + 1 for offset in range(capacity)]
-        return [slot for slot in order if slot not in occupied
-                and (eligible is None or slot in eligible)][:waiting]
+        return [slot for slot in order if slot not in occupied and (eligible is None or slot in eligible)][:waiting]
 
     def launch(self, stage, slot, coroutine):
         key = stage, slot
@@ -48,14 +49,12 @@ class StageWorkers:
 
     async def completed(self):
         finished = [key for key, task in self.active.items() if task.done()]
-        results = await asyncio.gather(*(self.active.pop(key) for key in finished),
-                                       return_exceptions=True)
+        results = await asyncio.gather(*(self.active.pop(key) for key in finished), return_exceptions=True)
         return list(zip(finished, results, strict=True))
 
     async def wait(self, interval=1.0):
         if self.active:
-            await asyncio.wait(self.active.values(), timeout=interval,
-                               return_when=asyncio.FIRST_COMPLETED)
+            await asyncio.wait(self.active.values(), timeout=interval, return_when=asyncio.FIRST_COMPLETED)
         else:
             await asyncio.sleep(interval)
 

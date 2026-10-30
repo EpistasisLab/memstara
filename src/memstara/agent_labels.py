@@ -3,6 +3,7 @@
 The report ID remains compatible with saved runs and Motoro agent identities.
 Its public name is Explanation Agent; Interpreter remains a separate role.
 """
+
 AGENT_LABELS = {
     "hypothesis": "Hypothesis Agent",
     "data": "Data Agent",

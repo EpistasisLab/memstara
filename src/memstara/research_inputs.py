@@ -82,8 +82,11 @@ def config(value):
         raise ValueError("Target values must be text, at most 4000 characters each")
     result["target"] = {key: target.get(key, "").strip() for key in sorted(TARGET_FIELDS)}
     target = result["target"]
-    if (result["data_mode"] == "dataset" and not target["description"]
-            and all(target[key] for key in ("column", "positive_label", "negative_label"))):
+    if (
+        result["data_mode"] == "dataset"
+        and not target["description"]
+        and all(target[key] for key in ("column", "positive_label", "negative_label"))
+    ):
         target["description"] = (
             f"Classify {target['column']}: positive label {target['positive_label']}, "
             f"negative label {target['negative_label']}. "
@@ -99,13 +102,13 @@ def config(value):
         raise ValueError("Categorical columns must be an array of exact column names")
     if categories:
         result["categorical_columns"] = sorted(set(categories))
-    if 'predictor_types' in result:
-        types = result['predictor_types']
+    if "predictor_types" in result:
+        types = result["predictor_types"]
         if not isinstance(types, dict) or any(
             not isinstance(k, str) or v not in ("continuous", "categorical") for k, v in types.items()
         ):
-            raise ValueError('Predictor types must map column names to continuous or categorical')
-        result['predictor_types'] = dict(types)
+            raise ValueError("Predictor types must map column names to continuous or categorical")
+        result["predictor_types"] = dict(types)
     result["missing_policy"] = result.get("missing_policy", "reject")
     if result["missing_policy"] not in ("reject", "impute_train_v1"):
         raise ValueError("Unsupported missing-value policy")
@@ -127,6 +130,7 @@ def inspect(value):
     nonfinite: Counter[str] = Counter()
     nonnumeric: Counter[str] = Counter()
     from memstara.predictor_types import ColumnTypes
+
     types = ColumnTypes()
     if value["data_mode"] == "dataset":
         dataset = Path(value["dataset_path"]).expanduser().resolve()
@@ -197,38 +201,41 @@ def inspect(value):
             issue("feature_count", "At least four eligible predictors are required")
         if set(value.get("categorical_columns", [])) - set(predictors):
             issue("categorical_columns", "Categorical columns must be eligible predictor columns")
-        typed = 'predictor_types' in value
+        typed = "predictor_types" in value
         if typed:
-            declared = value['predictor_types']
+            declared = value["predictor_types"]
             if set(declared) - set(predictors):
-                issue('predictor_types', 'Predictor types must refer to eligible predictor columns')
+                issue("predictor_types", "Predictor types must refer to eligible predictor columns")
             metadata = types.metadata(predictors)
             resolved = {}
             for column in predictors:
-                kind = metadata['column_kinds'][column]
+                kind = metadata["column_kinds"][column]
                 choice = declared.get(column)
-                if nonnumeric[column] and choice == 'continuous':
-                    issue('predictor_type_mismatch', f'{column} contains text and cannot be a continuous measurement')
+                if nonnumeric[column] and choice == "continuous":
+                    issue("predictor_type_mismatch", f"{column} contains text and cannot be a continuous measurement")
                 if choice:
                     resolved[column] = choice
-                elif column in metadata['suggested_predictor_types']:
-                    resolved[column] = metadata['suggested_predictor_types'][column]
-                elif kind == 'categorical':
-                    resolved[column] = 'categorical'
-                elif column in metadata['type_confirmation_columns'] and value['missing_policy'] == 'impute_train_v1':
+                elif column in metadata["suggested_predictor_types"]:
+                    resolved[column] = metadata["suggested_predictor_types"][column]
+                elif kind == "categorical":
+                    resolved[column] = "categorical"
+                elif column in metadata["type_confirmation_columns"] and value["missing_policy"] == "impute_train_v1":
                     issue(
                         "predictor_type_required",
                         f"Confirm whether {column} contains category codes or continuous measurements "
                         "before imputation",
                     )
-                elif kind == 'numeric':
-                    resolved[column] = 'continuous'
-            value['predictor_types'] = resolved
-            value['categorical_columns'] = sorted(c for c, kind in resolved.items() if kind == 'categorical')
+                elif kind == "numeric":
+                    resolved[column] = "continuous"
+            value["predictor_types"] = resolved
+            value["categorical_columns"] = sorted(c for c, kind in resolved.items() if kind == "categorical")
         unsupported = [h for h in predictors if nonnumeric[h] and not typed]
         if unsupported:
-            issue("nonnumeric_predictors", "Encode or exclude nonnumeric predictors before running; "
-                  "automatic encoding and scaling are disabled: " + ", ".join(unsupported))
+            issue(
+                "nonnumeric_predictors",
+                "Encode or exclude nonnumeric predictors before running; "
+                "automatic encoding and scaling are disabled: " + ", ".join(unsupported),
+            )
         active = set(predictors) | {target["column"]}
         if any(missing[k] for k in predictors) and value["missing_policy"] == "reject":
             issue(
@@ -291,8 +298,8 @@ def inspect(value):
         identity["input_modes"] = {key: value[key] for key in ("knowledge_mode", "data_mode")}
     if value.get("categorical_columns"):
         identity["categorical_columns"] = value["categorical_columns"]
-    if 'predictor_types' in value:
-        identity['predictor_types'] = value['predictor_types']
+    if "predictor_types" in value:
+        identity["predictor_types"] = value["predictor_types"]
     fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     return {
         "configuration": {
@@ -373,9 +380,13 @@ def verify_materialized(profile):
     required = {"dataset.csv", "matcher_rules.json"} if configuration["data_mode"] == "dataset" else set()
     if configuration["knowledge_mode"] == "okf":
         required.add("okf/index.md")
-    if not isinstance(hashes, dict) or not required.issubset(hashes) or any(
-        not isinstance(name, str) or not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{64}", value)
-        for name, value in hashes.items()
+    if (
+        not isinstance(hashes, dict)
+        or not required.issubset(hashes)
+        or any(
+            not isinstance(name, str) or not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{64}", value)
+            for name, value in hashes.items()
+        )
     ):
         raise ValueError("Frozen research manifest is incomplete or invalid; restore the original manifest")
     root = (registry_root() / "prepared" / profile["fingerprint"]).resolve()
@@ -502,6 +513,7 @@ def ensure_matcher(profile):
     if profile["configuration"]["data_mode"] != "dataset":
         raise ValueError("Proposal mode must not build a dataset matcher")
     from memstara.predictor_cache import ensure
+
     return ensure(Path(profile["root"]) / "derived" / "matcher_catalog.json")
 
 
@@ -528,27 +540,32 @@ def instructions(profile):
         + "\n"
         + data
         + knowledge
-        + ("User approved training-only imputation: the ML pipeline fits means for continuous predictors "
-           "and modes for binary or declared categorical predictors inside each training split/CV fold, "
-           "then applies them to held-out data. Never fill values before splitting or remove rows. "
-           if configuration.get("missing_policy") == "impute_train_v1" else
-           "Missing predictor values block execution without user consent. Do not fill values or remove rows. ")
+        + (
+            "User approved training-only imputation: the ML pipeline fits means for continuous predictors "
+            "and modes for binary or declared categorical predictors inside each training split/CV fold, "
+            "then applies them to held-out data. Never fill values before splitting or remove rows. "
+            if configuration.get("missing_policy") == "impute_train_v1"
+            else "Missing predictor values block execution without user consent. Do not fill values or remove rows. "
+        )
         + "Empty prediction_time or horizon means unspecified. Do not claim verified predictor timing, "
-          "temporal leakage protection or prospective risk prediction without supporting information. "
+        "temporal leakage protection or prospective risk prediction without supporting information. "
         + "Do not substitute a prior study target or assume undocumented timing or label meanings. "
         "Avoid predictors unavailable at the specified prediction time; report uncertainty explicitly.\n"
     )
 
 
-def validate_skills(books, profile=None, *, knowledge_mode='okf'):
+def validate_skills(books, profile=None, *, knowledge_mode="okf"):
     """Validate the selected skills against the actual, explicitly bound corpus."""
     from memstara.corpus_skills import validate_hypotheses
     from memstara.control.catalog import (
-        ensure_hypothesis_enabled, ensure_explanation_enabled, ensure_interpretation_enabled,
+        ensure_hypothesis_enabled,
+        ensure_explanation_enabled,
+        ensure_interpretation_enabled,
     )
-    ensure_hypothesis_enabled(books.get('hypothesis', []))
-    ensure_explanation_enabled(books.get('report', []))
-    ensure_interpretation_enabled(books.get('interpreter', []))
+
+    ensure_hypothesis_enabled(books.get("hypothesis", []))
+    ensure_explanation_enabled(books.get("report", []))
+    ensure_interpretation_enabled(books.get("interpreter", []))
     validate_hypotheses(books, profile, knowledge_mode=knowledge_mode)
 
 
@@ -560,6 +577,7 @@ if __name__ == "__main__":
     parser.add_argument("input", help="Configuration JSON path, or saved record ID for prepare")
     args = parser.parse_args()
     from memstara.env import load_env
+
     load_env()
     try:
         result = (

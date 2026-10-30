@@ -1,3 +1,5 @@
+# PORT NOTE: Repository Ruff formatting was applied for CI; upstream logic and text are unchanged.
+# Byte-identical claims below describe the port before this whitespace-only normalization.
 # SOURCE: PORTED FROM afc-forge — NOT sandbox-authored code.
 #   upstream: afc-forge/ade_forge/tools/impl/embedder.py (312 lines)
 # --- PORT NOTE (memstara) -------------------------------------
@@ -174,9 +176,7 @@ def load_sentence_transformer(config: EmbeddingConfig | None = None):  # noqa: A
         return SentenceTransformer(cfg.model, **kwargs)
 
 
-def sentence_transformer_encoder(
-    config: EmbeddingConfig | None = None, *, batch_size: int = 128
-) -> Encoder:
+def sentence_transformer_encoder(config: EmbeddingConfig | None = None, *, batch_size: int = 128) -> Encoder:
     """The production encoder, loaded on first call and held for the process."""
     cfg = config or EmbeddingConfig()
     model_holder: list[object] = []
@@ -316,8 +316,7 @@ def embeddings_stale(
         return f"the embedding stamp is unreadable ({stamp_path.name})"
     if stamp.get("schema_version") != STAMP_SCHEMA_VERSION:
         return (
-            f"the embedding stamp is version {stamp.get('schema_version')!r}, "
-            f"this build writes {STAMP_SCHEMA_VERSION}"
+            f"the embedding stamp is version {stamp.get('schema_version')!r}, this build writes {STAMP_SCHEMA_VERSION}"
         )
     texts = list(match_texts)
     if stamp.get("n") != len(texts):

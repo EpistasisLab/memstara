@@ -22,9 +22,10 @@ class KnowledgeError(ValueError):
 def validate(binding, expert):
     if not isinstance(binding, dict) or binding.get("expert") != expert:
         raise KnowledgeError(f"{expert}: an explicit expert database binding is required")
-    if binding.get('kind') == 'okf':
+    if binding.get("kind") == "okf":
         from memstara.okf_expert import validate as validate_okf
-        return validate_okf(binding,expert)
+
+        return validate_okf(binding, expert)
     required = {"expert", "database_id", "kind", "table", "id_column", "text_column"}
     optional = {"path", "dsn_env", "scope_column", "scope_value"}
     if set(binding) - required - optional or not required <= set(binding):
@@ -99,9 +100,10 @@ def _sqlite(binding, sql, params):
 
 
 async def retrieve(binding, text):
-    if binding.get('kind') == 'okf':
+    if binding.get("kind") == "okf":
         from memstara.okf_expert import retrieve as retrieve_okf
-        return await retrieve_okf(binding,text)
+
+        return await retrieve_okf(binding, text)
     validate(binding, binding.get("expert"))
     sql, params = query(binding, text)
     try:
@@ -153,8 +155,9 @@ async def retrieve(binding, text):
 
 async def probe(binding):
     """Check actual read-only connectivity, schema and scoped availability before LLM work."""
-    if binding.get('kind') == 'okf':
+    if binding.get("kind") == "okf":
         from memstara.okf_expert import probe as probe_okf
+
         return await probe_okf(binding)
     validate(binding, binding.get("expert"))
     sql = f'SELECT "{binding["id_column"]}" AS id, "{binding["text_column"]}" AS text FROM "{binding["table"]}"'

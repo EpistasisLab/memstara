@@ -1,4 +1,5 @@
 """Register bundled and mounted research inputs without executing experiments."""
+
 import fcntl
 import json
 import os
@@ -24,9 +25,11 @@ def register_file(path):
     if not checked["input_checks_passed"]:
         raise ValueError("Research input validation failed; inspect this manifest before registering")
     for record in research_inputs.list_inputs():
-        if (record.get("input_checks_passed")
-                and record.get("fingerprint") == checked["fingerprint"]
-                and record.get("configuration") == checked["configuration"]):
+        if (
+            record.get("input_checks_passed")
+            and record.get("fingerprint") == checked["fingerprint"]
+            and record.get("configuration") == checked["configuration"]
+        ):
             return record["id"]
     record = research_inputs.register(value)
     if not record["input_checks_passed"]:
@@ -56,8 +59,7 @@ def bootstrap(root=REPO_ROOT, inputs=None, destination=None):
         evidence = json.loads((prepared / "preparation.json").read_text())
         if research_inputs.digest(prepared / "dataset.csv") != evidence["derived_sha256"]:
             raise ValueError("Prepared HeartFailure data changed; restore it before startup")
-        result = {"bundled": register_file(prepared / "research.json"), "user_inputs": [],
-                  "execution_started": False}
+        result = {"bundled": register_file(prepared / "research.json"), "user_inputs": [], "execution_started": False}
         # One folder per study; never recursively scan arbitrary private files.
         for manifest in sorted(inputs.glob("*/research.json")):
             try:
@@ -66,6 +68,7 @@ def bootstrap(root=REPO_ROOT, inputs=None, destination=None):
             except (ValueError, OSError, TypeError, KeyError):
                 result["user_inputs"].append({"manifest": str(manifest), "status": "invalid"})
         from memstara.pipeline.checkpoint import atomic_json
+
         atomic_json(destination / "registration.json", result)
         return result
 
@@ -73,5 +76,7 @@ def bootstrap(root=REPO_ROOT, inputs=None, destination=None):
 if __name__ == "__main__":
     result = bootstrap()
     invalid = sum(item["status"] == "invalid" for item in result["user_inputs"])
-    print(f"HeartFailure registered; {len(result['user_inputs']) - invalid} user studies registered; "
-          f"{invalid} invalid. See outputs/bundled-research/registration.json. No experiment started.")
+    print(
+        f"HeartFailure registered; {len(result['user_inputs']) - invalid} user studies registered; "
+        f"{invalid} invalid. See outputs/bundled-research/registration.json. No experiment started."
+    )

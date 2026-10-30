@@ -3,6 +3,7 @@
 The synchronous function is also used by offline callers. The registered asynchronous
 wrapper keeps the MCP event loop available while scikit-learn/XGBoost perform the fit.
 """
+
 from __future__ import annotations
 
 import json
@@ -22,13 +23,23 @@ _DEFAULT_ENGINE = "xgboost"
 @mcp.tool(name="list_models")
 async def list_models() -> str:
     """List predictive models available through the ML MCP server."""
-    return json.dumps([
-        {"id": "xgboost", "label": "XGBoost", "library": "xgboost", "explainability": "TreeSHAP"},
-        {"id": "random_forest", "label": "Random forest", "library": "scikit-learn",
-         "explainability": "permutation importance"},
-        {"id": "logistic_regression", "label": "Logistic regression", "library": "scikit-learn",
-         "explainability": "permutation importance"},
-    ])
+    return json.dumps(
+        [
+            {"id": "xgboost", "label": "XGBoost", "library": "xgboost", "explainability": "TreeSHAP"},
+            {
+                "id": "random_forest",
+                "label": "Random forest",
+                "library": "scikit-learn",
+                "explainability": "permutation importance",
+            },
+            {
+                "id": "logistic_regression",
+                "label": "Logistic regression",
+                "library": "scikit-learn",
+                "explainability": "permutation importance",
+            },
+        ]
+    )
 
 
 def _output_dir() -> Path:
@@ -37,6 +48,7 @@ def _output_dir() -> Path:
 
 def _make_model(engine: str, seed: int):
     from memstara.evaluation import model_for
+
     return model_for(engine, seed)
 
 
@@ -50,23 +62,30 @@ async def get_ml_configuration(path: str, y_column: str) -> str:
     from memstara.evaluation import active_plan
     from memstara.data_allocation import load_effective
     from memstara.ml_configuration import context, enabled, for_dataset
+
     try:
         p = Path(path).resolve()
         p.relative_to(_output_dir())
         snapshot = active_plan()
         if snapshot is None or not enabled(snapshot):
             return json.dumps({"required": False, "instruction": "Use the frozen single-model run policy."})
-        if snapshot['y_column'] != y_column:
-            raise ValueError('Target differs from the run target')
-        plan, _ = load_effective(p, snapshot, snapshot['evaluation'])
+        if snapshot["y_column"] != y_column:
+            raise ValueError("Target differs from the run target")
+        plan, _ = load_effective(p, snapshot, snapshot["evaluation"])
         return json.dumps(context(for_dataset(snapshot, p), plan))
     except Exception as exc:
-        return json.dumps({'error': str(exc) if isinstance(exc, ValueError) else type(exc).__name__})
+        return json.dumps({"error": str(exc) if isinstance(exc, ValueError) else type(exc).__name__})
 
 
 def train_and_score(
-    path: str, y_column: str, test_size: float = 0.25, seed: int = 42,
-    engine: str = "", folds: int = 0, replicates: int = 1, search_trials: int = 1,
+    path: str,
+    y_column: str,
+    test_size: float = 0.25,
+    seed: int = 42,
+    engine: str = "",
+    folds: int = 0,
+    replicates: int = 1,
+    search_trials: int = 1,
     ml_plan: dict | None = None,
 ) -> str:
     """Evaluate with the frozen run policy, or explicit options for standalone calls.
@@ -77,6 +96,7 @@ def train_and_score(
     from memstara.evaluation import DataQualityError, active_plan, score, validate
     import hashlib
     import tempfile
+
     try:
         p = Path(path).resolve()
         try:
@@ -86,36 +106,48 @@ def train_and_score(
         snapshot = active_plan()
         if snapshot and y_column != snapshot["y_column"]:
             raise ValueError("Target differs from the run's fixed target")
-        plan = snapshot["evaluation"] if snapshot else {
-            "engine": engine or os.environ.get("MEMSTARA_ML_ENGINE", "").strip() or _DEFAULT_ENGINE,
-            "seed": seed, "test_size": test_size,
-            "folds": folds, "replicates": replicates, "search_trials": search_trials,
-        }
+        plan = (
+            snapshot["evaluation"]
+            if snapshot
+            else {
+                "engine": engine or os.environ.get("MEMSTARA_ML_ENGINE", "").strip() or _DEFAULT_ENGINE,
+                "seed": seed,
+                "test_size": test_size,
+                "folds": folds,
+                "replicates": replicates,
+                "search_trials": search_trials,
+            }
+        )
         plan = validate(plan)
         from memstara.data_allocation import load_effective
+
         plan, allocation = load_effective(p, snapshot, plan)
         from memstara.ml_configuration import enabled, resolve as resolve_ml, for_dataset
+
         plan_resolution = None
         if enabled(snapshot):
             snapshot = for_dataset(snapshot, p)
             from memstara.pipeline.paused_recovery import saved_fit
+
             stopped_fit = saved_fit(p, snapshot)
             if stopped_fit:
-                ml_plan = stopped_fit['proposal']
+                ml_plan = stopped_fit["proposal"]
             # Proposal errors are repairable and cannot start training or freeze a plan.
             ml_plan, plan_resolution = resolve_ml(ml_plan, snapshot, plan)
-            if snapshot.get('ml_overrides'):
-                snapshot = {**snapshot, '_ml_plan_resolution': plan_resolution}
+            if snapshot.get("ml_overrides"):
+                snapshot = {**snapshot, "_ml_plan_resolution": plan_resolution}
         elif ml_plan is not None:
-            raise ValueError('This frozen run does not support agent-configured paired ML')
+            raise ValueError("This frozen run does not support agent-configured paired ML")
         try:
             if enabled(snapshot):
                 from memstara.paired_ml import execute
+
                 result = execute(p, y_column, plan, snapshot, ml_plan)
-                if result.get('retryable'):
+                if result.get("retryable"):
                     return json.dumps(result)
             elif (snapshot or {}).get("comparison_policy"):
                 from memstara.comparisons import score_comparisons
+
                 result = score_comparisons(p, y_column, plan, snapshot)
             else:
                 result = score(p, y_column, plan)
@@ -124,13 +156,16 @@ def train_and_score(
                 raise
             # Never send data values embedded in library exception messages to an LLM.
             detail = str(exc) if isinstance(exc, DataQualityError) else f"Evaluation failed ({type(exc).__name__})"
-            result = {"status": "failed", "error": detail,
-                      "evaluation": {"dataset_sha256": hashlib.sha256(p.read_bytes()).hexdigest()}}
+            result = {
+                "status": "failed",
+                "error": detail,
+                "evaluation": {"dataset_sha256": hashlib.sha256(p.read_bytes()).hexdigest()},
+            }
 
         if allocation:
             result["data_allocation"] = allocation
         if plan_resolution:
-            result['ml_plan_resolution'] = plan_resolution
+            result["ml_plan_resolution"] = plan_resolution
         result["config_hash"] = snapshot.get("config_hash") if snapshot else None
         result["y_column"] = y_column
         destination = p.with_suffix(".evaluation.json")
@@ -145,8 +180,14 @@ def train_and_score(
 
 @mcp.tool(name="train_and_score")
 async def train_and_score_async(
-    path: str, y_column: str, test_size: float = 0.25, seed: int = 42,
-    engine: str = "", folds: int = 0, replicates: int = 1, search_trials: int = 1,
+    path: str,
+    y_column: str,
+    test_size: float = 0.25,
+    seed: int = 42,
+    engine: str = "",
+    folds: int = 0,
+    replicates: int = 1,
+    search_trials: int = 1,
     ml_plan: dict | None = None,
 ) -> str:
     """Evaluate a model without blocking MCP. Frozen run settings override these options.
@@ -159,8 +200,18 @@ async def train_and_score_async(
     test_size: reserved hold-out fraction. No cleaning or imputation is performed.
     """
     import asyncio
+
     return await asyncio.to_thread(
-        train_and_score, path, y_column, test_size, seed, engine, folds, replicates, search_trials, ml_plan,
+        train_and_score,
+        path,
+        y_column,
+        test_size,
+        seed,
+        engine,
+        folds,
+        replicates,
+        search_trials,
+        ml_plan,
     )
 
 

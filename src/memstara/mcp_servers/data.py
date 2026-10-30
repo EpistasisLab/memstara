@@ -37,13 +37,13 @@ the caller sees only "failed to connect" with no indication of why.
 
 from __future__ import annotations
 
-import hashlib     # builds the short fingerprint (hash) that goes into filenames
-import json        # a tool must return a **string**, so results are wrapped in JSON
-import os          # environment variables
+import hashlib  # builds the short fingerprint (hash) that goes into filenames
+import json  # a tool must return a **string**, so results are wrapped in JSON
+import os  # environment variables
 from pathlib import Path
 
-import pandas as pd                      # the library for working with tabular data
-from mcp.server.fastmcp import FastMCP    # the toolkit for building an MCP server
+import pandas as pd  # the library for working with tabular data
+from mcp.server.fastmcp import FastMCP  # the toolkit for building an MCP server
 
 # This server's name. The pipeline looks it up as "memstara-data".
 # It is a child process, so the parent's debugger cannot reach it. It waits for a
@@ -53,8 +53,8 @@ from memstara.mcp_servers.debug_hook import quiet_child, wait_for_debugger
 
 from memstara.paths import DEFAULT_OUTPUT_DIR
 
-quiet_child()          # silences the three startup messages a child prints
-wait_for_debugger('memstara-data')
+quiet_child()  # silences the three startup messages a child prints
+wait_for_debugger("memstara-data")
 
 mcp = FastMCP("memstara-data")
 
@@ -83,7 +83,7 @@ def _dataset_path() -> Path:
 def _output_dir() -> Path:
     """Directory the sliced CSVs go into. Created if it does not exist."""
     out = Path(os.environ.get("MEMSTARA_OUTPUT_DIR", "").strip() or _DEFAULT_OUT)
-    out.mkdir(parents=True, exist_ok=True)   # no error if it is already there
+    out.mkdir(parents=True, exist_ok=True)  # no error if it is already there
     return out
 
 
@@ -153,6 +153,7 @@ def slice_columns(columns: list[str], y_column: str, tag: str) -> str:
     already takes a list; the two tools now agree.
     """
     from memstara.evaluation import active_plan
+
     snapshot = active_plan()
     if snapshot and y_column != snapshot["y_column"]:
         return json.dumps({"error": "Extraction target differs from the run's fixed target"})
@@ -200,15 +201,13 @@ def slice_columns(columns: list[str], y_column: str, tag: str) -> str:
         # the agent learns that name it could use it as a feature on the next call,
         # which would be leakage.
         safe_cols = [c for c in df.columns if c != outcome_col] if outcome_col else list(df.columns)
-        return json.dumps(
-            {"error": f"y_column '{y_column}' is not in the dataset", "columns": safe_cols}
-        )
+        return json.dumps({"error": f"y_column '{y_column}' is not in the dataset", "columns": safe_cols})
 
     # Feeding the outcome back in as a feature is leakage. Drop it if requested.
     # It amounts to reading the answer off the answer, so the AUC comes out close
     # to 1.0 and means nothing at all.
-    present = [c for c in wanted if c in df.columns and c != y_column]   # the ones that exist
-    missing = [c for c in wanted if c not in df.columns]                 # the ones that do not
+    present = [c for c in wanted if c in df.columns and c != y_column]  # the ones that exist
+    missing = [c for c in wanted if c not in df.columns]  # the ones that do not
 
     if not present:
         return json.dumps(
@@ -253,14 +252,14 @@ def slice_columns(columns: list[str], y_column: str, tag: str) -> str:
     # The chosen columns plus the outcome. Putting the outcome **last** is this
     # project's convention.
     subset = df[present + [y_column]]
-    subset.to_csv(out_path, index=False)   # index=False — do not add a row-number column
+    subset.to_csv(out_path, index=False)  # index=False — do not add a row-number column
 
     return json.dumps(
         {
-            "path": str(out_path),          # the next stage (ml) trains from this path
+            "path": str(out_path),  # the next stage (ml) trains from this path
             "n_rows": int(len(subset)),
             "columns_used": present + [y_column],
-            "columns_missing": missing,     # non-empty means a name did not match
+            "columns_missing": missing,  # non-empty means a name did not match
         }
     )
 
@@ -269,6 +268,7 @@ def slice_columns(columns: list[str], y_column: str, tag: str) -> str:
 async def describe_dataset_async() -> str:
     """Describe the configured clean dataset without exposing the target as a feature."""
     import asyncio
+
     return await asyncio.to_thread(describe_dataset)
 
 
@@ -276,6 +276,7 @@ async def describe_dataset_async() -> str:
 async def slice_columns_async(columns: list[str], y_column: str, tag: str) -> str:
     """Extract only the requested feature columns and fixed target; no data cleaning."""
     import asyncio
+
     return await asyncio.to_thread(slice_columns, columns, y_column, tag)
 
 

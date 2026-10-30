@@ -158,9 +158,7 @@ def match_concepts(
 
     from memstara.matcher.service import get_matcher
 
-    results = get_matcher().match_many(
-        concepts, feature_type=feature_type, top_k=top_k, threshold=threshold
-    )
+    results = get_matcher().match_many(concepts, feature_type=feature_type, top_k=top_k, threshold=threshold)
     return json.dumps({"results": [r.to_dict() for r in results]}, ensure_ascii=False)
 
 
@@ -182,9 +180,7 @@ def match_concept(
 
     from memstara.matcher.service import get_matcher
 
-    result = get_matcher().match(
-        concept, feature_type=feature_type, top_k=top_k, threshold=threshold
-    )
+    result = get_matcher().match(concept, feature_type=feature_type, top_k=top_k, threshold=threshold)
     return json.dumps(result.to_dict(), ensure_ascii=False)
 
 

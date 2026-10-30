@@ -68,24 +68,29 @@ def check(label: str, passed: bool, detail: str = "", fix: str = "") -> bool:
 def check_env_files() -> None:
     """[1] Report the actual selected source, without inspecting sibling files."""
     from memstara.env import configuration_source
+
     source = configuration_source()
     print("\n[1] configuration source")
-    if source.get('mode') == 'environment':
+    if source.get("mode") == "environment":
         print("      explicit environment injection; no .env fallback")
-    elif source.get('mode') == 'project':
-        check("selected project .env", True, source.get('file', ''))
+    elif source.get("mode") == "project":
+        check("selected project .env", True, source.get("file", ""))
     else:
-        check("configuration loaded", False, "source is not initialized",
-              "load the selected project configuration first")
+        check(
+            "configuration loaded", False, "source is not initialized", "load the selected project configuration first"
+        )
 
 
 def check_vars(provider: str, *, knowledge_mode: str = "okf", data_mode: str = "dataset") -> None:
     """[2] Are all required variables set, including this provider's credentials."""
     print("\n[2] environment variables")
     problems = missing_vars(provider, knowledge_mode=knowledge_mode, data_mode=data_mode)
-    check("every required variable is present", not problems,
-          "none missing" if not problems else f"{len(problems)} missing",
-          "check the selected configuration source above")
+    check(
+        "every required variable is present",
+        not problems,
+        "none missing" if not problems else f"{len(problems)} missing",
+        "check the selected configuration source above",
+    )
     for p in problems:
         print(f"      - {p}")
     print(f"      provider={provider} → {', '.join(PROVIDER_KEYS.get(provider, ())) or '(no credentials needed)'}")
@@ -98,11 +103,11 @@ def check_paths(*, knowledge_mode: str = "okf", data_mode: str = "dataset") -> N
     dataset = os.environ.get("MEMSTARA_DATASET_PATH", "").strip()
     outdir = os.environ.get("MEMSTARA_OUTPUT_DIR", "").strip()
 
-    if knowledge_mode == 'okf':
+    if knowledge_mode == "okf":
         check("knowledge-source folder", bool(bundle) and Path(bundle).is_dir(), bundle or "(not set)")
     else:
         print("      knowledge source — not selected (llm_only); not accessed")
-    if knowledge_mode == 'okf' and bundle and Path(bundle).is_dir():
+    if knowledge_mode == "okf" and bundle and Path(bundle).is_dir():
         # Do not reimplement the counting here; call the okf server's own `_load`. A
         # separate count is certain to drift, and drift means "the check passes but
         # there are really 0 documents".
@@ -113,19 +118,27 @@ def check_paths(*, knowledge_mode: str = "okf", data_mode: str = "dataset") -> N
             # because the package is installed, so this no longer depends on the two
             # files being neighbours.
             import importlib
+
             mod = importlib.import_module(BY_NAME["okf"].module)
             docs, skipped = mod._load(Path(bundle))
             layout = "domain folders" if any("/" in d.address for d in docs) else "flat"
-            check("the knowledge source has documents", bool(docs),
-                  f"{len(docs)} docs · {layout} layout" + (f" · {len(skipped)} filtered out" if skipped else ""),
-                  "check that the .md files in the bundle have a `title` in their frontmatter")
+            check(
+                "the knowledge source has documents",
+                bool(docs),
+                f"{len(docs)} docs · {layout} layout" + (f" · {len(skipped)} filtered out" if skipped else ""),
+                "check that the .md files in the bundle have a `title` in their frontmatter",
+            )
             for s in skipped[:3]:
                 print(f"      filtered out: {s['path']} — {s['why'][:60]}")
         except Exception as e:  # noqa: BLE001
             check("the knowledge source has documents", False, f"{type(e).__name__}: {e}")
-    if data_mode == 'dataset':
-        check("data csv", bool(dataset) and Path(dataset).is_file(), dataset or "(not set)",
-              "configure an existing CSV or select --data-mode proposal")
+    if data_mode == "dataset":
+        check(
+            "data csv",
+            bool(dataset) and Path(dataset).is_file(),
+            dataset or "(not set)",
+            "configure an existing CSV or select --data-mode proposal",
+        )
     else:
         print("      data csv — not selected (proposal); not accessed")
     check("output folder", bool(outdir) and Path(outdir).is_dir(), outdir or "(not set)")
@@ -154,8 +167,9 @@ async def check_databases() -> None:
     from memstara.blackboard import dsn as board_dsn
 
     await reachable("board DB (memstara)", board_dsn(), "docker compose up -d")
-    await reachable("core DB (motoro)", os.environ.get("MOTORO_DATABASE_URL", ""),
-                    "docker compose up -d in the motoro folder")
+    await reachable(
+        "core DB (motoro)", os.environ.get("MOTORO_DATABASE_URL", ""), "docker compose up -d in the motoro folder"
+    )
 
 
 def check_allowlist() -> None:
@@ -164,9 +178,12 @@ def check_allowlist() -> None:
     # This is the quietest failure in the whole project — see the comments on
     # memstara.env.allowlist_gaps.
     gaps = allowlist_gaps()
-    check("the list covers every variable the tools read", not gaps,
-          "nothing missing" if not gaps else f"missing: {', '.join(gaps)}",
-          "add the names above to mcp_allowed_env_vars in src/memstara/config.py")
+    check(
+        "the list covers every variable the tools read",
+        not gaps,
+        "nothing missing" if not gaps else f"missing: {', '.join(gaps)}",
+        "add the names above to mcp_allowed_env_vars in src/memstara/config.py",
+    )
 
 
 def check_matcher_catalog() -> None:
@@ -183,8 +200,12 @@ def check_matcher_catalog() -> None:
         from memstara.matcher.embedder import embeddings_stale
         from memstara.matcher.service import build_run_config, current_fingerprint
     except Exception as e:  # noqa: BLE001
-        check("import memstara.matcher", False, f"{type(e).__name__}: {e}",
-              "check you are in the memstara environment and that numpy is installed")
+        check(
+            "import memstara.matcher",
+            False,
+            f"{type(e).__name__}: {e}",
+            "check you are in the memstara environment and that numpy is installed",
+        )
         return
 
     # Nothing here loads a model. `current_fingerprint` reads the CSV *header*,
@@ -194,16 +215,23 @@ def check_matcher_catalog() -> None:
         run_config = build_run_config()
         fingerprint = current_fingerprint(run_config)
     except Exception as e:  # noqa: BLE001
-        check("compute the catalog fingerprint", False, f"{type(e).__name__}: {e}",
-              "check MEMSTARA_DATASET_PATH and MEMSTARA_OUTCOME_COLUMN")
+        check(
+            "compute the catalog fingerprint",
+            False,
+            f"{type(e).__name__}: {e}",
+            "check MEMSTARA_DATASET_PATH and MEMSTARA_OUTCOME_COLUMN",
+        )
         return
 
     # No `fix` is passed below: `verify_catalog` and `embeddings_stale` each end
     # their message with the rebuild command already — that is why the hint was
     # hoisted into them rather than repeated at every call site.
     stale = verify_catalog(matcher_cfg.CATALOG_JSON, fingerprint)
-    if not check("the catalog matches the current cohort", stale is None,
-                 stale or f"{matcher_cfg.CATALOG_JSON.name} · {fingerprint['columns_sha1'][:8]}"):
+    if not check(
+        "the catalog matches the current cohort",
+        stale is None,
+        stale or f"{matcher_cfg.CATALOG_JSON.name} · {fingerprint['columns_sha1'][:8]}",
+    ):
         return
 
     # Checked separately because `Matcher.from_catalog` REFUSES a stale matrix
@@ -215,8 +243,7 @@ def check_matcher_catalog() -> None:
         match_texts=[e.match_text for e in entries],
         cfg=run_config.embedding,
     )
-    check("the embedding matrix matches the catalog", stale_matrix is None,
-          stale_matrix or f"{len(entries)} entries")
+    check("the embedding matrix matches the catalog", stale_matrix is None, stale_matrix or f"{len(entries)} entries")
 
 
 def check_servers(*, knowledge_mode: str = "okf", data_mode: str = "dataset") -> None:
@@ -226,29 +253,33 @@ def check_servers(*, knowledge_mode: str = "okf", data_mode: str = "dataset") ->
     # never return, so **only the import** runs, which catches startup errors — where
     # nearly all the failures happen.
     for server in SERVERS:
-        if data_mode == 'proposal' or (knowledge_mode == 'llm_only' and server.name == 'okf'):
+        if data_mode == "proposal" or (knowledge_mode == "llm_only" and server.name == "okf"):
             print(f"      {server.name} — not used in selected mode; skipped")
             continue
         r = subprocess.run(
-            [sys.executable, "-c",
-             f"import importlib;m=importlib.import_module('{server.module}');"
-             f"print(len([x for x in dir(m) if not x.startswith('_')]))"],
-            capture_output=True, text=True, cwd=REPO_ROOT, timeout=120,
+            [
+                sys.executable,
+                "-c",
+                f"import importlib;m=importlib.import_module('{server.module}');"
+                f"print(len([x for x in dir(m) if not x.startswith('_')]))",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+            timeout=120,
         )
         ok = r.returncode == 0
         detail = "" if ok else (r.stderr.strip().splitlines() or ["?"])[-1][:90]
-        check(server.module, ok, detail,
-              f"starting it directly with `python -m {server.module}` shows the real error")
+        check(server.module, ok, detail, f"starting it directly with `python -m {server.module}` shows the real error")
 
 
 def main() -> int:
     """Run every check in order and return 0 only when all of them passed."""
     ap = argparse.ArgumentParser(description="pre-run environment check. Does not call an LLM.")
-    ap.add_argument("--provider", default="azure_foundry",
-                    choices=["anthropic", "azure_foundry", "openai"])
+    ap.add_argument("--provider", default="azure_foundry", choices=["anthropic", "azure_foundry", "openai"])
     ap.add_argument("--quick", action="store_true", help="skip the tool-server startup check")
-    ap.add_argument("--knowledge-mode", choices=['okf', 'llm_only'], default='okf')
-    ap.add_argument("--data-mode", choices=['dataset', 'proposal'], default='dataset')
+    ap.add_argument("--knowledge-mode", choices=["okf", "llm_only"], default="okf")
+    ap.add_argument("--data-mode", choices=["dataset", "proposal"], default="dataset")
     args = ap.parse_args()
     _failures.clear()
 
@@ -259,12 +290,12 @@ def main() -> int:
     print(f"  python:    {sys.executable}")
 
     check_env_files()
-    modes = {'knowledge_mode': args.knowledge_mode, 'data_mode': args.data_mode}
+    modes = {"knowledge_mode": args.knowledge_mode, "data_mode": args.data_mode}
     check_vars(args.provider, **modes)
     check_paths(**modes)
     asyncio.run(check_databases())
     check_allowlist()
-    if args.data_mode == 'dataset':
+    if args.data_mode == "dataset":
         check_matcher_catalog()
     else:
         print("\n[6] matcher catalog — not used in proposal mode; skipped")

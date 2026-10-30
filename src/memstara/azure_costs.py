@@ -70,8 +70,10 @@ def refresh(mapping=None):
     from datetime import timedelta
 
     import os
-    data = json.loads(Path(mapping).read_text() if mapping else
-                      os.environ.get("MEMSTARA_AZURE_PRICING_METERS_JSON", "{}"))
+
+    data = json.loads(
+        Path(mapping).read_text() if mapping else os.environ.get("MEMSTARA_AZURE_PRICING_METERS_JSON", "{}")
+    )
     if not isinstance(data, dict) or not data.get("profiles"):
         raise ValueError("Configure MEMSTARA_AZURE_PRICING_METERS_JSON")
     if catalog_path() is None:
@@ -134,6 +136,7 @@ def main():
     actual.add_argument("--output", default="outputs/runs/azure_costs.json")
     args = parser.parse_args()
     from memstara.env import load_env
+
     load_env()
     if args.command == "meters":
         items = fetch_meters(args.filter)

@@ -1,3 +1,5 @@
+# PORT NOTE: Repository Ruff formatting was applied for CI; upstream logic and text are unchanged.
+# Byte-identical claims below describe the port before this whitespace-only normalization.
 # SOURCE: MIXED — this file is part afc-forge and part sandbox. Every top-level
 #   symbol below carries its own SOURCE tag; the map is also given here.
 #
@@ -147,9 +149,7 @@ def save_catalog_meta(
     fingerprint: dict[str, Any],
 ) -> dict[str, Any]:
     meta = {**fingerprint, "n_entries": len(entries)}
-    meta_path(catalog_json).write_text(
-        json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
+    meta_path(catalog_json).write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return meta
 
 
@@ -170,16 +170,9 @@ def verify_catalog(catalog_json: str | Path, fingerprint: dict[str, Any]) -> str
     if not Path(catalog_json).exists():
         return f"no catalog at {catalog_json}. {hint}"
     if not p.exists():
-        return (
-            f"{Path(catalog_json).name} has no {p.name} sidecar, so it cannot be "
-            f"checked against its cohort. {hint}"
-        )
+        return f"{Path(catalog_json).name} has no {p.name} sidecar, so it cannot be checked against its cohort. {hint}"
     stored = json.loads(p.read_text(encoding="utf-8"))
-    drift = [
-        f"{k}: built with {stored.get(k)!r}, now {v!r}"
-        for k, v in fingerprint.items()
-        if stored.get(k) != v
-    ]
+    drift = [f"{k}: built with {stored.get(k)!r}, now {v!r}" for k, v in fingerprint.items() if stored.get(k) != v]
     if not drift:
         return None
     return f"{Path(catalog_json).name} is STALE — " + "; ".join(drift) + f". {hint}"
@@ -235,7 +228,7 @@ def _parse_column(col: str) -> CatalogEntry:
     mean exactly what they mean in afc-forge; the rest is ours to choose.
     """
     if col.startswith("DX__"):
-        rest = col[len("DX__"):]
+        rest = col[len("DX__") :]
         code, _, desc = rest.partition("__")
         # coding_system is **conditional**. 2 of the 540 DX codes (IMO0001,
         # IMO0002) are IMO proprietary and do not pass the ICD-10-CM recognizer.
@@ -255,7 +248,7 @@ def _parse_column(col: str) -> CatalogEntry:
         )
 
     if col.startswith("MED__"):
-        name = col[len("MED__"):]
+        name = col[len("MED__") :]
         return CatalogEntry(
             feature_name=col,
             feature_type="medication",
@@ -265,7 +258,7 @@ def _parse_column(col: str) -> CatalogEntry:
         )
 
     if col.startswith("LAB__"):
-        name = col[len("LAB__"):]
+        name = col[len("LAB__") :]
         return CatalogEntry(
             feature_name=col,
             feature_type="lab",
@@ -275,7 +268,7 @@ def _parse_column(col: str) -> CatalogEntry:
         )
 
     if col.startswith("CAT__"):
-        rest = col[len("CAT__"):]
+        rest = col[len("CAT__") :]
         family, _, level = rest.partition("__")
         if family not in _CAT_LABELS:
             raise ValueError(
@@ -352,6 +345,7 @@ def catalog_fingerprint(
     independent.
     """
     from memstara.matcher.rules import EMPTY_RULES_SHA1
+
     if rules is not None:
         rules.validate_columns(columns, outcome_col)
     ordered = json.dumps(columns, ensure_ascii=False)

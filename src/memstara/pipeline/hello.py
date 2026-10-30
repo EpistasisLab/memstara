@@ -48,11 +48,11 @@ from memstara.config import Settings
 
 from motoro import configure
 from motoro.runner import (
-    create_agent,       # make a new agent
-    create_run,         # make one run — it does not execute yet
-    execute_run,        # actually run a run that was made earlier
+    create_agent,  # make a new agent
+    create_run,  # make one run — it does not execute yet
+    execute_run,  # actually run a run that was made earlier
     get_agent_by_name,  # find an agent that already exists, by name
-    get_run_steps,      # after it has finished, read the step record it left
+    get_run_steps,  # after it has finished, read the step record it left
 )
 from motoro.schemas.agent import LLMProvider, ModelConfig
 from memstara.env import configured_api_base
@@ -83,8 +83,9 @@ async def provision(provider: str, model: str) -> Any:
         name=name,
         goal="Answer the user's question accurately and concisely.",
         description="Smoke-test agent for the sandbox.",
-        model_config=ModelConfig(provider=LLMProvider(provider), model=model, max_tokens=2048,
-                                 api_base=configured_api_base(provider)),
+        model_config=ModelConfig(
+            provider=LLMProvider(provider), model=model, max_tokens=2048, api_base=configured_api_base(provider)
+        ),
         # Leaving this None would use the orchestrator default, reason_act. Naming it
         # explicitly makes it easy to swap and compare later. Lean on the default and
         # you cannot tell from the code alone which pattern was used.
@@ -103,6 +104,7 @@ async def main() -> int:
     ap.add_argument("--log-file", default=None, help="JSONL log path (default: outputs/logs/hello.jsonl)")
     args = ap.parse_args()
     from memstara.env import load_env, configured_llm
+
     load_env()
     args.provider, args.model = configured_llm(args.provider, args.model)
 
@@ -110,8 +112,7 @@ async def main() -> int:
     # the equivalent of a web app's startup / lifespan hook. Get the order the wrong
     # way round and it runs with the settings unapplied — and raises no error.
     configure(Settings())
-    setup_logging(level="DEBUG" if args.verbose else "INFO",
-                  log_file=args.log_file or default_log_path("hello"))
+    setup_logging(level="DEBUG" if args.verbose else "INFO", log_file=args.log_file or default_log_path("hello"))
 
     agent = await provision(args.provider, args.model)
     print(f"agent: {agent.id}  ({agent.name})")

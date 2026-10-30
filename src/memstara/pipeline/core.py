@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import json      # agent output (a JSON string) into Python values
-import uuid      # run ids
-from collections import Counter   # for counting how often each column was chosen
+import json  # agent output (a JSON string) into Python values
+import uuid  # run ids
+from collections import Counter  # for counting how often each column was chosen
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
@@ -91,8 +91,8 @@ class TodoRow:
     stages pass one row back and forth between them.
     """
 
-    trial: int                    # which trial this is
-    perspective: str = ""         # the perspective phrase that trial was given
+    trial: int  # which trial this is
+    perspective: str = ""  # the perspective phrase that trial was given
 
     # (1) hypothesis  — the fields the hypothesis stage fills in
     hypothesis: str = ""
@@ -204,9 +204,7 @@ async def _ensure_agent(name: str, **kwargs: Any) -> Any:
     return existing
 
 
-async def _ensure_agent_from_file(
-    name: str, prompt: str, playbook: str = "", **kwargs: Any
-) -> Any:
+async def _ensure_agent_from_file(name: str, prompt: str, playbook: str = "", **kwargs: Any) -> Any:
     """`_ensure_agent`, with `goal` and `system_prompt` read from a prompt file.
 
     Args:
@@ -228,9 +226,7 @@ async def _ensure_agent_from_file(
     return await _ensure_agent(name, **load_prompt(prompt, playbook), **kwargs)
 
 
-async def provision_all(
-    *, provider: str = "", model: str = ""
-) -> dict[str, uuid.UUID]:
+async def provision_all(*, provider: str = "", model: str = "") -> dict[str, uuid.UUID]:
     """Create the four agents (or find the existing ones) and return their ids.
 
     The mvp path. Its four prompts are one file each under
@@ -243,24 +239,33 @@ async def provision_all(
     being persisted with the agent. Credentials resolve at call time instead.
     """
     from memstara.stage_models import deployment_profiles, for_stage
+
     profiles = deployment_profiles()
     react = {"execution_pattern": "reason_act"}
 
     hypothesis = await _ensure_agent_from_file(
-        AGENT_NAMES["hypothesis"], "mvp/hypothesis",
-        model_config=ModelConfig(**for_stage(profiles, "hypothesis")), pattern_config=react,
+        AGENT_NAMES["hypothesis"],
+        "mvp/hypothesis",
+        model_config=ModelConfig(**for_stage(profiles, "hypothesis")),
+        pattern_config=react,
     )
     data = await _ensure_agent_from_file(
-        AGENT_NAMES["data"], "mvp/data",
-        model_config=ModelConfig(**for_stage(profiles, "data")), pattern_config=react,
+        AGENT_NAMES["data"],
+        "mvp/data",
+        model_config=ModelConfig(**for_stage(profiles, "data")),
+        pattern_config=react,
     )
     ml = await _ensure_agent_from_file(
-        AGENT_NAMES["ml"], "mvp/ml",
-        model_config=ModelConfig(**for_stage(profiles, "ml")), pattern_config=react,
+        AGENT_NAMES["ml"],
+        "mvp/ml",
+        model_config=ModelConfig(**for_stage(profiles, "ml")),
+        pattern_config=react,
     )
     interpreter = await _ensure_agent_from_file(
-        AGENT_NAMES["interpreter"], "mvp/interpreter",
-        model_config=ModelConfig(**for_stage(profiles, "interpreter")), pattern_config=react,
+        AGENT_NAMES["interpreter"],
+        "mvp/interpreter",
+        model_config=ModelConfig(**for_stage(profiles, "interpreter")),
+        pattern_config=react,
     )
 
     return {
@@ -330,8 +335,16 @@ BOARD_AGENT_NAMES = {
 # stages are separated is so a result can be traced back to whose judgement produced it,
 # and doing somebody else's work destroys that.
 BOARD_TOOLS = {
-    "hypothesis": {"okf_list_domains", "okf_search", "okf_read", "describe_dataset",
-                   "match_concepts", "match_concept", "claim_question", "create_task"},
+    "hypothesis": {
+        "okf_list_domains",
+        "okf_search",
+        "okf_read",
+        "describe_dataset",
+        "match_concepts",
+        "match_concept",
+        "claim_question",
+        "create_task",
+    },
     "data": {"describe_dataset", "slice_columns", "claim_task", "submit_result"},
     "ml": {"get_ml_configuration", "train_and_score", "claim_task", "submit_result"},
     "interpreter": {"claim_task", "submit_result"},
@@ -411,9 +424,7 @@ def board_workers(playbooks: dict[str, list[str]] | None = None, namespace: str 
     hypothesis_books = books.get("hypothesis") or [""]
     out = {
         ("hypothesis" if k == 0 else f"hypothesis#{k + 1}"): (name, book)
-        for k, (name, book) in enumerate(
-            zip(hypothesis_agent_names(hypothesis_books), hypothesis_books, strict=True)
-        )
+        for k, (name, book) in enumerate(zip(hypothesis_agent_names(hypothesis_books), hypothesis_books, strict=True))
     }
     for stage in ("data", "ml", "interpreter", "report"):
         choices = (books.get(stage) or [""]) if stage == "interpreter" else [_sole(books, stage)]
@@ -427,13 +438,16 @@ def board_workers(playbooks: dict[str, list[str]] | None = None, namespace: str 
 
 
 async def provision_board_agents(
-    *, provider: str = "", model: str = "",
+    *,
+    provider: str = "",
+    model: str = "",
     playbooks: dict[str, list[str]] | None = None,
     namespace: str = "",
     stage_models: dict | None = None,
 ) -> dict[str, uuid.UUID]:
     """Create the board-driven agents (or find the existing ones)."""
     from memstara.stage_models import deployment_profiles, validate_profiles, for_stage
+
     profiles = validate_profiles(stage_models) if stage_models else deployment_profiles()
     react = {"execution_pattern": "reason_act"}
 
@@ -441,7 +455,11 @@ async def provision_board_agents(
     for key, (name, book) in board_workers(playbooks, namespace).items():
         selected_model = ModelConfig(**for_stage(profiles, key))
         agent = await _ensure_agent_from_file(
-            name, f"board/{stage_of(key)}", book, model_config=selected_model, pattern_config=react,
+            name,
+            f"board/{stage_of(key)}",
+            book,
+            model_config=selected_model,
+            pattern_config=react,
         )
         out[key] = agent.id
     return out
@@ -489,8 +507,11 @@ def tools_for(
     back. Without tool-level filtering, giving any agent the board would give it all
     of those, and "each agent only takes its own work" would stop being true.
     """
-    server_ids = [key for key, entry in registry.servers.items()
-                  if entry.name in servers and (entry.owner_id is None or entry.is_system)]
+    server_ids = [
+        key
+        for key, entry in registry.servers.items()
+        if entry.name in servers and (entry.owner_id is None or entry.is_system)
+    ]
     picked = [t for t in registry.get_all_tools(server_ids=server_ids) if t.get("server") in servers]
     if only is None:
         return picked
@@ -560,8 +581,13 @@ async def _run_stage(
 
     with _tagged(trial=row.trial, stage=stage, run_id=run.id):
         from memstara.pipeline.llm import PipelineLLMService
-        result = await execute_run(run_id=run.id, registry=registry, available_tools=tools,
-                                   llm_service=PipelineLLMService(principal_id=run.owner_id))
+
+        result = await execute_run(
+            run_id=run.id,
+            registry=registry,
+            available_tools=tools,
+            llm_service=PipelineLLMService(principal_id=run.owner_id),
+        )
     _record_usage(row, stage, result)
 
     if result.error or result.status != "completed":
@@ -586,15 +612,18 @@ async def _run_stage_text(
     registry: Any,
 ) -> str:
     """For agents with no output_contract — return the envelope's free-text result."""
-    run = await create_run(
-        agent_id=agent_id, user_input=user_input, metadata={"trial": row.trial, "stage": stage}
-    )
+    run = await create_run(agent_id=agent_id, user_input=user_input, metadata={"trial": row.trial, "stage": stage})
     row.run_ids[stage] = str(run.id)
 
     with _tagged(trial=row.trial, stage=stage, run_id=run.id):
         from memstara.pipeline.llm import PipelineLLMService
-        result = await execute_run(run_id=run.id, registry=registry, available_tools=[],
-                                   llm_service=PipelineLLMService(principal_id=run.owner_id))
+
+        result = await execute_run(
+            run_id=run.id,
+            registry=registry,
+            available_tools=[],
+            llm_service=PipelineLLMService(principal_id=run.owner_id),
+        )
     _record_usage(row, stage, result)
 
     if result.error or result.status != "completed":
@@ -632,11 +661,7 @@ async def run_one_trial(trial: int, cfg: TrialConfig) -> TodoRow:
     """
     row = TodoRow(trial=trial, perspective=perspective_for(trial))
 
-    hyp_servers = (
-        {"okf", "memstara-data", "semantic-matcher"}
-        if cfg.use_okf else
-        {"memstara-data", "semantic-matcher"}
-    )
+    hyp_servers = {"okf", "memstara-data", "semantic-matcher"} if cfg.use_okf else {"memstara-data", "semantic-matcher"}
     # The hypothesis agent reads the knowledge source and asks what columns exist. It
     # does not cut the dataset — that is the data stage. `only` keeps `slice_columns`
     # out of its hands; without it the agent had the cutter and used it (six calls in
@@ -664,8 +689,7 @@ async def run_one_trial(trial: int, cfg: TrialConfig) -> TodoRow:
     # -- (1) hypothesis --------------------------------------------------
     payload = await _run_stage(
         cfg.agents["hypothesis"],
-        f"The outcome column is '{cfg.y_column}'. Choose the columns that will predict it, "
-        f"{row.perspective}.",
+        f"The outcome column is '{cfg.y_column}'. Choose the columns that will predict it, {row.perspective}.",
         row=row,
         stage="hypothesis",
         tools=hyp_tools,

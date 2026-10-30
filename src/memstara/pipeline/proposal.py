@@ -21,8 +21,10 @@ TASKS = {
     "question": "Write a research question for the objective and available knowledge.",
     "hypothesis": "Propose a testable hypothesis and 4–20 provisional predictor concepts with reasons.",
     "data": "Specify required variables, target definition, predictor timing, collection and data quality checks.",
-    "ml": ("Propose configuration for the single user-selected ML model, including preprocessing, "
-           "splits, seeds and evaluation; do not train."),
+    "ml": (
+        "Propose configuration for the single user-selected ML model, including preprocessing, "
+        "splits, seeds and evaluation; do not train."
+    ),
     "interpreter": "Plan SHAP/LIME interpretation and uncertainty checks for future measured results.",
     "report": "Synthesize the proposal, conditional meaning, limitations and next empirical testing steps.",
 }
@@ -115,6 +117,7 @@ def freeze(args, root, books):
 
     prior = json.loads((root / "config.json").read_text()) if args.resume else None
     from memstara.explanation_length import frozen_words
+
     explanation_words = frozen_words(args, prior)
     profiles = resolve_run_profiles(args.stage_models, recovering=args.resume, frozen=prior)
     args.stage_models = profiles
@@ -169,17 +172,19 @@ def freeze(args, root, books):
         "input_contract": "Research planning only; proposed variables are not verified dataset columns",
         "planning_adapter": "proposal_v1",
     }
-    if getattr(args, 'model_connection_id', ''):
-        state['model_connection_id'] = args.model_connection_id
+    if getattr(args, "model_connection_id", ""):
+        state["model_connection_id"] = args.model_connection_id
     from memstara.ml_configuration import validate_overrides
-    overrides = validate_overrides(json.loads(getattr(args, 'ml_overrides', '{}')), all_books.get('ml', []))
+
+    overrides = validate_overrides(json.loads(getattr(args, "ml_overrides", "{}")), all_books.get("ml", []))
     if overrides:
-        state['ml_overrides'] = overrides
+        state["ml_overrides"] = overrides
     if prior and prior != state:
         raise ValueError("Proposal configuration changed; start a new execution")
     if not prior:
         atomic_json(root / "config.json", state)
         from memstara.operational import save_source
+
         save_source(root)
     os.environ["MEMSTARA_RUN_CONFIG"] = str((root / "config.json").resolve())
     return state
@@ -237,12 +242,12 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
                 )
                 names = books.get(role, [])
                 from memstara.explanation_length import instruction
-                system = POLICY + TASKS[stage] + "\n" + "\n".join(
-                    state["prompts"][n]["content"] for n in names if n)
+
+                system = POLICY + TASKS[stage] + "\n" + "\n".join(state["prompts"][n]["content"] for n in names if n)
                 if stage == "report":
                     system += instruction(state.get("explanation_words"))
                 payload = {
-                    'fixed_ml_settings': state.get('ml_overrides', {}),
+                    "fixed_ml_settings": state.get("ml_overrides", {}),
                     "objective": state["research_objective"],
                     "target": (state.get("research_profile") or {}).get("configuration", {}).get("target", {}),
                     "evidence": state["knowledge_evidence"],
@@ -299,32 +304,45 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
                                 ) from error
                             payload["output_correction"] = str(error)
                     length_audit = None
-                    if stage == 'report':
+                    if stage == "report":
                         from memstara.explanation_length import refine
 
                         async def revise(previous, guidance):
-                            revised, revised_usage = await invoke(profile, system, {
-                                **payload, 'output_correction': guidance, 'previous_summary': previous,
-                            })
-                            atomic_json(io / f'report.length-revision-{len(revisions) + 1}.json', {
-                                'text': revised,
-                                'usage': (revised_usage.model_dump(mode='json')
-                                          if hasattr(revised_usage, 'model_dump') else revised_usage),
-                            })
+                            revised, revised_usage = await invoke(
+                                profile,
+                                system,
+                                {
+                                    **payload,
+                                    "output_correction": guidance,
+                                    "previous_summary": previous,
+                                },
+                            )
+                            atomic_json(
+                                io / f"report.length-revision-{len(revisions) + 1}.json",
+                                {
+                                    "text": revised,
+                                    "usage": (
+                                        revised_usage.model_dump(mode="json")
+                                        if hasattr(revised_usage, "model_dump")
+                                        else revised_usage
+                                    ),
+                                },
+                            )
                             try:
                                 candidate = validate_output(revised, stage, source_ids)
                             except (ValueError, TypeError):
-                                return '', {'status': 'failed'}
+                                return "", {"status": "failed"}
                             revisions.append(candidate)
-                            return candidate['summary'], {'status': 'completed'}
+                            return candidate["summary"], {"status": "completed"}
 
                         revisions: list[dict[str, Any]] = []
                         summary, length_entry = await refine(
-                            value['summary'], {'status': 'completed'}, state.get('explanation_words'), revise)
+                            value["summary"], {"status": "completed"}, state.get("explanation_words"), revise
+                        )
                         if revisions:
                             value = revisions[-1]
-                        value['summary'] = summary
-                        length_audit = length_entry.get('explanation_length')
+                        value["summary"] = summary
+                        length_audit = length_entry.get("explanation_length")
                     record.update(
                         {
                             "run_id": identifier,
@@ -341,7 +359,7 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
                             "execution_adapter": "proposal_text",
                             "core_run_id": None,
                             "output": value,
-                            **({'explanation_length': length_audit} if length_audit else {}),
+                            **({"explanation_length": length_audit} if length_audit else {}),
                         }
                     )
                     atomic_json(io / f"{stage}.output.json", record)

@@ -1,4 +1,5 @@
 """Pause time is not agent execution time; ML waits are observable across processes."""
+
 import asyncio
 from contextlib import asynccontextmanager
 import json
@@ -16,18 +17,19 @@ def pause_wrapper_settings(settings, policy):
     active agent work and ML workers retain their own deadlines. This process
     owns one frozen execution, so all concurrent agents share this policy.
     """
-    if policy != 'fresh_request_and_ml_restart_v2':
+    if policy != "fresh_request_and_ml_restart_v2":
         return settings
     ceiling = 2147483647
-    fields = ('llm_call_timeout_seconds', 'tool_timeout_seconds', 'hook_timeout_seconds')
+    fields = ("llm_call_timeout_seconds", "tool_timeout_seconds", "hook_timeout_seconds")
     return settings.model_copy(update={key: ceiling for key in fields})
 
 
 @asynccontextmanager
 async def active_timeout(seconds, root):
-    marker = Path(root) / 'pause.request' if root else None
+    marker = Path(root) / "pause.request" if root else None
     remaining = seconds
     async with asyncio.timeout(None) as timeout:
+
         async def watch():
             nonlocal remaining
             last = time.monotonic()
@@ -44,7 +46,8 @@ async def active_timeout(seconds, root):
                     timeout.reschedule(asyncio.get_running_loop().time())
                     return
                 last, was_paused = now, paused
-                await asyncio.sleep(min(.025, seconds / 4))
+                await asyncio.sleep(min(0.025, seconds / 4))
+
         watcher = asyncio.create_task(watch()) if seconds is not None else None
         try:
             yield
@@ -60,11 +63,12 @@ async def active_timeout(seconds, root):
 def ml_pause_count(root):
     """Ignore records from exited/reused process identities."""
     import psutil
+
     count = 0
-    for path in (Path(root) / 'paused_ml').glob('*.json'):
+    for path in (Path(root) / "paused_ml").glob("*.json"):
         try:
             record = json.loads(path.read_text())
-            if psutil.Process(record['pid']).create_time() == record['created']:
+            if psutil.Process(record["pid"]).create_time() == record["created"]:
                 count += 1
         except (OSError, ValueError, KeyError, psutil.Error):
             continue
@@ -76,19 +80,20 @@ def wait_for_ml_resume(marker, lock):
     import fcntl
     import psutil
     from memstara.pipeline.checkpoint import atomic_json
-    folder = marker.parent / 'paused_ml'
+
+    folder = marker.parent / "paused_ml"
     folder.mkdir(exist_ok=True)
-    record = folder / f'{os.getpid()}.json'
+    record = folder / f"{os.getpid()}.json"
     fcntl.flock(lock, fcntl.LOCK_UN)
-    atomic_json(record, {'pid': os.getpid(), 'created': psutil.Process().create_time()})
+    atomic_json(record, {"pid": os.getpid(), "created": psutil.Process().create_time()})
     try:
         while True:
             while marker.exists():
-                time.sleep(.1)
+                time.sleep(0.1)
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
-                time.sleep(.1)
+                time.sleep(0.1)
                 continue
             if not marker.exists():
                 return

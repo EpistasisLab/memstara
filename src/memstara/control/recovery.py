@@ -1,4 +1,5 @@
 """Recover ownership after a control-service restart without trusting a recycled PID."""
+
 import json
 import copy
 from functools import lru_cache
@@ -11,7 +12,7 @@ from pathlib import Path
 from memstara.pipeline.checkpoint import atomic_json
 
 
-_record_cache: ContextVar[dict | None] = ContextVar('control_record_cache', default=None)
+_record_cache: ContextVar[dict | None] = ContextVar("control_record_cache", default=None)
 
 
 @contextmanager
@@ -39,13 +40,14 @@ def records(root: Path):
     # run's artifacts, not additional executions. Archive wrapper directories
     # are still traversed; malformed records do not hide nested valid records.
     for directory, subdirectories, filenames in os.walk(root, followlinks=False):
-        if 'control_record.json' not in filenames:
+        if "control_record.json" not in filenames:
             continue
-        path = Path(directory) / 'control_record.json'
+        path = Path(directory) / "control_record.json"
         try:
             stat = path.stat()
-            record = copy.deepcopy(_record_version(
-                str(path), stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size, stat.st_ino))
+            record = copy.deepcopy(
+                _record_version(str(path), stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size, stat.st_ino)
+            )
             if isinstance(record, dict):
                 found.append((path, record))
                 subdirectories[:] = []
@@ -59,10 +61,11 @@ def records(root: Path):
 
 def identity(pid: int) -> str:
     try:
-        return subprocess.check_output(['ps', '-p', str(pid), '-o', 'lstart=', '-o', 'command='],
-                                       text=True, stderr=subprocess.DEVNULL).strip()
+        return subprocess.check_output(
+            ["ps", "-p", str(pid), "-o", "lstart=", "-o", "command="], text=True, stderr=subprocess.DEVNULL
+        ).strip()
     except subprocess.CalledProcessError:
-        return ''
+        return ""
 
 
 class RecoveredProcess:
@@ -70,29 +73,32 @@ class RecoveredProcess:
         self.record = record
 
     def poll(self):
-        current = identity(self.record['pid'])
-        expected = self.record.get('process_identity')
+        current = identity(self.record["pid"])
+        expected = self.record.get("process_identity")
         if current and expected and current == expected:
             return None
         try:
-            root = Path(self.record['run_dir'])
-            status_path = root / ('report_status.json' if self.record.get('report_only') else 'pipeline_status.json')
+            root = Path(self.record["run_dir"])
+            status_path = root / ("report_status.json" if self.record.get("report_only") else "pipeline_status.json")
             status = json.loads(status_path.read_text())
-            terminal = ({'completed'} if self.record.get('report_only') else
-                        {'completed', 'completed_with_skips', 'no_findings'})
-            return 0 if status.get('status') in terminal else 1
+            terminal = (
+                {"completed"}
+                if self.record.get("report_only")
+                else {"completed", "completed_with_skips", "no_findings"}
+            )
+            return 0 if status.get("status") in terminal else 1
         except (OSError, ValueError):
             return 1
 
     def send_signal(self, signal):
         if self.poll() is not None:
-            raise RuntimeError('The original pipeline process is no longer running')
-        os.kill(self.record['pid'], signal)
+            raise RuntimeError("The original pipeline process is no longer running")
+        os.kill(self.record["pid"], signal)
 
 
 def save_record(record: dict):
-    data = {k: v for k, v in record.items() if k != 'popen'}
-    path = Path(data['run_dir']) / 'control_record.json'
+    data = {k: v for k, v in record.items() if k != "popen"}
+    path = Path(data["run_dir"]) / "control_record.json"
     atomic_json(path, data)
 
 
@@ -101,20 +107,20 @@ def recover(root: Path, pipeline_id=None):
     for path, saved in records(root):
         try:
             record = dict(saved)
-            if record.get('pipeline_id') != pipeline_id:
+            if record.get("pipeline_id") != pipeline_id:
                 continue
-            record['run_dir'] = str(path.parent.resolve())
-            if record.get('exit_code') is not None:
+            record["run_dir"] = str(path.parent.resolve())
+            if record.get("exit_code") is not None:
                 finished.append(record)
                 continue
             process = RecoveredProcess(record)
             code = process.poll()
             if code is None:
-                live.append({**record, 'popen': process})
+                live.append({**record, "popen": process})
             else:
-                finished.append({**record, 'exit_code': code})
+                finished.append({**record, "exit_code": code})
         except (OSError, ValueError, KeyError):
             continue
     if len(live) > 1:
-        raise RuntimeError('Multiple surviving pipelines detected; refusing ambiguous ownership')
+        raise RuntimeError("Multiple surviving pipelines detected; refusing ambiguous ownership")
     return (live[0] if live else None), finished[:10]
