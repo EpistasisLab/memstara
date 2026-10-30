@@ -22,7 +22,8 @@ BACKLOG.md
 # Keep every filename containing kr local, regardless of case.
 *[kK][rR]*
 scripts/backlog_to_issues.py
-docs/
+docs/*
+!docs/development_release_workflow.md
 daily_log/
 papers/
 .DS_Store
