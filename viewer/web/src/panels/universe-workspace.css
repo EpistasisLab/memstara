@@ -148,3 +148,10 @@
 .related-settings[open] > summary::after { content:'−'; }
 .related-layout-actions button { padding:8px 12px; border:1px solid rgb(var(--line)); color:rgb(var(--ink)); }
 .related-error { border-left:3px solid rgb(var(--ink-soft)); background:rgb(var(--paper)); border-radius:6px; padding:12px; font-size:13px; }
+
+/* Stack toolbar controls when zoom leaves too little width for their labels. */
+@container (max-width:340px) {
+ .universe-toolbar { grid-template-columns:minmax(0,1fr); }
+ .universe-toolbar .universe-popover > summary { white-space:normal; height:auto; overflow-wrap:anywhere; }
+ .universe-toolbar > .universe-clear-questions { justify-self:start; }
+}

@@ -38,7 +38,11 @@ try {for(const width of [1440,390]){
  const sizes=await page.locator('.universe-search, .universe-popover > summary, .universe-clear-questions').evaluateAll(els=>els.map(e=>e.getBoundingClientRect().height));
  assert(sizes.length===4&&sizes.every(h=>Math.abs(h-44)<1),JSON.stringify({width,sizes}));
  const tops=await page.locator('.universe-popover > summary, .universe-clear-questions').evaluateAll(els=>els.map(e=>e.getBoundingClientRect().top));
- assert(Math.max(...tops)-Math.min(...tops)<1,JSON.stringify({width,tops}));
+ const toolbarWidth=await page.locator('.universe-toolbar').evaluate(e=>e.getBoundingClientRect().width);
+ if(toolbarWidth>340)assert(Math.max(...tops)-Math.min(...tops)<1,JSON.stringify({width,tops}));
+ else assert(tops.every((top,i)=>i===0||top>=tops[i-1]+44),'Narrow controls must stack without overlap');
+ const controls=await page.locator('.universe-popover > summary, .universe-clear-questions').evaluateAll(els=>els.map(e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,viewport:innerWidth};}));
+ assert(controls.every(r=>r.left>=0&&r.right<=r.viewport),'Toolbar controls must stay inside the viewport');
  const popup=page.locator('.universe-popover[open] .universe-popover-body');await expect(popup).toBeVisible();
  assert(await popup.evaluate(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&e.scrollWidth<=e.clientWidth+1;}));
  await page.screenshot({path:join(tmpdir(),`universe-popover-${width}.png`)});
