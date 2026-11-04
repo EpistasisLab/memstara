@@ -27,6 +27,13 @@ def test_nested_bundle_loads_and_is_addressable(bundle):
     assert '"error"' not in json.dumps(result)
 
 
+def test_nested_evidence_edits_invalidate_cache(bundle):
+    assert "Synthetic only." in okf._read_documents("alpha/deep/one")
+    path = bundle / "alpha/deep/one.md"
+    path.write_text("---\ntitle: Updated nested evidence\n---\nNew evidence text.\n")
+    assert "New evidence text." in okf._read_documents("alpha/deep/one")
+
+
 def test_domains_respect_same_lock_as_reader(bundle, monkeypatch):
     monkeypatch.setenv("MEMSTARA_OKF_FIELDS", "branch=a")
     result = json.loads(okf.okf_list_domains())

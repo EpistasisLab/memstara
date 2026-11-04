@@ -117,6 +117,9 @@ def config(value):
 
 def inspect(value):
     value = config(value)
+    from memstara.research_visibility import require_source_access
+
+    require_source_access(value)
     problems = []
 
     def issue(code, message):
@@ -350,6 +353,13 @@ def list_inputs():
     return [current_availability(json.loads(p.read_text())) for p in sorted(registry_root().glob("*.json"))]
 
 
+def visible_inputs():
+    """The app menu includes only visible studies with permitted research sources."""
+    from memstara.research_visibility import visible_records
+
+    return visible_records(list_inputs())
+
+
 def current_availability(record):
     """Check current source access; historical inspection is not current readiness.
 
@@ -395,6 +405,8 @@ def current_availability(record):
 
 
 def load(identifier):
+    from memstara.research_visibility import require_source_access
+
     if not isinstance(identifier, str) or not re.fullmatch("[a-f0-9]{32}", identifier):
         raise ValueError("Select a saved research input record")
     try:
@@ -408,17 +420,21 @@ def load(identifier):
         ):
             raise ValueError("Invalid registration structure")
         record["configuration"] = config(record["configuration"])
-        return record
     except FileNotFoundError:
         raise ValueError("Research input record no longer exists") from None
     except ValueError:
         raise ValueError(
             "Research input record is invalid. Restore the original record or inspect and save a new version"
         ) from None
+    require_source_access(record["configuration"])
+    return record
 
 
 def verify_materialized(profile):
     """A resume uses its frozen files, never current source files or new settings."""
+    from memstara.research_visibility import require_source_access
+
+    require_source_access(profile.get("configuration", {}))
     configuration = config(profile["configuration"])
     hashes = profile.get("artifact_hashes")
     required = {"dataset.csv", "matcher_rules.json"} if configuration["data_mode"] == "dataset" else set()

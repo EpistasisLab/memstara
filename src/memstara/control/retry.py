@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 
-def configuration_for_retry(record, configuration, pipeline_id):
+def configuration_for_retry(record, configuration, pipeline_id, *, incomplete=False):
     root = Path(record["run_dir"])
     try:
         failure, saved, frozen, outcomes = [
@@ -22,29 +22,41 @@ def configuration_for_retry(record, configuration, pipeline_id):
     tag = record["run_tag"]
     if saved.get("pipeline_id") != pipeline_id or saved.get("run_tag") != tag:
         raise ValueError("Retry source does not belong to this pipeline")
-    loop = failure.get("loop")
-    interrupted = failure.get("status") == "interrupted"
-    if interrupted:
-        candidates = [
-            int(key) for key, value in outcomes.items() if key.isdigit() and value.get("outcome") == "interrupted"
-        ]
-        if len(candidates) != 1:
-            raise ValueError("A unique interrupted Loop is required for retry")
-        loop = candidates[0]
-    start = saved.get("start_loop", 1)
     end = saved.get("waves")
-    if (
-        failure.get("status") not in ("failed", "interrupted")
-        or type(loop) is not int
-        or type(end) is not int
-        or type(start) is not int
-        or not 1 <= start <= loop <= end
-    ):
-        raise ValueError("No failed Loop is available for retry")
-    if any(outcomes.get(str(i), {}).get("outcome") != "completed" for i in range(start, loop)):
-        raise ValueError("Earlier unfinished Loops require review before retry")
-    if outcomes.get(str(loop), {}).get("outcome") != ("interrupted" if interrupted else "blocked"):
-        raise ValueError("The failed Loop outcome is not confirmed")
+    selection = None
+    if incomplete:
+        if failure.get("status") not in ("failed", "interrupted", "cancelled", "incomplete", "completed_with_skips"):
+            raise ValueError("No unfinished execution is available for selective retry")
+        if not frozen.get("combination_plan") or frozen["combination_plan"]["total_loops"] != end:
+            raise ValueError("Selective retry requires the original complete combination schedule")
+        from memstara.pipeline.retry_selection import pending_loops
+
+        selection = pending_loops(outcomes, end, saved)
+        loop = selection[0]
+    else:
+        loop = failure.get("loop")
+        interrupted = failure.get("status") == "interrupted"
+        if interrupted:
+            candidates = [
+                int(key) for key, value in outcomes.items() if key.isdigit() and value.get("outcome") == "interrupted"
+            ]
+            if len(candidates) != 1:
+                raise ValueError("A unique interrupted Loop is required for retry")
+            loop = candidates[0]
+        start = saved.get("start_loop", 1)
+        end = saved.get("waves")
+        if (
+            failure.get("status") not in ("failed", "interrupted")
+            or type(loop) is not int
+            or type(end) is not int
+            or type(start) is not int
+            or not 1 <= start <= loop <= end
+        ):
+            raise ValueError("No failed Loop is available for retry")
+        if any(outcomes.get(str(i), {}).get("outcome") != "completed" for i in range(start, loop)):
+            raise ValueError("Earlier unfinished Loops require review before retry")
+        if outcomes.get(str(loop), {}).get("outcome") != ("interrupted" if interrupted else "blocked"):
+            raise ValueError("The failed Loop outcome is not confirmed")
     if configuration.get("research_input_id", "") != saved.get("research_input_id", ""):
         raise ValueError("Research source changed; use a separate new execution")
     result = copy.deepcopy(configuration)
@@ -72,6 +84,8 @@ def configuration_for_retry(record, configuration, pipeline_id):
             except ValueError as exc:
                 raise ValueError(f"Invalid saved {key} for retry") from exc
     result.update(waves=end, continuous=False, _retry_from_loop=loop, _retry_source_run=tag)
+    if selection is not None:
+        result["_retry_loops"] = selection
     result["_retry_experiment_policy"] = {
         key: copy.deepcopy(frozen[key])
         for key in ("experiment_policy", "hypothesis_policy", "dataset_sha256", "y_column")

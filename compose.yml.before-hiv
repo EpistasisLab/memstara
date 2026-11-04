@@ -1,0 +1,196 @@
+# Canonical, isolated application stack. Set installation values in .env only.
+# Only the web entry point is published, on all host IPv4 interfaces.
+name: memstara-app
+
+x-runtime: &runtime
+  build:
+    context: .
+    dockerfile: deployment/Dockerfile
+    target: runtime
+  volumes:
+    - control-settings:/settings:ro
+    - type: bind
+      bind:
+        create_host_path: false
+      source: ${MEMSTARA_OUTPUT_DIR:-./outputs}
+      target: /app/outputs
+    - type: bind
+      bind:
+        create_host_path: false
+      source: ${HF_HOME:-./outputs/huggingface}
+      target: /app/cache
+    - type: bind
+      bind:
+        create_host_path: false
+      source: ${MEMSTARA_INPUTS_DIR:-./user-inputs}
+      target: /app/user-inputs
+      read_only: true
+  init: true
+
+services:
+  configure:
+    build:
+      context: .
+      dockerfile: deployment/Dockerfile
+      target: configure
+    environment:
+      COMPOSE_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME}
+      COMPOSE_MEMSTARA_WEB_PORT: ${MEMSTARA_WEB_PORT:-5173}
+      COMPOSE_MEMSTARA_OUTPUT_DIR: ${MEMSTARA_OUTPUT_DIR:-outputs}
+      COMPOSE_HF_HOME: ${HF_HOME:-outputs/huggingface}
+      COMPOSE_MEMSTARA_INPUTS_DIR: ${MEMSTARA_INPUTS_DIR:-user-inputs}
+    volumes:
+      - ./.env:/app/.env:ro
+      - type: bind
+        source: ./.memstara
+        target: /app/.memstara
+        read_only: true
+        bind: {create_host_path: false}
+      - board-settings:/generated/board
+      - runtime-settings:/generated/runtime
+      - control-settings:/generated/control
+      - api-settings:/generated/api
+      - type: bind
+        bind:
+          create_host_path: false
+        source: ${MEMSTARA_OUTPUT_DIR:-./outputs}
+        target: /app/outputs
+      - type: bind
+        bind:
+          create_host_path: false
+        source: ${HF_HOME:-./outputs/huggingface}
+        target: /app/cache
+      - type: bind
+        bind:
+          create_host_path: false
+        source: ${MEMSTARA_INPUTS_DIR:-./user-inputs}
+        target: /app/user-inputs
+        read_only: true
+
+  board:
+    image: postgres:16-alpine
+    entrypoint: ["/bin/sh", "/postgres.sh"]
+    command: ["postgres"]
+    volumes:
+      - ./deployment/postgres.sh:/postgres.sh:ro
+      - board-settings:/settings:ro
+      - board-data:/var/lib/postgresql/data
+    depends_on:
+      configure: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD-SHELL", ". /settings/postgres.env; pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  runtime:
+    image: pgvector/pgvector:pg16
+    entrypoint: ["/bin/sh", "/postgres.sh"]
+    command: ["postgres"]
+    volumes:
+      - ./deployment/postgres.sh:/postgres.sh:ro
+      - runtime-settings:/settings:ro
+      - runtime-data:/var/lib/postgresql/data
+    depends_on:
+      configure: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD-SHELL", ". /settings/postgres.env; pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  initialize:
+    <<: *runtime
+    command: ["python", "/app/deployment/initialize.py"]
+    depends_on:
+      board: {condition: service_healthy}
+      runtime: {condition: service_healthy}
+      redis: {condition: service_healthy}
+
+  acceptance:
+    <<: *runtime
+    profiles: [verification]
+    build:
+      context: .
+      dockerfile: deployment/Dockerfile
+      target: acceptance
+    command: ["python", "/app/deployment/live_acceptance.py"]
+
+  control:
+    <<: *runtime
+    environment:
+      MEMSTARA_PUBLIC_ORIGIN: "http://10.226.8.205:${MEMSTARA_WEB_PORT:-5173}"
+    depends_on:
+      initialize: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8072/control/health',timeout=10)"]
+      interval: 15s
+      timeout: 12s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    stop_grace_period: 60s
+
+  api:
+    build:
+      context: viewer
+      dockerfile: api/Dockerfile
+      args:
+        ENABLE_UNIVERSE_SEMANTICS: ${MEMSTARA_UNIVERSE_SEMANTICS:-0}
+    entrypoint: ["python", "/exec_service.py"]
+    command: ["uvicorn", "main:app", "--app-dir", "api", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+    volumes:
+      - ./deployment/exec_service.py:/exec_service.py:ro
+      - api-settings:/settings:ro
+      - type: bind
+        bind:
+          create_host_path: false
+        source: ${MEMSTARA_OUTPUT_DIR:-./outputs}/runs
+        target: /runs
+        read_only: true
+      - type: bind
+        bind:
+          create_host_path: false
+        source: ${HF_HOME:-./outputs/huggingface}
+        target: /root/.cache/huggingface
+        read_only: true
+      - universe-cache:/tmp/memstara-universe
+    depends_on:
+      initialize: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json',timeout=10)"]
+      interval: 15s
+      timeout: 12s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build: {context: viewer, dockerfile: web/Dockerfile}
+    volumes:
+      - ./deployment/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "0.0.0.0:${MEMSTARA_WEB_PORT:-5173}:80"
+    depends_on:
+      control: {condition: service_healthy}
+      api: {condition: service_healthy}
+    restart: unless-stopped
+
+volumes:
+  board-data:
+  runtime-data:
+  board-settings:
+  runtime-settings:
+  control-settings:
+  api-settings:
+  universe-cache:

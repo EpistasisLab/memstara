@@ -1,0 +1,15 @@
+{
+  "name": "HIV Integrated Knowledge Base",
+  "dataset_path": "/app/resources/datasets/hiv/ecoxai_dataset_2.5pct_no_PHI.csv",
+  "knowledge_path": "/app/resources/knowledge/hiv-combined",
+  "target": {
+    "column": "HIV_DETECTABLE",
+    "description": "Classify HIV_DETECTABLE as encoded in the source dataset: 1 versus 0.",
+    "positive_label": "1",
+    "negative_label": "0",
+    "prediction_time": "Not specified in the available source metadata",
+    "horizon": "Not specified in the available source metadata"
+  },
+  "excluded_columns": ["LAB__PATIENT ID NUMBER", "LAB__CLIENT REQUISITION NUMBER"],
+  "missing_policy": "impute_train_v1"
+}

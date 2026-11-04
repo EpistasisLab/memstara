@@ -17,7 +17,7 @@ current=''
 if [ -n "$(docker compose ps --status running -q web 2>/dev/null)" ]; then
     current=$(docker compose port web 80 2>/dev/null || true)
 fi
-if [ "$current" = "127.0.0.1:$requested" ]; then
+if [ "$current" = "0.0.0.0:$requested" ]; then
     # This project's own publisher is replaced by Compose; it is not a conflict.
     exit 0
 fi
@@ -31,7 +31,7 @@ probe() {
 # Check existing publishers explicitly as well as probing native host listeners.
 docker ps --format '{{.Ports}}' >"$scratch/publishers"
 if ! grep -Eq "(127\\.0\\.0\\.1|0\\.0\\.0\\.0|\\[::\\]):${requested}->" "$scratch/publishers"; then
-    if probe "127.0.0.1:$requested:80"; then
+    if probe "0.0.0.0:$requested:80"; then
         exit 0
     fi
     if ! grep -Eiq 'address already in use|port is already allocated|port.*already.*use' "$scratch/start.log"; then
@@ -42,7 +42,7 @@ if ! grep -Eq "(127\\.0\\.0\\.1|0\\.0\\.0\\.0|\\[::\\]):${requested}->" "$scratc
     rm "$scratch/probe.cid"
 fi
 # Let Docker allocate an available host port rather than guessing the next number.
-if ! probe '127.0.0.1::80'; then
+if ! probe '0.0.0.0::80'; then
     cat "$scratch/start.log" >&2
     exit 1
 fi

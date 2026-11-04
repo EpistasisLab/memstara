@@ -14,8 +14,8 @@ def port(value):
 def requested(config):
     bindings = [entry for entry in config['services']['web']['ports']
                 if int(entry['target']) == 80 and entry.get('protocol', 'tcp') == 'tcp']
-    if len(bindings) != 1 or bindings[0].get('host_ip') != '127.0.0.1':
-        raise ValueError('Automatic port selection requires one loopback web binding')
+    if len(bindings) != 1 or bindings[0].get('host_ip') != '0.0.0.0':
+        raise ValueError('Automatic port selection requires one all-interface IPv4 web binding')
     return port(bindings[0]['published'])
 
 

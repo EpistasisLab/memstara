@@ -242,7 +242,7 @@ def _signature(root: pathlib.Path) -> tuple[tuple[str, int], ...]:
     for folder in sorted(p for p in root.iterdir() if p.is_dir()):
         if folder.name.startswith((".", "_")):
             continue  # skip hidden folders and scratch folders beginning with `_`
-        for md in sorted(folder.glob("*.md")):
+        for md in sorted(folder.rglob("*.md")):
             # st_mtime_ns is the modification time in nanoseconds. Finer than whole
             # seconds, so two edits inside the same second are still told apart.
             stamps.append((str(md), md.stat().st_mtime_ns))

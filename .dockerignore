@@ -13,3 +13,7 @@ src/**/*.pyc
 !tests/live/test_haiku_pipeline.py
 !scripts/prepare_heart_failure_demo.py
 !tests/live/test_request_pause.py
+
+# Keep the host example archive out of all application images.
+examples/heart-failure
+examples/heart-failure/**

@@ -15,7 +15,6 @@ PROFILES = {
         "hypothesis": [
             "hiv-psychiatric-or-substance-use",
             "addiction-sdoh",
-            "hiv-clinical-frailty",
             "hiv-okf-whole-graph",
             "hiv-no-knowledge",
             "random_features",
@@ -50,6 +49,7 @@ for _profile in PROFILES.values():
     _profile["report"] = list(dict.fromkeys([*_profile["report"], *EXPLANATION_SKILLS]))
 
 INDEX_PROFILES = {
+    "c17e23a6a752b9324bba09226b6b00c5091f9b0d0e1a8e6caa23c24e682a33b3": "hiv",
     "aec7452874f70ec9b427f55187aad44a8115d0720e585294fc70e6ad11b12527": "hiv",
     "e90b6191d13c1c1bc626713bf4c12787f445b72e24aac523598ac483156c7a06": "heart_failure",
 }
@@ -80,7 +80,7 @@ def corpus_profile(profile=None, *, knowledge_mode="okf"):
 
 
 def menu_bindings():
-    from memstara.research_inputs import list_inputs
+    from memstara.research_inputs import visible_inputs as list_inputs
 
     return {
         "profiles": {

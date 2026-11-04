@@ -44,8 +44,8 @@ export default function PipelineManagementDialog({pipeline:p,onSettings,close}:{
       </section>
       {!p.running&&p.latest&&p.failure?.loop&&<section>
         <h3>Retry from {labelReplicate({iteration:p.failure.loop,run_tag:p.latest?.run_tag})}</h3>
-        <p>Keep completed results and retain the failed attempt in history. A new execution starts at the failed Replicate using the original order, with fresh model training and a new validation partition. Earlier completed Replicates are not rerun.</p>
-        {!retry?<button disabled={busy} onClick={()=>setRetry(true)}>Retry remaining Replicates…</button>:<div className="pipeline-management-buttons"><button disabled={busy} onClick={()=>setRetry(false)}>Cancel</button><button disabled={busy} onClick={async()=>{if(await usePipelines.getState().play(p.id,{mode:'retry',expectedRunTag:p.latest!.run_tag}))close();}}>Start from {labelReplicate({iteration:p.failure.loop,run_tag:p.latest?.run_tag})}</button></div>}
+        <p>Keep completed results and retain the failed attempt in history. For combination designs, retry failed, skipped and unattempted combinations in the original order with recorded seeds. Completed combinations are not rerun. Other designs restart at the failed replicate.</p>
+        {!retry?<button disabled={busy} onClick={()=>setRetry(true)}>Retry remaining Replicates…</button>:<div className="pipeline-management-buttons"><button disabled={busy} onClick={()=>setRetry(false)}>Cancel</button><button disabled={busy} onClick={async()=>{if(await usePipelines.getState().play(p.id,{mode:combinations?'retry_incomplete':'retry',expectedRunTag:p.latest!.run_tag}))close();}}>{combinations?'Retry unfinished combinations':'Start from '+labelReplicate({iteration:p.failure.loop,run_tag:p.latest?.run_tag})}</button></div>}
       </section>}
       {error&&<p role="alert">{error}</p>}
     </div>

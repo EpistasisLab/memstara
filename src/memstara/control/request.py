@@ -166,6 +166,7 @@ def build_argv(
     # The HTTP boundary rejects these fields from callers; workspace retry owns them.
     retry_fields = {
         "_retry_from_loop",
+        "_retry_loops",
         "_retry_source_run",
         "_retry_combination_plan",
         "_retry_seed_schedule",
@@ -422,6 +423,13 @@ def build_argv(
         if type(start) is not int or not 1 <= start <= waves:
             raise ValueError("The requested replicate is outside the saved schedule")
         argv += ["--start-loop", str(start), "--retry-source-run", body["_retry_source_run"]]
+        if "_retry_loops" in body:
+            from memstara.pipeline.retry_selection import validate_loops
+
+            selected = validate_loops(body["_retry_loops"], waves)
+            if selected[0] != start:
+                raise ValueError("Selective retry must start at its first selected Loop")
+            argv += ["--retry-loops", json.dumps(selected)]
         if body.get("_retry_seed_schedule"):
             argv += ["--retry-seed-schedule", json.dumps(body["_retry_seed_schedule"], allow_nan=False)]
         if body.get("_retry_experiment_policy") is not None:

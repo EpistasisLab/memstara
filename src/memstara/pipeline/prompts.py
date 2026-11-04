@@ -59,6 +59,7 @@ DISABLED_EXPLANATION_SKILLS = frozenset(
 HIDDEN_PLAYBOOKS = HIDDEN_PLAYBOOKS | DISABLED_EXPLANATION_SKILLS
 DISABLED_HYPOTHESIS_SKILLS = frozenset(
     {
+        "hiv-clinical-frailty",  # Temporarily disabled; retain original and historical records.
         "hypothesis_research",
         "comorbidity",
         "drug-class-effect",

@@ -45,21 +45,25 @@ def bootstrap(root=REPO_ROOT, inputs=None, destination=None):
     # The lock also prevents duplicate registrations when initializers overlap.
     with (destination / ".registration.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        source = root / "examples/heart-failure/dataset.csv"
-        corpus = root / "examples/heart-failure/okf"
-        prepared = destination / ("heart-failure-v1-" + research_inputs.digest(source))
-        if not prepared.exists():
-            with tempfile.TemporaryDirectory(dir=destination) as temporary:
-                staging = Path(temporary) / "prepared"
-                prepare(source, corpus, staging)
-                value = json.loads((staging / "research.json").read_text())
-                value["dataset_path"] = "dataset.csv"
-                (staging / "research.json").write_text(json.dumps(value, indent=2) + "\n")
-                staging.rename(prepared)
-        evidence = json.loads((prepared / "preparation.json").read_text())
-        if research_inputs.digest(prepared / "dataset.csv") != evidence["derived_sha256"]:
-            raise ValueError("Prepared HeartFailure data changed; restore it before startup")
-        result = {"bundled": register_file(prepared / "research.json"), "user_inputs": [], "execution_started": False}
+        from memstara.research_visibility import selection_policy
+
+        result = {"bundled": None, "user_inputs": [], "execution_started": False}
+        if selection_policy(inputs)["register_bundled_demo"]:
+            source = root / "examples/heart-failure/dataset.csv"
+            corpus = root / "examples/heart-failure/okf"
+            prepared = destination / ("heart-failure-v1-" + research_inputs.digest(source))
+            if not prepared.exists():
+                with tempfile.TemporaryDirectory(dir=destination) as temporary:
+                    staging = Path(temporary) / "prepared"
+                    prepare(source, corpus, staging)
+                    value = json.loads((staging / "research.json").read_text())
+                    value["dataset_path"] = "dataset.csv"
+                    (staging / "research.json").write_text(json.dumps(value, indent=2) + "\n")
+                    staging.rename(prepared)
+            evidence = json.loads((prepared / "preparation.json").read_text())
+            if research_inputs.digest(prepared / "dataset.csv") != evidence["derived_sha256"]:
+                raise ValueError("Prepared HeartFailure data changed; restore it before startup")
+            result["bundled"] = register_file(prepared / "research.json")
         # One folder per study; never recursively scan arbitrary private files.
         for manifest in sorted(inputs.glob("*/research.json")):
             try:
@@ -77,6 +81,7 @@ if __name__ == "__main__":
     result = bootstrap()
     invalid = sum(item["status"] == "invalid" for item in result["user_inputs"])
     print(
-        f"HeartFailure registered; {len(result['user_inputs']) - invalid} user studies registered; "
+        f"Bundled demo {'registered' if result['bundled'] else 'disabled'}; "
+        f"{len(result['user_inputs']) - invalid} user studies registered; "
         f"{invalid} invalid. See outputs/bundled-research/registration.json. No experiment started."
     )

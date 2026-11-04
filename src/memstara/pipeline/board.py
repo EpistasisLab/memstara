@@ -1437,9 +1437,8 @@ async def questions_for_wave(
             f"return that branch and nothing else, so ask what that branch can answer."
         )
     try:
-        # Neither half of what call_agent returns is wanted here. What the call did is
-        # read back off the bank below, not taken from what it said — that is the whole
-        # point of the docstring above.
+        # The response supplies regeneration feedback only. Success still requires
+        # reading verified questions back from the bank.
         #
         # `stage=` is the console and trace label only (`:502-503`); the run is recorded
         # against the agent id. "question" rather than the agent's own name because the
@@ -1460,14 +1459,21 @@ async def questions_for_wave(
             repair = retry_instructions(snapshot or {}, wave, key) + (
                 "" if independent_questions(snapshot) else prior_failure_instructions(snapshot or {}, wave, key)
             )
-            await call_agent(
+            from memstara.pipeline.question_regeneration import writer_feedback, remember_writer
+
+            result = await call_agent(
                 agent,
-                ask + repair + f" Your writer identity is '{key}'. Pass writer='{key}' to propose_questions. "
+                ask
+                + repair
+                + writer_feedback(key)
+                + f" Your writer identity is '{key}'. Pass writer='{key}' to propose_questions. "
                 f"Propose exactly up to {allocation} grounded questions; this replaces the total requested above.",
                 tools=by_stage["question"],
                 registry=registry,
                 stage=f"question{wave}-{slot + 1}",
             )
+            if isinstance(result, tuple) and len(result) == 2:
+                remember_writer(key, result[0])
 
         for attempt in range(2):
             # Recover a saved but not yet executed question from THIS wave only.
@@ -1638,6 +1644,9 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
 
     prepared = await prepare_execution(args, run_dir, chosen_playbooks(args))
     combination_plan = prepared.combination_plan
+    from memstara.pipeline.retry_selection import from_arguments
+
+    retry_loops = from_arguments(args, args.waves)
     stage_models = prepared.stage_models
     from memstara.pipeline.checkpoint import Checkpoint, atomic_json
 
@@ -1656,7 +1665,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                     "source_run_tag": args.retry_source_run,
                     "first_loop": first_loop,
                     "last_loop": args.waves,
-                    "mode": "new_attempt_from_failed_loop",
+                    "mode": "retry_incomplete_combinations" if retry_loops else "new_attempt_from_failed_loop",
+                    **({"selected_loops": retry_loops} if retry_loops else {}),
                     "prior_results": "retained_in_source_execution",
                     "validation_reserve": "new_execution_partition",
                 },
@@ -1914,7 +1924,9 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             finalize_rounds,
         )
 
-        async for wave in rounds(args.waves, args.continuous, run_dir, start=checkpoint.state["next_wave"]):
+        async for wave in rounds(
+            args.waves, args.continuous, run_dir, start=checkpoint.state["next_wave"], selected=retry_loops
+        ):
             from memstara.combinations import execution_label
 
             note(execution_label(wave + 1, combination_plan) + " · starting research process")
@@ -1950,16 +1962,26 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                     "the question step follows the frozen knowledge/iteration-feedback policy"
                     + f" and makes {args.trials} questions",
                 )
+                from memstara.pipeline.question_regeneration import until_saved
+                from memstara.evaluation import active_plan
+
                 questions, recycled = await checkpoint.phase(
                     f"{wave}:questions",
-                    lambda agents=agents, wave=wave: questions_for_wave(
-                        registry,
-                        agents,
-                        by_stage,
-                        run_tag=args.run_tag,
+                    lambda agents=agents, wave=wave: until_saved(
+                        lambda: questions_for_wave(
+                            registry,
+                            agents,
+                            by_stage,
+                            run_tag=args.run_tag,
+                            wave=wave,
+                            want=args.trials,
+                            skill=args.skill,
+                        ),
+                        root=run_dir,
                         wave=wave,
-                        want=args.trials,
-                        skill=args.skill,
+                        run_tag=args.run_tag,
+                        config_hash=(active_plan() or {}).get("config_hash"),
+                        wait=_EXECUTION_GATE.wait if _EXECUTION_GATE else None,
                     ),
                 )
                 for q in questions:
@@ -1968,37 +1990,9 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                     )
                 done("(3')", f"{len(questions)} questions" + (" · no executable question saved" if recycled else ""))
 
-            # -- stop when it runs dry -----------------------------------
-            #
-            # Two consecutive dry waves, not one. The question step can come back
-            # empty-handed once by mistake, and that is not the same thing as a corpus
-            # with nothing left in it. The break happens *before* seeding, so a run that
-            # has run dry pays for one more question call and not for a whole wave of
-            # trials it has already done.
+            # A question checkpoint can complete only with verified bank entries.
+            # Keep a defensive guard for malformed/legacy saved phase results.
             if not questions and not args.no_curator:
-                from memstara.pipeline.combination_questions import skip_unavailable
-                from memstara.evaluation import active_plan
-
-                if skip_unavailable(
-                    active_plan(),
-                    run_dir,
-                    wave,
-                    checkpoint,
-                    dry_streak=dry_streak,
-                    waves_run=waves_run,
-                    seeded_total=seeded_total,
-                    missing_trials=missing_trials,
-                ):
-                    dry_streak += 1
-                    note("This combination has no executable question; recorded as skipped. Continuing the schedule.")
-                    continue
-                record_round(
-                    run_dir,
-                    wave + 1,
-                    "blocked",
-                    "No executable question after bounded recovery; no analysis was completed.",
-                )
-                write_progress(run_dir, wave + 1, "hypothesis")
                 from memstara.pipeline.question_repair import require_executable_questions
 
                 require_executable_questions(questions, run_dir, wave)
@@ -2973,6 +2967,7 @@ async def main() -> int:
     ap.add_argument("--research-objective", default="")
     ap.add_argument("--research-input-id", default="", help="Saved user corpus, dataset and prediction target")
     ap.add_argument("--start-loop", type=int, default=1, help="First ordinal in a new retry attempt")
+    ap.add_argument("--retry-loops", default="", help="Original Loop ordinals selected for a new retry")
     ap.add_argument("--retry-source-run", default="", help="Original failed run retained as evidence")
     ap.add_argument("--retry-seed-schedule", default="", help="Recorded seed schedule from the retry source")
     ap.add_argument("--retry-experiment-policy", default="", help="Original scientific policy for a retry")

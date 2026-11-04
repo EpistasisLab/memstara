@@ -115,8 +115,7 @@ done
 # Check both backends through the same proxy the browser uses, not just containers.
 echo "Checking the web application and backend connections..."
 attempt=0
-until docker compose exec -T web sh -c \
-    'wget -q -T 5 -O /dev/null http://127.0.0.1/ && wget -q -T 5 -O /dev/null http://127.0.0.1/control/health && wget -q -T 5 -O /dev/null http://127.0.0.1/api/discovery/questions' >/dev/null 2>&1; do
+until docker compose exec -T control python /app/deployment/check_web.py; do
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 30 ]; then
         echo "Services started, but application readiness could not be confirmed." >&2

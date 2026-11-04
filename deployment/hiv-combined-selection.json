@@ -1,0 +1,8 @@
+{
+  "register_bundled_demo": false,
+  "hidden_research_ids": ["923dcff44ca549a4991b75e9622eecd6", "a7f6965f6ec44f2f9c2799570c91d2ed", "3a5852520a9042aaab4bc68993aaa9c4"],
+  "allowed_sources": {
+    "dataset_path": "/app/resources/datasets/hiv/ecoxai_dataset_2.5pct_no_PHI.csv",
+    "knowledge_path": ["/app/resources/knowledge/hiv", "/app/resources/knowledge/hiv-combined"]
+  }
+}

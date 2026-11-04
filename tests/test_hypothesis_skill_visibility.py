@@ -12,7 +12,7 @@ def test_catalog_contains_both_corpus_profiles_and_general_choice(tmp_path, monk
     monkeypatch.setenv('MEMSTARA_USER_SKILLS_DIR', str(tmp_path))
     ids = {i['id'] for i in catalog.catalog() if i['stage'] == 'hypothesis'}
     assert ids == {'addiction-sdoh', 'hiv-psychiatric-or-substance-use',
-                   'hiv-clinical-frailty', 'hiv-okf-whole-graph', 'hiv-no-knowledge',
+                   'hiv-okf-whole-graph', 'hiv-no-knowledge',
                    'heart-failure-cardiovascular', 'heart-failure-metabolic-renal',
                    'heart-failure-lifestyle-social', 'heart-failure-all-categories', 'hypothesis_general'}
     for name in ids:

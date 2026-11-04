@@ -417,6 +417,7 @@ def validate_new_design(body: dict) -> None:
     choices = body.get("combination_skills")
     if isinstance(choices, dict) and isinstance(choices.get("hypothesis"), list):
         names += choices["hypothesis"]
+    ensure_hypothesis_enabled([name.strip() for name in names if isinstance(name, str)])
     if any(isinstance(name, str) and canonical_name(name.strip()) == "heart-failure-all" for name in names):
         raise ValueError(
             "The historical all-predictor skill is unavailable for new designs. "

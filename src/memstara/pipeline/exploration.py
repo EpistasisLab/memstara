@@ -12,9 +12,14 @@ if TYPE_CHECKING:
     from memstara.pipeline.checkpoint import Checkpoint
 
 
-async def rounds(limit: int, continuous: bool, run_dir: Path, *, start=0):
+async def rounds(limit: int, continuous: bool, run_dir: Path, *, start=0, selected=None):
     """Yield zero-based rounds; pause only between complete rounds."""
+    allowed = set(selected) if selected is not None else None
+    if allowed is not None and continuous:
+        raise ValueError("Selective retry requires a finite schedule")
     for wave in itertools.count(start) if continuous else range(start, limit):
+        if allowed is not None and wave + 1 not in allowed:
+            continue
         while (run_dir / "pause.request").exists():
             await asyncio.sleep(1)
         yield wave

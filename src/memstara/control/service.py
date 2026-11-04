@@ -567,15 +567,28 @@ class Handler(BaseHTTPRequestHandler):
 
     def _refuse_stranger(self) -> bool:
         """True if the request was answered with a refusal and the caller should stop."""
-        host = self.headers.get("Host", "").rsplit(":", 1)[0] or "127.0.0.1"
-        if host not in _ALLOWED_HOSTS:
+        from memstara.control.access import public_viewer, request_host
+
+        allowed_hosts = set(_ALLOWED_HOSTS) | {"::1"}
+        allowed_origins = set(_ALLOWED_ORIGINS)
+        public_origin = os.environ.get("MEMSTARA_PUBLIC_ORIGIN", "")
+        if public_origin:
+            try:
+                viewer_origin, viewer_host = public_viewer(public_origin)
+            except ValueError:
+                self._send(503, {"error": "Invalid MEMSTARA_PUBLIC_ORIGIN configuration"})
+                return True
+            allowed_hosts.add(viewer_host)
+            allowed_origins.add(viewer_origin)
+        host = request_host(self.headers.get("Host", ""))
+        if host not in allowed_hosts:
             self._send(403, {"error": f"this service does not answer to the name {host!r}"})
             return True
         origin = self.headers.get("Origin")
         configured_origins = {
             f"http://{host}:{os.environ.get('MEMSTARA_WEB_PORT', '5173')}" for host in ("localhost", "127.0.0.1")
         }
-        if origin is not None and origin not in (_ALLOWED_ORIGINS | configured_origins):
+        if origin is not None and origin not in (allowed_origins | configured_origins):
             self._send(403, {"error": f"{origin} is not the viewer"})
             return True
         return False
@@ -665,7 +678,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/control/research-inputs":
-            from memstara.research_inputs import list_inputs
+            from memstara.research_inputs import visible_inputs as list_inputs
             from memstara.corpus_skills import corpus_profile
 
             try:

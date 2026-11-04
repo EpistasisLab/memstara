@@ -348,13 +348,13 @@ class PipelineWorkspace:
                 raise ValueError("This pipeline is already running; pause or resume its current execution")
             history = manager.finished()
             latest = history[0] if history else None
-            if mode not in ("initial", "additional", "fresh", "retry"):
+            if mode not in ("initial", "additional", "fresh", "retry", "retry_incomplete"):
                 raise ValueError("Invalid execution mode")
             if latest and mode == "initial":
                 raise ValueError(
                     "Choose additional analysis and a total replicate count, or explicitly start a new execution"
                 )
-            if mode in ("additional", "fresh", "retry"):
+            if mode in ("additional", "fresh", "retry", "retry_incomplete"):
                 if not latest or expected_run_tag != latest.get("run_tag"):
                     raise ValueError("Execution history changed. Refresh and review before starting")
             configuration = self.configuration(item["configuration"])
@@ -368,10 +368,12 @@ class PipelineWorkspace:
                 configuration.update(waves=additional_loops, continuous=False)
             elif additional_loops is not None:
                 raise ValueError("Additional replicates require additional analysis mode")
-            if mode == "retry":
+            if mode in ("retry", "retry_incomplete"):
                 from memstara.control.retry import configuration_for_retry
 
-                configuration = configuration_for_retry(latest, configuration, key)
+                configuration = configuration_for_retry(
+                    latest, configuration, key, incomplete=mode == "retry_incomplete"
+                )
             return launch(manager, {**copy.deepcopy(item), "configuration": configuration})
 
     def stop_all(self):
