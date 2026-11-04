@@ -765,7 +765,7 @@ UV_PROJECT_ENVIRONMENT=.venv-test uv sync --frozen --extra dev --extra runtime
 UV_PROJECT_ENVIRONMENT=.venv-test uv run --frozen --extra dev --extra runtime pytest -q
 ```
 
-The runtime extra fixes Motoro v0.13.0 to its release commit; `uv.lock` records
+The runtime extra fixes Motoro v0.15.0 to its release commit; `uv.lock` records
 the complete dependency set. Linux uv
 installs select CPU Torch. This extra is for a reproducible test/runtime baseline;
 it does not edit or replace an existing sibling checkout. CI installs it explicitly.

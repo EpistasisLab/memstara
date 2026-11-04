@@ -8,11 +8,29 @@ import pytest
 from memstara import model_catalog as catalog, model_connections as connections
 
 
+@pytest.fixture
+def explicit_catalog(monkeypatch):
+    """Synthetic caller metadata, not claims inferred from provider model IDs."""
+    from motoro.services import model_capabilities as mc
+    rows = [
+        mc.ModelCatalogEntry(provider='openai', model='gpt-5', label='Test reasoning',
+            capabilities=mc.ModelCapabilities(supports_temperature=False, supports_effort=True,
+                                               effort_levels=['low', 'high'])),
+        mc.ModelCatalogEntry(provider='openai', model='gpt-4o', label='Test temperature',
+            capabilities=mc.ModelCapabilities(supports_temperature=True, supports_effort=False)),
+        mc.ModelCatalogEntry(provider='anthropic', model='claude-opus-4-7', label='Test effort',
+            capabilities=mc.ModelCapabilities(supports_effort=True, effort_levels=['max'])),
+    ]
+    monkeypatch.setattr(mc, 'CATALOG', rows)
+    monkeypatch.setattr(mc, 'get_capabilities', lambda model: next(r.capabilities for r in rows if r.model == model))
+
+
 def test_catalog_comes_from_installed_motoro():
     from motoro.schemas.agent import LLMProvider, ModelConfig
     from motoro.services.model_capabilities import CATALOG
     result = catalog.catalog()
     assert result['source'] == 'motoro'
+    assert all(row['custom_model_name'] for row in result['providers'] if not row['models'])
     assert {row['id'] for row in result['providers']} == {p.value for p in LLMProvider}
     for entry in CATALOG:
         row = next(r for r in catalog.choices(entry.provider) if r['model'] == entry.model)
@@ -28,8 +46,8 @@ def test_nullable_capabilities_and_joint_sampling_follow_motoro():
     from motoro.services.model_capabilities import ModelCapabilities
     unknown = ModelCapabilities().model_dump(mode='json')
     assert catalog.validate_settings({'max_tokens': 4096}, unknown) == {'max_tokens': 4096}
-    with pytest.raises(ValueError):
-        catalog.validate_settings({'effort': 'high'}, unknown)
+    assert catalog.validate_settings({'effort': 'high'}, unknown) == {'effort': 'high'}
+    assert catalog.validate_settings({'temperature': .4}, unknown) == {'temperature': .4}
     caps = ModelCapabilities(supports_temperature=True, supports_effort=True,
                              effort_levels=['none', 'low', 'high'], default_effort='low',
                              temperature_effort_levels=['none']).model_dump(mode='json')
@@ -39,8 +57,7 @@ def test_nullable_capabilities_and_joint_sampling_follow_motoro():
         catalog.validate_settings({'effort': 'high', 'temperature': .4}, caps)
     caps.update(effort_levels=None, default_effort='high', temperature_effort_levels=None)
     assert catalog.validate_settings({'effort': 'high'}, caps) == {'effort': 'high'}
-    with pytest.raises(ValueError):
-        catalog.validate_settings({'effort': 'low'}, caps)
+    assert catalog.validate_settings({'effort': 'low'}, caps) == {'effort': 'low'}
 
 
 @pytest.mark.parametrize('model,settings', [
@@ -50,7 +67,7 @@ def test_nullable_capabilities_and_joint_sampling_follow_motoro():
     ('gpt-5', {'max_tokens': 0}), ('gpt-5', {'max_tokens': 200001}),
     ('gpt-5', {'max_tokens': 1.1}), ('gpt-5', {'top_p': .5}),
 ])
-def test_invalid_settings_rejected_before_probe(model, settings, monkeypatch):
+def test_invalid_settings_rejected_before_probe(model, settings, monkeypatch, explicit_catalog):
     monkeypatch.setattr(connections, 'probe', lambda data: pytest.fail('Must not make a provider request'))
     with pytest.raises(ValueError):
         connections.check_and_save({'provider': 'openai', 'model': model, 'api_key': 'synthetic', 'settings': settings})
@@ -61,7 +78,7 @@ def test_invalid_settings_rejected_before_probe(model, settings, monkeypatch):
     ('anthropic', 'claude-opus-4-7', '', 'anthropic:claude-opus-4-7', {'effort': 'max', 'max_tokens': 8000}),
     ('local', 'my-deployment', 'http://localhost:8080/v1', 'openai:gpt-4o', {'temperature': .2, 'max_tokens': 500}),
 ])
-def test_checked_settings_survive_launch_and_resume(tmp_path, monkeypatch, provider, model, base, catalog_id, settings):
+def test_checked_settings_survive_launch_and_resume(tmp_path, monkeypatch, provider, model, base, catalog_id, settings, explicit_catalog):
     from memstara.operational import model_profiles
     from memstara.stage_models import call_overrides, resolve_run_profiles, for_stage
     from motoro.schemas.agent import ModelConfig
@@ -81,7 +98,8 @@ def test_checked_settings_survive_launch_and_resume(tmp_path, monkeypatch, provi
         assert actual.model == model
         assert actual.max_tokens == settings['max_tokens']
         sampling = _sampling_kwargs(actual, model)
-        assert sampling == ({'temperature': settings['temperature']} if 'temperature' in settings else {'reasoning_effort': settings['effort']})
+        expected_sampling = ({'temperature': settings['temperature']} if 'temperature' in settings else {'reasoning_effort': settings['effort']})
+        assert sampling == {'extra_body': expected_sampling, 'drop_params': False}
         assert for_stage(frozen, role) == expected[role]
     # Changing the catalog later must not rewrite an already checked connection.
     monkeypatch.setattr(catalog, 'capabilities', lambda *args: pytest.fail('Stored capability metadata is frozen'))
@@ -89,7 +107,7 @@ def test_checked_settings_survive_launch_and_resume(tmp_path, monkeypatch, provi
     assert 'synthetic' not in json.dumps(public)
 
 
-def test_catalog_id_cannot_disguise_a_different_native_model():
+def test_catalog_id_cannot_disguise_a_different_native_model(explicit_catalog):
     with pytest.raises(ValueError, match='differs'):
         catalog.capabilities('openai', 'gpt-5', 'openai:gpt-4o')
     with pytest.raises(ValueError, match='catalog'):

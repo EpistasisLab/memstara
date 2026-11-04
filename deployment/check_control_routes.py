@@ -20,6 +20,7 @@ def main():
         os.environ['MEMSTARA_OUTPUT_DIR'] = directory
         from memstara.control import service
         from memstara.combinations import build_plan
+        from motoro.services.model_capabilities import get_capabilities, ModelCapabilities
         root = Path(directory) / 'synthetic-run'
         root.mkdir()
         plan = build_plan({'hypothesis': ['hypothesis_general'], 'data': ['data_training_heavy'],
@@ -50,7 +51,13 @@ def main():
                     assert len(body['calls']) == 1 and body['calls'][0]['loop'] == loop
                 assert get('/control/runs/synthetic/log?offset=6')['text'] == 'second\n'
                 assert get('/control/model-catalog')['source'] == 'motoro'
-                assert get('/control/model-capabilities?provider=azure_foundry&model=gpt-5')['capabilities']['supports_effort']
+                # Motoro 0.15 does not infer sampling support from a model ID.
+                # Verify the HTTP contract against installed Motoro metadata,
+                # including unknown support for a custom Azure deployment.
+                for model in ('gpt-5', 'synthetic-deployment'):
+                    caps = get(f'/control/model-capabilities?provider=azure_foundry&model={model}')['capabilities']
+                    ModelCapabilities.model_validate(caps)
+                    assert caps == get_capabilities(model).model_dump(mode='json')
             try:
                 get('/control/pipelines/test/combinations?loop=invalid')
                 raise AssertionError('Invalid loop must return a JSON 400 response')

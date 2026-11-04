@@ -61,7 +61,7 @@ def catalog():
             {
                 "id": p.value,
                 "label": LABELS.get(p.value, p.value),
-                "custom_model_name": p.value in ALIASES,
+                "custom_model_name": p.value in ALIASES or not choices(p.value),
                 "can_list_models": p.value in ("openai", "anthropic", "openrouter", "local"),
                 "models": choices(p.value),
             }
@@ -91,8 +91,8 @@ def validate_settings(settings, caps):
     if not isinstance(settings, dict) or set(settings) - {"temperature", "effort", "max_tokens"}:
         raise ValueError("Unsupported advanced model settings")
     if "temperature" in settings:
-        if not caps["supports_temperature"]:
-            raise ValueError("Temperature support is not confirmed for this model")
+        if caps.get("supports_temperature") is False:
+            raise ValueError("Temperature is unsupported for this model")
         if type(settings["temperature"]) not in (float, int) or not math.isfinite(settings["temperature"]):
             raise ValueError("Temperature must be a finite number")
     if "max_tokens" in settings and type(settings["max_tokens"]) is not int:

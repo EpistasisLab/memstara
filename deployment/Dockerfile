@@ -24,7 +24,7 @@ COPY deployment/ deployment/
 # Git metadata is excluded from the Docker context. Keep the release version
 # with the source so direct Compose builds and downloaded archives agree.
 RUN SETUPTOOLS_SCM_PRETEND_VERSION="$(cat deployment/VERSION)" uv sync --frozen --extra runtime --no-dev
-RUN .venv/bin/python -c "from importlib.metadata import version; from pathlib import Path; import memstara; assert version('motoro') == '0.13.0'; assert version('memstara') == memstara.__version__ == Path('deployment/VERSION').read_text().strip()"
+RUN .venv/bin/python -c "from importlib.metadata import version; from pathlib import Path; import memstara; assert version('motoro') == '0.15.0'; assert version('memstara') == memstara.__version__ == Path('deployment/VERSION').read_text().strip()"
 # Fail local image builds as well as CI on undefined/shadowed names and broken
 # HTTP query handlers. The smoke test uses isolated synthetic records, no LLM.
 RUN uvx --from ruff==0.16.8 ruff check --select F821,F823 src/ \
