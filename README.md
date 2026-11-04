@@ -11,7 +11,7 @@ See [release notes](CHANGELOG.md) for the included features.
 Download Git from [git-scm.com](https://git-scm.com/downloads) and Docker from
 [docker.com](https://www.docker.com/products/docker-desktop/).
 Azure Foundry credentials are needed when configuring a model to run an experiment.
-Docker installs the application and its dependencies, including **Motoro 0.13.0**;
+Docker installs the application and its dependencies, including **Motoro 0.15.0**;
 no separate Python, Node or database setup is needed.
 
 ### 1. Download
@@ -123,6 +123,27 @@ docker compose logs --tail=80 configure initialize control api web
 
 These commands stop the app, restart/apply settings, and inspect logs respectively.
 Finish active experiments before rerunning `./start.sh`; it restarts services.
+
+To clear execution history while keeping research and model settings, run
+`./start.sh --reset-execution-history`. This stops the application, backs up both
+PostgreSQL databases (schema and all data), outputs, user input manifests and local
+installation settings, then clears execution records and restarts. Backup failure
+prevents deletion. Python 3 is required on the host for this option.
+File backups use a temporary control container with read-only source mounts so
+container-owned private settings can be archived without changing their permissions.
+Run the startup command as your normal Docker-enabled user, without `sudo`.
+
+Backups are retained in timestamped folders under `../memstara-execution-backups`.
+To choose another location, use
+`MEMSTARA_BACKUP_DIR=/absolute/backup/path ./start.sh --reset-execution-history`.
+Choose a location outside the outputs and user-inputs directories. Each successful
+backup contains `board.dump`, `runtime.dump`, `files.tar.gz` and `COMPLETE.json`
+with SHA-256 checksums and original file locations. Database dumps use PostgreSQL
+custom format for `pg_restore`; they include all database schemas/data, not cluster
+roles. Archive readability is checked, but a full restore is not rehearsed.
+Backups contain credentials and research results; their directories are private
+and they are never automatically removed. Normal `./start.sh` retains history
+and does not create a reset backup.
 Saved records are retained. Use an unused web port for a second installation.
 
 ## Input and setup help
