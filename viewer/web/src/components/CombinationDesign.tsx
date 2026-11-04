@@ -2,9 +2,9 @@ import {identityLabel,scheduledLabel} from '../lib/replicateIdentity';
 import { displayText, skillLabel } from '../lib/displayText';
 import {floorCallRole as callRole, type FloorTrace as Trace, type FloorActivity, floorExecutionState} from '../lib/floorActivity';
 import {createPortal} from "react-dom";
-import {memo,useEffect,useState,useRef,lazy,Suspense,type CSSProperties} from 'react';
+import {memo,useEffect,useState,useRef,type CSSProperties} from 'react';
 import {Sparkles,Database,BrainCircuit,ScanEye,FileText,ArrowRight,Layers3,Network,Play,AlertCircle,Search,ExternalLink} from 'lucide-react';
-const SkillMarkdown=lazy(()=>import('./SkillMarkdown'));
+import SkillInstructions from './SkillInstructions';
 import {useControl,PLAYBOOK_STAGES,type PlaybookStage} from '../store/control';
 import {usePipelines,type PipelineDefinition} from '../store/pipelines';
 import {STAGE_COLOR} from '../lib/stage';
@@ -19,7 +19,7 @@ const roles={
  interpreter:{name:'Interpretation',description:'Describe the observed evidence',icon:ScanEye},
  report:{name:'Explanation',description:'Explain meaning and next steps',icon:FileText},
 };
-type Flavor={stage:PlaybookStage;id:string;title?:string;hash?:string};
+type Flavor={stage:PlaybookStage;id:string;title?:string;hash?:string;origin?:'catalog'|'recorded'};
 function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:PipelineDefinition;headerHost?:HTMLDivElement|null;onActivity?:(activity:FloorActivity|null)=>void}){
  const catalog=useControl(s=>s.catalog),busy=usePipelines(s=>s.busy);
  const controlError=usePipelines(s=>s.error==='Error: Pipeline workspace is unavailable; last settings are retained.'?s.error:null);
@@ -30,7 +30,7 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
  const [response,setResponse]=useState<{key:string;data:Trace}|null>(null),[failure,setFailure]=useState<{key:string;message:string}|null>(null);
  useEffect(()=>{if(board.current)board.current.scrollLeft=0;},[role,search,view]);
  const choices=p.configuration.combination_skills??{};
- const lists=PLAYBOOK_STAGES.map(stage=>(choices[stage]?.length?choices[stage]:[{hypothesis:'hypothesis_general',data:'data_manual_split',ml:'ml_default_logistic_regression',interpreter:'shared-shap',report:'shared-heart-failure-cardiovascular'}[stage]]).filter((id,i,ids)=>ids.findIndex(other=>(catalog.find(s=>s.id===other)?.hash??other)===(catalog.find(s=>s.id===id)?.hash??id))===i));
+ const lists=PLAYBOOK_STAGES.map(stage=>(choices[stage]?.length?choices[stage]:[{hypothesis:'hypothesis_general',data:'data_manual_split',ml:'ml_default_logistic_regression',interpreter:'shared-shap',report:'shared-hiv'}[stage]]).filter((id,i,ids)=>ids.findIndex(other=>(catalog.find(s=>s.id===other)?.hash??other)===(catalog.find(s=>s.id===id)?.hash??id))===i));
  const count=lists.reduce((n,ids)=>n*ids.length,1);
  const following=!!(p.running||p.latest);
  const activityMode=p.running?'live':'history';
@@ -65,7 +65,6 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
  const visibleRoles=PLAYBOOK_STAGES.filter(s=>role==='all'||s===role);
  const skillFor=(id:string)=>catalog.find(s=>s.id===id);
  const selectedContent=detail?skillFor(detail.id):undefined;
- const sameVersion=!!selectedContent&&(!!detail?.hash&&detail.hash===selectedContent.hash);
  const header=(
   <header className="cs-unified-header" aria-label="Combination workspace controls">
    <div className="cs-heading-row">
@@ -91,7 +90,7 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
    {following&&error&&<div className="cs-error" role="alert"><AlertCircle size={16}/><span>{displayText(error)} {trace?'Last available records; activity may have changed.':'Waiting for this Replicate’s records.'}</span><button onClick={()=>setRetry(n=>n+1)}>Retry</button></div>}
    {following&&!trace&&<p role="status" className="cs-empty">{error?'Execution records unavailable.':'Loading current Replicate…'}</p>}
    <CombinationFloor
-    skills={PLAYBOOK_STAGES.map((stage,i)=>{const configured=lists[i].map(id=>({stage,id,title:skillFor(id)?.title,hash:skillFor(id)?.hash}));const frozen=trace?.calls.filter(c=>callRole(c)===stage).at(-1)?.skill??trace?.planned?.agents.find(a=>a.stage===stage);return following&&frozen?[...configured.map(s=>s.id===frozen.id?frozen:s),...(!configured.some(s=>s.id===frozen.id)?[frozen]:[])]:configured;})}
+    skills={PLAYBOOK_STAGES.map((stage,i)=>{const configured:Flavor[]=lists[i].map(id=>({stage,id,title:skillFor(id)?.title,hash:skillFor(id)?.hash,origin:'catalog'}));const frozen=trace?.calls.filter(c=>callRole(c)===stage).at(-1)?.skill??trace?.planned?.agents.find(a=>a.stage===stage);const recorded:Flavor|undefined=frozen?{...frozen,origin:'recorded'}:undefined;return following&&recorded?[...configured.map(s=>s.id===recorded.id?recorded:s),...(!configured.some(s=>s.id===recorded.id)?[recorded]:[])]:configured;})}
     currentStage={currentStage} activeSkills={following?(trace?.planned?.agents??[]):undefined} recorded={following} calls={following?trace?.calls:undefined} live={following&&!!trace&&live&&!error} paused={following&&paused} stopping={following&&stopping} stale={following&&!!error} inspect={setDetail}/>
   </>:<>
    <p className="cs-architecture-caption">One skill from each agent column defines a Pipeline. A Replicate repeats its complete research process. Scroll across, or filter by role.</p>
@@ -113,8 +112,8 @@ function CombinationDesign({pipeline:p,headerHost,onActivity}:{pipeline:Pipeline
    </div>
   </>}
   {detail&&<FloorDetailDialog title={skillLabel(detail.id,detail.title)} close={()=>setDetail(null)} className="cs-skill-dialog">
-   <div className="cs-document-role"><span>{roles[detail.stage]?.name??detail.stage} agent</span><span>{sameVersion?'Skill instructions':'Recorded skill reference'}</span></div>
-   {sameVersion?<><p className="cs-document-description">{displayText(selectedContent.description)}</p><div className="cs-markdown"><Suspense fallback={<p>Loading instructions…</p>}><SkillMarkdown content={selectedContent.content||'No instructions are available for this skill.'}/></Suspense></div></>:<p>The recorded version is not available in the current skill catalog. Its current content is not substituted for the recorded instructions.</p>}
+   <div className="cs-document-role"><span>{roles[detail.stage]?.name??detail.stage} agent</span></div>
+   <SkillInstructions key={`${runTag}:${detail.stage}:${detail.id}:${detail.hash}:${detail.origin}`} reference={detail} current={selectedContent} runTag={runTag}/>
    <details className="cs-document-provenance"><summary>File and version details</summary><dl><dt>Skill</dt><dd>{skillLabel(detail.id,detail.title)}</dd><dt>Version hash</dt><dd>{detail.hash??'Not recorded'}</dd></dl></details>
   </FloorDetailDialog>}
  </section>;

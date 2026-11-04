@@ -2,7 +2,7 @@ import type {RunRequest} from '../store/control';
 
 type Profile={label:string;hypothesis:string[];report:string[]};
 type Bindings={profiles:Record<string,Profile>;default:string;research:Record<string,string>};
-const explanationSkills=['shared-heart-failure-cardiovascular','shared-heart-failure-comorbidity'];
+const explanationSkills=['shared-hiv','shared-addiction'];
 const general:Profile={label:'General research',hypothesis:['hypothesis_general'],report:explanationSkills};
 let bindings:Bindings={profiles:{general},default:'legacy',research:{}};
 

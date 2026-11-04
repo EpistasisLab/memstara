@@ -247,7 +247,7 @@ class PipelineWorkspace:
         config = {
             **copy.deepcopy(DEFAULTS),
             "playbook_interpreter": "shared-shap",
-            "playbook_explanation": "shared-heart-failure-cardiovascular",
+            "playbook_explanation": "shared-hiv",
             **value,
             "hypothesis_agents": 1,
             "interpret_agents": 1,

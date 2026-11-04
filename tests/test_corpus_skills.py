@@ -21,8 +21,8 @@ def profile(scope):
 def test_corpus_profiles_have_distinct_specialties_and_random(scope):
     assert corpus_profile(profile(scope)) == scope
     selected = PROFILES[scope]['hypothesis']
-    assert len(selected) == 6 and selected[-1] == 'random_features'
-    validate_skills({'hypothesis': selected, 'report': PROFILES[scope]['report']}, profile(scope))
+    assert len(selected) == (5 if scope == 'hiv' else 6) and selected[-1] == 'random_features'
+    validate_skills({'hypothesis': selected}, profile(scope))
     for name in [s for s in selected if s not in ('random_features', 'heart-failure-all')]:
         item = next(item for item in catalog() if item['id'] == name)
         assert item['stage'] == 'hypothesis'
@@ -40,7 +40,7 @@ def test_wrong_corpus_skills_rejected_for_single_and_combination_requests(scope,
     names = [item['id'] for item in catalog()]
     correct = PROFILES[scope]['hypothesis'][0]
     request = {'research_input_id': 'a' * 32, 'provider': 'openai', 'model': 'fixture',
-               'playbook_hypothesis': correct, 'playbook_explanation': 'shared-heart-failure-cardiovascular'}
+               'playbook_hypothesis': correct, 'playbook_explanation': 'shared-hiv'}
     assert correct in build_argv(request, [], names, ['hypothesis', 'report'])
     bad = PROFILES[wrong]['hypothesis'][0]
     with pytest.raises(ValueError, match='does not match the selected corpus'):
@@ -80,8 +80,8 @@ def test_legacy_explanation_is_readable_but_rejected_for_new_execution():
             validate_skills({'hypothesis': ['hypothesis_general'], 'report': ['report_general']}, profile(scope))
 
 
-@pytest.mark.parametrize('scope,wrong', [('hiv', 'heart_failure'), ('heart_failure', 'hiv')])
-def test_two_supplied_explanations_are_selectable_across_corpora(scope, wrong, monkeypatch):
+def test_hiv_explanations_are_selectable_and_heart_failure_is_rejected(monkeypatch):
+    scope, wrong = 'hiv', 'heart_failure'
     import memstara.research_inputs as research
     monkeypatch.setattr(research, 'load', lambda identifier: profile(scope))
     monkeypatch.setattr('memstara.stage_models.deployment_profiles', lambda: {})
@@ -91,12 +91,14 @@ def test_two_supplied_explanations_are_selectable_across_corpora(scope, wrong, m
     rows = {row['id']: row for row in catalog()}
     reports = PROFILES[scope]['report']
     assert len(reports) == 2
-    assert len(PROFILES[scope]['hypothesis']) * 2 * 2 * 2 * len(reports) == 96
+    from memstara.corpus_skills import menu_bindings
+    assert len(menu_bindings()['profiles']['hiv']['hypothesis']) * 2 * 2 * 2 * len(reports) == 64
     for name in reports:
         assert rows[name]['stage'] == 'report'
         assert rows[name]['content'].strip() in load_prompt('board/report', playbook=name)['system_prompt']
         request = {'research_input_id': 'a' * 32, 'playbook_hypothesis': PROFILES[scope]['hypothesis'][0],
                    'playbook_explanation': name}
         assert name in build_argv(request, [], list(rows), ['hypothesis', 'report'])
-    validate_skills({'report': PROFILES[wrong]['report']}, profile(scope))
+    with pytest.raises(ValueError, match='disabled for new execution'):
+        validate_skills({'report': PROFILES[wrong]['report']}, profile(scope))
     validate_skills({'report': reports}, profile(scope), knowledge_mode='llm_only')

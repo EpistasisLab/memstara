@@ -12,7 +12,7 @@ DEFAULT_SKILLS = dict(
             "data_manual_split",
             "ml_default_logistic_regression",
             "shared-shap",
-            "shared-heart-failure-cardiovascular",
+            "shared-hiv",
         ),
         strict=True,
     )

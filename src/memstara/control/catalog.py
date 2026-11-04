@@ -19,9 +19,17 @@ from memstara.pipeline import prompts
 
 ROLES = ("hypothesis", "data", "ml", "interpreter", "report")
 
+# Presentation only: preserve the original Markdown, skill IDs and content hashes.
+HYPOTHESIS_DISPLAY_TITLES = {
+    "addiction-sdoh": "HIV — Social Determinants of Health",
+    "hiv-no-knowledge": "HIV — No Knowledge",
+    "hiv-okf-whole-graph": "HIV — Whole Knowledge Graph",
+    "hiv-psychiatric-or-substance-use": "HIV — Psychiatric or Substance Use Disorders",
+}
+
 FINAL_STAGE_SKILLS = {
     "interpreter": ("shared-shap", "shared-lime"),
-    "report": ("shared-heart-failure-cardiovascular", "shared-heart-failure-comorbidity"),
+    "report": ("shared-hiv", "shared-addiction"),
 }
 
 # Exact current filenames only: no recursive discovery and no archive fallback.
@@ -219,7 +227,7 @@ def _entry(name: str, content: str, stage: str, source: str) -> dict:
     lines = [line.strip().lstrip("#").strip() for line in content.splitlines() if line.strip()]
     return {
         "id": name,
-        "title": lines[0] if lines else name,
+        "title": HYPOTHESIS_DISPLAY_TITLES.get(name, lines[0] if lines else name),
         "stage": stage,
         "stage_label": agent_label(stage),
         "description": " ".join(lines[1:4])[:400],

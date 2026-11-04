@@ -19,7 +19,7 @@ PROFILES = {
             "hiv-no-knowledge",
             "random_features",
         ],
-        "report": ["shared-heart-failure-cardiovascular", "shared-heart-failure-comorbidity"],
+        "report": ["shared-hiv", "shared-addiction"],
     },
     "heart_failure": {
         "label": "HeartFailure knowledge corpus",
@@ -36,17 +36,15 @@ PROFILES = {
     "general": {
         "label": "General research corpus / model knowledge",
         "hypothesis": ["hypothesis_general", "random_features"],
-        "report": ["shared-heart-failure-cardiovascular", "shared-heart-failure-comorbidity"],
+        "report": ["shared-hiv", "shared-addiction"],
     },
 }
 # Active Explanation perspectives are selectable independently of the corpus.
 # Historical identifiers are retained only for saved-record resolution.
 EXPLANATION_SKILLS = (
-    "shared-heart-failure-cardiovascular",
-    "shared-heart-failure-comorbidity",
+    "shared-hiv",
+    "shared-addiction",
 )
-for _profile in PROFILES.values():
-    _profile["report"] = list(dict.fromkeys([*_profile["report"], *EXPLANATION_SKILLS]))
 
 INDEX_PROFILES = {
     "c17e23a6a752b9324bba09226b6b00c5091f9b0d0e1a8e6caa23c24e682a33b3": "hiv",

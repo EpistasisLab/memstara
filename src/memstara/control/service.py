@@ -857,6 +857,29 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"running": RUNS.running(), "finished": RUNS.finished()})
             return
 
+        if path.startswith("/control/runs/") and path.endswith("/skill-instructions"):
+            tag = path[len("/control/runs/") : -len("/skill-instructions")]
+            found = RUNS.locate(tag)
+            if found is None:
+                self._send(404, {"error": "This service has no such execution"})
+                return
+            from memstara.control.skill_instructions import recorded_instructions
+
+            query = parse_qs(urlsplit(self.path).query)
+            try:
+                result = recorded_instructions(
+                    found[1], tag, query.get("stage", [""])[0],
+                    query.get("skill", [""])[0], query.get("hash", [""])[0],
+                )
+                self._send(200, result)
+            except FileNotFoundError:
+                self._send(404, {"error": "Recorded instructions are unavailable for this execution and skill"})
+            except (ValueError, TypeError, KeyError):
+                self._send(409, {"error": "Recorded instructions do not match the requested execution and skill version"})
+            except OSError:
+                self._send(503, {"error": "Recorded instructions could not be read"})
+            return
+
         if path.startswith("/control/runs/") and path.endswith("/log"):
             found = RUNS.locate(path[len("/control/runs/") : -len("/log")])
             if found is None:
@@ -1300,6 +1323,7 @@ _ROUTES = [
     "POST /control/runs",
     "GET /control/runs",
     "GET /control/runs/{tag}/log",
+    "GET /control/runs/{tag}/skill-instructions",
     "POST /control/runs/{tag}/stop",
 ]
 

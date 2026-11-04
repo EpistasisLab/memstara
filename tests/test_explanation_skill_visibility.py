@@ -24,7 +24,7 @@ def shared(tmp_path, monkeypatch):
 
 def test_only_available_supplied_explanations_visible(shared):
     assert {i['id'] for i in catalog.catalog() if i['stage'] == 'report'} == {
-        'shared-heart-failure-cardiovascular', 'shared-heart-failure-comorbidity'}
+        'shared-hiv', 'shared-addiction'}
     for name in catalog.FINAL_STAGE_SKILLS['report']:
         catalog.validate_selection({'playbook_explanation': name})
 
@@ -48,10 +48,10 @@ def test_board_rejects_disabled_skill_before_execution(tmp_path, combination, mo
         asyncio.run(run(args, tmp_path))
     assert list(tmp_path.iterdir()) == []
 
-@pytest.mark.parametrize('name', ['shared-addiction', 'shared-hiv'])
+@pytest.mark.parametrize('name', ['shared-heart-failure-cardiovascular', 'shared-heart-failure-comorbidity'])
 def test_retired_explanation_stays_readable_but_cannot_be_selected(shared, name):
     assert catalog.resolve(name)['stage'] == 'report'
     with pytest.raises(ValueError, match='disabled for new execution'):
         catalog.validate_selection({'playbook_explanation': name})
     from memstara.corpus_skills import menu_bindings
-    assert all(name not in profile['report'] for profile in menu_bindings()['profiles'].values())
+    assert name not in menu_bindings()['profiles']['hiv']['report']

@@ -6,13 +6,12 @@ export const corpusSkillBindings={
       "hypothesis": [
         "hiv-psychiatric-or-substance-use",
         "addiction-sdoh",
-        "hiv-clinical-frailty",
         "hiv-okf-whole-graph",
         "hiv-no-knowledge"
       ],
       "report": [
-        "shared-heart-failure-cardiovascular",
-        "shared-heart-failure-comorbidity"
+        "shared-hiv",
+        "shared-addiction"
       ]
     },
     "heart_failure": {
@@ -33,8 +32,8 @@ export const corpusSkillBindings={
         "hypothesis_general"
       ],
       "report": [
-        "shared-heart-failure-cardiovascular",
-        "shared-heart-failure-comorbidity"
+        "shared-hiv",
+        "shared-addiction"
       ]
     }
   },

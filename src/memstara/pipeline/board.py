@@ -2940,7 +2940,7 @@ async def main() -> int:
                 else [f"--playbook-{stage_flag}"]
             ),
             dest="playbook_explanation" if stage_flag == "report" else f"playbook_{stage_flag}",
-            default={"interpreter": "shared-shap", "report": "shared-heart-failure-cardiovascular"}.get(stage_flag, ""),
+            default={"interpreter": "shared-shap", "report": "shared-hiv"}.get(stage_flag, ""),
             help=f"a behavioural standard for the {public_stage} stage, named without the "
             f".md — the prompt must carry a {{{{playbook}}}} line to receive it "
             f"(default: the prompt as written)",
