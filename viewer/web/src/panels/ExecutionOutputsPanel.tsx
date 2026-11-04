@@ -15,6 +15,7 @@ import { executionTiles, tileComplete, tileStatus, testAuroc, outputViewNames, t
 import { identityLabel } from '../lib/replicateIdentity';
 import { costLabel, usageDuration } from '../lib/loopUsage';
 import type { Result } from '../types';
+import { recordedModels } from '../lib/recordedModel';
 import './execution-outputs.css';
 
 const views = ['results', 'report', 'agents'] as const;
@@ -23,8 +24,19 @@ const positions = new Map<string, {top: number; loop?: number}>();
 
 function ResultMetadata({result, compact = false}: {result: Result; compact?: boolean}) {
   const predictors = result.columns_used?.filter(column => column !== result.y_column) ?? [];
+  const models = recordedModels(result);
   return <dl className={`output-record-meta${compact ? ' is-compact' : ''}`}>
-    <div className="output-model-meta"><dt>Model</dt><dd title={compact ? result.model : undefined}>{result.model || 'Not recorded'}</dd></div>
+    <div className="output-model-meta"><dt>Model</dt><dd>{models.map(model => model.family + (model.primary ? ' (primary)' : '')).join(', ')}</dd></div>
+    <div className="output-parameter-meta"><dt>Recorded parameters</dt><dd>{models.map(model => <div key={model.family} className="output-model-parameters">
+      {models.length > 1 && <strong>{model.family}</strong>}
+      {model.fits.length ? model.fits.map(fit => <div key={fit.index}>
+        {model.fits.length > 1 && <strong>Fit {fit.index}: </strong>}
+        <span>{fit.parameters ? `Fitted: ${fit.parameters}` : 'Fitted parameters not recorded'}</span>
+        {fit.seed !== undefined && <p>Recorded fit seed: {fit.seed}</p>}
+        {fit.threshold !== undefined && <p>Decision threshold: {fit.threshold}</p>}
+      </div>) : <span>Fitted parameters not recorded</span>}
+      {!model.fits.some(fit => fit.parameters) && model.configured && <p>Configured (not verified as fitted): {model.configured}</p>}
+    </div>)}</dd></div>
     <div className="output-target-meta"><dt>Target</dt><dd title={compact ? result.y_column : undefined}>{result.y_column || 'Not recorded'}</dd></div>
     <div className="output-predictor-meta"><dt>Predictors{predictors.length ? ` · ${predictors.length}` : ''}</dt><dd className={compact ? 'output-column-preview' : undefined} title={compact ? predictors.join(', ') : undefined}>{predictors.length ? predictors.join(', ') : 'Not recorded'}</dd></div>
     <div className="output-test-metric"><dt>Test AUROC</dt><dd data-reported={testAuroc(result) !== 'Not reported'}>{testAuroc(result)}</dd></div>
@@ -119,7 +131,7 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
           {next !== 'results' && !(view === 'agents' && next === 'report') && <ArrowRight size={15} aria-hidden="true"/>}
         </button>)}</nav>
       </header>
-      {view !== 'agents' && <details className="output-data-details"><summary>Data columns & recorded metrics</summary>{active.results.length ? active.results.map(result => <section key={result.result_id}><h4>Analysis {result.result_id}</h4><ResultMetadata result={result}/></section>) : <p>No model or column record has been saved for this replicate yet.</p>}</details>}
+      <details className="output-data-details"><summary>Model parameters, data columns & recorded metrics</summary>{active.results.length ? active.results.map(result => <section key={result.result_id}><h4>Analysis {result.result_id}</h4><ResultMetadata result={result}/></section>) : <p>No model or column record has been saved for this replicate yet.</p>}</details>
       {view === 'results' && <div className="output-documents">{active.results.length ? active.results.map(result => <article key={result.result_id} aria-label={`Interpretation output for analysis ${result.result_id}`}><header className="output-document-header"><h4>Interpretation · Analysis {result.result_id}</h4></header><InterpretationOutput result={result} includeLimitations={false}/></article>) : <p className="output-empty">No Interpretation output has been saved for this replicate yet.</p>}</div>}
       {view === 'report' && <div className="output-documents">{active.explanations.length ? active.explanations.map((output, index) => <article key={`${output.result_id}:${index}`} aria-label={`Explanation output ${index + 1}`}><header className="output-document-header"><h4>Explanation output {index + 1}<span>{output.status}</span></h4><button type="button" disabled={!output.text} onClick={() => downloadOutput(output.text, `${tag}_pipeline-${active.pipeline_number}_replicate-${active.replicate_number}_explanation-${index + 1}.md`)}><Download size={15} aria-hidden="true"/>Download Markdown</button></header>{output.text ? <ReportBody verbatim text={output.text}/> : <p>No Explanation text has been saved for this output yet.</p>}</article>) : <p className="output-empty">No Explanation output has been saved for this replicate yet.</p>}</div>}
       {view === 'agents' && <TelemetryPanel key={`${tag}:${active.loop}`} lockedLoop={active.loop}/>}

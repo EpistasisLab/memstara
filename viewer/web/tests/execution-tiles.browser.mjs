@@ -11,6 +11,7 @@ const metric={calls:2,tokens:1234,tokens_status:'complete',cost:{usd:.125,status
 const result={result_id:17,trial:16,perspective:'',hypothesis:'Do not show research proposal',columns_used:['age_years','a_very_long_predictor_column_name_that_must_wrap_without_breaking_the_layout','outcome'],columns_missing:[],importance:{},okf_concept_ids:[],y_column:'outcome',auc:.812345,model:'Logistic regression',interpretation:original,evaluation:{interpretations:[{slot:1,skill:'SHAP',status:'done',text:original},{slot:2,skill:'LIME',status:'done',text:'LIME original output for P1 R2.'}]} };
 const snapshot={run_tag:'selected',run_configuration:{pipeline_name:'Heart Failure study',trials:1,waves:32,combination_plan:plan,y_column:'outcome'},stale:false,health:{memstara:{up:true},core:{up:true}},results:[result,{...result,result_id:1,trial:0,interpretation:'OTHER REPLICATE',evaluation:undefined},{...result,result_id:32,trial:31,interpretation:'LAST COMPLETED RESULT',evaluation:undefined},{...result,result_id:2,trial:1,evaluation:{interpretations:[{slot:1,status:'in_progress',text:'UNFINISHED OUTPUT'}]}}],board:{tasks:[]},report:{status:'running',explanation_outputs:[{loop:17,result_id:17,status:'completed',text:explanation},{loop:1,result_id:1,status:'completed',text:'OTHER EXPLANATION'}]},agents:[],scene:{places:[],agents:[],flashes:[]},feed:[],access:{rows:[],windows:[]},runs:[]};
 const totals={updated_at:'2026-10-28T01:00:00Z',executions:[{...metric,run_tag:'selected',model:'Recorded LLM',provider:'test',loops:Array.from({length:32},(_,i)=>({...metric,number:i+1,pipeline_number:i%16+1,replicate_number:Math.floor(i/16)+1,status:[1,17,32].includes(i+1)?'completed':i===2?'failed':'running'})),loop_summary:{},unassigned:{...metric,calls:0}}],pipelines:[],total:metric};
+result.evaluation.model_results={logistic_regression:{evaluation:{replicates:[{seed:42,parameters:{C:.37,random_state:42,warm_start:false,n_jobs:null},operating_point:{probability_cutoff:.15}}]}}};
 const browser=await launchResponsiveBrowser();
 try {for(const width of [320,390,768,1440]) {
  const page=await browser.newPage({viewport:{width,height:1000}});
@@ -26,6 +27,15 @@ try {for(const width of [320,390,768,1440]) {
    assert.deepEqual(overflow,{own:false,body:false});
  };
  await expect(panel.locator('.execution-output-tile')).toHaveCount(3);
+ for (const view of ['Results','Conclusions','Usage']) {
+   await panel.getByRole('navigation',{name:'Output views'}).getByRole('button',{name:view,exact:true}).click();
+   const tile=panel.getByRole('button',{name:`Open ${view}: Pipeline 1 · Replicate 2`,exact:true});
+   await expect(tile).toContainText('random_state=42');
+   await expect(tile).toContainText('Decision threshold: 0.15');
+   await expect(tile).toContainText('warm_start=false');
+   await checkLayout();
+ }
+ await panel.getByRole('navigation',{name:'Output views'}).getByRole('button',{name:'Results',exact:true}).click();
  await checkLayout();
  await page.screenshot({path:join(tmpdir(),`memstara-execution-tiles-${width}.png`),fullPage:true});
  // Scroll restoration and keyboard activation use a tile well below the first row.

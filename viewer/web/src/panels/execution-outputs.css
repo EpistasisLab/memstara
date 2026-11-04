@@ -44,7 +44,10 @@
 .output-record-meta.is-compact dt {font-size:10px;line-height:1.5;letter-spacing:.025em;font-weight:450;color:rgb(var(--ink-soft));}
 .output-record-meta.is-compact dd {font-size:12px;line-height:1.6;margin-top:5px;}
 .output-record-meta.is-compact .output-model-meta {grid-column:1/-1;border-top:1px solid rgb(var(--line)/.6);padding-top:14px;}
-.output-record-meta.is-compact .output-model-meta dd {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:3.2em;}
+.output-record-meta.is-compact .output-model-meta dd {min-height:1.6em;}
+.output-record-meta.is-compact .output-parameter-meta {grid-column:1/-1;}
+.output-model-parameters {overflow-wrap:anywhere;font-variant-numeric:tabular-nums;}
+.output-model-parameters + .output-model-parameters,.output-model-parameters>div+div {margin-top:8px;}
 .output-record-meta.is-compact .output-target-meta dd {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
 .output-record-meta.is-compact .output-predictor-meta dd {min-height:3.2em;}
 .output-record-meta.is-compact>.output-test-metric {grid-column:1/-1;grid-row:1;display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:24px 0 4px;}
