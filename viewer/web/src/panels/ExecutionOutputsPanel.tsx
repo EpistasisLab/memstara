@@ -51,6 +51,8 @@ function downloadOutput(text: string, filename: string) {
 }
 
 /** One shared list/detail boundary for Results, Conclusions and Usage. */
+import HypothesisResultsTable from '../components/HypothesisResultsTable';
+
 export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
   const snapshot = useViewer(s => s.snapshot);
   const requested = useViewer(s => s.runTag);
@@ -105,6 +107,7 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
       </select></label>
     </header>
     <nav className="output-view-navigation" aria-label="Output views">{views.map(next => {const Icon = icons[next]; return <button type="button" key={next} aria-current={view === next ? 'page' : undefined} onClick={() => navigate(next)}><Icon size={17} aria-hidden="true"/>{outputViewNames[next]}</button>;})}</nav>
+    {view === 'results' && !waiting && <HypothesisResultsTable key={tag} runTag={tag} results={(snapshot?.results ?? []).map(result => ({...result, run_tag: tag}))}/>}
     {(error || snapshot?.stale || (view === 'agents' && totals.error)) && <p className="output-notice" role="status">Updates are delayed. Showing the last available records for this execution. Missing records do not indicate a completed or empty run.</p>}
     {waiting ? <p className="output-empty" role="status">Loading the selected execution…</p> : !snapshot ? <p className="output-empty" role="status">{requested ? 'Loading execution records…' : 'Select an experiment to browse its outputs.'}</p> : active ? <>
       <header className="output-detail-header">

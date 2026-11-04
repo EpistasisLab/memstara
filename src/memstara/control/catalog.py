@@ -348,6 +348,25 @@ def registered_user_skill(name: str, stage: str) -> bool:
     return bool(item and item.get("stage") == stage)
 
 
+def delete_user_skill(name: str) -> dict:
+    """Delete one persisted user skill; bundled and shared skills are immutable."""
+    import fcntl
+
+    if not isinstance(name, str) or not re.fullmatch(r"user-(hypothesis|data|ml|interpreter|report)-[a-zA-Z0-9_-]+", name):
+        raise ValueError("Only saved custom skills can be deleted")
+    directory = user_dir()
+    path = directory / f"{name}.json"
+    with (directory / ".names.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not path.is_file():
+            raise FileNotFoundError("Saved custom skill was not found")
+        item = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(item, dict) or item.get("id") != name:
+            raise ValueError("Saved custom skill record is invalid and was not deleted")
+        path.unlink()
+    return item
+
+
 def ensure_explanation_enabled(names) -> None:
     for name in names:
         if (

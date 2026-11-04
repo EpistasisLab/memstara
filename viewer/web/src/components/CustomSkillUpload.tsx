@@ -1,7 +1,7 @@
 import HypothesisSkillWizard from './HypothesisSkillWizard';
 import CreateCustomSkill from './CreateCustomSkill';
 import { useRef, useState } from 'react';
-import { Upload, FileText } from 'lucide-react';
+import { Upload, FileText, Trash2 } from 'lucide-react';
 import { useControl, type SkillInfo } from '../store/control';
 
 type Props = {
@@ -11,16 +11,36 @@ type Props = {
   includeAssistant?: boolean;
   onSelect: (skill: SkillInfo) => void;
   onBusy: (busy: boolean) => void;
+  onDelete?: (id: string) => void;
+  creationDisabled?: boolean;
 };
 
 /** Register a role-scoped skill; the parent owns its uncommitted selection. */
-export default function CustomSkillUpload({ stage, disabled, multiple = false, includeAssistant = true, onSelect, onBusy }: Props) {
+export default function CustomSkillUpload({ stage, disabled, multiple = false, includeAssistant = true, onSelect, onBusy, onDelete, creationDisabled = false }: Props) {
+  const catalog = useControl(s => s.catalog);
   const input = useRef<HTMLInputElement>(null);
   const [writing, setWriting] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [filename, setFilename] = useState('');
   const [error, setError] = useState('');
+  const [deleting, setDeleting] = useState('');
+  const saved = catalog.filter(skill => skill.stage === stage && skill.id.startsWith(`user-${stage}-`));
+  const remove = async (skill: SkillInfo) => {
+    if (disabled || deleting || !window.confirm(`Delete custom skill “${skill.title}”? This cannot be undone.`)) return;
+    setDeleting(skill.id); setError(''); onBusy(true);
+    try {
+      const response = await fetch(`/control/playbooks/${encodeURIComponent(skill.id)}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Delete failed. Please try again.');
+      }
+      useControl.setState(s => ({ catalog: s.catalog.filter(item => item.id !== skill.id),
+        playbooks: s.playbooks?.filter(id => id !== skill.id) ?? null }));
+      onDelete?.(skill.id);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Delete failed. Please try again.'); }
+    finally { setDeleting(''); onBusy(false); }
+  };
   const upload = async (files: File[]) => {
     if (!files.length || uploading || writing || drafting || disabled) return;
     setUploading(true); onBusy(true); setError(''); setFilename('');
@@ -61,7 +81,8 @@ export default function CustomSkillUpload({ stage, disabled, multiple = false, i
     }
   };
   return <section className="rounded-lg border border-paper-line p-3 text-sm" aria-label="Upload a custom skill" aria-busy={uploading || writing || drafting}>
-    <h4 className="font-medium">Or use your own skill</h4>
+    <h4 className="font-medium">{creationDisabled?'Manage your saved custom skills':'Or use your own skill'}</h4>
+    {!creationDisabled && <>
     <p className="mt-1 text-xs leading-relaxed text-ink-muted">{multiple ? 'Select one or more skill files for this agent. Each successful upload is added to the combination set. ' : 'Upload instructions for this agent, then review them below. '}UTF-8 Markdown (.md), up to 48 kB per file.</p>
     <input ref={input} type="file" accept=".md" multiple={multiple} className="hidden" aria-label="Custom skill Markdown file"
       disabled={disabled || uploading || writing || drafting} onChange={event => void upload(Array.from(event.target.files ?? []))} />
@@ -73,8 +94,14 @@ export default function CustomSkillUpload({ stage, disabled, multiple = false, i
       <FileText size={16} className="shrink-0" aria-hidden="true" /><span className="min-w-0 break-words">{filename} · Uploaded to your skill library.</span>
     </p>}</div>
     <p className="mt-2 text-xs text-ink-muted">The file is saved in your skill library. This pipeline is created only after you finish the review.</p>
-    <CreateCustomSkill stage={stage} disabled={disabled || uploading || writing || drafting} onSelect={onSelect} onBusy={value=>{setWriting(value);onBusy(value);}} />
-    {includeAssistant && <HypothesisSkillWizard key={stage} stage={stage} disabled={disabled || uploading || writing} multiple={multiple} onSelect={onSelect} onBusy={value=>{setDrafting(value);onBusy(value);}} />}
+    </>}
+    {!!saved.length && <details className="mt-3"><summary className="cursor-pointer font-medium">Manage saved custom skills ({saved.length})</summary>
+      <ul className="mt-2 space-y-2">{saved.map(skill => <li key={skill.id} className="flex items-center justify-between gap-3 rounded-md border border-paper-line p-2">
+        <span className="min-w-0 break-words">{skill.title}</span><button type="button" aria-label={`Delete ${skill.title}`} disabled={disabled || !!deleting}
+          onClick={() => void remove(skill)} className="inline-flex shrink-0 items-center gap-1 text-red-700 disabled:opacity-40"><Trash2 size={15}/>{deleting===skill.id?'Deleting…':'Delete'}</button>
+      </li>)}</ul></details>}
+    {!creationDisabled && <CreateCustomSkill stage={stage} disabled={disabled || uploading || writing || drafting} onSelect={onSelect} onBusy={value=>{setWriting(value);onBusy(value);}} />}
+    {!creationDisabled && includeAssistant && <HypothesisSkillWizard key={stage} stage={stage} disabled={disabled || uploading || writing} multiple={multiple} onSelect={onSelect} onBusy={value=>{setDrafting(value);onBusy(value);}} />}
     {error && <p role="alert" className="mt-2 text-sm text-red-600">{error}</p>}
   </section>;
 }

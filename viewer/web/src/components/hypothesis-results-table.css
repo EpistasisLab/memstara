@@ -1,0 +1,24 @@
+.hypothesis-comparison{margin:16px 0;border:1px solid rgb(var(--line));border-radius:14px;background:rgb(var(--panel));min-width:0;overflow:hidden;color:rgb(var(--ink))}
+.hypothesis-comparison-toggle{display:flex;align-items:center;gap:12px;width:100%;padding:16px 20px;text-align:left;background:transparent;cursor:pointer}
+.hypothesis-comparison-toggle>span:first-of-type{display:grid;gap:3px;flex:1}
+.hypothesis-comparison-toggle strong{font-size:14px;font-weight:600}
+.hypothesis-comparison-toggle small,.hypothesis-comparison-count{font-size:12px;opacity:.65}
+.hypothesis-comparison-count{white-space:nowrap}
+.hypothesis-comparison button:focus-visible,.hypothesis-comparison-scroll:focus-visible{outline:2px solid currentColor;outline-offset:-3px}
+.hypothesis-comparison-toggle:hover{background:rgba(128,128,128,.06)}
+.hypothesis-comparison-body>header{padding:20px;border-top:1px solid rgb(var(--line))}
+.hypothesis-comparison-body>header h3{font-size:15px;margin:0 0 6px}
+.hypothesis-comparison-body>header button{min-height:38px;font-size:12px;border-radius:8px}
+.hypothesis-comparison-scroll{max-height:460px;overflow:auto;overscroll-behavior:contain}
+.hypothesis-comparison table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
+.hypothesis-comparison thead{position:sticky;top:0;z-index:1;background:rgb(var(--panel))}
+.hypothesis-comparison th{padding:13px 16px;white-space:nowrap;border-bottom:1px solid rgb(var(--line));font-weight:600;text-align:right}
+.hypothesis-comparison td{padding:15px 16px!important;border-bottom:1px solid rgb(var(--line));text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.hypothesis-comparison th:nth-child(-n+2),.hypothesis-comparison td:nth-child(-n+2),.hypothesis-comparison th:nth-child(6),.hypothesis-comparison td:nth-child(6){text-align:left}
+.hypothesis-comparison td:first-child{min-width:180px;max-width:260px;white-space:normal;line-height:1.5;font-weight:600}
+.hypothesis-comparison td:nth-child(7){font-weight:700;background:rgba(128,128,128,.05)}
+.hypothesis-comparison tbody tr:hover{background:rgba(128,128,128,.05)}
+.hypothesis-run-label{display:block;max-width:160px;overflow:hidden;text-overflow:ellipsis}
+.hypothesis-comparison td:nth-child(6){min-width:240px;max-width:360px;white-space:normal;overflow-wrap:anywhere;line-height:1.6}
+.hypothesis-comparison-footnote,.hypothesis-comparison-empty{padding:14px 20px;font-size:12px;line-height:1.6;opacity:.7;margin:0}
+@media(max-width:640px){.hypothesis-comparison-toggle{padding:14px;gap:8px}.hypothesis-comparison-count{display:none}.hypothesis-comparison-body>header{padding:14px}.hypothesis-comparison td,.hypothesis-comparison th{padding:12px!important}}

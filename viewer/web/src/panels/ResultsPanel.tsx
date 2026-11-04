@@ -13,6 +13,7 @@ import Panel from "../components/Panel";
 import { useBoard, useResults, useViewer, useSnapshot } from "../store/viewer";
 import { newestResult, unreadResults, useResultNotices } from '../store/resultNotices';
 import { useResultsReadReceipt } from '../lib/useResultsReadReceipt';
+import HypothesisResultsTable from '../components/HypothesisResultsTable';
 
 const resultKey = (result: Result) => `${result.run_tag || ''}:${result.result_id}`;
 
@@ -111,6 +112,7 @@ export default function ResultsPanel({ telemetry = false, embedded = false }: { 
               useResultNotices.getState().acknowledge(results);
             }}>View latest results</button>
           </div>}
+          <HypothesisResultsTable results={results} runTag={scope==='selected'?savedTag:null}/>
           <label className="analysis-select-label">Analysis
             <select aria-label="Analysis to inspect" value={activeResult ? resultKey(activeResult) : ''} onChange={e => chooseResult(e.target.value)}>
               {results.map(r => <option key={resultKey(r)} value={resultKey(r)}>{resultName(r)}</option>)}

@@ -347,7 +347,40 @@ def register(value):
 
 
 def list_inputs():
-    return [json.loads(p.read_text()) for p in sorted(registry_root().glob("*.json"))]
+    return [current_availability(json.loads(p.read_text())) for p in sorted(registry_root().glob("*.json"))]
+
+
+def current_availability(record):
+    """Check current source access; historical inspection is not current readiness.
+
+    Never alter persisted records or infer replacement files by filename.
+    Full content/fingerprint validation remains mandatory in prepare().
+    """
+    configuration = record.get("configuration", {})
+    issues = []
+    for field, required, directory in (
+        ("dataset_path", configuration.get("data_mode", "dataset") == "dataset", False),
+        ("knowledge_path", configuration.get("knowledge_mode", "okf") == "okf", True),
+    ):
+        if not required:
+            continue
+        value = configuration.get(field, "")
+        path = Path(value).expanduser()
+        try:
+            available = bool(value) and (
+                path.is_dir() and os.access(path, os.R_OK | os.X_OK) if directory
+                else path.suffix.lower() == ".csv" and path.is_file() and os.access(path, os.R_OK)
+            )
+        except OSError:
+            available = False
+        if not available:
+            label = "Knowledge folder" if directory else "CSV file"
+            issues.append({"code": "source_unavailable", "message":
+                f"{label} is unavailable to this server. Review the saved data location or upload it again."})
+    if not issues:
+        return record
+    return {**record, "input_checks_passed": False, "execution_ready": False,
+            "issues": issues + list(record.get("issues") or [])}
 
 
 def load(identifier):
