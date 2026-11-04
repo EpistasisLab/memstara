@@ -201,3 +201,6 @@ Do not speculate beyond the available evidence.
 ## Technical Observations
 - [Observation 1]
 - [Observation 2]
+
+## Interpretation Style
+Keep the interpretation as concise as possible while preserving the required sections, essential results, and limitations. Avoid repetition and unnecessary background explanation.
