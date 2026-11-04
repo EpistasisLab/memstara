@@ -24,6 +24,7 @@ BACKLOG.md
 scripts/backlog_to_issues.py
 docs/*
 !docs/development_release_workflow.md
+!docs/shared-study-deployments.md
 daily_log/
 papers/
 .DS_Store

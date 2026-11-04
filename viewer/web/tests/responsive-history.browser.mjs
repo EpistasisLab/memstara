@@ -10,7 +10,9 @@ try{for(const [width,height] of [[390,500],[768,700],[1440,900]]){
  await page.goto(root+'/tests/responsive-history.fixture.html');
  const list=page.getByRole('navigation',{name:'Recorded agent outputs'});
  await expect(list.getByRole('button')).toHaveCount(80);
- const last=list.getByRole('button').last();await last.focus();await page.keyboard.press('Enter');
+ // Wait for the initial lazy document and selection effect before keyboard input.
+ await expect(page.locator('.agent-reader-body h1')).toHaveText('Output 79');
+ const last=list.getByRole('button').last();await last.focus();await expect(last).toBeFocused();await last.press('Enter');
  await expect(page.locator('.agent-reader-body h1')).toHaveText('Output 0');
  await page.getByRole('button',{name:'Go to latest output'}).click();
  await expect(page.locator('.agent-reader-body h1')).toHaveText('Output 79');

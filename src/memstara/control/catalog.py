@@ -352,7 +352,9 @@ def delete_user_skill(name: str) -> dict:
     """Delete one persisted user skill; bundled and shared skills are immutable."""
     import fcntl
 
-    if not isinstance(name, str) or not re.fullmatch(r"user-(hypothesis|data|ml|interpreter|report)-[a-zA-Z0-9_-]+", name):
+    if not isinstance(name, str) or not re.fullmatch(
+        r"user-(hypothesis|data|ml|interpreter|report)-[a-zA-Z0-9_-]+", name
+    ):
         raise ValueError("Only saved custom skills can be deleted")
     directory = user_dir()
     path = directory / f"{name}.json"

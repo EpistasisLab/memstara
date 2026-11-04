@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
 try {
  const page=await browser.newPage({viewport:{width:1400,height:1000}});
- const catalog=[['hypothesis_general','hypothesis'],['random_features','hypothesis'],...corpusSkillBindings.profiles.hiv.hypothesis.slice(0,3).map(id=>[id,'hypothesis']),...corpusSkillBindings.profiles.heart_failure.hypothesis.slice(0,3).map(id=>[id,'hypothesis']),['data_training_heavy','data'],['ml_logistic_regression','ml'],['ml_xgboost','ml'],['shared-shap','interpreter'],['shared-addiction','report'],['shared-hiv','report'],...corpusSkillBindings.profiles.heart_failure.report.filter(id=>!['shared-addiction','shared-hiv'].includes(id)).map(id=>[id,'report'])].map(([id,stage])=>({id,stage,title:id,hash:id,content:'# Fixture',description:'Fixture',source:'fixture'}));
+ const catalog=[['hypothesis_general','hypothesis'],['random_features','hypothesis'],...corpusSkillBindings.profiles.hiv.hypothesis.map(id=>[id,'hypothesis']),...corpusSkillBindings.profiles.heart_failure.hypothesis.map(id=>[id,'hypothesis']),['data_training_heavy','data'],['ml_logistic_regression','ml'],['ml_xgboost','ml'],['shared-shap','interpreter'],['shared-addiction','report'],['shared-hiv','report'],...corpusSkillBindings.profiles.heart_failure.report.filter(id=>!['shared-addiction','shared-hiv'].includes(id)).map(id=>[id,'report'])].map(([id,stage])=>({id,stage,title:id,hash:id,content:'# Fixture',description:'Fixture',source:'fixture'}));
  const inputs=['hiv','heart'].map(id=>({id,input_checks_passed:true,configuration:{name:id,knowledge_mode:'okf',data_mode:'dataset',target:{column:id==='hiv'?'HIV_DETECTABLE':'chronic_heart_failure',description:id+' target',prediction_time:'Before outcome'}}}));
  await page.route('**/control/**',async route=>{
   const path=new URL(route.request().url()).pathname;
@@ -26,7 +26,7 @@ try {
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
  const hivHyp=dialog.getByRole('combobox',{name:'Hypothesis skill',exact:true});
  assert.deepEqual((await hivHyp.locator('option').evaluateAll(options=>options.map(o=>o.value).filter(Boolean))).sort(),corpusSkillBindings.profiles.hiv.hypothesis.filter(id=>id!=='random_features').sort());
- await hivHyp.selectOption('addiction-psychiatric');
+ await hivHyp.selectOption('hiv-psychiatric-or-substance-use');
  await dialog.getByRole('button',{name:'Back',exact:true}).click();
  await dialog.getByText('Change dataset',{exact:false}).click();
  await dialog.getByRole('button',{name:'Use heart',exact:true}).click();
@@ -35,7 +35,7 @@ try {
  const hyp=dialog.getByRole('combobox',{name:'Hypothesis skill',exact:true});
  assert.equal(await hyp.inputValue(),'heart-failure-cardiovascular');
  assert.deepEqual((await hyp.locator('option').evaluateAll(options=>options.map(o=>o.value).filter(Boolean))).sort(),corpusSkillBindings.profiles.heart_failure.hypothesis.filter(id=>id!=='random_features').sort());
- assert.equal(await hyp.locator('option[value="addiction-psychiatric"]').count(),0);
+ for(const id of corpusSkillBindings.profiles.hiv.hypothesis)assert.equal(await hyp.locator(`option[value="${id}"]`).count(),0);
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
  await dialog.getByRole('button',{name:'Next',exact:true}).click();
  await dialog.getByText('Agent-configured selected model',{exact:true}).waitFor();

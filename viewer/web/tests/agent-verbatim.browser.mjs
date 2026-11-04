@@ -33,7 +33,8 @@ try{for(const width of [320,768,1440]){
  const download=await event;let saved='';for await(const chunk of await download.createReadStream())saved+=chunk;
  assert.equal(saved,explanation);
  // Change analyses and inspect two independent agent documents. Neither recorded
- // ML metrics nor a legacy aggregate may leak into this output-only panel.
+ // ML metrics nor a legacy aggregate may leak into the agent documents.
+ // The separate comparison table may show metrics only when expanded.
  const lime='## LIME original\n\nConfusion matrix on test set\n\n| Actual / predicted | 0 | 1 |\n|---|---|---|\n| 0 | 12 | 3 |\n| 1 | 2 | 7 |\n\nAgent research proposal — quoted by the original agent.\n';
  const base={trial:0,perspective:'UNWANTED perspective',hypothesis:'UNWANTED hypothesis',interpretation:'WRONG AGGREGATE',columns_used:['age'],columns_missing:[],importance:{age:.1},y_column:'outcome',auc:.999,model:'lr',okf_concept_ids:[],created_at:'2026-10-27T00:00:00Z'};
  const rows=[{...base,result_id:101,evaluation:{interpretations:[
@@ -53,8 +54,17 @@ try{for(const width of [320,768,1440]){
  await expect(results).toContainText('Agent research proposal — quoted by the original agent.');
  await expect(results).not.toContainText('UNWANTED');
  await expect(results).not.toContainText('WRONG');
- await expect(results).not.toContainText('0.999');
- await expect(results.locator('.assessment-badge,.content-origin,details')).toHaveCount(0);
+ await expect(results.getByRole('article',{name:'Selected interpretation outputs'})).not.toContainText('0.999');
+ await expect(results.locator('[data-interpretation-slot] .assessment-badge,[data-interpretation-slot] .content-origin,[data-interpretation-slot] details')).toHaveCount(0);
+ const comparison=results.getByRole('region',{name:'Hypothesis skill results table',exact:true});
+ const compare= comparison.getByRole('button',{name:/Compare hypothesis results/});
+ await expect(compare).toHaveAttribute('aria-expanded','false');
+ await expect(comparison.locator('table')).toBeHidden();
+ await compare.click();
+ await expect(comparison.locator('table')).toBeVisible();
+ await expect(comparison.locator('table')).toContainText('0.999');
+ await compare.click();
+ await expect(comparison.locator('table')).toBeHidden();
  await select.selectOption('verbatim:102');
  await expect(interpreter).toHaveCount(1);
  await expect(interpreter.getByRole('heading',{name:'Second replicate original'})).toBeVisible();
@@ -62,7 +72,7 @@ try{for(const width of [320,768,1440]){
  await select.selectOption('verbatim:103');
  await expect(interpreter).toHaveCount(0);
  await expect(results).toContainText('This perspective is not yet available.');
- await expect(results).not.toContainText('0.999');
+ await expect(results.locator('[data-interpretation-slot]')).not.toContainText('0.999');
  await select.selectOption('verbatim:101');
  const geometry=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));
  assert(geometry.scroll<=geometry.width+1,JSON.stringify(geometry));
