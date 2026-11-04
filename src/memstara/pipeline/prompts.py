@@ -28,6 +28,10 @@ LEGACY_PLAYBOOKS.update(
 # Temporarily hidden from selection only. Keep files and saved configurations intact.
 HIDDEN_PLAYBOOKS = frozenset(
     {
+        # Superseded by the combined HIV OR-scope skill. Keep both files for
+        # historical saved-run resolution, but do not offer them in new menus.
+        "addiction-psychiatric",
+        "addiction-substance-use",
         "ml_default_logistic_regression",
         "random_features",
         "heart-failure-all",

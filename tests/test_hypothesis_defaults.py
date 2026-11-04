@@ -19,7 +19,7 @@ def choices(hypothesis):
             'ml': [], 'interpreter': ['shared-shap'], 'report': ['shared-heart-failure-cardiovascular']}
 
 
-@pytest.mark.parametrize('scope,expected', [('heart_failure',NEW),('hiv','addiction-substance-use'),('general','hypothesis_general')])
+@pytest.mark.parametrize('scope,expected', [('heart_failure',NEW),('hiv','hiv-psychiatric-or-substance-use'),('general','hypothesis_general')])
 def test_empty_selection_is_saved_and_launched_with_matching_default(monkeypatch, scope, expected):
     from memstara import research_inputs
     index = next((h for h,p in corpus_skills.INDEX_PROFILES.items() if p==scope), 'unknown')

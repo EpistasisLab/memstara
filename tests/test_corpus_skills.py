@@ -18,10 +18,10 @@ def profile(scope):
 
 
 @pytest.mark.parametrize('scope', ['hiv', 'heart_failure'])
-def test_corpus_profiles_have_three_distinct_specialties_and_random(scope):
+def test_corpus_profiles_have_distinct_specialties_and_random(scope):
     assert corpus_profile(profile(scope)) == scope
     selected = PROFILES[scope]['hypothesis']
-    assert len(selected) == (6 if scope == 'heart_failure' else 4) and selected[-1] == 'random_features'
+    assert len(selected) == 6 and selected[-1] == 'random_features'
     validate_skills({'hypothesis': selected, 'report': PROFILES[scope]['report']}, profile(scope))
     for name in [s for s in selected if s not in ('random_features', 'heart-failure-all')]:
         item = next(item for item in catalog() if item['id'] == name)
@@ -64,6 +64,15 @@ def test_profile_binding_uses_actual_index_not_a_study_name_or_target(tmp_path, 
         validate_skills({'hypothesis': PROFILES['hiv']['hypothesis']})
 
 
+def test_hiv_profile_rejects_custom_hypotheses_to_keep_fixed_five(tmp_path, monkeypatch):
+    monkeypatch.setenv('MEMSTARA_USER_SKILLS_DIR', str(tmp_path))
+    from memstara.control.catalog import register
+    custom = register({'stage': 'hypothesis', 'name': 'custom', 'content': '# Custom'})
+    with pytest.raises(ValueError, match='does not match the selected corpus'):
+        validate_skills({'hypothesis': [custom['id']]}, profile('hiv'))
+    validate_skills({'hypothesis': [custom['id']]}, knowledge_mode='llm_only')
+
+
 def test_legacy_explanation_is_readable_but_rejected_for_new_execution():
     for scope in ['hiv', 'heart_failure']:
         assert load_prompt('board/report', playbook='report_general')['system_prompt']
@@ -82,7 +91,7 @@ def test_two_supplied_explanations_are_selectable_across_corpora(scope, wrong, m
     rows = {row['id']: row for row in catalog()}
     reports = PROFILES[scope]['report']
     assert len(reports) == 2
-    assert len(PROFILES[scope]['hypothesis']) * 2 * 2 * 2 * len(reports) == (96 if scope == 'heart_failure' else 64)
+    assert len(PROFILES[scope]['hypothesis']) * 2 * 2 * 2 * len(reports) == 96
     for name in reports:
         assert rows[name]['stage'] == 'report'
         assert rows[name]['content'].strip() in load_prompt('board/report', playbook=name)['system_prompt']

@@ -66,7 +66,7 @@ from urllib.parse import parse_qs, urlsplit
 from memstara.control.workspace import PipelineWorkspace
 from memstara.control.request import build_argv, _MAX_HYPOTHESIS_AGENTS
 from memstara.agent_labels import AGENT_LABELS
-from memstara.control.catalog import catalog, reference_knowledge, register, validate_selection
+from memstara.control.catalog import catalog, delete_user_skill, reference_knowledge, register, validate_selection
 from memstara.env import load_env
 from memstara.logging_setup import new_run_dir
 from memstara.mcp_servers.frontmatter import matches, values_for
@@ -493,6 +493,14 @@ def playbooks() -> dict[str, Any]:
     }
 
 
+def _uses_skill(value: Any, skill_id: str) -> bool:
+    if isinstance(value, dict):
+        return any(_uses_skill(item, skill_id) for item in value.values())
+    if isinstance(value, list):
+        return any(_uses_skill(item, skill_id) for item in value)
+    return isinstance(value, str) and skill_id in {part.strip() for part in value.split(",")}
+
+
 def read_log(run_dir: Path, offset: int) -> dict[str, Any]:
     """One run's console output from `offset` bytes in, capped at `_MAX_LOG`.
 
@@ -854,6 +862,37 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         self._send(404, {"error": f"no route {path}", "routes": _ROUTES})
+
+    def do_DELETE(self) -> None:  # noqa: N802 - the name http.server dispatches on
+        if self._refuse_stranger():
+            return
+        path = urlsplit(self.path).path.rstrip("/")
+        prefix = "/control/playbooks/"
+        if not path.startswith(prefix):
+            self._send(404, {"error": f"no route: DELETE {path}"})
+            return
+        skill_id = path[len(prefix) :]
+        if not skill_id or "/" in skill_id:
+            self._send(400, {"error": "Choose one saved custom skill to delete"})
+            return
+        try:
+            if RUNS.running() or any(item.get("running") for item in WORKSPACE.list()):
+                raise RuntimeError("Stop running pipelines before deleting a custom skill")
+            used_by = [
+                item.get("name", "Saved pipeline")
+                for item in WORKSPACE.items
+                if _uses_skill(item.get("configuration", {}), skill_id)
+            ]
+            if used_by:
+                raise RuntimeError(f"Custom skill is used by saved pipeline: {used_by[0]}")
+            item = delete_user_skill(skill_id)
+            self._send(200, {"deleted": item["id"]})
+        except FileNotFoundError as exc:
+            self._send(404, {"error": str(exc)})
+        except ValueError as exc:
+            self._send(400, {"error": str(exc)})
+        except RuntimeError as exc:
+            self._send(409, {"error": str(exc)})
 
     def do_POST(self) -> None:  # noqa: N802 - the name http.server dispatches on
         if self._refuse_stranger():

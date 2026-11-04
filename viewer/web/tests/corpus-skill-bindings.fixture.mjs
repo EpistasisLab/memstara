@@ -4,9 +4,11 @@ export const corpusSkillBindings={
     "hiv": {
       "label": "HIV / Addiction knowledge corpus",
       "hypothesis": [
-        "addiction-substance-use",
+        "hiv-psychiatric-or-substance-use",
         "addiction-sdoh",
-        "addiction-psychiatric"
+        "hiv-clinical-frailty",
+        "hiv-okf-whole-graph",
+        "hiv-no-knowledge"
       ],
       "report": [
         "shared-heart-failure-cardiovascular",

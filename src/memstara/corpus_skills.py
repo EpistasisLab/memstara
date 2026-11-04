@@ -12,7 +12,14 @@ from pathlib import Path
 PROFILES = {
     "hiv": {
         "label": "HIV / Addiction knowledge corpus",
-        "hypothesis": ["addiction-substance-use", "addiction-sdoh", "addiction-psychiatric", "random_features"],
+        "hypothesis": [
+            "hiv-psychiatric-or-substance-use",
+            "addiction-sdoh",
+            "hiv-clinical-frailty",
+            "hiv-okf-whole-graph",
+            "hiv-no-knowledge",
+            "random_features",
+        ],
         "report": ["shared-heart-failure-cardiovascular", "shared-heart-failure-comorbidity"],
     },
     "heart_failure": {
@@ -96,7 +103,7 @@ def validate_hypotheses(books, profile=None, *, knowledge_mode="okf"):
     # offers the four corpus-specific choices for new known-corpus selections.
     permitted = set(PROFILES[scope]["hypothesis"]) | {"hypothesis_general"}
     for name in books.get("hypothesis", []):
-        if name not in permitted and not name.startswith("user-hypothesis-"):
+        if name not in permitted and not (scope != "hiv" and name.startswith("user-hypothesis-")):
             raise ValueError(
                 f"{name}: Hypothesis skill does not match the selected corpus ({scope}). "
                 "Review Knowledge sources and select a matching skill."

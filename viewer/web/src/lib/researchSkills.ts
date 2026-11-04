@@ -13,9 +13,15 @@ export function setCorpusSkillBindings(value?:Bindings):void {
 export function setResearchCorpusProfile(id:string,profile:string):void {
   bindings.research[id]=profile;
 }
-export function researchSkillProfile(form:Partial<RunRequest>):Profile {
-  const key=form.knowledge_mode==='llm_only'?'general':form.research_input_id
+function researchSkillProfileKey(form:Partial<RunRequest>):string {
+  return form.knowledge_mode==='llm_only'?'general':form.research_input_id
     ?bindings.research[form.research_input_id]??'general':bindings.default;
+}
+export function allowsCustomResearchSkill(stage:string,form:Partial<RunRequest>):boolean {
+  return stage!=='hypothesis'||researchSkillProfileKey(form)!=='hiv';
+}
+export function researchSkillProfile(form:Partial<RunRequest>):Profile {
+  const key=researchSkillProfileKey(form);
   const profile=bindings.profiles[key]??general;
   const reports=profile.report.filter(id=>explanationSkills.includes(id));
   return {...profile,report:reports.length?reports:explanationSkills};
@@ -27,7 +33,7 @@ export function compatibleResearchSkill(skill:{id:string;stage:string},form:Part
   if(id==='random_features'||id==='heart-failure-all')return false;
   if(skill.stage!=='hypothesis')return true;
   // Match server validation: user-authored hypotheses are selectable with every corpus.
-  if(id.startsWith('user-hypothesis-'))return true;
+  if(id.startsWith('user-hypothesis-'))return allowsCustomResearchSkill(skill.stage,form);
   if(bindings.default==='legacy'&&!form.research_input_id&&form.knowledge_mode!=='llm_only'&&form.data_mode!=='proposal')return !id.startsWith('heart-failure-');
   const profile=researchSkillProfile(form);
   return profile[skill.stage].includes(id);

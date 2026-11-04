@@ -1,7 +1,7 @@
 import ExplanationLengthSettings, {explanationLengthError} from './ExplanationLengthSettings';
 import { displayText, skillLabel } from '../lib/displayText';
 import {overridesForSkills} from '../lib/mlOverrides';
-import {compatibleResearchSkill,researchSkillProfile} from '../lib/researchSkills';
+import {allowsCustomResearchSkill,compatibleResearchSkill,researchSkillProfile} from '../lib/researchSkills';
 import {useEffect,useRef,useState} from 'react';
 import {ArrowRight,ArrowLeft,Check,Search,Brain,Database,ChartNoAxesCombined,ScanSearch,Lightbulb} from 'lucide-react';
 import './combinations.css';
@@ -132,7 +132,7 @@ export default function CombinationWizard(){
        </div>
       </details>
      </div>
-     {<div hidden={skillMode!=='custom'}><CustomSkillUpload includeAssistant={false} multiple key={`custom-${activeRole}`} stage={activeRole} disabled={busy||uploading} onBusy={setUploading} onSelect={s=>{setSearch('');toggle(activeRole,s.id,true);}}/></div>}
+     {<div hidden={skillMode!=='custom'}><CustomSkillUpload includeAssistant={false} multiple key={`custom-${activeRole}`} stage={activeRole} disabled={busy||uploading} creationDisabled={!allowsCustomResearchSkill(activeRole,draft)} onBusy={setUploading} onSelect={s=>{setSearch('');toggle(activeRole,s.id,true);}} onDelete={id=>toggle(activeRole,id,false)}/></div>}
      {<div hidden={skillMode!=='ai'} className="comb-ai-section"><HypothesisSkillWizard key={`${activeRole}:${connection?.id || "defaults"}`} stage={activeRole} expanded={skillMode==='ai'} modelConnectionId={connection?.id} multiple disabled={busy||uploading} onBusy={setUploading} onSelect={s=>{setSearch('');toggle(activeRole,s.id,true);}}/></div>}
      </div>
      {activeRole==='hypothesis'&&!selected.hypothesis?.length&&defaultHypothesis&&<p className="comb-review-hint">Default: {skillLabel(defaultHypothesis.id,defaultHypothesis.title)}. Select Next to use this skill.</p>}

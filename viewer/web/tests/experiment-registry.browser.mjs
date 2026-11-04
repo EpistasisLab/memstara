@@ -11,8 +11,10 @@ try{
  await region.getByText('$1.41192',{exact:true}).waitFor();
  await region.getByRole('button',{name:'Inspect',exact:true}).click();
  try{await region.getByRole('button',{name:'Download complete evidence JSON'}).waitFor();}catch(e){console.log('REGION', (await region.innerText()).slice(0,1500), 'ERRORS',errors);throw e;}
- const event=page.waitForEvent('download');await region.getByRole('button',{name:'Download complete evidence JSON'}).click();
- assert.match((await event).suggestedFilename(),/evidence.json$/);
+ const csvEvent=page.waitForEvent('download');await region.getByRole('button',{name:'Download complete evidence CSV'}).click();
+ assert.match((await csvEvent).suggestedFilename(),/complete-evidence.csv$/);
+ const jsonEvent=page.waitForEvent('download');await region.getByRole('button',{name:'Download complete evidence JSON'}).click();
+ assert.match((await jsonEvent).suggestedFilename(),/evidence.json$/);
  for(const width of [1280,390]){await page.setViewportSize({width,height:900});assert.equal(await region.evaluate(e=>e.scrollWidth>e.clientWidth+2),false);}
  assert.deepEqual(errors,[]);console.log('Registry UI: database listing, costs, evidence, download, responsive panel passed.');
 }finally{await browser.close();}

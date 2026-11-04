@@ -57,6 +57,16 @@ def test_changed_skill_creates_a_separate_version(skill_store):
     assert json.loads((skill_store / (second['id'] + '.json')).read_text()) == second
 
 
+def test_only_saved_custom_skills_can_be_deleted(skill_store):
+    item = catalog.register({'stage': 'hypothesis', 'name': 'delete-me', 'content': '# Temporary'})
+    assert catalog.delete_user_skill(item['id'])['id'] == item['id']
+    assert not (skill_store / f"{item['id']}.json").exists()
+    with pytest.raises(FileNotFoundError):
+        catalog.delete_user_skill(item['id'])
+    with pytest.raises(ValueError, match='Only saved custom'):
+        catalog.delete_user_skill('hiv-no-knowledge')
+
+
 @pytest.mark.parametrize('conflicting', [False, True])
 def test_concurrent_registrations_preserve_one_complete_version(skill_store, monkeypatch, conflicting):
     from concurrent.futures import ThreadPoolExecutor
