@@ -12,6 +12,10 @@ def startup(tmp_path):
     root = Path(__file__).resolve().parents[1]
     shutil.copyfile(root / "start.sh", tmp_path / "start.sh")
     (tmp_path / ".env").write_text("# synthetic settings\n")
+    auth = tmp_path / '.memstara/web-auth'
+    auth.mkdir(parents=True)
+    (auth/'htpasswd').write_text('synthetic:unused\n')
+    (auth/'client.json').write_text('{"username":"synthetic","password":"unused"}')
     deployment = tmp_path / "deployment"
     deployment.mkdir()
     (deployment / "reset-execution-history.py").write_text("# fake cleanup\n")

@@ -45,6 +45,13 @@ elif [ "$#" -ne 0 ]; then
     echo "Usage: ./start.sh [--reset-execution-history]" >&2
     exit 2
 fi
+# Browser authentication is required for static pages and both proxied APIs.
+# Credentials stay in the ignored installation directory, outside image layers.
+# Configure once (or rotate) with: python3 deployment/setup-web-auth.py
+if [ ! -f .memstara/web-auth/htpasswd ] || [ ! -f .memstara/web-auth/client.json ]; then
+    echo "Configure browser login first: python3 deployment/setup-web-auth.py" >&2
+    exit 1
+fi
 if [ "$reset_execution_history" = true ]; then
     # Reset is for an existing installation, not first-time provisioning.
     # Validate these prerequisites before creating defaults or stopping services.
