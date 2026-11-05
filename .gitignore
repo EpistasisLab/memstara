@@ -25,6 +25,18 @@ scripts/backlog_to_issues.py
 docs/*
 !docs/development_release_workflow.md
 !docs/shared-study-deployments.md
+# Share authored skill proposals and implementation notes, not local study reports.
+!docs/skill-drafts/
+docs/skill-drafts/*
+!docs/skill-drafts/hiv-medication-treatment-pathways.md
+!docs/skill-drafts/hiv-shared-symptom-patterns.md
+!docs/skill-drafts/hiv-okf-whole-graph-csv-guided-v2.md
+!docs/skill-drafts/hiv-anemia-associated-findings.md
+!docs/skill-drafts/hiv-model-knowledge-with-graph-augmentation.md
+!docs/skill-drafts/hiv-integrated-clinical-knowledge.md
+!docs/skill-drafts/hiv-complication-linked-pathways.md
+!docs/hiv_hypothesis_skill_overview_EN.md
+!docs/pipeline_stop_diagnostics_20261105_EN.md
 daily_log/
 papers/
 .DS_Store
