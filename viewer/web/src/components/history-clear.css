@@ -1,0 +1,24 @@
+.history-clear-trigger{display:inline-flex;align-items:center;gap:5px;align-self:center;min-height:34px;padding:6px 8px;border:1px solid rgb(var(--line));border-radius:7px;color:rgb(var(--ink-soft));font-size:11px;white-space:nowrap;background:rgb(var(--panel));}
+.history-clear-trigger:hover{color:rgb(var(--ink));border-color:rgb(var(--ink-soft));}
+.history-clear-dialog{width:min(570px,calc(100vw - 24px));max-height:calc(100dvh - 32px);margin:auto;padding:22px;overflow:auto;border:1px solid rgb(var(--line));border-radius:14px;background:rgb(var(--panel));color:rgb(var(--ink));box-sizing:border-box;}
+.history-clear-dialog::backdrop{background:#0008;}
+.history-clear-dialog header,.history-clear-dialog footer{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.history-clear-dialog h2{font-size:17px;font-weight:650;}
+.history-clear-dialog header button{padding:8px;}
+.history-clear-dialog p{font-size:13px;line-height:1.6;margin:12px 0;overflow-wrap:anywhere;}
+.history-clear-dialog fieldset{border:1px solid rgb(var(--line));padding:12px;border-radius:9px;}
+.history-clear-dialog legend{font-size:12px;padding:0 5px;}
+.history-clear-dialog fieldset label{display:flex;align-items:flex-start;gap:9px;padding:9px 0;cursor:pointer;font-size:13px;}
+.history-clear-dialog input[type=radio]{margin-top:4px;flex-shrink:0;}
+.history-clear-dialog small{display:block;font-size:12px;line-height:1.5;margin-top:3px;color:rgb(var(--ink-soft));}
+.history-clear-confirm{display:block;font-size:13px;line-height:1.7;}
+.history-clear-confirm input{display:block;width:100%;box-sizing:border-box;padding:9px;border:1px solid rgb(var(--line));border-radius:6px;background:rgb(var(--paper));color:rgb(var(--ink));margin:6px 0 16px;}
+.history-clear-dialog footer{justify-content:flex-end;flex-wrap:wrap;}
+.history-clear-dialog footer button,.history-clear-dialog .history-clear-primary{font-size:12px;min-height:36px;padding:8px 12px;border:1px solid rgb(var(--line));border-radius:6px;}
+.history-clear-dialog .history-clear-primary{background:rgb(var(--ink));color:rgb(var(--panel));}
+.history-clear-dialog button:disabled{opacity:.4;cursor:not-allowed;}
+.history-clear-dialog [role=alert]{padding:10px;border:1px solid #c65c5c;border-radius:6px;}
+.history-clear-backup{display:flex;gap:8px;align-items:flex-start;}
+.history-clear-backup code{overflow-wrap:anywhere;}
+.history-clear-dialog a{text-decoration:underline;}
+@media(max-width:600px){.history-clear-dialog{padding:16px}.history-clear-trigger{font-size:11px;padding:6px}.history-clear-dialog footer button{flex:1}}

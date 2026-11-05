@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Activity, ArrowUpRight, ChevronDown } from 'lucide-react';
 import { usePipelines } from '../../store/pipelines';
 import { useLiveOutputs, type OutputEvent } from '../../store/liveOutputs';
+import { liveOutputScope } from '../../lib/liveOutputScope';
 import './live-outputs.css';
 const labels:Record<string,string>={question:'Question',hypothesis:'Hypothesis',data:'Data',ml:'ML',interpretation:'Interpretation',report:'Explanation',result:'Finding'};
 export default function LiveOutputDock({ clinical=false, compact=false, open }: { clinical?:boolean; compact?:boolean; open?:(event:OutputEvent)=>void }) {
@@ -14,7 +15,12 @@ export default function LiveOutputDock({ clinical=false, compact=false, open }: 
   const pipelinesLoaded=usePipelines(s=>s.loaded);
   const runningCount=pipelines.filter(p=>p.running).length;
   const [pipeline,setPipeline]=useState('all');const [expanded,setExpanded]=useState(false);
-  const events=live.events.filter(e=>(pipeline==='all'||e.run_tag===pipeline)&&(!clinical||['result','interpretation','report'].includes(e.stage)));
+  const heads = pipelines.flatMap(p => (p.running ?? p.latest)?.run_tag ? [(p.running ?? p.latest)!.run_tag] : []);
+  const scope = liveOutputScope(pipeline==='all'?heads:[pipeline], live.tags, live.continuationGroups);
+  // The request is workspace-wide; verify freshness against all heads first.
+  if(pipeline!=='all'&&live.tags===[...new Set(heads)].sort().join(','))
+    for(const tag of live.continuationGroups[pipeline]??[])scope.add(tag);
+  const events=live.events.filter(e=>scope.has(e.run_tag)&&(!clinical||['result','interpretation','report'].includes(e.stage)));
   if(compact){
     const groups=new Map<string,{name:string;state:string;events:OutputEvent[]}>();
     pipelines.forEach(p=>{const tag=(p.running??p.latest)?.run_tag;if(tag)groups.set(tag,{name:p.name,state:`${p.running?(p.progress.stage||'Running'):'Not running'}${p.progress.iteration!=null?` · ${pipelineLoopLabel(p)}`:''}`,events:[]});});

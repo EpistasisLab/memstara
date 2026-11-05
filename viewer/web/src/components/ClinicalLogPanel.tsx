@@ -7,6 +7,7 @@ import {floorActivityRows, floorExecutionState, type FloorActivity} from '../lib
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { MessageSquareText, ArrowDown } from 'lucide-react';
 import { useLiveOutputs } from '../store/liveOutputs';
+import { liveOutputScope } from '../lib/liveOutputScope';
 import { usePipelines, type PipelineDefinition } from '../store/pipelines';
 import { clinicalEventText, clinicalPipelineStatus, clinicalRoles, scopedClinicalEvents } from '../lib/clinicalLog';
 import ActivityDetails, { type ActivityScope } from './ActivityDetails';
@@ -46,7 +47,8 @@ function ClinicalLogBody({pipelines, live, pipelineError, floorActivity}: {
   const [detail, setDetail] = useState<ActivityScope | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 3000); return () => clearInterval(timer); }, []);
-  const events = scopedClinicalEvents(live.events, pipelines).filter(e => !floorActivity || (e.run_tag === floorActivity.runTag && e.iteration === floorActivity.loop));
+  const heads = pipelines.flatMap(p => (p.running ?? p.latest)?.run_tag ? [(p.running ?? p.latest)!.run_tag] : []);
+  const events = scopedClinicalEvents(live.events, pipelines, liveOutputScope(heads, live.tags, live.continuationGroups)).filter(e => !floorActivity || (e.run_tag === floorActivity.runTag && e.iteration === floorActivity.loop));
   const owner = pipelines.find(p=>p.id===floorActivity?.pipelineId);
   const last = events.at(-1);
   const lastKey = last ? `${last.id}:${last.revision}` : '';

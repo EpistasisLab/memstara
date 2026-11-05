@@ -71,3 +71,24 @@ test('only completed records appear, including all analyses and branches',()=>{
  assert.deepEqual(updated.filter(t=>tileComplete(t,'report')).map(t=>t.loop),[1]);
  assert.equal(updated[0].results[0].interpretation,'complete');
 });
+
+test('all three tile views include 28 prior and 4 continued pipelines with original ownership',()=>{
+ const s=snapshot();
+ s.report.run_tags=['original','selected'];
+ s.results=Array.from({length:32},(_,i)=>({result_id:i+1,trial:i,iteration:i+1,
+  run_tag:i<28?'original':'selected',interpretation:`Original interpretation ${i+1}`}));
+ s.results.push({result_id:999,trial:0,run_tag:'unrelated',interpretation:'Must stay excluded'});
+ s.report.explanation_outputs=s.results.map(r=>({loop:r.iteration??1,result_id:r.result_id,
+  run_tag:r.run_tag,text:`Explanation ${r.result_id}`,status:'completed'}));
+ const usage={run_tag:'selected',run_tags:['original','selected'],loops:Array.from({length:32},(_,i)=>({
+  number:i+1,status:'completed',tokens:100+i,run_tags:[i<28?'original':'selected']}))};
+ const tiles=executionTiles(s,usage);
+ for(const view of ['results','report','agents'])assert.equal(tiles.filter(t=>tileComplete(t,view)).length,32,view);
+ assert.equal(tiles.flatMap(t=>t.results).length,32);
+ assert.equal(tiles.flatMap(t=>t.explanations).length,32);
+ assert.equal(tiles.find(t=>t.loop===1).record_run_tag,'original');
+ assert.equal(tiles.find(t=>t.loop===29).record_run_tag,'selected');
+ assert.equal(tiles.find(t=>t.loop===1).results[0].run_tag,'original');
+ const fresh={...s,report:{explanation_outputs:[]},results:s.results.filter(r=>r.run_tag==='original')};
+ assert.equal(executionTiles(fresh).flatMap(t=>t.results).length,0);
+});

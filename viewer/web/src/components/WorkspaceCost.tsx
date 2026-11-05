@@ -5,6 +5,7 @@ import { useViewer } from '../store/viewer';
 import { costLabel } from '../lib/loopUsage';
 import type { WorkspaceCostState } from '../lib/useWorkspaceCost';
 import './workspace-cost.css';
+import HistoryClearButton from './HistoryClearButton';
 
 export default function WorkspaceCost({state}: {state: WorkspaceCostState}) {
   const pipelines = usePipelines(s => s.items);
@@ -34,21 +35,22 @@ export default function WorkspaceCost({state}: {state: WorkspaceCostState}) {
 
   // Inline scope and pricing explanations replace the automatic hover tooltip here.
   return <div className="workspace-cost" data-context-help-managed>
+    <HistoryClearButton/>
     <button ref={trigger} type="button" className="workspace-cost-trigger" popoverTarget={id}
       aria-haspopup="dialog" aria-controls={id} aria-expanded={open}
       aria-describedby={`${id}-amount ${id}-scope`}
       aria-label="Estimated total. Show pipeline cost breakdown">
       <span className="workspace-cost-heading"><span>Estimated total</span><strong id={`${id}-amount`}>{value}</strong><ChevronDown size={13} aria-hidden="true"/></span>
-      <span id={`${id}-scope`} className="workspace-cost-scope">Latest executions · USD{status && <span className={delayed || partial ? 'cost-notice' : ''}>{status}</span>}</span>
+      <span id={`${id}-scope`} className="workspace-cost-scope">Experiment totals · USD{status && <span className={delayed || partial ? 'cost-notice' : ''}>{status}</span>}</span>
     </button>
     <div ref={panel} id={id} popover="auto" role="dialog" aria-labelledby={`${id}-title`}
       className="workspace-cost-popover" onBeforeToggle={event => { if (event.newState === 'open') place(); }}
       onToggle={event => setOpen(event.newState === 'open')}>
       <header><h2 id={`${id}-title`}>Pipeline costs</h2><button type="button" popoverTarget={id} popoverTargetAction="hide" aria-label="Close pipeline costs"><X size={16}/></button></header>
-      <p>Latest execution of each pipeline.</p>
+      <p>Latest experiment of each pipeline, including all continued executions and failed attempts.</p>
       {(delayed || partial) && <p className="workspace-cost-notice" role="status">{description}</p>}
       <div className="workspace-cost-rows">
-        <table><caption className="sr-only">Estimated costs in USD for the latest executions</caption>
+        <table><caption className="sr-only">Estimated costs in USD including continued executions</caption>
           <thead><tr><th scope="col">Pipeline</th><th scope="col">Estimated cost</th></tr></thead>
           <tbody>{pipelines.map(pipeline => {
             const execution = cost?.executions.find(item => item.run_tag === pipeline.latest?.run_tag);

@@ -31,7 +31,7 @@ export default function ReportPanel() {
   const pipelineReport = reports.find(r=>`${tag}:${r.number}`===outputKey)??reports[0];
   const recordedReplicates = pipelineReport?new Set(pipelineReport.outputs.map(o=>o.replicate_number??o.loop)).size:0;
   const usage = useTelemetryTotals();
-  const execution = usage.data?.executions.find(e => e.run_tag === tag);
+  const execution = (usage.data?.experiments??usage.data?.executions)?.find(e => e.run_tag === tag);
   const loading = !!requested && requested !== tag;
   const download = () => {
     if (!pipelineReport?.outputs.length || !tag || loading) return;
@@ -75,7 +75,7 @@ export default function ReportPanel() {
         {pipelineReport ? <div data-report-content>
           <p className="my-3 text-sm text-ink-soft">{recordedReplicates} {recordedReplicates===1?'replicate':'replicates'} with saved explanations{pipelineReport.expected?` / ${pipelineReport.expected} scheduled`:''}. Each replicate retains its own hypothesis and findings.</p>
           {pipelineReport.outputs.map(o=><section key={`${o.loop}:${o.result_id}`} className="border-t border-paper-line py-5">
-            <h3 className="mb-3 font-semibold">{labelLoop({...o,iteration:o.loop,run_tag:tag})}{o.result_id==null?'':` · Result ${o.result_id}`} · {o.status}</h3>
+            <h3 className="mb-3 font-semibold">{labelLoop({...o,iteration:o.loop,run_tag:o.run_tag??tag})}{o.result_id==null?'':` · Result ${o.result_id}`} · {o.status}</h3>
             <Suspense fallback={<p>Loading report…</p>}><ReportBody verbatim text={o.text}/></Suspense>
           </section>)}
         </div> : <p className="py-8 text-sm text-ink-soft">{tag ? 'No Explanation output has been saved for this execution yet.' : 'Choose a pipeline with saved output to read its conclusions.'}</p>}

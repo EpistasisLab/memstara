@@ -28,6 +28,7 @@ export interface Skill {
 }
 
 export interface RunningRun {
+  report_recovered?: boolean;
   recoverable?: boolean;
   recovery_blocked?: string;
   connection_health?: {state: string; at: string; consecutive_failures?: number};

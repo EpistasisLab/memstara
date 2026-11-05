@@ -26,6 +26,13 @@ export interface HypothesisSummaryRow {
   falseNegative: number | null;
   truePositive: number | null;
   hypothesis: string;
+  resultUid: string;
+  pipelineNumber: number | null;
+  replicateNumber: number | null;
+  interpretationOutputIds: string[];
+  explanationOutputIds: string[];
+  interpretationStatus: string;
+  explanationStatus: string;
 }
 
 const object = (value: unknown): UnknownRecord => value && typeof value === 'object' && !Array.isArray(value) ? value as UnknownRecord : {};
@@ -75,6 +82,10 @@ export function hypothesisSummaryRows(results: readonly unknown[]): HypothesisSu
         falseNegative: number(matrix.fn) ?? number(point.false_negative),
         truePositive: number(matrix.tp) ?? number(point.true_positive),
         hypothesis: text(result.hypothesis),
+        resultUid: text(result.result_uid), pipelineNumber: number(result.pipeline_number), replicateNumber: number(result.replicate_number),
+        interpretationOutputIds: Array.isArray(result.interpretation_output_ids)?result.interpretation_output_ids.map(text).filter(Boolean):[],
+        explanationOutputIds: Array.isArray(result.explanation_output_ids)?result.explanation_output_ids.map(text).filter(Boolean):[],
+        interpretationStatus: text(result.interpretation_status)||'not_loaded', explanationStatus: text(result.explanation_status)||'not_loaded',
       };
     });
   });
@@ -98,6 +109,9 @@ export function hypothesisSummaryCsv(rows: readonly HypothesisSummaryRow[]): str
     ['Average Precision','averagePrecision'],['F1','f1'],['Threshold','threshold'],['Sensitivity','sensitivity'],
     ['Specificity','specificity'],['Precision','precision'],['TN','trueNegative'],['FP','falsePositive'],['FN','falseNegative'],
     ['TP','truePositive'],['Hypothesis','hypothesis'],
+    ['result_uid','resultUid'],['Pipeline Number','pipelineNumber'],['Schedule Replicate','replicateNumber'],
+    ['interpretation_output_ids','interpretationOutputIds'],['explanation_output_ids','explanationOutputIds'],
+    ['interpretation_status','interpretationStatus'],['explanation_status','explanationStatus'],
   ];
-  return '\uFEFF' + [fields.map(([label])=>quote(label)).join(','), ...rows.map(row=>fields.map(([,key])=>quote(row[key])).join(','))].join('\r\n') + '\r\n';
+  return '\uFEFF' + [fields.map(([label])=>quote(label)).join(','), ...rows.map(row=>fields.map(([,key])=>quote(Array.isArray(row[key])?JSON.stringify(row[key]):row[key])).join(','))].join('\r\n') + '\r\n';
 }

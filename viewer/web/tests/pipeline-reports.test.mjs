@@ -31,3 +31,17 @@ test('download preserves exact single narrative including fences, labels and whi
  const text='  ```markdown\n| Confidence | Robustness |\n|---|---|\n| shared-shap | 0.5 |\n```\n';
  assert.equal(pipelineReportMarkdown({outputs:[{text}]}),text);
 });
+
+test('continued reports retain original hypotheses and ignore unrelated executions',()=>{
+ const plan={combinations:2,repetitions:1,total_loops:2};
+ const outputs=[{loop:1,result_id:1,run_tag:'old',text:'Original old text',status:'completed'},
+  {loop:2,result_id:2,run_tag:'retry',text:'Original new text',status:'completed'}];
+ const findings=[{run_tag:'unrelated',trial:0,result_id:99,hypothesis:'Wrong title'},
+  {run_tag:'old',trial:0,result_id:1,hypothesis:'First hypothesis'},
+  {run_tag:'retry',trial:1,result_id:2,hypothesis:'Second hypothesis'}];
+ const reports=pipelineReports(outputs,findings,'retry',plan);
+ assert.equal(reports[0].title,'Pipeline 1 · First hypothesis');
+ assert.equal(reports[0].outputs[0].run_tag,'old');
+ assert.equal(pipelineReportMarkdown(reports[0]),'Original old text');
+ assert.equal(reports[1].title,'Pipeline 2 · Second hypothesis');
+});

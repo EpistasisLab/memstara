@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Activity } from 'lucide-react';
 import { usePipelines } from '../store/pipelines';
 import { useLiveOutputs } from '../store/liveOutputs';
+import { liveOutputScope } from '../lib/liveOutputScope';
 
 /** Reuse existing polling stores; do not add a second status request stream. */
 export default function HeaderStatus({onOpen}: {onOpen: () => void}) {
@@ -14,7 +15,8 @@ export default function HeaderStatus({onOpen}: {onOpen: () => void}) {
   const tags = [...new Set(items.flatMap(p => p.latest ? [p.latest.run_tag] : []))].sort();
   const stale = !!error || (tags.length > 0 && (!!live.error || live.tags !== tags.join(',') || !live.updatedAt || now - Date.parse(live.updatedAt) > 15000));
   const running = items.filter(p => p.running && (!('execution_state' in p.running) || p.running.execution_state !== 'paused')).length;
-  const results = live.results.filter(r => r.run_tag && tags.includes(r.run_tag)).length;
+  const scope = liveOutputScope(tags, live.tags, live.continuationGroups);
+  const results = live.results.filter(r => r.run_tag && scope.has(r.run_tag)).length;
   const label = stale ? 'Updates delayed' : !loaded ? 'Connecting…' : running ? `${running} running` : 'No pipelines running';
   return <button className={`topbar-live-status ${stale ? 'is-delayed' : ''}`} onClick={onOpen}
     aria-label={`${label}. Open workspace summary`} title="Current workspace status. Open Workspace summary for details and data freshness.">

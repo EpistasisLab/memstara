@@ -1,7 +1,7 @@
 import {useLoopLabel} from '../lib/useLoopLabel';
 import {useEffect,useState} from 'react';
 import {costLabel} from '../lib/loopUsage';
-type Row={id:string;stage:string;loop:number|null;model:string;provider:string;usd:number|null;source:string;reason:string|null;prompt_tokens:number|null;completion_tokens:number|null;cache_read_input_tokens:number|null;cache_creation_input_tokens:number|null};
+type Row={run_tag?:string;id:string;stage:string;loop:number|null;model:string;provider:string;usd:number|null;source:string;reason:string|null;prompt_tokens:number|null;completion_tokens:number|null;cache_read_input_tokens:number|null;cache_creation_input_tokens:number|null};
 type Evidence={run_tag:string;loop?:number|null;missing_runs?:number;status:string;usd:number;recorded_calls:number;unpriced_calls:number;expected_calls:number;coverage_note:string;groups:{stage:string;model:string;calls:number;priced_calls:number;usd:number;input_tokens:number;output_tokens:number}[];records:Row[]};
 export default function CostEvidence({runTag,loop=null,refreshRevision=0}:{runTag:string|null;loop?:number|null;refreshRevision?:number}){
  const labelReplicate=useLoopLabel();
@@ -9,7 +9,7 @@ export default function CostEvidence({runTag,loop=null,refreshRevision=0}:{runTa
  useEffect(()=>{let disposed=false;let timer:ReturnType<typeof setTimeout>;let controller:AbortController;
  setError('');
  const poll=async()=>{controller=new AbortController();const deadline=setTimeout(()=>controller.abort(),6000);
- try{const paths=runTag?[`/api/cost-details?run_tag=${encodeURIComponent(runTag)}${loop===null?'':`&loop=${loop}`}`]:[];
+ try{const paths=runTag?[`/api/cost-details?include_continuations=true&run_tag=${encodeURIComponent(runTag)}${loop===null?'':`&loop=${loop}`}`]:[];
  const values=await Promise.all(paths.map(async path=>{const r=await fetch(path,{signal:controller.signal});if(!r.ok)throw Error('Cost evidence could not be refreshed');return r.json();}));
  if(!disposed){setData(values[0]??null);setError('');}}
  catch{if(!disposed)setError('Cost evidence could not be refreshed. Any displayed values are the last retrieved snapshot.');}
@@ -32,7 +32,7 @@ export default function CostEvidence({runTag,loop=null,refreshRevision=0}:{runTa
  {current.records.length===0&&<p>No persisted Motoro call-cost records are available for this execution. No local estimates are substituted.</p>}
  {current.groups.length>0&&<div className="overflow-x-auto"><table className="w-full text-left text-sm"><caption className="text-left">Recorded LLM requests by agent and model</caption><thead><tr>{['Agent','Model','Priced / recorded requests','Input / output tokens','Estimated USD'].map(h=><th className="p-2" key={h}>{h}</th>)}</tr></thead><tbody>{current.groups.map(g=><tr key={`${g.stage}/${g.model}`}><td className="p-2">{g.stage}</td><td className="p-2 break-all">{g.model}</td><td className="p-2">{g.priced_calls} / {g.calls}</td><td className="p-2">{g.input_tokens.toLocaleString()} / {g.output_tokens.toLocaleString()}</td><td className="p-2">{costLabel({usd:g.usd,status:g.priced_calls===g.calls?'complete':'partial'})}</td></tr>)}</tbody></table></div>}
  <details><summary className="cursor-pointer font-bold">Request amounts, token usage and pricing sources</summary>
- {current.records.map(r=><div key={r.id} className="my-2 break-words rounded border border-paper-line p-2 text-sm"><p>{r.stage} · {r.loop==null?'Execution-wide':labelReplicate({iteration:r.loop,run_tag:runTag})} · {r.model} · {r.usd==null?'Unpriced':`USD ${r.usd.toFixed(6)} (estimate)`}</p><p>Input {r.prompt_tokens??'unknown'} · output {r.completion_tokens??'unknown'} · cache reads {r.cache_read_input_tokens??'unknown'} · cache writes {r.cache_creation_input_tokens??'unknown'}</p><p>Motoro pricing source: {r.source??'Not recorded'}. {r.reason}</p>
+ {current.records.map(r=><div key={r.id} className="my-2 break-words rounded border border-paper-line p-2 text-sm"><p>{r.stage} · {r.loop==null?'Execution-wide':labelReplicate({iteration:r.loop,run_tag:runTag})} · {r.model} · {r.usd==null?'Unpriced':`USD ${r.usd.toFixed(6)} (estimate)`}</p><p>{r.run_tag&&`Execution: ${r.run_tag}`}</p><p>Input {r.prompt_tokens??'unknown'} · output {r.completion_tokens??'unknown'} · cache reads {r.cache_read_input_tokens??'unknown'} · cache writes {r.cache_creation_input_tokens??'unknown'}</p><p>Motoro pricing source: {r.source??'Not recorded'}. {r.reason}</p>
 </div>)}</details>
  <button className="rounded border border-paper-line px-3 py-2 text-sm" onClick={download}>Download cost evidence (JSON)</button>
  </>}

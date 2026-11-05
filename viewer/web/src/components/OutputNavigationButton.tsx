@@ -12,7 +12,7 @@ export default function OutputNavigationButton({view, open, active, className}: 
   const runTag = useViewer(state => state.runTag);
   const read = useOutputNotices(state => state.read);
   const totals = useTelemetryTotals(view === 'agents');
-  const usage = totals.data?.executions.find(execution => execution.run_tag === runTag);
+  const usage = (totals.data?.experiments ?? totals.data?.executions)?.find(execution => execution.run_tag === runTag);
   const keys = snapshot?.run_tag === runTag ? outputNoticeKeys(snapshot, usage, view) : [];
   const unread = keys.filter(key => !read[key]);
   const description = useId();

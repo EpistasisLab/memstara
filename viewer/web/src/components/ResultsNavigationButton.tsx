@@ -15,7 +15,7 @@ export default function ResultsNavigationButton({ open, active, className }: {
   const description = useId();
   // A delayed response for another execution must never light up this pipeline's button.
   const results = snapshot?.run_tag === runTag
-    ? snapshot.results.map(result => ({ ...result, run_tag: snapshot.run_tag })) : [];
+    ? snapshot.results.map(result => ({ ...result, run_tag: result.run_tag ?? snapshot.run_tag })) : [];
   const unread = unreadResults(results, read);
   const arrival = `${runTag}:${unread.map(result => result.result_id).sort((a, b) => a - b).join(',')}`;
   return <>

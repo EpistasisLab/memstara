@@ -131,10 +131,13 @@ const RESULT_PATHS = {
 function rowFor(type: string, index: number, record: unknown, detail: JsonObject): Record<string, CsvScalar> {
   const row: Record<string, CsvScalar> = {...context(detail), record_type: type, record_index: index};
   if (isObject(record)) {
-    for (const key of ['result_id', 'task_id', 'trial', 'hypothesis_id', 'hypothesis', 'perspective', 'y_column', 'model', 'interpretation', 'created_at', 'agent_run_id', 'stage', 'started_at', 'duration_seconds', 'path', 'sha256', 'bytes', 'kind'] as const) {
+    for (const key of ['run_tag', 'result_uid', 'result_id', 'task_id', 'trial', 'pipeline_number', 'replicate_number', 'interpretation_status', 'explanation_status', 'hypothesis_id', 'hypothesis', 'perspective', 'y_column', 'model', 'interpretation', 'created_at', 'agent_run_id', 'stage', 'started_at', 'duration_seconds', 'path', 'sha256', 'bytes', 'kind'] as const) {
       if (record[key] !== undefined && !isObject(record[key]) && !Array.isArray(record[key])) row[key] = record[key] as CsvScalar;
     }
     if (type === 'result') {
+      for (const key of ['interpretation_output_ids','explanation_output_ids']) {
+        if (Array.isArray(record[key])) row[key] = json(record[key]);
+      }
       for (const [key, paths] of Object.entries(RESULT_PATHS)) {
         const value = first(record, paths);
         row[key] = Array.isArray(value) || isObject(value) ? json(value) : value as CsvScalar;
@@ -156,17 +159,26 @@ function rowFor(type: string, index: number, record: unknown, detail: JsonObject
  * nested objects/arrays encoded as lossless JSON cells and stable analysis aliases.
  */
 export function evidenceToCsv(detail: JsonObject): string {
-  const executionBase = Object.fromEntries(Object.entries(detail).filter(([key]) => !CHILD_COLLECTIONS.includes(key as typeof CHILD_COLLECTIONS[number])));
-  const rows = [rowFor('execution', 0, executionBase, detail)];
-  for (const collection of CHILD_COLLECTIONS) {
-    const values = Array.isArray(detail[collection]) ? detail[collection] : [];
-    values.forEach((record, index) => rows.push(rowFor(collection.slice(0, -1), index, record, detail)));
+  return evidenceCollectionToCsv([detail]);
+}
+
+/** One header union across continued executions; original run identities survive. */
+export function evidenceCollectionToCsv(details:JsonObject[]):string {
+  const rows:Record<string,CsvScalar>[]=[];
+  for (const detail of details) {
+    const executionBase = Object.fromEntries(Object.entries(detail).filter(([key]) => !CHILD_COLLECTIONS.includes(key as typeof CHILD_COLLECTIONS[number])));
+    rows.push(rowFor('execution', 0, executionBase, detail));
+    for (const collection of CHILD_COLLECTIONS) {
+      const values = Array.isArray(detail[collection]) ? detail[collection] : [];
+      values.forEach((record, index) => rows.push(rowFor(collection.slice(0, -1), index, record, detail)));
+    }
   }
   const preferred = [
     'schema_version', 'record_type', 'record_index', 'run_tag', 'experiment_id', 'combination_id', 'pipeline_id', 'execution_status', 'synced_at',
     'result_id', 'task_id', 'trial', 'hypothesis_id', 'stage', 'agent_run_id', 'agent_skill', 'skills_json', 'model', 'seed_number', 'replicate_seeds',
     'auroc', 'average_precision', 'threshold', 'sensitivity', 'specificity', 'precision', 'f1', 'true_negative', 'false_positive', 'false_negative', 'true_positive',
     'hypothesis', 'perspective', 'y_column', 'interpretation', 'created_at', 'started_at', 'duration_seconds', 'path', 'sha256', 'bytes', 'kind',
+    'result_uid','pipeline_number','replicate_number','interpretation_output_ids','explanation_output_ids','interpretation_status','explanation_status',
   ];
   const keys = new Set(rows.flatMap(row => Object.keys(row)));
   const headers = [...preferred.filter(key => keys.delete(key)), ...[...keys].sort()];

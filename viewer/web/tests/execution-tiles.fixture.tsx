@@ -5,12 +5,14 @@ import ControlPanel from '../src/panels/ControlPanel';
 import ExecutionOutputsPanel from '../src/panels/ExecutionOutputsPanel';
 import {useViewer} from '../src/store/viewer';
 import {usePipelines} from '../src/store/pipelines';
+import {useLiveOutputs} from '../src/store/liveOutputs';
 import type {Snapshot} from '../src/types';
 import '../src/index.css';
 import '../src/readability.css';
 import '../src/workspace-layout.css';
+Object.assign(window,{setOutputOwnerName:(name:string)=>usePipelines.setState(state=>({items:state.items.map(item=>({...item,name}))}))});
 
-Object.assign(window, {deliverOutputs(snapshot: Snapshot, error: string | null = null, requested = snapshot.run_tag) {
+Object.assign(window, {deliverLiveOutputs: (value:Partial<ReturnType<typeof useLiveOutputs.getState>>) => useLiveOutputs.setState(value), deliverOutputs(snapshot: Snapshot, error: string | null = null, requested = snapshot.run_tag) {
   useViewer.setState({snapshot, runTag:requested, error, loading:false, newRunMode:false});
 }});
 usePipelines.setState({loaded:true,selected:'example',items:[{id:'example',number:1,name:'Heart Failure study',latest:{run_tag:'selected'},running:null,progress:{},configuration:{}}] as never});

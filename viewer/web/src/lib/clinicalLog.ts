@@ -14,6 +14,7 @@ const working: Record<string, string> = {
 
 /** Describe recorded execution state; a zero exit code alone is not completion. */
 export function clinicalPipelineStatus(p: PipelineDefinition) {
+  if(p.latest?.report_recovered&&!p.running)return 'All analyses and the final report are complete. Original attempt diagnostics are retained.';
   if (p.failure) return p.failure.message;
   const execution = p.running ?? p.latest;
   if (execution?.infrastructure_status?.status === 'interrupted') return execution.infrastructure_status.message || 'Execution interrupted. Previously saved results are retained.';
@@ -45,7 +46,7 @@ export function clinicalEventText(event: OutputEvent) {
   return messages[event.stage] ?? 'An analysis update was recorded.';
 }
 
-export function scopedClinicalEvents(events: OutputEvent[], pipelines: PipelineDefinition[]) {
-  const tags = new Set(pipelines.map(p => (p.running ?? p.latest)?.run_tag).filter(Boolean));
+export function scopedClinicalEvents(events: OutputEvent[], pipelines: PipelineDefinition[], scope?:Set<string>) {
+  const tags = scope ?? new Set(pipelines.map(p => (p.running ?? p.latest)?.run_tag).filter(Boolean));
   return events.filter(e => tags.has(e.run_tag)).sort((a, b) => a.receivedAt - b.receivedAt);
 }

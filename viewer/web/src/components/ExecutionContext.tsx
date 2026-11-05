@@ -8,7 +8,7 @@ export function useExecutionContext() {
   const items = usePipelines(s => s.items);
   const tag = snapshot?.run_tag ?? null;
   const owner = items.find(p => p.latest?.run_tag === tag);
-  const name = owner?.name || snapshot?.run_configuration?.pipeline_name || 'Archived pipeline';
+  const name = owner?.name || snapshot?.experiment?.name || snapshot?.run_configuration?.pipeline_name || 'Archived pipeline';
   const started = owner?.latest?.started;
   const date = started ? new Date(started) : null;
   const savedDate = tag?.match(/(?:^|_)(\d{4})(\d{2})(\d{2})T/)?.slice(1).join('-');
@@ -34,7 +34,7 @@ export default function ExecutionContext() {
         <p className="text-sm text-ink-soft">{context.tag ? `Execution started ${context.startedLabel} · local time` : 'Start a pipeline to record activity.'}</p></div>
     </div>
     <details className="mt-2 text-xs text-ink-soft"><summary className="cursor-pointer">What records am I viewing?</summary>
-      <p className="mt-2">An execution is one session started with Play. It contains the scheduled Pipelines and their Replicates. These tabs follow the execution shown above. Selecting another pipeline opens its latest execution; this does not start or stop it. Results can also compare pipelines using its own scope buttons.</p>
+      <p className="mt-2">An experiment contains its original scheduled combinations and every explicitly continued execution attempt. Results, Conclusions and Usage include retained outputs from all those attempts. Selecting another experiment does not start or stop it.</p>
       <p className="mt-2">Execution ID: <code>{context.tag || 'None'}</code></p>
     </details>
     {context.loading && <p role="status" className="mt-2 text-sm">Loading the requested execution. Records still shown belong to {context.label}.</p>}

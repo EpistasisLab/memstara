@@ -45,10 +45,11 @@ const descriptions: Record<Tab, string> = {
   Results: 'Review recorded findings and their supporting evidence.',
 };
 
-export default function TelemetryPanel({lockedLoop}: {lockedLoop?: number} = {}) {
+export default function TelemetryPanel({lockedLoop, recordRunTag}: {lockedLoop?: number; recordRunTag?: string} = {}) {
   const labelReplicate=useLoopLabel();
   const totals = useTelemetryTotals();
   const runTag = useViewer(s => s.runTag);
+  const recordTag = recordRunTag ?? runTag;
   const pipelines = usePipelines(s => s.items);
   const selectedPipelineId = usePipelines(s => s.selected);
   const pipelineError = usePipelines(s => s.error?.includes('Pipeline workspace is unavailable') ? s.error : null);
@@ -63,10 +64,10 @@ export default function TelemetryPanel({lockedLoop}: {lockedLoop?: number} = {})
   const [catalog, setCatalog] = useState<{tag: string; loops: Loop[]} | null>(null);
   const [revision, setRevision] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  const key = `${runTag ?? ''}:${loop ?? 'all'}:${tab}`;
+  const key = `${runTag ?? ''}:${recordTag ?? ''}:${loop ?? 'all'}:${tab}`;
   const data = record?.key === key ? record.data : null;
   const error = failure?.key === key ? failure.text : '';
-  const execution = totals.data?.executions.find(e => e.run_tag === runTag);
+  const execution = (totals.data?.experiments ?? totals.data?.executions)?.find(e => e.run_tag === runTag);
   const owner = pipelines.find(p => p.latest?.run_tag === runTag || p.running?.run_tag === runTag);
   const pipeline = owner ?? (!runTag ? pipelines.find(p => p.id === selectedPipelineId) : undefined);
   const choices = execution?.loops.map(l => ({number: l.number, status: l.status ?? 'recorded'}))
@@ -76,7 +77,7 @@ export default function TelemetryPanel({lockedLoop}: {lockedLoop?: number} = {})
   const refresh = () => {totals.refresh(); setRevision(n => n + 1); void usePipelines.getState().poll();};
 
   useEffect(() => {
-    if (!runTag || tab === 'Experiments' || tab === 'Totals') return;
+    if (!recordTag || tab === 'Experiments' || tab === 'Totals') return;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     let request: AbortController | null = null;
@@ -86,16 +87,16 @@ export default function TelemetryPanel({lockedLoop}: {lockedLoop?: number} = {})
       let retryDelay = 4000;
       const deadline = setTimeout(() => request?.abort(), 10000);
       try {
-        const response = await fetch(`/api/telemetry?run_tag=${encodeURIComponent(runTag)}${loop === null ? '' : `&loop=${loop}`}&view=${encodeURIComponent(tab)}`, {signal: request.signal});
+        const response = await fetch(`/api/telemetry?run_tag=${encodeURIComponent(recordTag)}${loop === null ? '' : `&loop=${loop}`}&view=${encodeURIComponent(tab)}`, {signal: request.signal});
         const body = await controlResponse(response);
-        if (response.status === 202 && body.detail?.status === 'loading' && body.detail.run_tag === runTag && body.detail.loop === loop) {
+        if (response.status === 202 && body.detail?.status === 'loading' && body.detail.run_tag === recordTag && body.detail.loop === loop) {
           retryDelay = 1000;
           if (!disposed) setFailure(null);
           return;
         }
         if (!response.ok) throw Error(body.detail || 'Usage is temporarily unavailable.');
-        if (body.run_tag !== runTag || body.telemetry?.loop !== loop) throw Error('The response did not match the selected scope.');
-        if (!disposed) {setRecord({key, data: body}); setCatalog({tag: runTag, loops: body.telemetry.loops}); setFailure(null);}
+        if (body.run_tag !== recordTag || body.telemetry?.loop !== loop) throw Error('The response did not match the selected scope.');
+        if (!disposed) {setRecord({key, data: body}); setCatalog({tag: runTag ?? recordTag, loops: body.telemetry.loops}); setFailure(null);}
       } catch (e) {
         if (!disposed) setFailure({key, text: e instanceof Error ? e.name === 'AbortError' ? 'Usage timed out. Retrying automatically.' : e.message : 'Usage is temporarily unavailable.'});
       } finally {
@@ -105,7 +106,7 @@ export default function TelemetryPanel({lockedLoop}: {lockedLoop?: number} = {})
     };
     void poll();
     return () => {disposed = true; clearTimeout(timer); request?.abort(); setRefreshing(false);};
-  }, [runTag, loop, key, tab, revision]);
+  }, [runTag, recordTag, loop, key, tab, revision]);
 
   const scope = globalScope ? 'All saved executions' : loop === null ? 'All replicates' : labelReplicate({iteration:loop,run_tag:runTag});
   const index = choices.findIndex(c => c.number === loop);
@@ -146,6 +147,7 @@ export default function TelemetryPanel({lockedLoop}: {lockedLoop?: number} = {})
         </div>
       </section>}
       {pipelineError && <div className="tm-notice" role="status"><AlertCircle size={16}/><p>Pipeline list updates are delayed. Retained selections remain available.</p></div>}
+      {recordRunTag && recordRunTag !== runTag && <p className="tm-notice">This pipeline's detailed records belong to the earlier execution <code>{recordRunTag}</code>. Experiment totals include its continued executions.</p>}
       <nav aria-label="Usage tabs" className="tm-navigation">
         <div className="tm-primary-tabs">{primaryTabs.map(({id, label, icon: Icon}) => <button type="button" key={id} aria-pressed={tab === id} aria-controls="telemetry-content" onClick={() => setTab(id)}><Icon size={16} aria-hidden="true"/>{label}</button>)}</div>
         <label className="tm-detail-picker"><span className="sr-only">Detailed records</span>
@@ -168,12 +170,12 @@ export default function TelemetryPanel({lockedLoop}: {lockedLoop?: number} = {})
           : !data ? <TelemetryState loading={!error} title={error ? 'Records are temporarily unavailable' : `Loading ${scope.toLowerCase()}`}>
             {error ? 'Retry above, or wait for the next automatic update.' : 'Preparing the saved history. Larger executions may take a little longer.'}
           </TelemetryState> : <div className="tm-records">
-            {tab === 'Agents' && <><AgentsTab/><MotoroRecords key={`${runTag}:${loop}`} tag={runTag} loop={loop}/></>}
+            {tab === 'Agents' && <><AgentsTab/><MotoroRecords key={`${recordTag}:${loop}`} tag={recordTag!} loop={loop}/></>}
             {tab === 'Activity' && <div className="tm-embedded-activity"><FeedPanel embedded/></div>}{tab === 'Access' && <AccessTab/>}{tab === 'Results' && <ResultsPanel telemetry/>}
             {tab === 'Tasks' && <><label className="tm-field tm-task-picker"><span>Task</span><select aria-label="Task in selected replicate" value={taskId ?? ''} onChange={e => setTaskSelection({scope: taskScope, id: e.target.value ? Number(e.target.value) : null})}>
               <option value="">Select a task</option>{data.board.tasks.map(t => <option key={t.task_id} value={t.task_id}>#{t.task_id} · {loopLabel(t, data.run_configuration?.trials, data.run_configuration?.combination_plan)} · {t.task_type} · {t.status}</option>)}
             </select></label><TaskTab taskId={taskId}/></>}
-            {tab === 'Logs' && <ExecutionLogs runTag={runTag} loop={loop} lines={data.loop_log.lines} note={data.loop_log.note}/>}
+            {tab === 'Logs' && <ExecutionLogs runTag={recordTag!} loop={loop} lines={data.loop_log.lines} note={data.loop_log.note}/>}
           </div>}
       </div>
     </div>

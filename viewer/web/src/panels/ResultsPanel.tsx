@@ -33,9 +33,9 @@ export default function ResultsPanel({ telemetry = false, embedded = false }: { 
   const selectedResults = useResults();
   const savedConfig=snapshot?.run_configuration;
   const savedTag=snapshot?.run_tag;
-  const labeledSelected=useMemo(()=>selectedResults?.map(r=>({...r,run_tag:savedTag,
-    pipeline_name:savedConfig?.pipeline_name,
-    iteration:savedConfig?.trials?Math.floor(r.trial/savedConfig.trials)+1:null})),[selectedResults,savedTag,savedConfig?.pipeline_name,savedConfig?.trials]);
+  const labeledSelected=useMemo(()=>selectedResults?.map(r=>({...r,run_tag:r.run_tag??savedTag,
+    pipeline_name:r.pipeline_name??savedConfig?.pipeline_name,
+    iteration:r.iteration??(savedConfig?.trials?Math.floor(r.trial/savedConfig.trials)+1:null)})),[selectedResults,savedTag,savedConfig?.pipeline_name,savedConfig?.trials]);
   const globalScope=usePipelines(s=>s.resultsScope);
   const scope=telemetry ? "selected" : globalScope;
   const setScope=(resultsScope:"all"|"selected")=>usePipelines.setState({resultsScope});
@@ -92,7 +92,8 @@ export default function ResultsPanel({ telemetry = false, embedded = false }: { 
       {scope==="selected" && dataUnavailable && <p role="status" className="m-4 text-sm text-amber-800">Connection interrupted. Showing the last available results; this is not an empty or completed run.</p>}
       {!telemetry && <div className="m-4 flex flex-wrap gap-2 text-sm"><button className="rounded border border-paper-line px-3 py-2" aria-pressed={scope==="all"} onClick={()=>setScope("all")}>Latest executions across pipelines</button><button className="rounded border border-paper-line px-3 py-2" aria-pressed={scope==="selected"} onClick={()=>setScope("selected")}>This execution</button></div>}
       {!telemetry && scope==="selected" && <p className="mx-4 text-sm text-ink-soft">Viewing: <strong>{executionContext.label}</strong>. Includes its recorded replicates.</p>}
-      {tags&&<p className="mx-4 mt-3 text-xs text-ink-soft">All recorded replicates from each pipeline's latest execution. Select an older run to inspect its archived results.</p>}
+      {tags&&<p className="mx-4 mt-3 text-xs text-ink-soft">Results from each latest experiment, including its continued executions.</p>}
+      {scope==='selected'&&(snapshot?.report?.run_tags?.length??0)>1&&<p className="mx-4 mt-3 text-xs text-ink-soft">Includes retained results from {snapshot?.report?.run_tags?.length} continued executions of this experiment.</p>}
       {scope==="all"&&fetchError&&<p role="alert" className="m-4 text-sm text-amber-800">{fetchError}. Last available results are retained.</p>}
       {failed.length > 0 && <div role="status" className="m-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
         <p className="font-bold">{failed.length} analysis task(s) could not be completed</p>
@@ -112,7 +113,7 @@ export default function ResultsPanel({ telemetry = false, embedded = false }: { 
               useResultNotices.getState().acknowledge(results);
             }}>View latest results</button>
           </div>}
-          <HypothesisResultsTable results={results} runTag={scope==='selected'?savedTag:null}/>
+          <HypothesisResultsTable results={results} runTag={scope==='selected'?savedTag:null} plannedSkills={scope==='selected'?savedConfig?.combination_plan?.skills?.hypothesis?.map(skill=>skill.id):undefined}/>
           <label className="analysis-select-label">Analysis
             <select aria-label="Analysis to inspect" value={activeResult ? resultKey(activeResult) : ''} onChange={e => chooseResult(e.target.value)}>
               {results.map(r => <option key={resultKey(r)} value={resultKey(r)}>{resultName(r)}</option>)}

@@ -5,15 +5,16 @@ import { usePipelines } from './pipelines';
 import type { Result } from '../types';
 export interface OutputEvent { id:string; pipeline_id?:string; revision:string; run_tag:string; pipeline_name:string; stage:string; title:string; detail:string; at:string|null; question_id:number|null; result_id:number|null; trial:number|null; iteration:number|null; status:string; receivedAt:number; fresh:boolean }
 export interface LiveQuestion { question_id:number; text:string; okf_tags:string[]; rationale:string; origin_run:string; origin_wave:number; writer:string; times_used:number; best_auc:number|null; status:string; created_at:string }
-interface Payload { events:OutputEvent[]; questions:LiveQuestion[]; results:Result[]; reports:Record<string,{status:string;text:string;error?:string}>; generated_at:string; record_limit:number }
+interface Payload { continuation_groups?:Record<string,string[]>; events:OutputEvent[]; questions:LiveQuestion[]; results:Result[]; reports:Record<string,{status:string;text:string;error?:string}>; generated_at:string; record_limit:number }
 let busy=false;
 let initialized=false;
 let revisions=new Map<string,string>();
 export const useLiveOutputs=create<{
   events:OutputEvent[]; questions:LiveQuestion[]; results:Result[]; reports:Payload['reports'];
+  continuationGroups:Record<string,string[]>;
   error:string|null; updatedAt:string|null; tags:string; pending:number; limit:number; poll:()=>Promise<void>; acknowledge:()=>void;
 }>((set,get)=>({
-  events:[],questions:[],results:[],reports:{},error:null,updatedAt:null,tags:'',pending:0,limit:200,
+  events:[],questions:[],results:[],reports:{},continuationGroups:{},error:null,updatedAt:null,tags:'',pending:0,limit:200,
   acknowledge:()=>set({pending:0,events:get().events.map(e=>({...e,fresh:false}))}),
   poll:async()=>{
     if(busy||document.hidden)return;
@@ -32,7 +33,7 @@ export const useLiveOutputs=create<{
       const additions=changes.arrivals;revisions=changes.versions;
       const results=new Map(get().results.map(r=>[r.result_id,r]));body.results.forEach(r=>results.set(r.result_id,r));
       const questions=new Map(get().questions.map(q=>[q.question_id,q]));body.questions.forEach(q=>questions.set(q.question_id,q));
-      set(s=>({tags,error:null,updatedAt:body.generated_at,limit:body.record_limit,
+      set(s=>({tags,error:null,updatedAt:body.generated_at,limit:body.record_limit,continuationGroups:body.continuation_groups??{},
         events:additions.length?[...additions.reverse(),...s.events].slice(0,500):s.events,pending:s.pending+additions.filter(e=>e.fresh).length,
         results:retainEqual(s.results,[...results.values()].sort((a,b)=>b.result_id-a.result_id).slice(0,600)),
         questions:retainEqual(s.questions,[...questions.values()].sort((a,b)=>b.question_id-a.question_id).slice(0,400)),reports:retainEqual(s.reports,{...s.reports,...body.reports})}));

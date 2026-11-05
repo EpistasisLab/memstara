@@ -332,9 +332,10 @@ export interface RunConfiguration {
 }
 
 export interface Snapshot {
+  experiment?: {id:string;name?:string;head_run_tag:string;run_tags:string[];scheduled_combinations?:number;result_combinations:number};
   run_configuration?: RunConfiguration | null;
   scene_scope?: string;
-  report?: { status: string; text: string; explanation_outputs?: (import("./lib/replicateIdentity").ReplicateIdentity & {loop: number; result_id: number | null; text: string; status: string})[]; error?: string | null; specialist_explanation?: ExplanationEvidence | null } | null;
+  report?: { status: string; text: string; run_tags?: string[]; explanation_outputs?: (import("./lib/replicateIdentity").ReplicateIdentity & {run_tag?: string; loop: number; result_id: number | null; text: string; status: string})[]; error?: string | null; specialist_explanation?: ExplanationEvidence | null } | null;
   pipeline?: { status: string; report_completed?: boolean; message?: string; reason?: string; code?: string; stage?: string; loop?: number | null } | null;
   run_tag: string;
   runs: RunSummary[];

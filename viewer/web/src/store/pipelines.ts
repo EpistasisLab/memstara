@@ -43,10 +43,25 @@ export const usePipelines = create<{
   poll: () => Promise<void>; select: (id: string) => void; add: () => Promise<void>;
   save: (id: string, config: RunRequest) => Promise<boolean>; rename: (id:string,name:string)=>Promise<void>;
   stoppingAll: boolean; stopAll:()=>Promise<void>; end:(id:string,expectedRunTag?:string)=>Promise<boolean>; pause:(id:string,paused:boolean)=>Promise<void>;
+  rebuildReport:(id:string)=>Promise<void>;
   startingAll: boolean; startOutcomes: StartOutcome[]; playAll:()=>Promise<void>;
   remove: (id:string)=>Promise<boolean>; play: (id:string, options?:{mode:"additional"|"fresh"|"retry"|"retry_incomplete";loops?:number;expectedRunTag:string})=>Promise<boolean>; stop: (id:string)=>Promise<void>;
 }>((set,get)=>({
   creationOpen:false, stoppingAll:false, startingAll:false, startOutcomes:[],
+  rebuildReport:async(id)=>{
+    const pipeline=get().items.find(p=>p.id===id);
+    if(!pipeline?.latest||pipeline.running||get().busy)return;
+    set({busy:true,error:null});
+    try{
+      const response=await fetch(`/control/runs/${encodeURIComponent(pipeline.latest.run_tag)}/rebuild-report`,
+        {method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(30000)});
+      const body=await controlResponse(response);
+      if(!response.ok)throw Error(body.error||'Report rebuild did not finish. Saved analyses were not rerun.');
+      if(body.warning)set({error:body.warning});
+      useViewer.getState().setRunTag(pipeline.latest.run_tag);
+    }catch(error){set({error:String(error)});}
+    finally{set({busy:false});void get().poll();}
+  },
   closeCreation:()=>{if(!get().busy)set({creationOpen:false});},
   focusRevision:0,
   focus:id=>{

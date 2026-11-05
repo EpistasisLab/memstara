@@ -3,6 +3,7 @@ import { Activity, Sparkles, Layers3, AlertCircle, Clock3, DollarSign, ArrowUpRi
 import { usePipelines } from '../store/pipelines';
 import { useLiveOutputs } from '../store/liveOutputs';
 import { useViewer } from '../store/viewer';
+import { liveOutputScope } from '../lib/liveOutputScope';
 import './exploration-summary.css';
 import type { WorkspaceCostState } from '../lib/useWorkspaceCost';
 
@@ -15,16 +16,17 @@ export default function ExplorationSummary({costState}: {costState: WorkspaceCos
   const [now, setNow] = useState(() => Date.now());
   const [seen, setSeen] = useState<Set<number>>(() => new Set());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-  const tags = new Set(pipelines.flatMap(p => p.latest ? [p.latest.run_tag] : []));
+  const heads = pipelines.flatMap(p => p.latest ? [p.latest.run_tag] : []);
+  const tags = liveOutputScope(heads, live.tags, live.continuationGroups);
   const results = live.results.filter(r => r.run_tag && tags.has(r.run_tag));
   const questions = live.questions.filter(q => tags.has(q.origin_run));
   const fresh = new Set(live.events.filter(e => tags.has(e.run_tag) && e.stage === 'result' && e.fresh && e.result_id !== null).map(e => e.result_id!));
   const unread = [...fresh].filter(id => !seen.has(id)).length;
   const active = pipelines.filter(p => p.running && p.running.execution_state !== 'paused');
   const waiting = active.filter(p => p.running?.waiting_for_questions).length;
-  const issues = pipelines.filter(p => (p.progress.counts?.failed ?? 0) > 0 || (p.latest?.exit_code != null && p.latest.exit_code !== 0));
+  const issues = pipelines.filter(p => (p.progress.counts?.failed ?? 0) > 0 || (!p.latest?.report_recovered&&p.latest?.exit_code != null && p.latest.exit_code !== 0));
   const age = live.updatedAt ? Math.max(0, Math.floor((now - Date.parse(live.updatedAt)) / 1000)) : null;
-  const currentTags = [...tags].sort().join(',');
+  const currentTags = [...new Set(heads)].sort().join(',');
   const stale = !!controlError || !!live.error || (tags.size > 0 && (live.tags !== currentTags || age === null || age > 15));
   const starts = active.map(p => Date.parse(p.running!.started)).filter(Number.isFinite);
   const seconds = starts.length ? Math.max(0, Math.floor((now - Math.min(...starts)) / 1000)) : null;
@@ -33,7 +35,7 @@ export default function ExplorationSummary({costState}: {costState: WorkspaceCos
   const ready = loaded && live.tags === currentTags && (!tags.size || live.updatedAt !== null);
   return <section className="exploration-summary" aria-label="Live exploration summary">
     <div className="exploration-summary-heading">
-      <div><h2>Current pipelines</h2><p>Status and results from their latest executions.</p></div>
+      <div><h2>Current pipelines</h2><p>Status and results including continued executions.</p></div>
       <span data-help="Connection freshness" tabIndex={0} className={`summary-connection ${stale ? 'summary-warning' : ''}`} title={controlError || live.error || 'Latest output refresh; inactive browser tabs pause polling.'}>
         <i aria-hidden="true" />{!loaded ? 'Connecting' : stale ? 'Updates delayed' : tags.size ? 'Live updates' : 'Ready to start'}
         {age !== null && tags.size > 0 && ` · ${age}s since sync`}
@@ -72,6 +74,6 @@ export default function ExplorationSummary({costState}: {costState: WorkspaceCos
         <span className="cost-refresh-note">Updates every 10 seconds</span>
       </button>
     </div>
-    <p className="summary-scope-note">{stale ? 'Updates are delayed; retained results may be out of date. ' : ''}Results reflect records loaded in this browser (up to 600 results and 400 questions). Cost covers the latest execution of each current pipeline, not account-wide spending. Select a card to inspect its details.</p>
+    <p className="summary-scope-note">{stale ? 'Updates are delayed; retained results may be out of date. ' : ''}Results reflect records loaded in this browser (up to 600 results and 400 questions), including continued executions. Cost includes prior attempts in each current experiment. Select a card to inspect its details.</p>
   </section>;
 }

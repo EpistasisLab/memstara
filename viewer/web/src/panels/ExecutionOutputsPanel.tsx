@@ -73,7 +73,7 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
   const context = useExecutionContext();
   const totals = useTelemetryTotals();
   const tag = snapshot?.run_tag ?? '';
-  const usage = totals.data?.executions.find(e => e.run_tag === tag);
+  const usage = (totals.data?.experiments ?? totals.data?.executions)?.find(e => e.run_tag === tag);
   const tiles = useMemo(() => snapshot ? executionTiles(snapshot, usage).filter(tile => tileComplete(tile, view)) : [], [snapshot, usage, view]);
   const selection = useOutputNavigation(s => s.selection);
   const active = selection?.tag === tag ? tiles.find(tile => tile.loop === selection.loop) : undefined;
@@ -99,7 +99,7 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
     return () => cancelAnimationFrame(frame);
   }, [listKey, detailLoop]);
   useEffect(() => {
-    if (view === 'results' && active && !waiting && !error && !snapshot?.stale) useResultNotices.getState().acknowledge(active.results.map(result => ({...result, run_tag: tag})));
+    if (view === 'results' && active && !waiting && !error && !snapshot?.stale) useResultNotices.getState().acknowledge(active.results.map(result => ({...result, run_tag: result.run_tag ?? tag})));
   }, [view, active, waiting, error, snapshot?.stale, tag]);
   const open = (tile: ExecutionTile) => {
     positions.set(listKey, {top: root.current?.scrollTop ?? 0, loop: tile.loop});
@@ -112,14 +112,17 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
     if (!active) positions.set(listKey, {...positions.get(listKey), top: root.current?.scrollTop ?? 0});
   }}>
     <header className="output-workspace-header">
-      <div><p className="output-eyebrow">Experiment outputs</p><h2>{context.name}</h2><p>{tag ? context.startedLabel : 'Choose an experiment with a saved execution.'}</p></div>
+      <div><p className="output-eyebrow">Experiment outputs</p><h2>{context.name}</h2><p>{tag ? context.startedLabel : 'Choose an experiment with a saved execution.'}</p>
+        {snapshot?.experiment&&<p className="output-experiment-scope">{snapshot.experiment.result_combinations} of {snapshot.experiment.scheduled_combinations??snapshot.experiment.result_combinations} combinations recorded · {snapshot.experiment.run_tags.length} execution {snapshot.experiment.run_tags.length===1?'attempt':'attempts'} · One experiment</p>}
+      </div>
       <label className="output-experiment-picker">Experiment<select aria-label="Experiment outputs to inspect" value={context.owner?.id ?? ''} onChange={e => {useOutputNavigation.getState().back(); usePipelines.getState().select(e.target.value);}}>
         <option value="" disabled>{tag ? context.name : 'Choose an experiment'}</option>
         {items.map(item => <option key={item.id} value={item.id}>{item.name}{item.latest ? '' : ' · not started'}</option>)}
       </select></label>
     </header>
     <nav className="output-view-navigation" aria-label="Output views">{views.map(next => {const Icon = icons[next]; return <button type="button" key={next} aria-current={view === next ? 'page' : undefined} onClick={() => navigate(next)}><Icon size={17} aria-hidden="true"/>{outputViewNames[next]}</button>;})}</nav>
-    {view === 'results' && !waiting && <HypothesisResultsTable key={tag} runTag={tag} results={(snapshot?.results ?? []).map(result => ({...result, run_tag: tag}))}/>}
+    {view === 'results' && !waiting && <HypothesisResultsTable key={tag} runTag={tag} results={(snapshot?.results ?? []).map(result => ({...result, run_tag: result.run_tag ?? tag}))} plannedSkills={snapshot?.run_configuration?.combination_plan?.skills?.hypothesis?.map(skill=>skill.id)}/>}
+    {(snapshot?.report?.run_tags?.length ?? 0) > 1 && <p className="output-notice">Includes retained outputs and usage from {snapshot?.report?.run_tags?.length} continued executions of this experiment.</p>}
     {(error || snapshot?.stale || (view === 'agents' && totals.error)) && <p className="output-notice" role="status">Updates are delayed. Showing the last available records for this execution. Missing records do not indicate a completed or empty run.</p>}
     {waiting ? <p className="output-empty" role="status">Loading the selected execution…</p> : !snapshot ? <p className="output-empty" role="status">{requested ? 'Loading execution records…' : 'Select an experiment to browse its outputs.'}</p> : active ? <>
       <header className="output-detail-header">
@@ -134,7 +137,7 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
       <details className="output-data-details"><summary>Model parameters, data columns & recorded metrics</summary>{active.results.length ? active.results.map(result => <section key={result.result_id}><h4>Analysis {result.result_id}</h4><ResultMetadata result={result}/></section>) : <p>No model or column record has been saved for this replicate yet.</p>}</details>
       {view === 'results' && <div className="output-documents">{active.results.length ? active.results.map(result => <article key={result.result_id} aria-label={`Interpretation output for analysis ${result.result_id}`}><header className="output-document-header"><h4>Interpretation · Analysis {result.result_id}</h4></header><InterpretationOutput result={result} includeLimitations={false}/></article>) : <p className="output-empty">No Interpretation output has been saved for this replicate yet.</p>}</div>}
       {view === 'report' && <div className="output-documents">{active.explanations.length ? active.explanations.map((output, index) => <article key={`${output.result_id}:${index}`} aria-label={`Explanation output ${index + 1}`}><header className="output-document-header"><h4>Explanation output {index + 1}<span>{output.status}</span></h4><button type="button" disabled={!output.text} onClick={() => downloadOutput(output.text, `${tag}_pipeline-${active.pipeline_number}_replicate-${active.replicate_number}_explanation-${index + 1}.md`)}><Download size={15} aria-hidden="true"/>Download Markdown</button></header>{output.text ? <ReportBody verbatim text={output.text}/> : <p>No Explanation text has been saved for this output yet.</p>}</article>) : <p className="output-empty">No Explanation output has been saved for this replicate yet.</p>}</div>}
-      {view === 'agents' && <TelemetryPanel key={`${tag}:${active.loop}`} lockedLoop={active.loop}/>}
+      {view === 'agents' && <TelemetryPanel key={`${tag}:${active.loop}:${active.record_run_tag}`} lockedLoop={active.loop} recordRunTag={active.record_run_tag}/>}
     </> : <>
       <div className="output-list-heading"><div><h3>{outputViewNames[view]}</h3><p>Completed {view === 'agents' ? 'replicates' : 'outputs'} only. Choose a tile to view details.</p></div><span>{pipelineCount} {pipelineCount === 1 ? 'pipeline' : 'pipelines'} · {tiles.length} {tiles.length === 1 ? 'replicate' : 'replicates'}</span></div>
       <div className="execution-output-grid">{tiles.map(tile => <Tile key={`${tag}:${tile.loop}`} tile={tile} view={view} target={snapshot.run_configuration?.y_column} onOpen={() => open(tile)}/>)}</div>

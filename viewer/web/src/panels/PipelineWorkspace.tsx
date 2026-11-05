@@ -144,7 +144,7 @@ export function PipelineStatus({ids}: {ids?: string[]} = {}){
             <span className="pipeline-track-line">{i===index&&percent!==100&&<i/>}</span><span className="pipeline-track-label">{label}</span>
           </div>)}
         </div>
-        <LoopUsage execution={usage.data?.executions.find(e=>e.run_tag===p.latest?.run_tag)} updatedAt={usage.data?.updated_at} error={usage.error}/>
+        <LoopUsage execution={(usage.data?.experiments??usage.data?.executions)?.find(e=>e.run_tag===p.latest?.run_tag)} updatedAt={usage.data?.updated_at} error={usage.error}/>
         <footer className="pipeline-progress-footer">
           <span>{(p.running?.pause_requested?'Progress is preserved. Resume continues this execution.':'') || p.progress.exploration?.reason || (failed?'An analysis step failed; review Results.':waiting?'Waiting before the next replicate.':p.running?'Following the latest observed stage.':'Progress is retained when execution stops.')}</span>
           <time>{p.progress.updated_at?new Date(p.progress.updated_at).toLocaleTimeString():'No activity yet'}</time>

@@ -1,7 +1,7 @@
 import {scheduleIdentity, type Schedule, type ReplicateIdentity} from './replicateIdentity.ts';
 import {findingHeading} from './findingHeading.ts';
 
-type Output = ReplicateIdentity & {loop:number;result_id:number|null;text:string;status:string};
+type Output = ReplicateIdentity & {run_tag?:string;loop:number;result_id:number|null;text:string;status:string};
 type Finding = ReplicateIdentity & {run_tag?:string;iteration?:number|null;trial:number;result_id:number;hypothesis:string};
 export type PipelineReport = {number:number;title:string;outputs:Output[];expected:number|null};
 
@@ -16,7 +16,7 @@ export function pipelineReports(outputs:Output[], findings:Finding[], tag:string
   group.outputs.push({...output,...identity});groups.set(number,group);
  }
  for(const group of groups.values()){
-  const finding=[...findings].filter(r=>(!r.run_tag||r.run_tag===tag)&&r.hypothesis?.trim()&&
+  const finding=[...findings].filter(r=>(!r.run_tag||r.run_tag===tag||group.outputs.some(o=>o.run_tag===r.run_tag))&&r.hypothesis?.trim()&&
    (r.pipeline_number??scheduleIdentity(r.iteration??Math.floor(r.trial/Math.max(1,trials))+1,plan).pipeline_number)===group.number)
    .sort((a,b)=>a.trial-b.trial||a.result_id-b.result_id)[0];
   if(finding)group.title=`Pipeline ${group.number} · ${findingHeading(finding.hypothesis)}`;

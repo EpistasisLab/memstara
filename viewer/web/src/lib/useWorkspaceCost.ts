@@ -65,13 +65,13 @@ export function useWorkspaceCost() {
   const delayed = error || !!workspaceError;
   const empty = loaded && !tags && !workspaceError;
   const partial = !!cost && cost.status !== 'complete';
-  const label = empty ? '—' : cost ? costLabel(cost) : delayed ? 'Not available' : '—';
+  const label = empty ? '$0.0000' : cost ? costLabel(cost) : delayed ? 'Not available' : '—';
   const value = label.replace(' · recorded subtotal', '');
   const status = delayed ? 'Update delayed' : empty ? 'No executions' : !cost ? 'Loading cost' : partial ? 'Partial estimate' : null;
   const description = delayed ? (cost ? 'Update delayed · last available estimate' : 'Cost records unavailable')
     : empty ? 'No executions in this workspace' : !cost ? 'Awaiting cost records'
     : cost.missing_costs > 0 ? `Pricing unavailable for ${cost.missing_costs} agent executions; recorded subtotal only`
-    : partial ? 'Incomplete usage · recorded subtotal only' : 'Latest executions · estimated, not billed';
+    : partial ? 'Incomplete usage · recorded subtotal only' : 'Experiment totals including continued executions · estimated, not billed';
   return {cost, value, label, status, description, delayed, partial, empty};
 }
 

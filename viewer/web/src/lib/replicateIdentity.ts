@@ -1,5 +1,5 @@
 /** Display-only schedule mapping. Internal loop/trial IDs remain stable for replay. */
-export type Schedule = {combinations:number;total_loops:number;start_index?:number;repetitions?:number;execution_order?:'all_pipelines_first'|'pipeline_replicates_first'};
+export type Schedule = {combinations:number;total_loops:number;start_index?:number;repetitions?:number;execution_order?:'all_pipelines_first'|'pipeline_replicates_first';skills?:Record<string,{id:string;title?:string;hash?:string}[]>};
 export type ReplicateIdentity = {pipeline_number?:number;pipeline_count?:number;replicate_number?:number;replicate_count?:number|null};
 export function scheduleIdentity(position:number|undefined|null,plan?:Schedule|null):ReplicateIdentity {
  if(!Number.isInteger(position)||position!<1)return {};

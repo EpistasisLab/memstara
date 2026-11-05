@@ -13,7 +13,7 @@ export default function FinalReport() {
   const report = useViewer(s => s.snapshot?.report);
   const tag = useViewer(s => s.snapshot?.run_tag ?? "run");
   const usage=useTelemetryTotals();
-  const execution=usage.data?.executions.find(e=>e.run_tag===tag);
+  const execution=(usage.data?.experiments??usage.data?.executions)?.find(e=>e.run_tag===tag);
   const [expanded, setExpanded] = useState(false);
   const text = savedReportText(report);
   if (!report) return null;
