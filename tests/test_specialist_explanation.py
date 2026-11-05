@@ -203,6 +203,48 @@ def test_prepare_actual_interpretation_and_expert_evidence(frozen, result, tmp_p
     assert audit["status"] == "warning" and audit["warnings"] == ["no_citations_found"]
 
 
+@pytest.mark.parametrize("condition", ["skill", "global", "scheduled"])
+def test_no_okf_explanation_never_retrieves_or_injects_sources(frozen, result, tmp_path, monkeypatch, condition):
+    from memstara.pipeline.no_knowledge import VERSION as isolation_version
+
+    frozen["no_knowledge_isolation"] = isolation_version
+    if condition == "global":
+        frozen["knowledge_policy"] = {"mode": "no_okf"}
+    elif condition == "skill":
+        frozen["books"]["hypothesis"] = ["hiv-no-knowledge"]
+    else:
+        frozen["combination_plan"] = {"test": True}
+        monkeypatch.setattr("memstara.combinations.loop_flavors", lambda plan, loop: {
+            "agents": [{"stage": "hypothesis", "id": "hiv-no-knowledge"}]})
+        monkeypatch.setattr("memstara.combinations.task_books", lambda plan, trial: {
+            "report": ["shared-addiction"]})
+    # Even an absent binding must not trigger external retrieval for this condition.
+    frozen["specialist_explanation_policy"]["bindings"] = {}
+    before = copy.deepcopy(frozen)
+    retrieve = AsyncMock(side_effect=AssertionError("External retrieval must never run"))
+    monkeypatch.setattr(knowledge, "retrieve", retrieve)
+    call = AsyncMock(return_value=("Measured results only; model knowledge is unverified.",
+                                  {"status": "completed", "run_id": "no-okf-test"}))
+    text, entry = asyncio.run(explanation.execute(
+        frozen, 1, tmp_path / "run", ("agent", "old prompt"),
+        {"registry": None, "tools": ["okf_search"], "stage": "report"},
+        call, AsyncMock(return_value={"results": [result]})))
+    assert text and entry["status"] == "completed"
+    retrieve.assert_not_awaited()
+    assert frozen == before
+    assert call.call_args.kwargs["tools"] == []
+    prompt = call.call_args.args[1]
+    assert "NO-OKF CONDITION" in prompt and "Selected model" in prompt
+    assert '"knowledge"' not in prompt and "Synthetic marker addiction evidence" not in prompt
+    summary = entry["specialist_explanation"]
+    assert summary["knowledge_condition"] == "no_okf"
+    assert summary["database_ids"] == summary["citations"] == []
+    assert summary["citation_audit"]["status"] == "not_applicable"
+    payload = explanation.read_receipt(summary["input"])
+    assert payload["binding"] is None
+    assert not list((tmp_path / "run" / "explanation_io").glob("retrieval-request-*.json"))
+
+
 @pytest.mark.parametrize("change", ["trial", "run", "hypothesis", "text", "models", "missing"])
 def test_reject_stale_or_missing_handoffs(frozen, result, change):
     row = copy.deepcopy(result)

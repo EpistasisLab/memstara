@@ -1,3 +1,5 @@
+FROM postgres:16-bookworm AS history-postgres-clients
+
 FROM python:3.12-slim AS configure
 WORKDIR /app
 RUN pip install --no-cache-dir python-dotenv==1.2.1
@@ -15,7 +17,11 @@ RUN pip install --no-cache-dir uv==0.8.22
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --extra runtime --no-dev --no-install-project
 # Process identity checks are required when saving/recovering pipeline ownership.
-RUN apt-get update && apt-get install -y --no-install-recommends procps && rm -rf /var/lib/apt/lists/*
+# The UI history-backup worker uses libpq clients directly, without a Docker socket.
+RUN apt-get update && apt-get install -y --no-install-recommends procps postgresql-client && rm -rf /var/lib/apt/lists/*
+# Match this stack's PostgreSQL 16 servers; the distro package supplies libraries.
+COPY --from=history-postgres-clients /usr/lib/postgresql/16/bin/pg_dump /usr/lib/postgresql/16/bin/pg_restore /usr/local/bin/
+RUN python -c "import subprocess; assert all(subprocess.check_output([name, '--version'], text=True).split()[2].startswith('16.') for name in ('pg_dump', 'pg_restore'))"
 COPY README.md THIRD_PARTY_NOTICES.md ./
 COPY licenses/ licenses/
 COPY src/ src/

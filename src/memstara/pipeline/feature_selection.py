@@ -81,6 +81,9 @@ def context(plan, wave):
 
 
 def scoped(plan, wave):
+    from memstara.pipeline.no_knowledge import scope
+
+    plan = scope(plan, wave)
     selected = context(plan, wave)
     if not selected or selected["mode"] != "random":
         return plan
@@ -148,6 +151,15 @@ def instructions(plan, wave):
 
 def hypothesis_tools(tools, plan, wave):
     """Only the random condition removes knowledge retrieval and semantic remapping."""
+    from memstara.pipeline.no_knowledge import selected as no_knowledge, tools_for_condition, scope
+    from memstara.pipeline.hybrid import BASE_CALL, BASE_TOOLS
+
+    if BASE_CALL.get():
+        return [t for t in tools if (t.get('tool_name') or t.get('name')) in BASE_TOOLS]
+
+    if no_knowledge(plan, wave):
+        scope(plan, wave)  # Fail closed for historical, unisolated controls.
+        return tools_for_condition(tools)
     selected = context(plan, wave)
     if not selected or selected["mode"] != "random":
         return tools

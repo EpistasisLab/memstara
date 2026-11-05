@@ -21,7 +21,7 @@ def profile(scope):
 def test_corpus_profiles_have_distinct_specialties_and_random(scope):
     assert corpus_profile(profile(scope)) == scope
     selected = PROFILES[scope]['hypothesis']
-    assert len(selected) == (5 if scope == 'hiv' else 6) and selected[-1] == 'random_features'
+    assert len(selected) == (7 if scope == 'hiv' else 6) and selected[-1] == 'random_features'
     validate_skills({'hypothesis': selected}, profile(scope))
     for name in [s for s in selected if s not in ('random_features', 'heart-failure-all')]:
         item = next(item for item in catalog() if item['id'] == name)
@@ -64,7 +64,7 @@ def test_profile_binding_uses_actual_index_not_a_study_name_or_target(tmp_path, 
         validate_skills({'hypothesis': PROFILES['hiv']['hypothesis']})
 
 
-def test_hiv_profile_rejects_custom_hypotheses_to_keep_fixed_five(tmp_path, monkeypatch):
+def test_hiv_profile_rejects_unregistered_custom_hypotheses(tmp_path, monkeypatch):
     monkeypatch.setenv('MEMSTARA_USER_SKILLS_DIR', str(tmp_path))
     from memstara.control.catalog import register
     custom = register({'stage': 'hypothesis', 'name': 'custom', 'content': '# Custom'})
@@ -92,7 +92,7 @@ def test_hiv_explanations_are_selectable_and_heart_failure_is_rejected(monkeypat
     reports = PROFILES[scope]['report']
     assert len(reports) == 2
     from memstara.corpus_skills import menu_bindings
-    assert len(menu_bindings()['profiles']['hiv']['hypothesis']) * 2 * 2 * 2 * len(reports) == 64
+    assert len(menu_bindings()['profiles']['hiv']['hypothesis']) * 2 * 2 * 2 * len(reports) == 96
     for name in reports:
         assert rows[name]['stage'] == 'report'
         assert rows[name]['content'].strip() in load_prompt('board/report', playbook=name)['system_prompt']

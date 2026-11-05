@@ -88,6 +88,18 @@ async def preflight_mapping(contract, plan):
         return None
     if not plan.get("feature_context"):
         return None  # Legacy snapshots lack the frozen catalog required by this check.
+    if plan.get("question_feasibility_policy") == "explicit_columns_v1":
+        from memstara.pipeline.question_contract import validate_mapping, predictor_column_error
+
+        mapping = contract.get("proposed_mapping", [])
+        try:
+            columns = [row["column"] for row in mapping]
+            validate_mapping(mapping, contract, columns, contract.get("source_ids", []))
+            if predictor_column_error(columns, plan):
+                raise ValueError("Selected columns are not available in the frozen catalog")
+        except (ValueError, KeyError, TypeError) as exc:
+            return {"code": "unmapped_predictor_concepts", "why": str(exc),
+                    "action": "Read the full catalog and declare exact columns with a defensible rationale for every concept."}
     import asyncio
     import re
 
@@ -117,6 +129,8 @@ async def preflight_mapping(contract, plan):
             "why": "Do not substitute a related diagnosis. Choose another knowledge-supported "
             "question whose required diagnosis codes are represented in the dataset.",
         }
+    if plan.get("no_knowledge_condition") and plan.get("question_feasibility_policy") == "explicit_columns_v1":
+        return None  # Exact declared columns and mapping coverage were checked above.
     from memstara.matcher.service import get_matcher
 
     def match_predictors() -> list[dict[str, Any]]:
@@ -134,6 +148,12 @@ async def preflight_mapping(contract, plan):
     for concept in contract["predictor_concepts"]:
         row = next((r for r in results if r.get("concept") == concept), {})
         if not any(c.get("feature_name") in allowed for c in row.get("candidates", [])):
+            # A declared exact column can be verified by the answering stage even
+            # when embedding search fails to retrieve a synonym. No nearest-rank
+            # candidate is treated as proof of clinical equivalence.
+            if any(m.get("concept") == concept and m.get("column") in allowed
+                   for m in contract.get("proposed_mapping", [])):
+                continue
             missing.append(
                 {"concept": concept, "reason": row.get("note") or "No candidate in frozen predictor catalog"}
             )

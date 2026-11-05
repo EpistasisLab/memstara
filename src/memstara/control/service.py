@@ -212,12 +212,14 @@ class _Runs:
             self._reap()
             from memstara.pipeline.checkpoint import recovery_status
             from memstara.pipeline.run_ownership import infrastructure_status
+            from memstara.rebuild_report import recovered
 
             return [
                 {
                     **{k: v for k, v in record.items() if k != "process_identity"},
                     **recovery_status(record["run_dir"]),
                     **infrastructure_status(record["run_dir"]),
+                    'report_recovered': recovered(record['run_dir']),
                 }
                 for record in self._done
             ]
@@ -284,6 +286,9 @@ class _Runs:
         shows. The extra write syscalls are the entire cost.
         """
         with self._lock:
+            from memstara.control.history_gate import ensure_idle
+
+            ensure_idle()
             self._reap()
             if self._live is not None:
                 raise RuntimeError(f"'{self._live['run_tag']}' is already running. One run at a time — stop it first")
@@ -424,6 +429,9 @@ RUNS = _Runs()
 # Saved configurations can reference deployment-configured external skills.
 load_env()
 WORKSPACE = PipelineWorkspace(RUNS_DIR / "pipeline_workspace.json", _Runs)
+from memstara.control.history import HistoryReset
+
+HISTORY = HistoryReset(WORKSPACE, RUNS)
 
 
 def skills(root=None) -> list[dict[str, Any]]:
@@ -628,6 +636,31 @@ class Handler(BaseHTTPRequestHandler):
         if self._refuse_stranger():
             return
         path = urlsplit(self.path).path.rstrip("/")
+
+        if path == '/control/history-reset':
+            try:
+                self._send(200, HISTORY.status())
+            except (OSError, ValueError, RuntimeError):
+                self._send(503, {'error': 'History reset state is unavailable; no reset was requested.'})
+            return
+
+        if path.startswith('/control/history-reset/backups/') and path.endswith('/download'):
+            identifier = path[len('/control/history-reset/backups/'):-len('/download')]
+            try:
+                archive = HISTORY.backup_file(identifier)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/gzip')
+                self.send_header('Content-Length', str(archive.stat().st_size))
+                self.send_header('Content-Disposition', f'attachment; filename="memstara-history-{identifier}.tar.gz"')
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                with archive.open('rb') as stream:
+                    import shutil
+
+                    shutil.copyfileobj(stream, self.wfile)
+            except (OSError, ValueError, KeyError):
+                self._send(404, {'error': 'A verified backup with this ID is not available.'})
+            return
 
         if path == "/control/pricing":
             self._send(
@@ -902,6 +935,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self) -> None:  # noqa: N802 - the name http.server dispatches on
         if self._refuse_stranger():
             return
+        from memstara.control.history_gate import ensure_idle
+
+        try:
+            ensure_idle(HISTORY.root)
+        except (OSError, ValueError, RuntimeError):
+            self._send(409, {'error': 'History maintenance is active; settings and skills are locked.'})
+            return
         path = urlsplit(self.path).path.rstrip("/")
         prefix = "/control/playbooks/"
         if not path.startswith(prefix):
@@ -939,6 +979,22 @@ class Handler(BaseHTTPRequestHandler):
             body = self._body()
         except ValueError as e:
             self._send(400, {"error": str(e)})
+            return
+
+        if path == '/control/history-reset':
+            try:
+                self._send(202, HISTORY.begin(body))
+            except (OSError, ValueError, RuntimeError) as error:
+                message = str(error) if isinstance(error, (ValueError, RuntimeError)) else 'History reset could not be queued.'
+                self._send(409, {'error': message})
+            return
+
+        from memstara.control.history_gate import ensure_idle
+
+        try:
+            ensure_idle(HISTORY.root)
+        except (OSError, ValueError, RuntimeError):
+            self._send(409, {'error': 'History maintenance is active or needs review. Wait or retry clearing history.'})
             return
 
         if path == "/control/pricing":
@@ -1089,8 +1145,40 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, result)
             return
 
+        if path.startswith('/control/runs/') and path.endswith('/rebuild-report'):
+            tag = path[len('/control/runs/'):-len('/rebuild-report')]
+            try:
+                from memstara.rebuild_report import rebuild, publish
+
+                with WORKSPACE.lock:
+                    ensure_idle(HISTORY.root)
+                    manager = WORKSPACE.locate_manager(tag) or RUNS
+                    located = manager.locate(tag)
+                    if not located or manager.running():
+                        raise ValueError('Select an ended execution before rebuilding the report')
+                    result = rebuild(located[1])
+                import asyncio
+                from memstara.control.history_gate import execution_guard
+
+                try:
+                    with execution_guard():
+                        asyncio.run(publish(located[1]))
+                    result['registry_synced'] = True
+                except Exception:
+                    result['registry_synced'] = False
+                    result['warning'] = 'Report rebuilt; the registry mirror still needs reconciliation.'
+                self._send(200,result)
+            except (OSError,ValueError,RuntimeError) as error:
+                self._send(409,{'error':str(error)})
+            return
+
         if path == "/control/runs":
-            self._start(body)
+            with WORKSPACE.lock:
+                try:
+                    ensure_idle(HISTORY.root)
+                    self._start(body)
+                except RuntimeError as error:
+                    self._send(409, {'error': str(error)})
             return
 
         if path.startswith("/control/runs/") and path.rsplit("/", 1)[-1] in ("pause", "resume"):
@@ -1314,6 +1402,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 _ROUTES = [
+    'GET /control/history-reset',
+    'POST /control/history-reset',
+    'GET /control/history-reset/backups/{id}/download',
+    'POST /control/runs/{tag}/rebuild-report',
     "GET  /control/question-memory",
     "POST /control/question-memory/clear",
     "GET /control/health",

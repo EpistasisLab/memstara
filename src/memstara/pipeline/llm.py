@@ -216,6 +216,15 @@ class PipelineLLMService(LLMService):
             kwargs["max_retries"] = 0
         context = call_context.get()
         prepared = provider_messages(messages, config.model)
+        from memstara.evaluation import active_plan
+        from memstara.pipeline.context_payloads import enabled, prepare
+
+        # A text-only stage cannot retrieve omitted evidence. Preserve its input.
+        tools = args[0] if args and isinstance(args[0], list) else kwargs.get("tools", [])
+        if context and enabled(active_plan()) and any(
+            "read_context_payload" in json.dumps(tool, default=str) for tool in tools
+        ):
+            prepared = prepare(prepared, context)
         if context and context[2] == "report":
             from memstara.evaluation import active_plan
 
@@ -240,6 +249,9 @@ class PipelineLLMService(LLMService):
                     model=config.model,
                     provider=provider,
                     message_count=len(prepared),
+                    context_payload_policy=(active_plan() or {}).get("context_payload_policy"),
+                    message_characters_before=len(json.dumps(messages, default=str)),
+                    message_characters_after=len(json.dumps(prepared, default=str)),
                     requested_max_tokens=getattr(config, "max_tokens", None),
                     timeout_policy=runtime_timeouts(config.model),
                 )

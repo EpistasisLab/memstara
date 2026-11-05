@@ -1,17 +1,35 @@
 {
   "schema_version": 1,
-  "originals_modified": false,
+  "originals_modified": true,
   "publication_status": "pending_rights_confirmation",
   "files": [
     {
       "path": "specialists/SHAP-Interpretation.md",
-      "sha256": "b876d6a83a45285f3a7984c5f024becc64db05f44cbb36d8b3c745dbfb1c1e02",
+      "sha256": "544b1b655bad09244bb6355cf0724d3bf9b24f963adbd0f41691dd275d0ddf3d",
+      "original_sha256": "b876d6a83a45285f3a7984c5f024becc64db05f44cbb36d8b3c745dbfb1c1e02",
+      "modifications": [
+        {
+          "kind": "appended_section",
+          "section": "Interpretation Style",
+          "reason": "User-requested concise interpretations while preserving required sections, essential results and limitations.",
+          "commit": "2c3438ce7e4d782254c3c7bbe5b96e5c838957ac"
+        }
+      ],
       "role": "specialist",
       "redistribution_approval": "pending"
     },
     {
       "path": "specialists/LIME-Interpretation.md",
-      "sha256": "48639f4149e19825bc05672ff7cbc1244d030bf6bfc55d25c5b7616d71032772",
+      "sha256": "e9da1fb27f8b421b89f555e67fb91c0f5e93594d7b3bad493a0897becd784bb8",
+      "original_sha256": "48639f4149e19825bc05672ff7cbc1244d030bf6bfc55d25c5b7616d71032772",
+      "modifications": [
+        {
+          "kind": "appended_section",
+          "section": "Interpretation Style",
+          "reason": "User-requested concise interpretations while preserving required sections, essential results and limitations.",
+          "commit": "2c3438ce7e4d782254c3c7bbe5b96e5c838957ac"
+        }
+      ],
       "role": "specialist",
       "redistribution_approval": "pending"
     },

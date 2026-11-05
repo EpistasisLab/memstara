@@ -262,6 +262,28 @@ def test_returned_interpreter_retries_without_failing_or_replaying_ml(monkeypatc
     assert tool.call_args.args[2]['task_id'] == 10
 
 
+def test_exhausted_interpretation_recovery_confirms_failure_to_submission_api(monkeypatch):
+    monkeypatch.setattr('memstara.evaluation.active_plan', lambda: PLAN)
+    monkeypatch.setattr(board, 'board_state', AsyncMock(return_value={'tasks': [
+        {'task_id': 33, 'status': 'in_progress', 'task_type': 'interpret', 'claimed_by': 'interpret#1'}]}))
+
+    async def tool(registry, name, args):
+        if name == 'recover_interpretation':
+            return {'ok': False, 'reason': 'Interpretation recovery limit reached'}
+        assert name == 'submit_result'
+        # Match the real API's explicit technical-failure contract.
+        if not args.get('execution_failed'):
+            return {'error': 'Failure was not confirmed', 'code': 'failure_confirmation_required'}
+        assert args['task_id'] == 33 and args['worker'] == 'interpret#1'
+        assert args['error'] and not args.get('interpretation')
+        return {'ok': True, 'status': 'failed'}
+
+    mocked = AsyncMock(side_effect=tool)
+    monkeypatch.setattr(board, 'call_board_tool', mocked)
+    asyncio.run(board.settle_finished_workers(None, 'run-a', {'interpret#1'}))
+    assert mocked.await_count == 2
+
+
 def test_completed_agent_interpretation_is_committed_without_another_model_call(monkeypatch):
     from memstara.pipeline.recovery import complete_interpretation
     text = '\n'.join(f'**{label}:** Evidence-based explanation with uncertainty and limitations.' for label in (

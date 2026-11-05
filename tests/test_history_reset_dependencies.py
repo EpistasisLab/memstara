@@ -60,3 +60,23 @@ def test_unknown_dependent_is_rejected_before_deletion():
 def test_memory_without_execution_link_is_not_blindly_deleted():
     with pytest.raises(RuntimeError, match="Cannot safely scope memory_entries"):
         reset.runtime_cleanup_plan({"agent_runs", "memory_entries"}, {"memory_entries": {"id", "content"}}, [])
+
+
+def test_owned_agent_memory_is_cleared_even_without_a_live_run_reference():
+    db=sqlite3.connect(':memory:')
+    db.execute("ATTACH DATABASE ':memory:' AS public")
+    db.executescript('''
+      CREATE TABLE public.agents(id TEXT PRIMARY KEY, name TEXT);
+      CREATE TABLE public.agent_runs(id TEXT PRIMARY KEY, agent_id TEXT);
+      CREATE TABLE public.memory_entries(id TEXT, agent_id TEXT, run_id TEXT);
+      INSERT INTO public.agents VALUES ('ours','memstara-hypothesis'),('other','unrelated');
+      INSERT INTO public.agent_runs VALUES ('old','ours');
+      INSERT INTO public.memory_entries VALUES ('old-semantic','ours',NULL),('unrelated','other',NULL);
+    ''')
+    plan=reset.runtime_cleanup_plan({'agent_runs','memory_entries'},
+        {'agent_runs':{'id','agent_id'},'memory_entries':{'agent_id','run_id'}},[])
+    for table,predicate in plan:
+        predicate=predicate.replace('=ANY($1::uuid[])'," IN ('old')")
+        db.execute(f'DELETE FROM public."{table}" WHERE {predicate}')
+    assert list(db.execute('SELECT id FROM public.memory_entries'))==[('unrelated',)]
+    assert list(db.execute('SELECT id FROM public.agents'))==[('other',),('ours',)]

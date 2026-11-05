@@ -94,6 +94,52 @@ def test_loop_timing_preserves_start_and_records_report_completion(tmp_path, mon
     assert value['started_at']==10 and value['ended_at']==25
 
 
+def test_sparse_retry_close_keeps_original_combination_number(tmp_path):
+    import json
+    from memstara.pipeline.exploration import record_round, write_progress, close_active_round
+    for loop in range(29,50):
+        record_round(tmp_path,loop,'completed')
+    record_round(tmp_path,50,'running')
+    write_progress(tmp_path,50,'hypothesis')
+    close_active_round(tmp_path,'blocked','Transport failure')
+    journal=json.loads((tmp_path/'iteration_outcomes.json').read_text())
+    assert journal['50']['outcome']=='blocked'
+    assert '22' not in journal and len(journal)==22
+    assert json.loads((tmp_path/'progress.json').read_text())['iteration']==50
+
+
+def test_old_misnumbered_retry_progress_is_derived_without_rewriting_history(tmp_path):
+    import json
+    from memstara.control.workspace import execution_progress
+    progress={'iteration':22,'stage':'report'}
+    (tmp_path/'progress.json').write_text(json.dumps(progress))
+    (tmp_path/'config.json').write_text(json.dumps({'retry_selection':{'loops':list(range(29,65))}}))
+    (tmp_path/'execution.json').write_text(json.dumps({'calls':[{'loop':50,'stage':'question49-1','started_at':10}]}))
+    current=execution_progress({'run_dir':str(tmp_path)})
+    assert current['iteration']==50 and current['recorded_iteration']==22
+    assert current['stage']=='hypothesis' and current['identity_source']=='execution_manifest'
+    assert json.loads((tmp_path/'progress.json').read_text())==progress
+
+
+def test_retry_counts_exclude_phantom_ordinals_and_terminal_failure_is_visible(tmp_path):
+    import json
+    from memstara.control.workspace import execution_progress,loop_totals
+    (tmp_path/'progress.json').write_text(json.dumps({'iteration':23,'exploration':{'attempted':24,'completed':21,'blocked':2}}))
+    (tmp_path/'config.json').write_text(json.dumps({'retry_selection':{'loops':list(range(29,65))}}))
+    journal={str(i):{'outcome':'completed'} for i in range(29,50)}
+    journal.update({'22':{'outcome':'blocked'},'23':{'outcome':'blocked'},'50':{'outcome':'running'}})
+    (tmp_path/'iteration_outcomes.json').write_text(json.dumps(journal))
+    (tmp_path/'execution.json').write_text(json.dumps({'calls':[{'loop':50,'stage':'question49-1'}]}))
+    (tmp_path/'pipeline_status.json').write_text(json.dumps({'status':'failed','message':'Transport failure'}))
+    record={'run_dir':str(tmp_path),'run_tag':'retry'}
+    current=execution_progress(record)
+    assert current['iteration']==50
+    assert current['exploration']['completed']==21 and current['exploration']['attempted']==22
+    assert current['exploration']['blocked']==1 and current['exploration']['outcome']=='blocked'
+    assert loop_totals([record])['attempted']==22
+    assert json.loads((tmp_path/'iteration_outcomes.json').read_text())==journal
+
+
 def test_stop_keeps_exact_continuation_and_never_replays_completed_calls(tmp_path):
     from memstara.pipeline.exploration import ExecutionGate
     import json

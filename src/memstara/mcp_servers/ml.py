@@ -72,7 +72,14 @@ async def get_ml_configuration(path: str, y_column: str) -> str:
         if snapshot["y_column"] != y_column:
             raise ValueError("Target differs from the run target")
         plan, _ = load_effective(p, snapshot, snapshot["evaluation"])
-        return json.dumps(context(for_dataset(snapshot, p), plan))
+        settings = context(for_dataset(snapshot, p), plan)
+        handoff = json.loads(p.with_suffix('.comparison.json').read_text()) if snapshot.get('hybrid_policy') else {}
+        if handoff.get('hybrid'):
+            settings['hybrid_evaluation'] = {
+                'minimum_training_cv_folds': 2,
+                'instruction': 'Use at least two folds; baseline and augmentation share these exact settings. '
+                               'Training CV chooses the candidate; the test set is evaluation only.'}
+        return json.dumps(settings)
     except Exception as exc:
         return json.dumps({"error": str(exc) if isinstance(exc, ValueError) else type(exc).__name__})
 

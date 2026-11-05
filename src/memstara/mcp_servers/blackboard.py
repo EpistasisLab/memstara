@@ -66,6 +66,28 @@ def _pipeline_run() -> str:
 
 
 @mcp.tool()
+async def freeze_hybrid_candidate(
+    questions: list[QuestionProposal], origin_run: str, origin_wave: int, writer: str = ''
+) -> str:
+    """Freeze one isolated model-knowledge candidate before graph retrieval.
+
+    Use predictor_concepts, rationale, source_ids=[], okf_tags=[] and exact
+    proposed_mapping rows with source_id="". This does not create a training task.
+    """
+    from memstara.evaluation import active_plan
+    from memstara.pipeline.hybrid import save_baseline
+
+    try:
+        plan = active_plan() or {}
+        if origin_run != plan.get('run_tag') or not isinstance(questions, list) or len(questions) != 1:
+            raise ValueError('Freeze one candidate for this execution only')
+        record = save_baseline(plan, origin_wave, questions[0])
+        return json.dumps({'frozen': True, 'baseline_sha256': record['sha256'], 'columns': record['columns']})
+    except (ValueError, OSError, KeyError, TypeError) as exc:
+        return _err(exc)
+
+
+@mcp.tool()
 async def create_task(
     run_tag: str,
     trial: int,
@@ -147,6 +169,8 @@ async def create_task(
     try:
         feature_selection = validate_selection(columns, snapshot, trial)
         snapshot = scoped(snapshot, trial)
+        if (snapshot or {}).get("no_knowledge_condition") and (ids or path_uses):
+            raise ValueError("No-knowledge tasks must not contain source IDs or knowledge paths")
     except ValueError as exc:
         return json.dumps({"error": str(exc), "code": "invalid_feature_selection"})
     from memstara.pipeline.critic import review
@@ -198,7 +222,8 @@ async def create_task(
 
                         if ablation_enabled(snapshot) and ids:
                             raise ValueError("OKF ablation tasks must not claim knowledge source IDs")
-                        if not cols or (not ids and not ablation_enabled(snapshot)):
+                        baseline_only = bool(contract.get('hybrid')) and not contract['hybrid']['augmentation_columns']
+                        if not cols or (not ids and not ablation_enabled(snapshot) and not baseline_only):
                             raise ValueError("Grounded feature columns and knowledge concept IDs are required")
                     except ValueError as exc:
                         return json.dumps({"error": str(exc)})
@@ -252,6 +277,7 @@ async def create_task(
                             },
                             "question_contract": contract,
                             "feature_mapping": feature_mapping,
+                            **({'hybrid': contract['hybrid']} if contract and contract.get('hybrid') else {}),
                             "critic": critic,
                             "knowledge_provenance": hypothesis_provenance(
                                 ids,
@@ -272,6 +298,60 @@ async def create_task(
     except Exception as e:  # noqa: BLE001 - the agent must see why
         return _err(e)
     return json.dumps({"task_id": task_id, "status": "ready", "task_type": "data"})
+
+
+@mcp.tool()
+async def lookup_predictor_catalog(queries: list[str], offset: int = 0, limit: int = 20) -> str:
+    """Search ALL frozen predictor names and label meanings, not a partial index.
+
+    A row matches any literal query (case insensitive). Try clinical synonyms or
+    diagnosis codes separately. Empty queries browse the full catalog. Follow
+    next_offset for all matches. This exposes metadata only, never outcomes or rows.
+    """
+    from memstara.evaluation import active_plan
+
+    plan = active_plan() or {}
+    if plan.get("question_feasibility_policy") != "explicit_columns_v1":
+        return json.dumps({"error": "Full catalog lookup is not enabled for this execution"})
+    if not isinstance(queries, list) or len(queries) > 12 or any(
+        not isinstance(q, str) or not q.strip() or len(q) > 160 for q in queries
+    ) or type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 40:
+        return json.dumps({"error": "Use up to 12 nonempty queries, a nonnegative offset, and limit 1–40"})
+    # The catalog defines availability only. Frozen selection policy still
+    # validates which columns may actually be used when the question is saved.
+    features = (plan.get("feature_context") or {}).get("features", [])
+    matches = [row for row in features if row.get("column") != plan.get("y_column") and (
+        not queries or any(q.casefold() in (row["column"] + " " + row.get("meaning", "")).casefold() for q in queries)
+    )]
+    return json.dumps({"source": "full_frozen_predictor_catalog", "total": len(matches),
+                       "matches": matches[offset:offset + limit],
+                       "next_offset": offset + limit if offset + limit < len(matches) else None,
+                       "note": "Literal search only: zero matches is not proof that no synonym exists. Similarity alone is not clinical equivalence."})
+
+
+@mcp.tool()
+async def read_context_payload(reference: str, pointer: str = "", offset: int = 0, limit: int = 8000) -> str:
+    """Read omitted evidence from this execution using its opaque context_reference.
+
+    Use JSON pointer paths from the index to select fields; page long content using
+    next_offset, keeping the same reference and pointer. limit must be 1..12000.
+    JSON objects stored inside text fields can be traversed directly, for example
+    /interpretation_input/models. This never reruns a tool or changes a task. Only references issued
+    in this execution are readable. Do not guess omitted evidence.
+    """
+    from pathlib import Path
+    from memstara.evaluation import active_plan
+    from memstara.pipeline.context_payloads import enabled, read
+
+    try:
+        source = os.environ.get("MEMSTARA_RUN_CONFIG")
+        if not source or not enabled(active_plan()):
+            raise ValueError("Context retrieval is not enabled for this execution")
+        return json.dumps(read(Path(source).resolve().parent, reference, pointer, offset, limit))
+    except (OSError, ValueError, KeyError, TypeError, IndexError) as exc:
+        return json.dumps({"error": "Context payload unavailable or invalid selection", "error_type": type(exc).__name__,
+                           "hint": "Use the original context_reference and exact JSON pointers from its index. "
+                           "Use a nonnegative offset and limit 1..12000. Do not guess field names or read a response envelope as evidence."})
 
 
 @mcp.tool()
@@ -768,7 +848,13 @@ async def submit_result(
                         from memstara.pipeline.feature_selection import validate_measured
 
                         try:
-                            fitted = validate_measured(measured.get("features"), previous["feature_selection"])
+                            if previous.get('hybrid'):
+                                from memstara.hybrid_evaluation import validate_receipt
+
+                                fitted = validate_receipt(measured.get('features'), previous['hybrid'],
+                                    previous['feature_selection']['features'], measured.get('hybrid_selection'))
+                            else:
+                                fitted = validate_measured(measured.get("features"), previous["feature_selection"])
                         except (ValueError, KeyError) as exc:
                             return json.dumps({"error": str(exc)})
                         used_json = json.dumps(fitted + [cur["y_column"]])
@@ -977,7 +1063,7 @@ async def attach_match_trace(task_id: int, match_trace: str) -> str:
 
 
 @mcp.tool()
-async def read_board(run_tag: str = "") -> str:
+async def read_board(run_tag: str = "", state_only: bool = False) -> str:
     """Every task of a run, finished or not. The reporting stage uses this.
 
     Args:
@@ -993,9 +1079,20 @@ async def read_board(run_tag: str = "") -> str:
             return json.dumps({"error": "This tool is scoped to its pipeline run"})
         run_tag = scope
     try:
-        conn = await asyncpg.connect(_dsn())
+        conn = await asyncpg.connect(_dsn(), timeout=10, command_timeout=20)
         try:
-            rows = await conn.fetch(
+            if state_only:
+                # Driver scheduling must not resend all historical match traces,
+                # fitted-model evidence and narratives on every one-second poll.
+                rows = await conn.fetch(
+                    """SELECT task_id, run_tag, trial, status, task_type, claimed_by,
+                              question_id, attempts, error, auc, model,
+                              jsonb_build_object('interpretation_branch',
+                                  evaluation->'interpretation_branch') AS evaluation
+                       FROM memstara_blackboard WHERE ($1 = '' OR run_tag = $1)
+                       ORDER BY trial, task_id""", run_tag)
+            else:
+                rows = await conn.fetch(
                 """
                 SELECT task_id, run_tag, trial, perspective, status, task_type,
                        hypothesis, columns, okf_concept_ids, match_trace, question_id,
@@ -1039,7 +1136,8 @@ async def read_board(run_tag: str = "") -> str:
             "feature_importance",
             "evaluation",
         ):
-            d[k] = json.loads(d[k]) if d[k] else ([] if k != "feature_importance" else {})
+            if k in d:
+                d[k] = json.loads(d[k]) if isinstance(d[k], str) else d[k] or ([] if k != "feature_importance" else {})
         tasks.append(d)
     return json.dumps({"count": len(tasks), "tasks": tasks}, ensure_ascii=False, default=str)
 
@@ -1428,7 +1526,12 @@ async def propose_questions(
     from memstara.pipeline.question_contract import enabled, make_contract
     from memstara.pipeline.question_repair import preflight_mapping, save_feedback
 
-    plan = active_plan() or {}
+    from memstara.pipeline.feature_selection import scoped
+
+    try:
+        plan = scoped(active_plan() or {}, int(origin_wave))
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)})
     from memstara.pipeline.combination_questions import enabled as independent_questions
 
     comparison_wave = int(origin_wave) if independent_questions(plan) else None
@@ -1491,7 +1594,7 @@ async def propose_questions(
                     from memstara.evaluation import active_plan
                     from memstara.pipeline.question_contract import enabled, make_contract, question_text
 
-                    plan = active_plan() or {}
+                    plan = scoped(active_plan() or {}, int(origin_wave))
                     contract = {}
                     if enabled(plan):
                         try:
@@ -1510,7 +1613,8 @@ async def propose_questions(
                         continue
                     from memstara.pipeline.ablation import enabled as ablation_enabled
 
-                    if not tags and not (ablation_enabled(plan) or contract.get("kind") == "random_feature_control"):
+                    baseline_only = bool(contract.get('hybrid')) and not contract['hybrid']['augmentation_columns']
+                    if not tags and not (ablation_enabled(plan) or contract.get("kind") == "random_feature_control" or baseline_only):
                         rejected.append(
                             {
                                 "text": text,

@@ -28,10 +28,6 @@ LEGACY_PLAYBOOKS.update(
 # Temporarily hidden from selection only. Keep files and saved configurations intact.
 HIDDEN_PLAYBOOKS = frozenset(
     {
-        # Superseded by the combined HIV OR-scope skill. Keep both files for
-        # historical saved-run resolution, but do not offer them in new menus.
-        "addiction-psychiatric",
-        "addiction-substance-use",
         "ml_default_logistic_regression",
         "random_features",
         "heart-failure-all",
@@ -60,6 +56,8 @@ HIDDEN_PLAYBOOKS = HIDDEN_PLAYBOOKS | DISABLED_EXPLANATION_SKILLS
 DISABLED_HYPOTHESIS_SKILLS = frozenset(
     {
         "hiv-clinical-frailty",  # Temporarily disabled; retain original and historical records.
+        "addiction-sdoh",
+        "hiv-psychiatric-or-substance-use",  # Use the two separate domain skills instead.
         "hypothesis_research",
         "comorbidity",
         "drug-class-effect",
@@ -220,6 +218,12 @@ def load_prompt(name: str, playbook: str = "") -> dict[str, str]:
     playbook = canonical_name(playbook) if playbook else playbook
     path = (PROMPTS_DIR / name).with_suffix(".md")
     front, body = _read(path)
+    if name == "board/hypothesis" and playbook == "hiv-no-knowledge":
+        path = PROMPTS_DIR / "board/hypothesis_no_knowledge.md"
+        front, body = _read(path)
+    elif name == 'board/hypothesis' and playbook == 'hiv-model-knowledge-with-graph-augmentation':
+        path = PROMPTS_DIR / 'board/hypothesis_hybrid.md'
+        front, body = _read(path)
 
     if "goal" not in front:
         raise ValueError(f"{path}: no 'goal' in front matter")

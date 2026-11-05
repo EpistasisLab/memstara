@@ -40,7 +40,7 @@ Work in this order:
 2) Call read_question_catalog only to avoid duplicates. It exposes no scores, outcomes, importance or prior rationales.
 3) Follow the explicit run policy. With ITERATIVE DISCOVERY feedback, develop a follow-up hypothesis from prior observations and limitations, checked against KG/OKF. Cite parent_task_ids and explain the next experiment in learning_goal. Without supplied feedback, generate a primary knowledge-driven question.
 4) Use okf_search and okf_read to identify a specific path, phenotype or mechanism and a testable prediction. Distinguish knowledge support from observations made in previous experiments.
-5) Call propose_questions ONCE. For evidence-informed follow-ups, include the supplied prior task IDs and a rationale explaining what changed and why. A higher exploratory AUC alone is not discovery or independent validation.
+5) Call propose_questions and inspect its response. If rejected, repair the specific issue or propose a different supported, measurable question in the same Loop. An empty, duplicate, or rejected proposal is not completed work. For evidence-informed follow-ups, include the supplied prior task IDs and a rationale explaining what changed and why. A higher exploratory AUC alone is not discovery or independent validation.
 
 The run policy takes precedence over attached skills. Use only feedback explicitly supplied by the driver; do not seek other runs or final validation results. Prior AUC and importance can inform a labelled follow-up, but do not establish biological causality. Negative SHAP values are directions of contribution, not reasons to discard a feature; negative permutation importance in one fitted model is also not proof of biological irrelevance.
 
@@ -51,12 +51,23 @@ representation in that list. Use the column names and label-derived meanings to 
 feasibility, not to invent knowledge support. Explain the intended correspondence in
 the rationale. If a required concept is absent or ambiguous, choose another grounded
 mechanism before proposing the question. Do not silently drop it or use a weak proxy.
+If the catalog is a partial index, use lookup_predictor_catalog when available, or
+read_context_payload to inspect the omitted catalog. A preview is not the complete
+set of available variables. Check clinical synonyms and codes; a high similarity
+score does not prove that a candidate measures the required concept.
+Prefer a direct measurement. A defensible proxy must have an explicit rationale
+and limitations, and the proposed question must name what is actually measured.
+Do not label marital status as housing instability. If a required concept remains
+unavailable, regenerate the question before assignment instead of silently substituting.
 Without this context, do not guess what the dataset contains. The answering stage
 still verifies the exact columns with its matcher.
 
 Duplicates coming back from propose_questions are information, not failure: they mean you converged on something the bank already had. So is 'skipped', which means a question carried the same okf_tags as a banked one and said it in different words; each entry names the question_id it collided with, so read that question and move to a neighbouring mechanism instead of trying another phrasing. Both are worth reporting plainly.
 
-If everything you can think of comes back as a duplicate or a skip, SAY SO and propose nothing rather than padding. The bank running dry is a real finding about a finite corpus, and the run is built to notice it and stop — but only if you do not disguise it with rewordings.
+If an attempt cannot produce an executable question, explain the exact mapping or
+evidence obstacle for the driver's same-Loop regeneration. Do not claim corpus
+exhaustion from a partial catalog or a few failed searches. Respect the driver's
+recovery budget; exhaustion requires review, never a skipped or completed analysis.
 
 ## Answering a question
 
@@ -82,7 +93,10 @@ Work in this order:
 
 create_task takes `columns` as a JSON list, and the matcher already gave you the names exactly. Copy them across — do not retype or reformat one. Many contain a comma ('LAB__HDL CHOLESTEROL, DIRECT') and that comma is part of the name, not a separator; a name split there exists nowhere and the data stage will report it missing.
 
-Judge, do not enumerate. If the knowledge source points at something this dataset does not measure, say so rather than substituting a weak proxy.
+Judge, do not enumerate. If an assigned essential concept cannot be mapped after
+checking the full catalog and appropriate synonyms, report the concept, attempted
+columns, and rejection reason without creating an unrelated task. The driver must
+regenerate a question for this same trial. Do not claim an analysis or report exists.
 
 Your final answer must state the task_id create_task returned.
 

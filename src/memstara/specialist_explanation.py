@@ -224,6 +224,13 @@ def write_record(directory, phase, payload):
 
 
 async def prepare(snapshot, rows, loop, directory):
+    from memstara.pipeline.ablation import enabled
+    from memstara.pipeline.no_knowledge import scope
+
+    # Apply the condition before controller-side retrieval, not just at the
+    # later agent/tool boundary. The global snapshot can also contain OKF Loops.
+    snapshot = scope(snapshot, (loop or 1) - 1)
+    no_okf = enabled(snapshot)
     name = selected(snapshot, loop)
     if name is None:
         return None
@@ -235,6 +242,9 @@ async def prepare(snapshot, rows, loop, directory):
     interpretations = handoffs(snapshot, rows, loop)
     items = []
     for row in interpretations:
+        if no_okf:
+            items.append(row)
+            continue
         # Deterministic query from the same hypothesis; never another Loop's findings.
         query = row["hypothesis"]
         write_record(
@@ -260,11 +270,19 @@ async def prepare(snapshot, rows, loop, directory):
         "expert": expert,
         "skill": skill,
         "results": items,
-        "binding": policy["bindings"][expert],
+        "binding": None if no_okf else policy["bindings"][expert],
+        "knowledge_condition": "no_okf" if no_okf else "okf",
     }
     # No credentials, connection names, or raw dataset rows are put in the model message.
     visible = {k: payload[k] for k in ("run_tag", "loop", "expert", "results")}
     message = "Input for the selected Explanation skill:\n" + json.dumps(visible, ensure_ascii=False, default=str)
+    if no_okf:
+        message += (
+            "\nNO-OKF CONDITION: No external knowledge was retrieved or supplied. "
+            "Explain only the supplied analysis and Interpretation results. General model knowledge "
+            "must be identified as unverified. Do not invent citations or claim database evidence. "
+            "This condition overrides the skill's retrieval and source-citation requirements."
+        )
     payload["user_prompt"] = message
     receipt = write_record(directory, "input", payload)
     return {"payload": payload, "receipt": receipt, "prompt": message}
@@ -276,10 +294,12 @@ def finish(prepared, text, entry, directory, *, normalization=None):
         {
             f"[{r['knowledge']['database_id']}:{d['id']}]"
             for r in payload["results"]
-            for d in r["knowledge"]["documents"]
+            for d in r.get("knowledge", {}).get("documents", [])
         }
     )
     citation_audit = audit_citations(text, refs)
+    if payload.get("knowledge_condition") == "no_okf" and not citation_audit["observed_citations"]:
+        citation_audit.update(status="not_applicable", warnings=[])
     # Citation omissions and mismatches are evidence-quality warnings, not execution
     # failures. Preserve the model text and exact audit so later review can distinguish
     # a completed report from a fully source-cited report.
@@ -305,7 +325,8 @@ def finish(prepared, text, entry, directory, *, normalization=None):
     summary = {
         "expert": payload["expert"],
         "loop": payload["loop"],
-        "database_ids": sorted({r["knowledge"]["database_id"] for r in payload["results"]}),
+        "database_ids": sorted({r["knowledge"]["database_id"] for r in payload["results"] if "knowledge" in r}),
+        "knowledge_condition": payload.get("knowledge_condition", "okf"),
         "interpretation_methods": sorted({i["method"] for r in payload["results"] for i in r["interpretations"]}),
         "task_ids": [r["task_id"] for r in payload["results"]],
         "input": prepared["receipt"],
@@ -319,34 +340,23 @@ def finish(prepared, text, entry, directory, *, normalization=None):
 
 
 def assemble(snapshot, directory):
-    """Join verified per-condition reports without using the last expert to rewrite peers."""
-    root = Path(directory)
-    reports = []
-    missing = []
-    for loop in range(1, snapshot["combination_plan"]["total_loops"] + 1):
-        path = root / f"loop-{loop}.json"
-        if not path.exists():
-            missing.append(loop)
-            continue
-        item = json.loads(path.read_text())
-        record = read_receipt(item["receipt"])
-        if (
-            record["config_hash"] != snapshot["config_hash"]
-            or record["run_tag"] != snapshot["run_tag"]
-            or record["loop"] != loop
-        ):
-            raise ValueError("Saved Explanation report belongs to another condition")
-        expected = {**record["provenance"], "output": item["receipt"]}
-        if item["summary"] != expected:
-            raise ValueError("Saved Explanation provenance integrity mismatch")
-        reports.append((loop, record["output"], expected))
-    text = "\n\n".join(output for _, output, _ in reports)
+    """Assemble the logical experiment across verified immutable attempt receipts."""
+    from memstara.logical_experiment import report_index
+    from memstara.pipeline.checkpoint import atomic_json
+
+    index,reports = report_index(snapshot,Path(directory).parent)
+    atomic_json(Path(directory).parent/'experiment_index.json',index)
+    missing = index['missing_loops']
+    text = "\n\n".join(reports[loop]['output'] for loop in sorted(reports))
     return text, {
         "status": "failed" if missing else "completed",
         "error": "Missing per-condition Explanation reports" if missing else None,
         "specialist_explanation": {
             "status": "incomplete" if missing else "completed",
-            "reports": [summary for _, _, summary in reports],
+            "reports": [reports[loop]['summary'] for loop in sorted(reports)],
+            'logical_experiment_id':index['id'],
+            'source_run_tags':[attempt['run_tag'] for attempt in index['attempts']],
+            'expected_combinations':index['expected_combinations'],
             "missing_loops": missing,
             "aggregation": "verbatim saved reports; no new LLM call",
         },
@@ -390,6 +400,9 @@ async def execute(snapshot, loop, run_dir, args, kwargs, invoke, read_board_tool
             raise
         error = str(exc) if isinstance(exc, (ValueError, expert_knowledge.KnowledgeError)) else type(exc).__name__
         value = {"status": "failed", "error": error, "specialist_explanation": {"status": "failed", "loop": loop}}
+        from memstara.pipeline.board_reads import exception_details
+
+        value['diagnostics'] = exception_details(exc)
         if directory:
             write_record(
                 directory,

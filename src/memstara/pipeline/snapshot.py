@@ -202,6 +202,22 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     }
     if bindings:
         state["skill_bindings"] = bindings
+    from memstara.pipeline.context_payloads import VERSION as context_version
+
+    if previous is None:
+        state["context_payload_policy"] = context_version
+    elif "context_payload_policy" in previous:
+        state["context_payload_policy"] = previous["context_payload_policy"]
+    if previous is None:
+        state["question_feasibility_policy"] = "explicit_columns_v1"
+    elif "question_feasibility_policy" in previous:
+        state["question_feasibility_policy"] = previous["question_feasibility_policy"]
+    if previous is None:
+        from memstara.pipeline.no_knowledge import VERSION as isolation_version
+
+        state["no_knowledge_isolation"] = isolation_version
+    elif "no_knowledge_isolation" in previous:
+        state["no_knowledge_isolation"] = previous["no_knowledge_isolation"]
     if getattr(args, "research_profile", None):
         state["research_profile"] = args.research_profile
         state["missing_value_policy"] = missing_policy
@@ -363,6 +379,9 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     retry_loops = from_arguments(args, args.waves)
     if retry_loops:
         state["retry_selection"] = {"source_run_tag": args.retry_source_run, "loops": retry_loops}
+    from memstara.pipeline.hybrid import freeze_policy as freeze_hybrid
+
+    freeze_hybrid(state, previous)
     state["config_hash"] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
     location = run_dir / "config.json"
     if location.exists():

@@ -13,6 +13,7 @@ import shutil
 BOARD_TABLES = (
     "memstara_execution_artifacts", "memstara_execution_costs", "memstara_execution_agents",
     "memstara_executions", "memstara_results", "memstara_blackboard", "memstara_questions",
+    "memstara_experiment_combinations", "memstara_experiments",
 )
 RUNTIME_CHILDREN = ("messages", "run_steps", "flat", "memory_entries")
 
@@ -24,7 +25,7 @@ def quote(name):
 def preserved(root):
     candidates = [root / "runs/pipeline_workspace.json", root / "skills",
                   root / "private-model-connections", root / "skill_aliases.json",
-                  Path("/app/user-inputs")]
+                  Path(os.environ.get("MEMSTARA_INPUTS_DIR", "/app/user-inputs"))]
     files = [p for item in candidates for p in (item.rglob("*") if item.is_dir() else [item]) if p.is_file()]
     files.extend((root / "research_inputs").glob("*.json"))
     return {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
@@ -32,8 +33,8 @@ def preserved(root):
 
 def targets(root):
     result = []
-    for p in (root / "runs").iterdir():
-        if p.name == "pipeline_workspace.json":
+    for p in (root / "runs").iterdir() if (root / "runs").exists() else ():
+        if p.name in {"pipeline_workspace.json", "history_epoch.json"}:
             continue
         if not p.is_dir() or not (p / "control_record.json").is_file():
             raise RuntimeError(f"Unrecognized runs entry; not deleting: {p.name}")
@@ -51,6 +52,12 @@ def targets(root):
 async def tables(conn):
     return {r["tablename"] for r in await conn.fetch(
         "SELECT tablename FROM pg_tables WHERE schemaname='public'")}
+
+
+def validate_board_dependencies(edges):
+    for edge in edges:
+        if edge['parent'] in BOARD_TABLES and (edge['child_schema'] != 'public' or edge['child'] not in BOARD_TABLES):
+            raise RuntimeError('Unknown dependency on execution history; nothing deleted')
 
 
 def runtime_cleanup_plan(existing, columns, edges):
@@ -91,6 +98,11 @@ def runtime_cleanup_plan(existing, columns, edges):
             # Older runtime versions contain run-linked rows without an FK.
             if "run_id" in columns.get(table, set()):
                 terms.append('"run_id"=ANY($1::uuid[])')
+            if table == 'memory_entries' and 'agent_id' in columns.get(table, set()):
+                # Semantic/episodic memories can outlive their run FK. Reset the
+                # installation's agent memories too, without removing the agents.
+                terms.append('"agent_id" IN (SELECT id FROM public.agents WHERE name LIKE \'memstara%\' '
+                             'OR id IN (SELECT agent_id FROM public.agent_runs WHERE id=ANY($1::uuid[])))')
             if not terms:
                 raise RuntimeError(f"Cannot safely scope {table} to executions; nothing deleted")
             predicate = "(" + " OR ".join(terms) + ")"
@@ -103,11 +115,12 @@ def runtime_cleanup_plan(existing, columns, edges):
     return [(table, predicates[table]) for table in reversed(order)]
 
 
-async def main(apply):
+async def main(apply, *, root=None, on_phase=None):
     import asyncpg
 
-    root = Path(os.environ.get("MEMSTARA_OUTPUT_DIR", "/app/outputs")).resolve()
-    if root != Path("/app/outputs"):
+    supplied_root = root
+    root = Path(root or os.environ.get("MEMSTARA_OUTPUT_DIR", "/app/outputs")).resolve()
+    if supplied_root is None and root != Path("/app/outputs"):
         raise RuntimeError("Expected this deployment's /app/outputs mount")
     keep = preserved(root)
     paths = targets(root)
@@ -128,8 +141,18 @@ async def main(apply):
             raise RuntimeError("Unexpected research DB schema; nothing deleted")
         if not {"agents", "agent_runs"} <= rt:
             raise RuntimeError("Unexpected runtime DB schema; nothing deleted")
+        validate_board_dependencies(await board.fetch("""SELECT child.relname AS child, parent.relname AS parent,
+            ns.nspname AS child_schema FROM pg_constraint c
+            JOIN pg_class child ON child.oid=c.conrelid JOIN pg_namespace ns ON ns.oid=child.relnamespace
+            JOIN pg_class parent ON parent.oid=c.confrelid
+            WHERE c.contype='f' AND parent.relnamespace='public'::regnamespace
+            AND parent.relname=ANY($1::text[])""", list(BOARD_TABLES)))
         run_ids = [r["id"] for r in await runtime.fetch(
             "SELECT r.id FROM agent_runs r JOIN agents a ON a.id=r.agent_id WHERE a.name LIKE 'memstara%'")]
+        # The registry also owns calls made through uploaded/custom agents.
+        if "memstara_execution_agents" in bt:
+            run_ids = list(set(run_ids) | {r["agent_run_id"] for r in await board.fetch(
+                "SELECT DISTINCT agent_run_id FROM memstara_execution_agents WHERE agent_run_id IS NOT NULL")})
         # Reject unfamiliar FK dependents rather than cascading into unknown data.
         edges = await runtime.fetch("""SELECT child.relname AS child, parent.relname AS parent,
             ns.nspname AS child_schema,
@@ -155,22 +178,33 @@ async def main(apply):
                           "runtime_cleanup_order": [table for table, _ in runtime_plan]}, indent=2), flush=True)
         if not apply:
             return
+        if on_phase:
+            on_phase("clearing_databases")
         # Delete children explicitly. Unexpected RESTRICT constraints abort both transactions.
         for table, predicate in runtime_plan:
             await runtime.execute(f"DELETE FROM public.{quote(table)} WHERE {predicate}", run_ids)
         for table in BOARD_TABLES:
             if table in bt:
                 await board.execute(f"DELETE FROM public.{quote(table)}")
-        assert preserved(root) == keep, "Settings changed during cleanup"
+        if preserved(root) != keep:
+            raise RuntimeError("Settings changed during cleanup")
         for tx in transactions:
             await tx.commit()
         transactions.clear()
+        if on_phase:
+            on_phase("clearing_files")
         for path in paths:
             if path.is_dir():
                 shutil.rmtree(path)
             else:
                 path.unlink()
-        assert preserved(root) == keep, "Settings preservation check failed"
+        if preserved(root) != keep:
+            raise RuntimeError("Settings preservation check failed")
+        for table in BOARD_TABLES:
+            if table in bt and await board.fetchval(f"SELECT count(*) FROM public.{quote(table)}"):
+                raise RuntimeError("Execution database verification failed")
+        if await runtime.fetchval("SELECT count(*) FROM agent_runs WHERE id=ANY($1::uuid[])", run_ids):
+            raise RuntimeError("Runtime execution verification failed")
         print("Execution history removed. Workspace, research, model and agent settings preserved.")
         print("No experiment started. Database schemas and sequence values retained.")
     finally:
@@ -186,4 +220,17 @@ async def main(apply):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true")
-    asyncio.run(main(parser.parse_args().apply))
+    from memstara.control.history_gate import maintenance_guard, quiescent_ml
+
+    cleanup_root = Path(os.environ.get("MEMSTARA_OUTPUT_DIR", "/app/outputs"))
+    with maintenance_guard(cleanup_root), quiescent_ml(cleanup_root):
+        apply = parser.parse_args().apply
+        asyncio.run(main(apply))
+        if apply:
+            from uuid import uuid4
+            from memstara.control.history import HistoryReset
+
+            identifier = str(uuid4())
+            HistoryReset(None, None)._save({'id': identifier, 'state': 'completed',
+                'revision': identifier, 'blocked': False,
+                'message': 'Execution history cleared by the startup maintenance command.'})

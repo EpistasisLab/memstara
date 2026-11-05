@@ -11,18 +11,19 @@ from memstara.pipeline import prompts
 def test_catalog_contains_both_corpus_profiles_and_general_choice(tmp_path, monkeypatch):
     monkeypatch.setenv('MEMSTARA_USER_SKILLS_DIR', str(tmp_path))
     ids = {i['id'] for i in catalog.catalog() if i['stage'] == 'hypothesis'}
-    assert ids == {'addiction-sdoh', 'hiv-psychiatric-or-substance-use',
-                   'hiv-okf-whole-graph', 'hiv-no-knowledge',
+    assert ids == {'addiction-psychiatric', 'addiction-substance-use',
+                   'hiv-okf-whole-graph', 'hiv-no-knowledge', 'hiv-integrated-clinical-knowledge',
+                   'hiv-model-knowledge-with-graph-augmentation',
                    'heart-failure-cardiovascular', 'heart-failure-metabolic-renal',
                    'heart-failure-lifestyle-social', 'heart-failure-all-categories', 'hypothesis_general'}
     for name in ids:
         catalog.validate_selection({'playbook_hypothesis': name})
 
 
-def test_superseded_hiv_domain_files_are_hidden_but_historically_resolvable(tmp_path, monkeypatch):
+def test_excluded_hiv_files_are_hidden_but_historically_resolvable(tmp_path, monkeypatch):
     monkeypatch.setenv('MEMSTARA_USER_SKILLS_DIR', str(tmp_path))
     visible = {item['id'] for item in catalog.catalog()}
-    for name in ('addiction-psychiatric', 'addiction-substance-use'):
+    for name in ('hiv-psychiatric-or-substance-use', 'addiction-sdoh', 'hiv-clinical-frailty'):
         assert name not in visible
         assert catalog.resolve(name)['content'].strip()
         assert prompts.load_prompt('board/hypothesis', name)['system_prompt']

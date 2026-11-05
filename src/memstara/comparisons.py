@@ -78,6 +78,7 @@ def write_context(subset_path, task, snapshot, *, data_allocation=None):
         "baseline_columns": baseline,
         "hypothesis_columns": columns,
         "groups": groups,
+        **({'hybrid': evaluation['hybrid']} if evaluation.get('hybrid') else {}),
     }
     with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, suffix=".json", delete=False) as f:
         json.dump(payload, f, allow_nan=False)

@@ -12,6 +12,56 @@ from memstara.agent_labels import AGENT_LABELS
 from memstara.pipeline.checkpoint import atomic_json
 
 
+def execution_progress(record):
+    """Read status, deriving original retry identity when an old writer used a count.
+
+    The historical files remain untouched. The repair is explicit in the response.
+    """
+    root = Path(record['run_dir'])
+    try:
+        progress = json.loads((root / 'progress.json').read_text())
+    except (OSError, ValueError):
+        return {}
+    try:
+        config = json.loads((root / 'config.json').read_text())
+        loops = (config.get('retry_selection') or {}).get('loops', [])
+        current = progress.get('iteration')
+        if loops and current not in loops:
+            manifest = json.loads((root / 'execution.json').read_text())
+            calls = [c for c in manifest.get('calls', []) if c.get('loop') in loops]
+            if calls:
+                call = max(calls, key=lambda c: (c['loop'], c.get('started_at') or 0))
+                stage = str(call.get('stage', '')).split('#', 1)[0]
+                stage = ('hypothesis' if stage.startswith(('question', 'hypothesis')) else
+                         'interpreter' if stage.startswith('interpret') else stage)
+                progress = {**progress, 'recorded_iteration': current, 'iteration': call['loop'],
+                            'identity_source': 'execution_manifest', 'stage': stage}
+        journal_path = root / 'iteration_outcomes.json'
+        if loops and journal_path.is_file():
+            journal = json.loads(journal_path.read_text())
+            valid = {key: value for key, value in journal.items() if key.isdigit() and int(key) in loops}
+            if valid:
+                latest_key = max(valid, key=int)
+                latest = dict(valid[latest_key])
+                status_path = root / 'pipeline_status.json'
+                status = json.loads(status_path.read_text()) if status_path.is_file() else {}
+                if latest.get('outcome') in ('running', 'analysis_complete') and status.get('status') == 'failed':
+                    latest['outcome'] = 'blocked'
+                    latest['reason'] = status.get('message', 'Execution failed; inspect diagnostics')
+                    valid[latest_key] = latest
+                progress['exploration'] = {
+                    'attempted': len(valid),
+                    'completed': sum(v.get('outcome') == 'completed' for v in valid.values()),
+                    'blocked': sum(v.get('outcome') == 'blocked' for v in valid.values()),
+                    'skipped': sum(v.get('outcome') == 'skipped' for v in valid.values()),
+                    'outcome': latest.get('outcome'), 'reason': latest.get('reason', ''),
+                    'count_source': 'original_selected_loop_ids',
+                }
+    except (OSError, ValueError, TypeError):
+        pass
+    return progress
+
+
 def loop_totals(records):
     """Count recorded Loop attempts across executions, never configured budgets."""
     totals = dict(attempted=0, completed=0, blocked=0, unknown_executions=0)
@@ -22,7 +72,7 @@ def loop_totals(records):
             continue
         seen.add(tag)
         try:
-            progress = json.loads((Path(record["run_dir"]) / "progress.json").read_text())
+            progress = execution_progress(record)
             outcome = progress.get("exploration") or {}
             attempted = outcome.get("attempted", progress.get("iteration"))
             if type(attempted) is not int or attempted < 0:
@@ -93,10 +143,7 @@ class PipelineWorkspace:
                 latest = current or (history[0] if history else None)
                 progress = {}
                 if latest:
-                    try:
-                        progress = json.loads((Path(latest["run_dir"]) / "progress.json").read_text())
-                    except (OSError, ValueError):
-                        pass
+                    progress = execution_progress(latest)
                 if latest:
                     # Historical progress must use that execution's frozen limit,
                     # even after the user changes the next execution's settings.

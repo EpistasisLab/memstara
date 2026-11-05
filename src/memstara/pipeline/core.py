@@ -515,7 +515,15 @@ def tools_for(
     picked = [t for t in registry.get_all_tools(server_ids=server_ids) if t.get("server") in servers]
     if only is None:
         return picked
-    return [t for t in picked if t.get("tool_name") in only]
+    from memstara.evaluation import active_plan
+    from memstara.pipeline.context_payloads import enabled
+
+    allowed = only | {"read_context_payload"} if enabled(active_plan()) else only
+    if (active_plan() or {}).get("question_feasibility_policy") == "explicit_columns_v1" and (
+        "propose_questions" in only or "create_task" in only
+    ):
+        allowed = allowed | {"lookup_predictor_catalog"}
+    return [t for t in picked if t.get("tool_name") in allowed]
 
 
 @contextmanager

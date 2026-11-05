@@ -13,10 +13,12 @@ PROFILES = {
     "hiv": {
         "label": "HIV / Addiction knowledge corpus",
         "hypothesis": [
-            "hiv-psychiatric-or-substance-use",
-            "addiction-sdoh",
+            "addiction-psychiatric",
+            "addiction-substance-use",
             "hiv-okf-whole-graph",
             "hiv-no-knowledge",
+            "hiv-integrated-clinical-knowledge",
+            "hiv-model-knowledge-with-graph-augmentation",
             "random_features",
         ],
         "report": ["shared-hiv", "shared-addiction"],
@@ -47,6 +49,8 @@ EXPLANATION_SKILLS = (
 )
 
 INDEX_PROFILES = {
+    # Standalone, unmodified phil_shared/hiv-suppression/okf literature corpus.
+    "2590857923b94a55e36fca41fdadc044bf76a86dc77b2048a3d08f0ea7f7b64f": "hiv",
     "c17e23a6a752b9324bba09226b6b00c5091f9b0d0e1a8e6caa23c24e682a33b3": "hiv",
     "aec7452874f70ec9b427f55187aad44a8115d0720e585294fc70e6ad11b12527": "hiv",
     "e90b6191d13c1c1bc626713bf4c12787f445b72e24aac523598ac483156c7a06": "heart_failure",
@@ -98,7 +102,7 @@ def menu_bindings():
 def validate_hypotheses(books, profile=None, *, knowledge_mode="okf"):
     scope = corpus_profile(profile, knowledge_mode=knowledge_mode)
     # General/custom choices remain executable for existing saved runs. The UI
-    # offers the four corpus-specific choices for new known-corpus selections.
+    # offers the explicitly registered corpus-specific choices for new selections.
     permitted = set(PROFILES[scope]["hypothesis"]) | {"hypothesis_general"}
     for name in books.get("hypothesis", []):
         if name not in permitted and not (scope != "hiv" and name.startswith("user-hypothesis-")):

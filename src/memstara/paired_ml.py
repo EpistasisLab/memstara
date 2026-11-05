@@ -109,10 +109,14 @@ def execute(path, target, evaluation, snapshot, proposal):
     accepted = config.validate(proposal, snapshot, evaluation)
     record = config.identity(path, snapshot, evaluation, accepted)
     handoff = json.loads(path.with_suffix(".comparison.json").read_text())
+    if handoff.get('hybrid') and accepted['folds'] < 2:
+        raise ValueError('Hybrid comparison requires at least two training CV folds')
     recorded_splits = (handoff.get("data_allocation") or {}).get("replicates", [])
     if accepted["folds"] and any(accepted["folds"] > min(r["train_class_counts"].values()) for r in recorded_splits):
         raise ValueError("Reduce training CV folds to the smallest training class count")
     variants = 2 + len(handoff.get("groups", {})) if snapshot.get("comparison_policy") else 1
+    if handoff.get('hybrid'):
+        variants = 3
     if exceeds_limit(limits, "max_fits", evaluation["replicates"] * (accepted["folds"] + 2) * variants):
         raise ValueError("Reduce training CV folds: selected-model fit count exceeds the resource budget")
     root = Path(os.environ.get("MEMSTARA_OUTPUT_DIR") or DEFAULT_OUTPUT_DIR)
@@ -267,6 +271,8 @@ def fit(request):
         raise DataQualityError("Encoded design matrix exceeds ML memory budget")
     handoff = json.loads(path.with_suffix(".comparison.json").read_text())
     variants = 2 + len(handoff.get("groups", {})) if snapshot.get("comparison_policy") else 1
+    if handoff.get('hybrid'):
+        variants = 3
     models_to_fit = (proposal["primary_model"],)
     estimated_fits = len(models_to_fit) * evaluation["replicates"] * (proposal["folds"] + 2) * variants
     if exceeds_limit(limits, "max_fits", estimated_fits):
@@ -280,7 +286,12 @@ def fit(request):
             atomic(path.with_suffix(".paired-progress.json"), {"phase": name, "completed_models": results})
             plan = {**evaluation, "engine": name, "folds": proposal["folds"], "search_trials": 1}
             configuration = proposal["models"][name]
-            if snapshot.get("comparison_policy"):
+            if handoff.get('hybrid'):
+                from memstara.hybrid_evaluation import score_hybrid
+
+                measured = score_hybrid(path, request['target'], plan, snapshot,
+                                        configuration=configuration, xai_request=specialist)
+            elif snapshot.get("comparison_policy"):
                 measured = score_comparisons(
                     path, request["target"], plan, snapshot, configuration=configuration, xai_request=specialist
                 )

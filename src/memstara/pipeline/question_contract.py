@@ -14,6 +14,7 @@ class QuestionProposal(TypedDict):
     text: NotRequired[str]
     parent_task_ids: NotRequired[list[int]]
     learning_goal: NotRequired[str]
+    proposed_mapping: NotRequired[list["FeatureMapping"]]
 
 
 class FeatureMapping(TypedDict):
@@ -73,8 +74,12 @@ def make_contract(item, plan):
 
     selection = context(plan, item.get("origin_wave"))
     random_selection = selection is not None and selection["mode"] == "random"
-    if selection:
-        plan = scoped(plan, item["origin_wave"])
+    plan = scoped(plan, item.get("origin_wave", 0))
+    from memstara.pipeline.hybrid import selected as hybrid_selected, contract_metadata
+
+    hybrid = None
+    if not plan.get('no_knowledge_condition') and hybrid_selected(plan, item.get('origin_wave', 0)):
+        hybrid = contract_metadata(plan, item.get('origin_wave', 0), item.get('proposed_mapping'))
     target = plan.get("y_column")
     if not isinstance(target, str) or not target or item.get("target", target) != target:
         raise ValueError("Question target must exactly match the fixed run target")
@@ -146,8 +151,13 @@ def make_contract(item, plan):
 
     ablated = ablation_enabled(plan)
     sources = item.get("source_ids")
-    if ablated:
-        if sources not in (None, []) or item.get("okf_tags") not in (None, []):
+    if hybrid and not hybrid['augmentation_columns']:
+        if sources not in (None, []) or item.get('okf_tags') not in (None, []):
+            raise ValueError('A baseline-only hybrid proposal cannot claim graph sources or tags')
+        sources = []
+    elif ablated:
+        if (sources not in (None, []) or item.get("okf_tags") not in (None, [])
+                or item.get("path_uses") or item.get("okf_concept_ids")):
             raise ValueError("OKF ablation must not claim source documents or corpus tags")
         sources = []
     elif plan.get("recovery_policy") or sources is not None:
@@ -166,6 +176,8 @@ def make_contract(item, plan):
         lineage["origin_wave"] = item["origin_wave"]
         if random_selection:
             lineage["kind"] = "random_feature_control"
+    if plan.get("no_knowledge_condition"):
+        lineage["origin_wave"] = item.get("origin_wave", 0)
     contract = {
         "version": VERSION,
         "target": target,
@@ -173,10 +185,26 @@ def make_contract(item, plan):
         "rationale": rationale,
         **lineage,
         **({"evidence_mode": "no_okf"} if ablated else {}),
+        **({'evidence_mode': 'hybrid', 'hybrid': hybrid} if hybrid else {}),
         **({"source_ids": sources} if sources is not None else {}),
     }
     if item.get("text") not in (None, "", question_text(contract)):
         raise ValueError("Omit free-text questions; the server binds the predictor concepts to the fixed target")
+    if plan.get("question_feasibility_policy") == "explicit_columns_v1" and not random_selection:
+        mapping = item.get("proposed_mapping")
+        if not isinstance(mapping, list) or not all(isinstance(row, dict) for row in mapping):
+            raise ValueError("Supply proposed_mapping for every concept after checking the full predictor catalog")
+        columns = [row.get("column") for row in mapping]
+        if any(not isinstance(column, str) for column in columns):
+            raise ValueError("proposed_mapping columns must be exact catalog names")
+        contract["proposed_mapping"] = validate_mapping(mapping, contract, columns, sources or [])
+        error = predictor_column_error(columns, plan)
+        if error:
+            raise ValueError("proposed_mapping contains unavailable or excluded predictor columns")
+        if hybrid:
+            from memstara.pipeline.feature_selection import validate
+
+            validate(columns, plan, item['origin_wave'])
     return contract
 
 
@@ -203,6 +231,13 @@ def validate_saved(contract, text, plan):
 def generation_instructions(plan):
     if not enabled(plan):
         return ""
+    if plan.get("no_knowledge_condition"):
+        return (f" The ONLY prediction target is {plan['y_column']!r}. Supply predictor_concepts, "
+                "a general-knowledge rationale, source_ids=[], okf_tags=[], and proposed_mapping "
+                'with exact CSV columns and source_id="". Omit text and target; the server binds them. '
+                "Do not cite retrieved documents or supply prior-result lineage.")
+    if plan.get('_hybrid_question'):
+        return ' Preserve the frozen baseline and justify only actual graph-grounded additions.'
     from memstara.pipeline.iteration_learning import enabled as learning_enabled
 
     rationale = (
@@ -234,11 +269,12 @@ def validate_mapping(mapping, contract, columns, source_ids):
             raise ValueError("Each feature_mapping entry must be an object")
         if row.get("concept") not in concepts or row.get("column") not in columns:
             raise ValueError("Feature mapping must reference the assigned concepts and selected columns exactly")
-        if (
-            row.get("source_id") != ""
-            if contract.get("evidence_mode") == "no_okf"
-            else row.get("source_id") not in source_ids
-        ):
+        baseline = (contract.get('hybrid') or {}).get('baseline_mapping', [])
+        original = next((b for b in baseline if b.get('column') == row.get('column')), None)
+        if original is not None and row != original:
+            raise ValueError('Frozen hybrid baseline mappings cannot change')
+        requires_empty = contract.get('evidence_mode') == 'no_okf' or original is not None
+        if (row.get('source_id') != '' if requires_empty else row.get('source_id') not in source_ids):
             raise ValueError("Feature mapping must cite a selected knowledge source ID")
         rationale = row.get("rationale")
         if not isinstance(rationale, str) or not rationale.strip() or len(rationale) > 2000:

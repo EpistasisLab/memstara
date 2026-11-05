@@ -121,6 +121,7 @@ def test_finished_worker_without_submission_cannot_stay_running(stage, monkeypat
     asyncio.run(board.settle_finished_workers(None, "test"))
     last = submit.call_args.args[2]
     assert last["task_id"] == 10 and last["error"] and last["worker"] == f"{stage}#1"
+    assert last["execution_failed"] is True
     assert all(call.args[2]["task_id"] != 11 for call in submit.call_args_list)
 
 

@@ -201,7 +201,12 @@ def stop_execution(run_dir, stage, loop, error, *, code=None, message=None) -> N
         if original:
             record = original
         else:
+            from memstara.pipeline.board_reads import exception_details, record_stop
+
+            if isinstance(error, BaseException):
+                record['exceptions'] = exception_details(error)
             atomic_json(root / "pipeline_failure.json", record)
+            record_stop(root, 'failure_detected', loop=loop, stage=stage, code=record['code'], error=error)
         atomic_json(
             root / "pipeline_status.json", {"status": "failed", "failure": record, "message": record["message"]}
         )
@@ -246,13 +251,23 @@ def record_startup_failure(run_dir, problems):
     root = Path(run_dir)
     root.mkdir(parents=True, exist_ok=True)
     record = read_failure(root) or startup_failure(problems)
+    from memstara.pipeline.board_reads import record_stop
+
+    record_stop(root, 'startup_rejected', stage='preflight', code=record['code'])
     atomic_json(root / "pipeline_failure.json", record)
     atomic_json(root / "pipeline_status.json", {"status": "failed", "failure": record, "message": record["message"]})
 
 
 def visible_failure(run_dir, *, include_legacy=True):
     """Surface an older failed run's cause without altering its original artifacts."""
+    from memstara.rebuild_report import recovered, report_failure
+
+    if recovered(run_dir):
+        return None
     if failure := read_failure(run_dir):
+        if report_failure(run_dir):
+            return {**failure,'code':'final_report_assembly_failed','stage':'report_assembly',
+                'message':'Analyses are complete. Final report assembly needs recovery; rebuild the report without rerunning analyses.'}
         if failure.get("http_status") == 429 and failure.get("code") == "model_request_rejected":
             return {
                 **failure,
