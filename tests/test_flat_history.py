@@ -47,3 +47,9 @@ def test_completed_history_reused_but_live_calls_and_completion_changes_refresh(
 def test_compaction_preserves_error_presence_and_required_identifiers():
     row=dict(zip(flat_history._COLUMNS,(uuid.uuid4(),uuid.uuid4(),None,'board','claim_task','{}',json.dumps({'task_id':4,'run_tag':'run','error':None,'large':'discard'}))))
     assert json.loads(flat_history.compact(row)[-1])=={'task_id':4,'run_tag':'run','error':None}
+
+
+def test_plain_tool_errors_cannot_abort_history_compaction():
+    text = 'Error calling submit_result: the task is not ready'
+    row=dict(zip(flat_history._COLUMNS,(uuid.uuid4(),uuid.uuid4(),None,'board','submit_result','{}',text)))
+    assert json.loads(flat_history.compact(row)[-1]) == {'error': text}

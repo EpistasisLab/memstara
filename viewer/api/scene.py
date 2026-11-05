@@ -1192,11 +1192,32 @@ async def _snapshot_uncached(run_tag: str | None, loop: int | None = None, *, te
             if agent["stage"] not in ("hypothesis", "interpreter"):
                 agent["playbook"] = (books.get(agent["stage"]) or [""])[0]
 
+    report = artifacts["report"] if artifacts and loop is None else None
+    # Display retained findings without changing the live board or agent inputs.
+    logical_scope = None
+    if not telemetry and artifacts:
+        from continuations import tags as history_tags, reports as history_reports
+        history = await asyncio.to_thread(history_tags, tag)
+        config = artifacts['config']
+        logical_scope = {'id':history[0], 'name':config.get('pipeline_name'),
+            'head_run_tag':tag, 'run_tags':history,
+            'scheduled_combinations':(config.get('combination_plan') or {}).get('total_loops')}
+        if len(history) > 1:
+            configs = await asyncio.to_thread(run_artifacts.configs)
+            groups = await asyncio.gather(*(_results(t) for t in history[:-1]))
+            groups.append(results)
+            results = [{**r, **run_artifacts.result_identity(configs.get(t) or {}, t, r['trial'])}
+                       for t, group in zip(history, groups, strict=True) for r in group]
+            report = await asyncio.to_thread(history_reports, history, artifacts)
+        logical_scope['result_combinations'] = len({r.get('iteration') or
+            int(r['trial'])//max(1,config.get('trials',1))+1 for r in results})
+
     return {
         "run_tag": tag,
+        **({'experiment':logical_scope} if logical_scope else {}),
         **({"telemetry": telemetry_meta, "loop_log": loop_log} if telemetry else {}),
         "run_configuration": artifacts["config"] if artifacts else None,
-        "report": artifacts["report"] if artifacts and loop is None else None,
+        "report": report,
         "pipeline": artifacts["pipeline"] if artifacts and loop is None else None,
         "scene_scope": "selected_run",
         "runs": runs,

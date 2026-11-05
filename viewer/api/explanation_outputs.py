@@ -59,8 +59,17 @@ def _read_saved_outputs(directory, tag):
             continue
         text = record.get('output')
         if isinstance(text, str) and text.strip():
+            extra = {}
+            provenance = record.get('provenance') or {}
+            if isinstance(provenance, dict) and isinstance(provenance.get('task_ids'), list):
+                extra['task_ids'] = provenance['task_ids']
+            execution = record.get('execution') or {}
+            if execution.get('run_id'):
+                extra['agent_run_id'] = execution['run_id']
+            if record.get('expert'):
+                extra['expert'] = record['expert']
             outputs.append({'loop': loop, 'result_id': None, 'text': text,
-                            'status': (record.get('execution') or {}).get('status', 'unknown')})
+                            'status': execution.get('status', 'unknown'), **extra})
     manifest = read(directory / 'execution.json', directory)
     calls = manifest.get('calls', []) if isinstance(manifest, dict) else []
     recorded_loops = {item['loop'] for item in outputs}

@@ -15,6 +15,31 @@ _cache = None
 _lock = asyncio.Lock()
 
 
+def scoped_outcomes(execution):
+    """Ignore legacy ordinal counters outside a retry's original frozen IDs.
+
+    Actual call receipts remain untouched and every attempt still costs money.
+    A presentation repair must never relabel or discard measured model usage.
+    """
+    config = execution.get('configuration') or {}
+    selection = (config.get('retry_selection') or {}).get('loops')
+    outcomes = dict(execution.get('outcomes') or {})
+    if selection is not None:
+        total = (config.get('combination_plan') or {}).get('total_loops',config.get('waves'))
+        if (not isinstance(selection,list) or not selection
+                or any(type(n) is not int or n<1 or (type(total) is int and n>total) for n in selection)):
+            raise HTTPException(503,'Original retry combination IDs are unavailable')
+        selected = set(selection)
+        outcomes = {key:value for key,value in outcomes.items() if str(key).isdigit() and int(key) in selected}
+    status = execution.get('execution_status') or {}
+    numbered = [key for key in outcomes if str(key).isdigit()]
+    if numbered and status.get('status') in ('failed','cancelled','interrupted'):
+        latest = max(numbered,key=lambda key:int(key))
+        if outcomes[latest].get('outcome') in ('running','analysis_complete'):
+            outcomes[latest] = {**outcomes[latest],'outcome':'blocked' if status['status']=='failed' else 'interrupted'}
+    return outcomes
+
+
 def metrics(calls, rows):
     ids = {c['run_id'] for c in calls if c.get('run_id')}
     selected = list({str(r['id']): r for r in rows if str(r['id']) in ids}.values())
@@ -102,10 +127,47 @@ def inventory():
             continue
         directory = archive.directory_for(tag)
         outcomes = archive.read_json(directory / 'iteration_outcomes.json') or {}
-        executions.append({'tag': tag, 'pipeline_id': config['pipeline_id'],
+        execution = {'tag': tag, 'pipeline_id': config['pipeline_id'],
                            'model': config.get('model'), 'provider': config.get('provider'), 'configuration': config,
-                           'calls': call_loops(item['calls']), 'outcomes': outcomes})
+                           'calls': call_loops(item['calls']), 'outcomes': outcomes,
+                           'execution_status':item.get('pipeline') or {}}
+        execution['outcomes'] = scoped_outcomes(execution)
+        executions.append(execution)
     return configured, executions
+
+
+def continued_usage(executions, rows):
+    """One cumulative view per explicit retry chain, retaining all attempt costs."""
+    from continuations import tags
+    indexed = {e['tag']: e for e in executions}
+    result = []
+    for current in executions:
+        history = tags(current['tag'])
+        if any(t not in indexed for t in history):
+            raise HTTPException(503, 'Continuation usage archive is unavailable')
+        records = [{**indexed[t],'outcomes':scoped_outcomes(indexed[t])} for t in history]
+        calls = [c for e in records for c in e['calls']]
+        numbers = {c['loop'] for c in calls if c['loop'] is not None}
+        numbers.update(int(n) for e in records for n in e['outcomes'] if str(n).isdigit() and int(n) > 0)
+        loops = []
+        for n in sorted(numbers):
+            attempts = [e['outcomes'][str(n)] for e in records if str(n) in e['outcomes']]
+            outcome = attempts[-1] if attempts else {}
+            selected = [c for c in calls if c['loop'] == n]
+            metric = loop_metrics(selected, rows, outcome)
+            if len(attempts) > 1:
+                # Failed attempts still cost money. Span includes retry gaps and
+                # must not enter the fully measured per-attempt average cohort.
+                metric.update(recorded_span(selected, rows), attribution='approximate')
+            sources = [e['tag'] for e in records if str(n) in e['outcomes'] or any(c['loop'] == n for c in e['calls'])]
+            loops.append({'number': n, 'run_tags': sources, **archive.identity(current['configuration'], n), **metric})
+        result.append({'run_tag': current['tag'], 'run_tags': history,
+                       'pipeline_id': current['pipeline_id'], 'model': current.get('model'),
+                       'provider': current.get('provider'), **metrics(calls, rows),
+                       **recorded_span(calls, rows), 'loops': loops,
+                       'loop_summary': completed_summary(loops),
+                       'unassigned': metrics([c for c in calls if c['loop'] is None], rows)})
+    return result
 
 
 async def totals():
@@ -144,6 +206,7 @@ async def totals():
                 result = {'scope': 'All saved executions of pipelines currently in this workspace',
                           'updated_at': datetime.now(UTC).isoformat(),
                           'total': metrics(calls, rows), 'pipelines': pipelines, 'executions': details,
+                          'experiments': await asyncio.to_thread(continued_usage, executions, rows),
                           'loop_summary': completed_summary([row for e in details for row in e['loops']])}
                 _cache = (time.monotonic(), result)
                 return result

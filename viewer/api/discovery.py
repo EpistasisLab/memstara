@@ -80,6 +80,11 @@ async def live_outputs(tags: list[str]) -> dict[str, Any]:
     """One bounded read for all active pipeline outputs, without querying core history."""
     import hashlib
     from datetime import datetime, timezone
+    from continuations import expand, tags as history_tags
+
+    requested_tags = list(tags)
+    histories = await asyncio.to_thread(lambda: {tag: history_tags(tag) for tag in requested_tags})
+    tags = await asyncio.to_thread(expand, requested_tags)
 
     def revision(value):
         import json
@@ -162,6 +167,7 @@ async def live_outputs(tags: list[str]) -> dict[str, Any]:
                 event(f'report:{tag}', tag, 'report', 'Report updated', report.get('text') or report.get('error'), status=report.get('status') or 'recorded')
     # The cap is explicit; browsing archives remains available through the question bank.
     return dict(events=events, questions=questions, results=results, reports=reports,
+                run_tags=tags, continuation_groups=histories,
                 generated_at=datetime.now(timezone.utc).isoformat(), record_limit=200)
 
 

@@ -104,7 +104,7 @@ def pipeline_state(directory):
     return state
 
 
-def lookup(tag):
+def lookup(tag, *, preserve_output_versions=False):
     with _index_lock:
         _refresh_index()
         matches = list(_matches.get(tag, []))
@@ -140,7 +140,12 @@ def lookup(tag):
         for location in locations:
             if location.resolve().is_relative_to(ROOT.resolve()):
                 for output in saved_outputs(location, tag):
-                    explanations[(output['loop'], output['result_id'])] = {**output, **identity(config, output['loop'])}
+                    key = (output['loop'], output['result_id'])
+                    if preserve_output_versions:
+                        # Bulk export retains distinct recovered narratives while normal
+                        # screen views keep their established latest-version behavior.
+                        key += (output.get('agent_run_id'), output.get('text'))
+                    explanations[key] = {**output, **identity(config, output['loop'])}
         result = {
             "config": {k: config.get(k) for k in (
                 "hypotheses", "interpreters", "interpretation_mode", "books", "evaluation", "comparison_policy",

@@ -29,8 +29,12 @@ def telemetry_jsonb(expression: str) -> str:
         + r"$nul$(?<!\\)((?:\\\\)*)\\u0000$nul$, $nul$\1\\ufffd$nul$, 'g')"
     )
     # Most payloads need no regex scan. In particular, ML outputs can be large.
-    return (f"(CASE WHEN strpos({expression}::text, " + r"$nul$\u0000$nul$"
-            + f") > 0 THEN {cleaned} ELSE {expression}::text END)::jsonb")
+    normalized = (f"(CASE WHEN strpos({expression}::text, " + r"$nul$\u0000$nul$"
+                  + f") > 0 THEN {cleaned} ELSE {expression}::text END)")
+    # Tool results can be plain error text after JSON string unwrapping. Keep
+    # these as explicit errors rather than aborting every telemetry query.
+    return (f"(CASE WHEN {normalized} IS JSON THEN {normalized}::jsonb "
+            f"ELSE jsonb_build_object('error', {normalized}) END)")
 
 
 

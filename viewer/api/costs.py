@@ -91,19 +91,24 @@ async def workspace_cost(run_tags):
         return await conn.fetch(SQL, list(ids))
     try:
         async with asyncio.timeout(4):
-            artifacts = await asyncio.to_thread(lambda: [run_artifacts.lookup(tag) for tag in tags])
-            execution_ids = [{uuid.UUID(call['run_id']) for call in a.get('calls', [])
-                              if call.get('run_id')} if a else set() for a in artifacts]
+            from continuations import tags as history_tags
+            histories = await asyncio.to_thread(lambda: [history_tags(tag) for tag in tags])
+            all_tags = list(dict.fromkeys(t for history in histories for t in history))
+            archives = await asyncio.to_thread(lambda: {t: run_artifacts.lookup(t) for t in all_tags})
+            def references(history):
+                return {uuid.UUID(call['run_id']) for t in history
+                        for call in (archives[t] or {}).get('calls', []) if call.get('run_id')}
+            execution_ids = [references(history) for history in histories]
             ids = set().union(*execution_ids)
             rows = await pools.guarded('core', lambda conn: read(conn, ids), None) if ids else []
             if rows is None:
                 raise HTTPException(503, 'Cost records are temporarily unavailable')
-            result = summarize(ids, rows, sum(a is None for a in artifacts))
+            result = summarize(ids, rows, sum(a is None for a in archives.values()))
             # The header and its breakdown share one Motoro query/snapshot.
-            executions = [{'run_tag': tag, **summarize(refs, rows, int(artifact is None)),
+            executions = [{'run_tag': tag, 'run_tags': history, **summarize(refs, rows, sum(archives[t] is None for t in history)),
                            'updated_at': result['updated_at']}
-                          for tag, refs, artifact in zip(tags, execution_ids, artifacts, strict=True)]
-            return {**result, 'run_tags': tags, 'scope': 'latest_execution_per_pipeline',
+                          for tag, refs, history in zip(tags, execution_ids, histories, strict=True)]
+            return {**result, 'run_tags': tags, 'scope': 'latest_experiment_including_continuations',
                     'executions': executions,
                     'shared_agent_runs': sum(map(len, execution_ids)) - len(ids)}
     except TimeoutError:

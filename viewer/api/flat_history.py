@@ -16,7 +16,10 @@ _COLUMNS = ('run_id','step_id','started_at','server','tool','arguments','result'
 def compact(row):
     values = list(row[k] for k in _COLUMNS)
     if values[-1]:
-        payload = json.loads(values[-1])
+        try:
+            payload = json.loads(values[-1])
+        except (ValueError, TypeError):
+            payload = {'error': str(values[-1])}
         if isinstance(payload, dict):
             values[-1] = json.dumps({k: payload[k] for k in ('task_id','run_tag','error') if k in payload})
     return tuple(values)

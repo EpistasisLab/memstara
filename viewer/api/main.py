@@ -85,6 +85,9 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Memstara Viewer", lifespan=lifespan)
+from history_epoch import barrier as history_barrier  # noqa: E402
+
+app.middleware('http')(history_barrier)
 
 
 @app.get('/api/experiments')
@@ -105,10 +108,16 @@ async def experiment_execution(run_tag: str = Query(min_length=1, max_length=180
     return await experiments.execution(run_tag)
 
 
+@app.get('/api/experiments/linked-export')
+async def linked_export(run_tags: str = Query(min_length=1, max_length=6000), include_evidence: bool = False):
+    from linked_outputs import bundle
+    return await bundle(run_tags.split(','), include_evidence)
+
+
 @app.get('/api/cost-details')
-async def cost_details(run_tag: str = Query(min_length=1, max_length=180), loop: int | None = Query(default=None, ge=1)):
+async def cost_details(run_tag: str = Query(min_length=1, max_length=180), loop: int | None = Query(default=None, ge=1), include_continuations: bool = False):
     import cost_details as evidence
-    return await evidence.motoro_details(run_tag, loop)
+    return await evidence.motoro_details(run_tag, loop, include_continuations=include_continuations)
 
 
 @app.get('/api/azure-costs')
@@ -166,6 +175,8 @@ async def pipeline_results(run_tags: str = Query(min_length=1, max_length=6000))
         raise HTTPException(400, "Execution IDs must not be empty")
     try:
         async with asyncio.timeout(4):
+            from continuations import expand
+            tags = await asyncio.to_thread(expand, tags)
             groups = await asyncio.gather(*(scene._results(tag) for tag in tags))
             boards = await asyncio.gather(*(scene._board(tag) for tag in tags))
             configs = await asyncio.to_thread(run_artifacts.configs)

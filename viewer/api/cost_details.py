@@ -105,13 +105,27 @@ def summarize_motoro(tag, calls, runs, steps):
         'groups':[{'stage':k[0],'model':k[1],**v} for k,v in groups.items()], 'records':records}
 
 
-async def motoro_details(tag, loop=None):
+async def motoro_details(tag, loop=None, *, include_continuations=False):
     from motoro_records import references, read_core
-    calls, ids = await references(tag, loop)
+    if include_continuations:
+        import asyncio
+        from continuations import tags
+        history = await asyncio.to_thread(tags, tag)
+    else:
+        history = [tag]
+    calls, ids = [], set()
+    for source in history:
+        source_calls, source_ids = await references(source, loop)
+        calls.extend({**call, 'run_tag': source} for call in source_calls)
+        ids.update(source_ids)
     async def read(conn):
         runs = await conn.fetch('SELECT id,status FROM agent_runs WHERE id=ANY($1::uuid[])', list(ids))
         steps = await conn.fetch('''SELECT id,run_id,llm_call::text AS llm_call FROM run_steps
             WHERE run_id=ANY($1::uuid[]) AND llm_call IS NOT NULL ORDER BY started_at,id''', list(ids))
         return runs, steps
     runs, steps = await read_core(read) if ids else ([],[])
-    return {**summarize_motoro(tag, calls, runs, steps), 'loop':loop}
+    result = summarize_motoro(tag, calls, runs, steps)
+    origins = {c['run_id']: c['run_tag'] for c in calls}
+    for record in result['records']:
+        record['run_tag'] = origins.get(record['agent_run_id'])
+    return {**result, 'loop':loop, 'run_tags': history}
