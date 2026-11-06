@@ -47,7 +47,9 @@ export async function readLinkedExport(tags:string[],includeEvidence=false,signa
  const response=await fetch(`/api/experiments/linked-export?${query}`,{signal:signal??AbortSignal.timeout(60000)});
  let body;
  try{body=await response.json();}
- catch{throw Error(response.status===401?'Your browser login expired. Reload the page and sign in again.':
+ catch(error){
+  if(error instanceof Error&&(error.name==='TimeoutError'||error.name==='AbortError'))throw Error('The export request timed out before all data arrived. Saved results are unchanged. Retry or export fewer executions.');
+  throw Error(response.status===401?'Your browser login expired. Reload the page and sign in again.':
   `The export server returned an unreadable response (HTTP ${response.status}). Saved results are unchanged; refresh and retry.`);}
  if(!response.ok)throw Error(typeof body.detail==='string'?body.detail:'Linked evidence could not be exported.');
  validateLinkedExport(body);

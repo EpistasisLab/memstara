@@ -76,7 +76,7 @@ def test_nginx_protects_pages_assets_and_backends(tmp_path):
             except URLError:
                 time.sleep(0.05)
         for route in ("/", "/results", "/assets/app.js", "/control/health", "/control/pipelines",
-                      "/api/discovery/questions"):
+                      "/api/discovery/questions", "/api/experiments/linked-download?run_tags=fixture&format=zip"):
             for password in (None, "incorrect"):
                 with pytest.raises(HTTPError) as caught:
                     get(route, password)

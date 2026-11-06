@@ -54,7 +54,7 @@ import asyncio
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -115,6 +115,12 @@ async def linked_export(run_tags: str = Query(min_length=1, max_length=6000), in
     # Returning Response avoids FastAPI re-encoding a large dictionary on the loop.
     value = await bundle(run_tags.split(','), include_evidence)
     return await asyncio.to_thread(JSONResponse, value)
+
+
+@app.get('/api/experiments/linked-download')
+async def linked_download(run_tags: str = Query(min_length=1, max_length=6000), format: Literal['zip', 'complete'] = 'zip'):
+    from export_files import download
+    return await download(run_tags.split(','), format)
 
 
 @app.get('/api/cost-details')

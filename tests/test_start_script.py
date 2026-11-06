@@ -15,6 +15,10 @@ def launcher(tmp_path, *, env=True):
     for name in ('build-service.sh', 'mount_directories.py', 'select-web-port.sh'):
         shutil.copy(ROOT / 'deployment' / name, tmp_path / 'deployment' / name)
     (tmp_path / '.env.example').write_text('OPENAI_API_KEY=REPLACE_ME\n')
+    auth = tmp_path / '.memstara/web-auth'
+    auth.mkdir(parents=True)
+    (auth / 'htpasswd').write_text('fixture:unused\n')
+    (auth / 'client.json').write_text('{"username":"fixture","password":"unused"}')
     if env:
         (tmp_path / '.env').write_text('OPENAI_API_KEY=PRIVATE_TEST_SENTINEL\n')
     binary = tmp_path / 'bin'
@@ -75,7 +79,7 @@ def test_start_preserves_env_and_checks_proxy_before_reporting_url(tmp_path):
     assert 'compose up -d --no-build --force-recreate' in calls
     for service in ('control', 'initialize', 'api', 'web'):
         assert calls.index('compose build ' + service) < calls.index('compose up')
-    assert '/api/discovery/questions' in calls and '/control/health' in calls
+    assert 'compose exec -T control python /app/deployment/check_web.py' in calls
     assert 'http://127.0.0.1:15999/' in result.stdout
     assert 'PRIVATE_TEST_SENTINEL' not in result.stdout + result.stderr + calls
     assert 'down' not in calls
