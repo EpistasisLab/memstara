@@ -21,7 +21,7 @@ function applyRevision(state:HistoryResetState) {
 }
 export const useHistoryReset=create<{
  state:HistoryResetState|null; error:string|null; submitting:boolean;
- poll:()=>Promise<void>; begin:(mode:'backup'|'no_backup',confirmation:string,requestId:string)=>Promise<void>;
+ poll:()=>Promise<void>; begin:(mode:'backup'|'no_backup',confirmation:string,requestId:string,scope?:'all'|'selected',pipelineId?:string)=>Promise<void>;
 }>((set,get)=>({
  state:null,error:null,submitting:false,
  poll:async()=>{
@@ -35,13 +35,13 @@ export const useHistoryReset=create<{
    set({state});applyRevision(state);
   }catch { /* A lost response is not proof that clearing failed. */ }
  },
- begin:async(mode,confirmation,requestId)=>{
+ begin:async(mode,confirmation,requestId,scope='all',pipelineId)=>{
   mutationVersion++;
   set({submitting:true,error:null});
   try {
    try{sessionStorage.setItem(historyRequestKey,requestId);}catch{/* Session still works. */}
    const response=await fetch('/control/history-reset',{method:'POST',headers:{'Content-Type':'application/json'},
-     body:JSON.stringify({mode,confirmation,request_id:requestId}),signal:AbortSignal.timeout(15000)});
+     body:JSON.stringify({mode,confirmation,request_id:requestId,scope,...(scope==='selected'?{pipeline_id:pipelineId}:{})}),signal:AbortSignal.timeout(15000)});
    const body=await response.json();
    if(!response.ok)throw new Error(body.error||'History reset could not be requested.');
    set({state:body});applyRevision(body);

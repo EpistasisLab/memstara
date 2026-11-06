@@ -2983,9 +2983,16 @@ async def give_up_on(task_ids: list[int]) -> list[int]:
 
 
 async def main() -> int:
-    from memstara.control.history_gate import execution_guard
+    from memstara.control.history_gate import execution_guard, execution_files_guard
+    from contextlib import ExitStack
 
-    with execution_guard():
+    # The control service supplies this path before the full argument parser runs.
+    early = argparse.ArgumentParser(add_help=False)
+    early.add_argument('--run-dir')
+    execution, _ = early.parse_known_args()
+    with execution_guard(), ExitStack() as leases:
+        if execution.run_dir:
+            leases.enter_context(execution_files_guard(execution.run_dir))
         return await _main()
 
 

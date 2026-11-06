@@ -8,6 +8,8 @@
 .history-clear-dialog p{font-size:13px;line-height:1.6;margin:12px 0;overflow-wrap:anywhere;}
 .history-clear-dialog fieldset{border:1px solid rgb(var(--line));padding:12px;border-radius:9px;}
 .history-clear-dialog legend{font-size:12px;padding:0 5px;}
+.history-clear-dialog fieldset{margin:12px 0;min-width:0;}
+.history-clear-dialog select{min-width:0;max-width:100%;flex:1;padding:7px;border:1px solid rgb(var(--line));border-radius:6px;background:rgb(var(--paper));color:rgb(var(--ink));}
 .history-clear-dialog fieldset label{display:flex;align-items:flex-start;gap:9px;padding:9px 0;cursor:pointer;font-size:13px;}
 .history-clear-dialog input[type=radio]{margin-top:4px;flex-shrink:0;}
 .history-clear-dialog small{display:block;font-size:12px;line-height:1.5;margin-top:3px;color:rgb(var(--ink-soft));}

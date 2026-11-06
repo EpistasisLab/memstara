@@ -76,3 +76,44 @@ def quiescent_ml(root):
             except BlockingIOError:
                 raise RuntimeError('An ML child is still active; nothing deleted') from None
         yield
+
+
+@contextmanager
+def execution_files_guard(directory):
+    """A run and its inherited ML children keep their own files alive."""
+    path = Path(directory)
+    path.mkdir(parents=True, exist_ok=True)
+    with (path / '.history-execution.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError('This experiment history is being cleared') from None
+        # Do not explicitly unlock: a subprocess may still own this descriptor.
+        yield lock
+
+
+@contextmanager
+def selected_maintenance(root, paths):
+    """Other experiments keep running; only selected execution leases are checked."""
+    with ExitStack() as stack:
+        legacy = False
+        for path in paths:
+            directory = Path(path)
+            if not directory.is_dir():
+                continue
+            lease = directory / '.history-execution.lock'
+            if not lease.exists():
+                legacy = True
+                continue
+            if lease.is_symlink():
+                raise RuntimeError('Unsafe execution lease')
+            lock = stack.enter_context(lease.open('r'))
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise RuntimeError('A selected execution or its ML child is still active; nothing deleted') from None
+        if legacy:
+            # Older workers have only the shared ML lease. Refuse, never stop an
+            # unrelated worker, when its ownership cannot be distinguished safely.
+            stack.enter_context(quiescent_ml(root))
+        yield

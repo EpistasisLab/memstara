@@ -1,4 +1,4 @@
-"""Explicit, installation-wide history reset jobs. Never run at import/startup.
+"""Explicit installation-wide or selected-experiment history reset jobs.
 
 Configuration lives outside the deletion allowlist. A verified backup is a
 precondition in backup mode, and a partial destructive job blocks new launches
@@ -17,9 +17,10 @@ from uuid import uuid4
 
 from memstara.paths import REPO_ROOT, output_dir
 from memstara.pipeline.checkpoint import atomic_json
-from memstara.control.history_gate import epoch, epoch_path, maintenance_guard, quiescent_ml
+from memstara.control.history_gate import epoch, epoch_path, maintenance_guard, quiescent_ml, selected_maintenance
 
 CONFIRMATION = 'CLEAR ALL HISTORY'
+SELECTED_CONFIRMATION = 'CLEAR SELECTED HISTORY'
 ACTIVE = {'stopping', 'validating', 'backing_up', 'clearing_databases', 'clearing_files', 'verifying'}
 
 
@@ -53,7 +54,7 @@ async def utility(args, *, env=None, timeout=600):
             await process.wait()
 
 
-async def backup_history(root, job_id, paths):
+async def backup_history(root, job_id, paths, *, selection=None):
     folder = Path(root) / 'history-backups' / job_id
     if folder.parent.is_symlink():
         raise RuntimeError('Unsafe backup directory')
@@ -82,6 +83,7 @@ async def backup_history(root, job_id, paths):
     names = ['board.dump', 'runtime.dump', 'execution-files.tar.gz']
     manifest = {'id': job_id, 'files': {name: {'sha256': digest(folder/name),
         'bytes': (folder/name).stat().st_size} for name in names},
+        'deletion_selection': selection or {'scope': 'all'},
         'scope': 'Both application databases and deleted execution files; input/settings files remain in place.',
         'validation': 'PostgreSQL archive listing, full execution archive read and SHA256 verification; restore not rehearsed'}
     atomic_json(folder / 'manifest.json', manifest)
@@ -135,7 +137,7 @@ class HistoryReset:
                               message='History clearing was interrupted. Review the saved state and retry explicitly.',
                               blocked=bool(record.get('deletion_started')))
                 self._save(record)
-            public = {key: value for key, value in record.items() if key not in ('owner_identity', 'owner_pid', 'exceptions')}
+            public = {key: value for key, value in record.items() if key not in ('owner_identity', 'owner_pid', 'exceptions', 'cleanup_plan')}
             return public
 
     def _save(self, record):
@@ -149,9 +151,17 @@ class HistoryReset:
             'last_reset_id': record['id'] if record['state'] == 'completed' else previous.get('last_reset_id')})
 
     def begin(self, body):
-        if (not isinstance(body, dict) or set(body) != {'mode', 'confirmation', 'request_id'}
-                or body.get('mode') not in ('backup', 'no_backup') or body.get('confirmation') != CONFIRMATION):
-            raise ValueError('Choose a backup option and type CLEAR ALL HISTORY to confirm clearing every pipeline.')
+        required = {'mode', 'confirmation', 'request_id'}
+        if not isinstance(body, dict) or not required <= set(body) or set(body) - required - {'scope', 'pipeline_id'}:
+            raise ValueError('Choose an explicit history scope and backup option')
+        scope = body.get('scope', 'all')
+        pipeline_id = body.get('pipeline_id')
+        expected = CONFIRMATION if scope == 'all' else SELECTED_CONFIRMATION
+        if (scope not in ('all', 'selected') or body.get('mode') not in ('backup', 'no_backup')
+                or body.get('confirmation') != expected
+                or (scope == 'all' and pipeline_id is not None)
+                or (scope == 'selected' and (not isinstance(pipeline_id, str) or not pipeline_id))):
+            raise ValueError('Choose a valid scope and backup option, then type the displayed confirmation')
         request_id = body.get('request_id')
         from uuid import UUID
         if not isinstance(request_id, str) or str(UUID(request_id)) != request_id:
@@ -159,16 +169,28 @@ class HistoryReset:
         with self.workspace.lock, self.lock:
             current = self.status()
             if current.get('request_id') == request_id:
-                if current.get('mode') != body['mode']:
-                    raise ValueError('This request ID already refers to a different backup choice')
+                if (current.get('mode') != body['mode'] or current.get('scope', 'all') != scope
+                        or current.get('pipeline_id') != pipeline_id):
+                    raise ValueError('This request ID already refers to a different scope or backup choice')
                 return current
             if current.get('state') in ACTIVE:
                 raise RuntimeError('History clearing is already in progress')
+            if current.get('blocked') and (current.get('scope', 'all') != scope or current.get('pipeline_id') != pipeline_id):
+                raise ValueError('Finish the interrupted clear with its original scope before clearing different history')
+            selected = None
+            if scope == 'selected':
+                selected = next((item for item in self.workspace.items if item['id'] == pipeline_id), None)
+                if selected is None or selected.get('deleting'):
+                    raise ValueError('Select an existing experiment before clearing its history')
             from memstara.control.recovery import identity
             record = {'id': str(uuid4()), 'request_id': request_id, 'mode': body['mode'],
+                      'scope': scope, 'pipeline_id': pipeline_id,
+                      'pipeline_name': selected.get('name') if selected else None,
                       'state': 'stopping', 'revision': current.get('revision', 'initial'),
-                      'started_at': time.time(), 'deletion_started': False, 'blocked': False,
+                      'started_at': time.time(), 'deletion_started': bool(current.get('blocked')), 'blocked': bool(current.get('blocked')),
                       'owner_pid': os.getpid(), 'owner_identity': identity(os.getpid())}
+            if current.get('blocked') and self._read().get('cleanup_plan'):
+                record['cleanup_plan'] = self._read()['cleanup_plan']
             self._save(record)
             self.thread = threading.Thread(target=self._worker, args=(record,), daemon=True)
             self.thread.start()
@@ -217,7 +239,54 @@ class HistoryReset:
                 raise RuntimeError('Executions did not stop within the safe deadline; nothing deleted')
             await asyncio.sleep(.2)
 
+    async def stop_selected(self, pipeline_id):
+        with self.workspace.lock:
+            manager = self.workspace.manager(pipeline_id)
+            active = manager.running()
+            if active:
+                manager.terminate(active['run_tag'])
+        deadline = time.monotonic() + self.stop_timeout
+        while manager.running():
+            if time.monotonic() >= deadline:
+                raise RuntimeError('Selected experiment did not stop within the safe deadline; nothing deleted')
+            await asyncio.sleep(.2)
+
+    async def perform_selected(self, record):
+        from memstara.control.history_scope import plan, validate_paths
+
+        await self.stop_selected(record['pipeline_id'])
+        self.phase(record, 'validating')
+        module = cleanup_module()
+        keep = module.preserved(self.root)
+        scope = record.get('cleanup_plan') or await plan(self.root, record['pipeline_id'])
+        paths = [Path(p) for p in scope['paths'] if Path(p).exists()]
+        validate_paths(self.root, paths)
+        record['cleanup_plan'] = scope
+        record['execution_count'] = len(scope['run_tags'])
+        self._save(record)  # Retain exact ownership even after either DB commits.
+        with selected_maintenance(self.root, paths):
+            await module.main(False, root=self.root, scope=scope)
+            if record['mode'] == 'backup':
+                self.phase(record, 'backing_up')
+                record['backup'] = await backup_history(self.root, record['id'], paths, selection={
+                    'scope': 'selected', 'pipeline_id': record['pipeline_id'],
+                    'pipeline_name': record.get('pipeline_name'), 'run_tags': scope['run_tags']})
+                self._save(record)
+            await module.main(True, root=self.root, scope=scope, on_phase=lambda state: self.phase(record, state))
+            self.phase(record, 'verifying')
+            if any(Path(p).exists() for p in scope['paths']) or module.preserved(self.root) != keep:
+                raise RuntimeError('Selected history removal or settings preservation could not be verified')
+            with self.workspace.lock:
+                manager = self.workspace.manager(record['pipeline_id'])
+                with manager._lock:
+                    manager._live, manager._done = None, []
+            record.update(state='completed', revision=record['id'], blocked=False, ended_at=time.time(),
+                          message='Selected experiment history cleared. Other experiments, settings and research inputs were preserved.')
+            self._save(record)
+
     async def perform(self, record):
+        if record.get('scope') == 'selected':
+            return await self.perform_selected(record)
         await self.stop_all()
         with maintenance_guard(self.root), quiescent_ml(self.root):
             module = cleanup_module()

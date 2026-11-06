@@ -37,7 +37,7 @@ try{
  await other.evaluate(()=>window.seedCachedHistory());
  await expect(other.getByTestId('cached-results')).toContainText('1');
  await page.getByRole('button',{name:'Clear',exact:true}).click();
- const dialog=page.getByRole('dialog',{name:'Clear all experiment history'});
+ const dialog=page.getByRole('dialog',{name:'Clear experiment history'});
  await expect(dialog).toBeVisible();
  for(const width of [1280,390,320]){
   await page.setViewportSize({width,height:800});
@@ -59,7 +59,7 @@ try{
  await expect(page.getByTestId('cached-snapshot')).toContainText('no');
  await expect(other.getByTestId('cached-results')).toContainText('0');
  await expect(other.getByRole('button',{name:'Estimated total. Show pipeline cost breakdown'})).toContainText('$0.0000');
- const success=page.getByRole('dialog',{name:'Clear all experiment history'});
+ const success=page.getByRole('dialog',{name:'Clear experiment history'});
  await expect(success.getByRole('link',{name:'Download verified backup'})).toBeVisible();
  assert.equal(await page.evaluate(()=>localStorage.getItem('memstara-draft-v1')),'{"model":"preserve"}');
  assert.equal(await page.evaluate(()=>localStorage.getItem('memstara-theme-v2')),'dark');

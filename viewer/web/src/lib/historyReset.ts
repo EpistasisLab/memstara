@@ -17,6 +17,7 @@ export function clearExecutionStorage(storage: Pick<Storage,'removeItem'|'setIte
 }
 export type HistoryResetState = {
   id?:string; request_id?:string; state:string; mode?:'backup'|'no_backup'; revision:string;
+  scope?:'all'|'selected'; pipeline_id?:string|null; pipeline_name?:string|null; execution_count?:number;
   message?:string; blocked?:boolean; deletion_started?:boolean; failed_phase?:string;
   error_code?:string; error_type?:string; updated_at?:number;
   backup?:{id:string;location:string;download:string};
@@ -27,5 +28,5 @@ export const resetPhaseLabels:Record<string,string> = {
   stopping:'Ending active executions safely…', validating:'Checking deletion scope and preserved settings…',
   backing_up:'Backing up and verifying both databases and execution files…',
   clearing_databases:'Clearing execution database records…', clearing_files:'Removing execution files…',
-  verifying:'Verifying empty history and unchanged settings…',
+  verifying:'Verifying the selected history is cleared and settings are unchanged…',
 };

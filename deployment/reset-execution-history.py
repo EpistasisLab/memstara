@@ -60,7 +60,7 @@ def validate_board_dependencies(edges):
             raise RuntimeError('Unknown dependency on execution history; nothing deleted')
 
 
-def runtime_cleanup_plan(existing, columns, edges):
+def runtime_cleanup_plan(existing, columns, edges, *, include_agent_memories=True):
     """Follow actual FK columns; never assume memory uses a column named run_id."""
     allowed = {"agent_runs", *RUNTIME_CHILDREN}
     incoming = {name: [] for name in allowed}
@@ -98,11 +98,14 @@ def runtime_cleanup_plan(existing, columns, edges):
             # Older runtime versions contain run-linked rows without an FK.
             if "run_id" in columns.get(table, set()):
                 terms.append('"run_id"=ANY($1::uuid[])')
-            if table == 'memory_entries' and 'agent_id' in columns.get(table, set()):
+            if include_agent_memories and table == 'memory_entries' and 'agent_id' in columns.get(table, set()):
                 # Semantic/episodic memories can outlive their run FK. Reset the
                 # installation's agent memories too, without removing the agents.
                 terms.append('"agent_id" IN (SELECT id FROM public.agents WHERE name LIKE \'memstara%\' '
                              'OR id IN (SELECT agent_id FROM public.agent_runs WHERE id=ANY($1::uuid[])))')
+            if not terms and table == 'memory_entries' and not include_agent_memories:
+                # Unattributed agent memory may be shared by other experiments.
+                terms.append('FALSE AND $1::uuid[] IS NOT NULL')
             if not terms:
                 raise RuntimeError(f"Cannot safely scope {table} to executions; nothing deleted")
             predicate = "(" + " OR ".join(terms) + ")"
@@ -115,7 +118,7 @@ def runtime_cleanup_plan(existing, columns, edges):
     return [(table, predicates[table]) for table in reversed(order)]
 
 
-async def main(apply, *, root=None, on_phase=None):
+async def main(apply, *, root=None, on_phase=None, scope=None):
     import asyncpg
 
     supplied_root = root
@@ -123,7 +126,10 @@ async def main(apply, *, root=None, on_phase=None):
     if supplied_root is None and root != Path("/app/outputs"):
         raise RuntimeError("Expected this deployment's /app/outputs mount")
     keep = preserved(root)
-    paths = targets(root)
+    paths = targets(root) if scope is None else [Path(p) for p in scope['paths'] if Path(p).exists()]
+    if scope is not None:
+        from memstara.control.history_scope import validate_paths
+        validate_paths(root, paths)
     connections = []
     transactions = []
     try:
@@ -136,11 +142,28 @@ async def main(apply, *, root=None, on_phase=None):
             transactions.append(tx)
             await conn.execute("SET LOCAL lock_timeout = '10s'")
         board, runtime = connections
+        if scope is not None:
+            import zlib
+            for tag in scope['run_tags']:
+                if not await board.fetchval('SELECT pg_try_advisory_xact_lock($1::bigint)', zlib.crc32(tag.encode('utf-8'))):
+                    raise RuntimeError('A selected execution still owns its database lease; nothing deleted')
         bt, rt = await tables(board), await tables(runtime)
         if not {"memstara_blackboard", "memstara_results", "memstara_questions"} <= bt:
             raise RuntimeError("Unexpected research DB schema; nothing deleted")
         if not {"agents", "agent_runs"} <= rt:
             raise RuntimeError("Unexpected runtime DB schema; nothing deleted")
+        if scope is not None:
+            if await board.fetchval('''SELECT count(*) FROM memstara_executions
+                    WHERE run_tag=ANY($1::text[]) AND pipeline_id IS DISTINCT FROM $2''',
+                    scope['run_tags'], scope.get('pipeline_id')):
+                raise RuntimeError('Execution ownership changed; nothing deleted')
+            # Recheck sharing after backup: another live experiment may have
+            # indexed a generated artifact since the deletion plan was recorded.
+            for row in await board.fetch('''SELECT path FROM memstara_execution_artifacts
+                    WHERE NOT (run_tag=ANY($1::text[]))''', scope['run_tags']):
+                shared_path = Path(row['path'])
+                if any(shared_path == path or (path.is_dir() and shared_path.is_relative_to(path)) for path in paths):
+                    raise RuntimeError('An execution file is now shared by another experiment; nothing deleted')
         validate_board_dependencies(await board.fetch("""SELECT child.relname AS child, parent.relname AS parent,
             ns.nspname AS child_schema FROM pg_constraint c
             JOIN pg_class child ON child.oid=c.conrelid JOIN pg_namespace ns ON ns.oid=child.relnamespace
@@ -148,11 +171,21 @@ async def main(apply, *, root=None, on_phase=None):
             WHERE c.contype='f' AND parent.relnamespace='public'::regnamespace
             AND parent.relname=ANY($1::text[])""", list(BOARD_TABLES)))
         run_ids = [r["id"] for r in await runtime.fetch(
-            "SELECT r.id FROM agent_runs r JOIN agents a ON a.id=r.agent_id WHERE a.name LIKE 'memstara%'")]
+            "SELECT r.id FROM agent_runs r JOIN agents a ON a.id=r.agent_id WHERE a.name LIKE 'memstara%'")] if scope is None else scope['runtime_run_ids']
         # The registry also owns calls made through uploaded/custom agents.
         if "memstara_execution_agents" in bt:
             run_ids = list(set(run_ids) | {r["agent_run_id"] for r in await board.fetch(
-                "SELECT DISTINCT agent_run_id FROM memstara_execution_agents WHERE agent_run_id IS NOT NULL")})
+                "SELECT DISTINCT agent_run_id FROM memstara_execution_agents WHERE agent_run_id IS NOT NULL" +
+                (" AND run_tag=ANY($1::text[])" if scope is not None else ''),
+                *([scope['run_tags']] if scope is not None else []))})
+        if scope is not None:
+            # Shared calls are retained even if the selected experiment references them.
+            shared = {r['agent_run_id'] for r in await board.fetch(
+                'SELECT DISTINCT agent_run_id FROM memstara_execution_agents WHERE NOT (run_tag=ANY($1::text[]))',
+                scope['run_tags'])}
+            from uuid import UUID
+            shared.update(UUID(str(value)) for value in scope.get('shared_runtime_run_ids', []))
+            run_ids = list({UUID(str(value)) for value in run_ids} - shared)
         # Reject unfamiliar FK dependents rather than cascading into unknown data.
         edges = await runtime.fetch("""SELECT child.relname AS child, parent.relname AS parent,
             ns.nspname AS child_schema,
@@ -169,8 +202,13 @@ async def main(apply, *, root=None, on_phase=None):
         for row in await runtime.fetch("""SELECT table_name, column_name FROM information_schema.columns
                 WHERE table_schema='public' AND table_name=ANY($1::text[])""", ["agent_runs", *RUNTIME_CHILDREN]):
             columns.setdefault(row["table_name"], set()).add(row["column_name"])
-        runtime_plan = runtime_cleanup_plan(rt, columns, edges)
-        counts = {t: await board.fetchval(f"SELECT count(*) FROM public.{quote(t)}")
+        runtime_plan = runtime_cleanup_plan(rt, columns, edges, include_agent_memories=scope is None)
+        if scope is not None:
+            from memstara.control.history_scope import board_predicates
+            predicates = board_predicates(scope)
+        else:
+            predicates = {t: ('TRUE', []) for t in BOARD_TABLES}
+        counts = {t: await board.fetchval(f"SELECT count(*) FROM public.{quote(t)} WHERE {predicates[t][0]}", *predicates[t][1])
                   for t in BOARD_TABLES if t in bt}
         print(json.dumps({"apply": apply, "research_rows": counts, "runtime_runs": len(run_ids),
                           "remove_paths": [str(p) for p in paths],
@@ -185,7 +223,8 @@ async def main(apply, *, root=None, on_phase=None):
             await runtime.execute(f"DELETE FROM public.{quote(table)} WHERE {predicate}", run_ids)
         for table in BOARD_TABLES:
             if table in bt:
-                await board.execute(f"DELETE FROM public.{quote(table)}")
+                predicate, args = predicates[table]
+                await board.execute(f"DELETE FROM public.{quote(table)} WHERE {predicate}", *args)
         if preserved(root) != keep:
             raise RuntimeError("Settings changed during cleanup")
         for tx in transactions:
@@ -201,7 +240,7 @@ async def main(apply, *, root=None, on_phase=None):
         if preserved(root) != keep:
             raise RuntimeError("Settings preservation check failed")
         for table in BOARD_TABLES:
-            if table in bt and await board.fetchval(f"SELECT count(*) FROM public.{quote(table)}"):
+            if table in bt and await board.fetchval(f"SELECT count(*) FROM public.{quote(table)} WHERE {predicates[table][0]}", *predicates[table][1]):
                 raise RuntimeError("Execution database verification failed")
         if await runtime.fetchval("SELECT count(*) FROM agent_runs WHERE id=ANY($1::uuid[])", run_ids):
             raise RuntimeError("Runtime execution verification failed")

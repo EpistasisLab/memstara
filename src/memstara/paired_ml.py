@@ -122,7 +122,16 @@ def execute(path, target, evaluation, snapshot, proposal):
     root = Path(os.environ.get("MEMSTARA_OUTPUT_DIR") or DEFAULT_OUTPUT_DIR)
     root.mkdir(parents=True, exist_ok=True)
     # One lock for all processes and pipelines in this local application.
-    with (root / ".paired-ml.lock").open("a") as lock:
+    from contextlib import ExitStack
+    from memstara.control.history_gate import execution_files_guard
+
+    with (root / ".paired-ml.lock").open("a") as lock, ExitStack() as leases:
+        execution_lock = None
+        if os.environ.get('MEMSTARA_RUN_CONFIG'):
+            frozen = Path(os.environ['MEMSTARA_RUN_CONFIG'])
+            if json.loads(frozen.read_text()).get('run_tag') != snapshot.get('run_tag'):
+                raise ValueError('ML history ownership differs from the frozen execution')
+            execution_lock = leases.enter_context(execution_files_guard(frozen.parent))
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -191,7 +200,7 @@ def execute(path, target, evaluation, snapshot, proposal):
                             [sys.executable, "-m", "memstara.paired_ml", str(request_path), str(output_path)],
                             env=env,
                             limits=limits,
-                            pass_fds=(lock.fileno(),),
+                            pass_fds=(lock.fileno(), *([execution_lock.fileno()] if execution_lock else [])),
                             **({"pause_marker": marker, "output_path": output_path} if marker else {}),
                         )
                         usage["pause_restarts"] = interruptions

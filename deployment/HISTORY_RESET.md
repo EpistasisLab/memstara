@@ -17,12 +17,21 @@ UI code. The control, API and web images all need the changes.
 
 ## Clear button
 
-**Clear**, immediately before **Estimated total**, opens an installation-wide
-dialog. Choose **Back up and clear** or **Clear without backup**, then type
-`CLEAR ALL HISTORY`. This affects every configured pipeline, not only the selected
-one. Running drivers are asked to end; the job refuses deletion if they remain
-active. A shared/exclusive lease blocks start/delete races, including CLI drivers.
-Inherited ML-worker leases are checked independently before deletion.
+**Clear**, immediately before **Estimated total**, offers two explicit scopes:
+
+- **All experiments** clears installation-wide history. Type `CLEAR ALL HISTORY`.
+- **Selected experiment** lets you choose a saved experiment by name and number.
+  Its immutable pipeline ID selects **all** execution attempts, including earlier
+  resumes/retries and separate fresh executions under that saved definition.
+  Type `CLEAR SELECTED HISTORY`. Other experiments' history and costs remain.
+
+Then choose **Back up and clear** or **Clear without backup**. Only drivers in the
+chosen scope are asked to end. The job refuses deletion if they remain active.
+New launches and edits are temporarily blocked during either operation. Already
+running unrelated experiments are not stopped by a selected clear. Run-specific
+leases, inherited by ML children, prevent deletion while selected work still runs.
+Older runs without a run-specific lease require the legacy shared ML lease to be
+idle; an ambiguous active worker causes a safe refusal, never an unrelated stop.
 
 The retained items are pipeline/workspace/model settings, research registrations,
 CSV datasets, OKF knowledge, skills and `.env`. The deletion allowlist covers
@@ -32,7 +41,14 @@ workspaces. Unknown foreign-key dependents or unsafe filesystem paths abort the
 operation; no unknown cascade is accepted. Agents and schemas are retained.
 
 Backup mode uses matching PostgreSQL 16 `pg_dump`/`pg_restore` clients inside the
-control image. It saves both complete database archives and the execution files.
+control image. For either scope it saves both complete database archives, plus the
+execution files selected for deletion. A selected clear therefore backs up a
+broader database scope than it deletes; the dialog states this explicitly. Other
+running experiments may continue writing, so these separate database dumps are
+not a coordinated snapshot of their live execution. Shared questions, runtime
+calls, unattributed agent memory, and indexed derived files referenced by other
+experiments are retained by selected clearing. Settings and source data are never
+in the per-experiment file deletion allowlist.
 PostgreSQL archive listing, a full file-archive read and SHA256 verification must
 finish before deletion. Partial backups have no `COMPLETE.json` marker and never
 authorize deletion. Backups live under `outputs/history-backups/<job-id>/` and a
@@ -49,7 +65,9 @@ reports success until deletion and preservation checks pass.
 On success, `runs/history_epoch.json` changes revision. Each API worker drops old
 caches/background refreshes and rejects responses from a previous revision. Open
 browser tabs clear execution selections/receipts and reload, while preserving
-settings/drafts/theme. The initial UI shows zero results/executions and `$0.0000`.
+settings/drafts/theme. An all-experiment clear shows zero results/executions and
+`$0.0000`. A selected clear refreshes the workspace with the remaining experiments'
+results and costs; it does not reset their totals to zero.
 No new experiment is started by clearing.
 
 ## One experiment across continuation attempts
