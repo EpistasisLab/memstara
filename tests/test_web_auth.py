@@ -27,9 +27,27 @@ def test_nginx_protects_pages_assets_and_backends(tmp_path):
     assert (credentials / "client.json").stat().st_mode & 0o777 == 0o600
     assert json.loads((credentials / "client.json").read_text())["username"] == "fixture"
 
+    release_progress = threading.Event()
+    progress_finished = threading.Event()
     class Backend(BaseHTTPRequestHandler):
         def do_GET(self):
             assert self.headers.get("Authorization") is None
+            if self.path == '/api/experiments/prepare-download?probe=1':
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/x-ndjson')
+                self.end_headers()
+                self.wfile.write(b'{"type":"progress"}\n')
+                self.wfile.flush()
+                release_progress.wait(3)
+                progress_finished.set()
+                self.wfile.write(b'{"type":"ready"}\n')
+                return
+            if self.path == '/api/experiments/linked-download?run_tags=fixture&format=complete':
+                self.send_response(503)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(b'{"detail":"Export could not read execution registry."}')
+                return
             self.send_response(200)
             self.end_headers()
             self.wfile.write(b'{"pipelines": []}')
@@ -76,7 +94,9 @@ def test_nginx_protects_pages_assets_and_backends(tmp_path):
             except URLError:
                 time.sleep(0.05)
         for route in ("/", "/results", "/assets/app.js", "/control/health", "/control/pipelines",
-                      "/api/discovery/questions", "/api/experiments/linked-download?run_tags=fixture&format=zip"):
+                      "/api/discovery/questions", "/api/experiments/linked-download?run_tags=fixture&format=zip",
+                      "/api/experiments/prepare-download?run_tags=fixture&format=zip",
+                      "/api/experiments/prepared-file/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"):
             for password in (None, "incorrect"):
                 with pytest.raises(HTTPError) as caught:
                     get(route, password)
@@ -84,7 +104,17 @@ def test_nginx_protects_pages_assets_and_backends(tmp_path):
                 assert 'Basic realm="Memstara"' in caught.value.headers["WWW-Authenticate"]
             with get(route, "fixture-password") as response:
                 assert response.status == 200
+        with pytest.raises(HTTPError) as failure:
+            get('/api/experiments/linked-download?run_tags=fixture&format=complete', 'fixture-password')
+        assert failure.value.code == 503
+        assert json.loads(failure.value.read()) == {'detail': 'Export could not read execution registry.'}
+        with get('/api/experiments/prepare-download?probe=1', 'fixture-password') as response:
+            assert json.loads(response.readline()) == {'type': 'progress'}
+            assert not progress_finished.is_set(), 'Nginx must forward progress before preparation finishes'
+            release_progress.set()
+            assert json.loads(response.readline()) == {'type': 'ready'}
     finally:
+        release_progress.set()
         process.terminate()
         process.wait(timeout=5)
         backend.shutdown()

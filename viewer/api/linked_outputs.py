@@ -11,10 +11,9 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException
 from fastapi.encoders import jsonable_encoder
-from db import pools
 import run_artifacts as archive
 from continuations import expand
-from experiments import execution as registered_execution
+from export_records import execution as registered_execution, results as read_export_results
 
 VERSION = 'linked_agent_outputs_v1'
 JSON_FIELDS = {'evaluation', 'columns_used', 'columns_missing', 'feature_importance',
@@ -142,25 +141,32 @@ def assemble(raw_results, artifacts, configs):
             'explanations': list(explanations.values()), 'warnings': warnings}
 
 
-async def bundle(requested_tags, include_evidence=False):
+async def bundle(requested_tags, include_evidence=False, on_progress=None):
+    def progress(message, completed=None, total=None):
+        if on_progress:
+            on_progress(message, completed, total)
+
     selected = list(dict.fromkeys(requested_tags))
     if not selected or len(selected) > 32 or any(not t.strip() or len(t) > 180 for t in selected):
         raise HTTPException(400, 'Choose up to 32 nonempty execution IDs')
+    progress('Resolving continued executions')
     tags = await asyncio.to_thread(expand, selected)
     configs = await asyncio.to_thread(archive.configs)
-    artifacts = await asyncio.to_thread(lambda: {tag: archive.lookup(tag, preserve_output_versions=True) for tag in tags})
+    artifacts = {}
+    for index, tag in enumerate(tags):
+        progress('Reading saved agent outputs', index, len(tags))
+        artifacts[tag] = await asyncio.to_thread(archive.lookup, tag, preserve_output_versions=True)
+    progress('Reading saved agent outputs', len(tags), len(tags))
     if any(item is None for item in artifacts.values()):
         raise HTTPException(503, 'An execution archive is unavailable; no incomplete export was substituted')
-    async def read(conn):
-        return [decoded(row) for row in await conn.fetch(
-            'SELECT * FROM memstara_results WHERE run_tag = ANY($1::text[]) ORDER BY result_id', tags)]
-    rows = await pools.guarded('memstara', read, None)
-    if rows is None:
-        raise HTTPException(503, 'Result export is unavailable; retry without changing the experiment')
+    progress('Reading saved evaluation records')
+    rows = await read_export_results(tags, decoded)
+    progress('Linking results to Interpretation and Explanation outputs')
     linked = await asyncio.to_thread(assemble, rows, artifacts, configs)
     executions = []
     if include_evidence:
-        for tag in tags:
+        for index, tag in enumerate(tags):
+            progress('Reading complete execution evidence', index, len(tags))
             try:
                 record = await registered_execution(tag)
                 record['registry_status'] = 'registered'
@@ -173,6 +179,7 @@ async def bundle(requested_tags, include_evidence=False):
             record['results'] = [row for row in linked['results'] if row['run_tag'] == tag]
             record['explanation_output_ids'] = [o['output_id'] for o in linked['explanations'] if o['run_tag'] == tag]
             executions.append(record)
+        progress('Reading complete execution evidence', len(tags), len(tags))
     # Large exports must not monopolize the API event loop used by status polling.
     return await asyncio.to_thread(jsonable_encoder, {
         'schema_version': VERSION, 'generated_at': datetime.now(UTC).isoformat(),

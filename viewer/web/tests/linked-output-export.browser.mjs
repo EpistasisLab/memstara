@@ -31,15 +31,18 @@ try{
  const page=await browser.newPage({acceptDownloads:true,viewport:{width:768,height:900}});
  const errors=[],requests=[];let failed=false,held=false,release=null,large=false;
  page.on('pageerror',error=>errors.push(error.message));
- await page.route(/\/api\/experiments\/linked-(?:export|download)\?/,async route=>{
+ await page.route(/\/api\/experiments\/(?:linked-(?:export|download)\?|prepare-download\?|prepared-file\/)/,async route=>{
   const url=new URL(route.request().url());requests.push(url);
   if(held)await new Promise(resolve=>{release=resolve;});
   if(failed)return route.fulfill({status:503,json:{detail:'Archive temporarily unavailable'}}).catch(()=>{});
-  if(url.pathname.endsWith('linked-export')){
-   assert.equal(url.searchParams.get('include_evidence'),'false','Large evidence must never be requested as JSON');
-   return route.fulfill({json:{...bundle,executions:[]}});
+  assert(!url.pathname.endsWith('linked-export'),'Table CSV must not fetch the full result JSON');
+  const kind=url.searchParams.get('format')??(url.pathname.endsWith('1'.repeat(32))?'table':'zip'),body=nativeFile(kind,large);
+  if(url.pathname.endsWith('prepare-download')){
+   const token=(kind==='table'?'1':'2').repeat(32);
+   return route.fulfill({status:200,contentType:'application/x-ndjson',body:
+    JSON.stringify({type:'progress',message:'Preparing files',progress:{phase:'preparing',completedUnits:1,totalUnits:8}})+'\n'+
+    JSON.stringify({type:'ready',kind,download_url:'/api/experiments/prepared-file/'+token,bytes:body.length,results:2,executions:2,warnings:0})+'\n'}).catch(()=>{});
   }
-  const kind=url.searchParams.get('format'),body=nativeFile(kind,large);
   return route.fulfill({status:200,body,headers:{'Content-Type':kind==='zip'?'application/zip':'text/csv',
    'X-Memstara-Export-Results':'2','X-Memstara-Export-Executions':'2','X-Memstara-Export-Warnings':'0',
    'X-Memstara-Export-Bytes':String(body.length)}}).catch(()=>{});
@@ -61,10 +64,10 @@ try{
   }else{assert(data.toString().includes('interpretation_output_ids'));assert(!data.toString().includes('Original 한글'));}
   await expect(page.getByRole('status').filter({hasText:'2 saved results from 2 execution(s)'})).toHaveCount(1);
  }
- assert.equal(requests[0].searchParams.get('include_evidence'),'false');
- assert.equal(requests[1].searchParams.get('format'),'complete');
- assert.equal(requests[2].searchParams.get('format'),'zip');
- assert(requests.every(url=>url.searchParams.get('run_tags')==='continued-experiment'));
+ assert.equal(requests[0].searchParams.get('format'),'table');
+ assert.equal(requests[2].searchParams.get('format'),'complete');
+ assert.equal(requests[3].searchParams.get('format'),'zip');
+ assert(requests.filter(url=>!url.pathname.includes('/prepared-file/')).every(url=>url.searchParams.get('run_tags')==='continued-experiment'));
  failed=true;let downloads=0;page.on('download',()=>downloads++);
  await page.getByRole('button',{name:'Download linked results ZIP',exact:true}).click();
  await expect(page.getByRole('alert')).toContainText('Archive temporarily unavailable');assert.equal(downloads,0);
@@ -80,12 +83,16 @@ try{
  const progress=page.getByRole('progressbar',{name:'Export preparation progress'});
  await expect(progress).toBeVisible();
  assert.equal(await progress.getAttribute('value'),null,'Preparation must not invent a completion percentage');
- await expect(page.getByText('Completion percentage is unavailable during preparation.')).toBeVisible();
+ await expect(page.getByText('Waiting for server progress.',{exact:true})).toBeVisible();
  await expect(page.getByText('Elapsed 0:01',{exact:true})).toBeVisible();
+ await page.evaluate(()=>window.activeExportWorker.onmessage({data:{type:'progress',message:'Preparing ZIP: complete_evidence.csv',progress:{phase:'preparing',completedUnits:4,totalUnits:8}}}));
+ await expect(progress).toHaveAttribute('value','50');
+ await expect(page.getByText('Current stage: 4 / 8 · 50% (not overall completion)',{exact:true})).toBeVisible();
  await page.evaluate(()=>window.activeExportWorker.onmessage({data:{type:'progress',message:'Downloading the prepared export file…',progress:{phase:'downloading',receivedBytes:524288,totalBytes:1048576}}}));
  await expect(page.getByRole('progressbar',{name:'Export download progress'})).toHaveAttribute('value','50');
  await expect(page.getByText('512.0 KiB / 1.0 MiB · 50%',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Downloading…',exact:true})).toBeDisabled();
+ await page.getByRole('button',{name:/Compare performance by hypothesis skill/}).click();
  await page.getByLabel('Performance metric').selectOption('f1');
  await expect(page.getByLabel('Performance metric')).toHaveValue('f1');
  await page.getByRole('button',{name:'Cancel export',exact:true}).click();

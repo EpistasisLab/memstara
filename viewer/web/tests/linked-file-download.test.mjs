@@ -68,3 +68,40 @@ test('unknown transfer length stays indeterminate and interrupted streams do not
   await assert.rejects(()=>readLinkedFile(['run'],'zip'),/connection was interrupted/);
  }finally{globalThis.fetch=original;}
 });
+
+test('a transfer lasting over three minutes succeeds while bytes keep arriving',async(t)=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const original=globalThis.fetch;let stream,signal;
+ const flush=()=>new Promise(resolve=>setImmediate(resolve));
+ try{
+  globalThis.fetch=async(_url,options)=>{
+   signal=options.signal;
+   return new Response(new ReadableStream({start(controller){stream=controller;}}),{
+    headers:{...headers,'X-Memstara-Export-Bytes':'8'},
+   });
+  };
+  const pending=readLinkedFile(['run'],'zip');
+  await flush();
+  t.mock.timers.tick(170000);
+  stream.enqueue(new Uint8Array([80,75,3,4]));await flush();
+  t.mock.timers.tick(170000);
+  assert.equal(signal.aborted,false);
+  stream.enqueue(new Uint8Array([5,6,7,8]));stream.close();
+  assert.equal((await pending).blob.size,8);
+ }finally{globalThis.fetch=original;t.mock.timers.reset();}
+});
+
+test('a stalled transfer still aborts instead of waiting forever',async(t)=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const original=globalThis.fetch;
+ try{
+  globalThis.fetch=async(_url,{signal})=>new Response(new ReadableStream({start(controller){
+   signal.addEventListener('abort',()=>controller.error(signal.reason),{once:true});
+  }}),{headers});
+  const pending=readLinkedFile(['run'],'zip');
+  const rejected=assert.rejects(pending,/timed out/);
+  await new Promise(resolve=>setImmediate(resolve));
+  t.mock.timers.tick(180001);
+  await rejected;
+ }finally{globalThis.fetch=original;t.mock.timers.reset();}
+});

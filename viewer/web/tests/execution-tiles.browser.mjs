@@ -95,6 +95,16 @@ try {for(const width of [320,390,768,1440]) {
  // A dropped connection retains this run; a different run cannot inherit its detail.
  await page.evaluate(s=>window.deliverOutputs(s,'offline'),snapshot);
  await expect(panel.getByRole('status')).toContainText('last available records');
+ // A failed first load must not masquerade as an endless loading operation.
+ await page.evaluate(s=>window.deliverOutputs(s,'503 Service Unavailable','new-selection'),snapshot);
+ await expect(panel.getByRole('alert')).toContainText('Could not load the selected execution');
+ await expect(panel.getByRole('alert')).toContainText('503 Service Unavailable');
+ await expect(panel.getByText('Loading the selected execution…',{exact:true})).toHaveCount(0);
+ await expect(panel.locator('.output-documents')).toHaveCount(0);
+ await page.route('**/api/snapshot?run_tag=new-selection',route=>route.fulfill({json:{...snapshot,run_tag:'new-selection'}}));
+ await panel.getByRole('button',{name:'Retry loading',exact:true}).click();
+ await expect(panel.getByRole('alert')).toHaveCount(0);
+ await expect(panel.locator('.execution-output-tile')).toHaveCount(3);
  await page.evaluate(s=>window.deliverOutputs({...s,run_tag:'different',results:[],report:{explanation_outputs:[]}}),snapshot);
  await expect(panel.locator('.execution-output-tile')).toHaveCount(0);
  await expect(panel.locator('.output-documents')).toHaveCount(0);

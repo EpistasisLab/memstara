@@ -18,6 +18,7 @@ try{for(const width of [320,768,1440]){
  if(width===768)await page.evaluate(()=>document.documentElement.dataset.theme='dark');
  await page.evaluate(rows=>window.deliverMetricResults(rows),results);
  const component=page.getByRole('region',{name:'Hypothesis skill performance distributions'});
+ await component.getByRole('button',{name:/Compare performance by hypothesis skill/}).click();
  await expect(component.getByRole('group',{name:/by hypothesis skill/})).toHaveCount(1);
  await expect(component.getByRole('button',{name:/^addiction-psychiatric; pipeline 1;/})).toHaveCount(1);
  await component.getByRole('button',{name:/^addiction-psychiatric; pipeline 1;/}).click();
@@ -35,12 +36,7 @@ try{for(const width of [320,768,1440]){
  await component.getByLabel('Performance metric').selectOption('fbeta');
  await component.getByText('Comparison options',{exact:true}).click();
  await component.getByLabel('F-beta weight').fill('2');
- const pending=page.waitForEvent('download');await component.getByRole('button',{name:'Download all metrics CSV'}).click();
- const file=await pending,stream=await file.createReadStream();const chunks=[];for await(const c of stream)chunks.push(c);
- const csv=Buffer.concat(chunks).toString();assert(csv.includes('before-resume'));assert(csv.includes('after-resume'));assert(csv.includes('Custom F-beta'));
- assert(!csv.includes('"NaN"'));assert(!csv.includes('"Infinity"'));
  await component.getByLabel('F-beta weight').fill('0');await expect(component.getByRole('alert')).toContainText('greater than 0');
- await expect(component.getByRole('button',{name:'Download all metrics CSV'})).toBeDisabled();
  await component.getByLabel('F-beta weight').fill('1');
  await component.getByLabel('Comparison model').selectOption('all');
  await component.getByLabel('Performance metric').selectOption('balanced_accuracy');
@@ -56,6 +52,6 @@ try{for(const width of [320,768,1440]){
  await page.evaluate(rows=>window.deliverMetricResults([...rows,rows[0]]),results);
  await expect(component.getByRole('region',{name:'Metric coverage and skill summary'})).toContainText('6 / 6');
  assert.deepEqual(errors,[]);
- console.log(`PASS ${width}px: boxes, prior-run evidence, undefined/infinite coverage, model filter, beta, CSV, all charts, no overflow`);
+ console.log(`PASS ${width}px: boxes, prior-run evidence, undefined/infinite coverage, model filter, beta, all charts, no overflow`);
  await page.close();
 }}finally{await browser.close();}

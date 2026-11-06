@@ -152,8 +152,9 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
       {chartError&&<p role="alert" className="output-notice">{chartError}</p>}
     </div>}
     {(snapshot?.report?.run_tags?.length ?? 0) > 1 && <p className="output-notice">Includes retained outputs and usage from {snapshot?.report?.run_tags?.length} continued executions of this experiment.</p>}
-    {(error || snapshot?.stale || (view === 'agents' && totals.error)) && <p className="output-notice" role="status">Updates are delayed. Showing the last available records for this execution. Missing records do not indicate a completed or empty run.</p>}
-    {waiting ? <p className="output-empty" role="status">Loading the selected execution…</p> : !snapshot ? <p className="output-empty" role="status">{requested ? 'Loading execution records…' : 'Select an experiment to browse its outputs.'}</p> : active ? <>
+    {error && (waiting || !snapshot) && <div className="output-notice" role="alert"><p>Could not load the selected execution. Saved results have not been deleted.</p><p>{error}</p><button type="button" onClick={() => void useViewer.getState().fetchOnce()}>Retry loading</button></div>}
+    {!waiting && snapshot && (error || snapshot.stale || (view === 'agents' && totals.error)) && <p className="output-notice" role="status">Updates are delayed. Showing the last available records for this execution. Missing records do not indicate a completed or empty run.</p>}
+    {waiting ? (!error && <p className="output-empty" role="status">Loading the selected execution…</p>) : !snapshot ? (!error && <p className="output-empty" role="status">{requested ? 'Loading execution records…' : 'Select an experiment to browse its outputs.'}</p>) : active ? <>
       <header className="output-detail-header">
         <button type="button" className="output-back" onClick={() => useOutputNavigation.getState().back()}><ArrowLeft size={17} aria-hidden="true"/>Back to {outputViewNames[view]}</button>
         <div><p className="output-eyebrow">{view === 'results' ? 'Interpretation agent output' : view === 'report' ? 'Explanation agent output' : 'Recorded usage'}</p><h3 ref={heading} tabIndex={-1}>{identityLabel(active)}</h3></div>

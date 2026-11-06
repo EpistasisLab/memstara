@@ -8,6 +8,11 @@ import type {Observation} from '../lib/confusionMetrics';
 
 const shown = (value: number | null, digits = 3) => value === null ? '—' : value.toFixed(digits);
 const sizeLabel=(bytes:number)=>bytes<1024?`${bytes} B`:bytes<1048576?`${(bytes/1024).toFixed(1)} KiB`:`${(bytes/1048576).toFixed(1)} MiB`;
+const exportDescriptions:Record<ExportKind,string>={
+  table:'Summary CSV with one row per evaluation: hypothesis skill, execution and result IDs, seed, model parameters, performance metrics, confusion matrix, hypothesis, and linked Interpretation/Explanation output IDs. Includes continued executions. Best for comparing performance.',
+  complete:'Detailed CSV of registered execution settings, prompts, agent records, results, costs, and artifact metadata. Nested data is stored as JSON inside cells. Includes continued executions and may be very large. Best for auditing recorded evidence.',
+  zip:'ZIP containing the results table CSV, results JSON, complete evidence CSV and JSON, original Interpretation and Explanation text in separate JSON files, a link manifest, and a README. Output IDs connect each result to its agent outputs. Includes continued executions. Best for analyzing results alongside agent explanations.',
+};
 
 export default function HypothesisResultsTable({results, runTag, plannedSkills, skillTitles, onOpenResult}:{results:readonly unknown[];runTag?:string|null;plannedSkills?:readonly string[];skillTitles?:Record<string,string>;onOpenResult?:(observation:Observation)=>void}) {
   const rows = hypothesisSummaryRows(results);
@@ -58,6 +63,10 @@ export default function HypothesisResultsTable({results, runTag, plannedSkills, 
   };
   const transferPercent=exportTransfer.phase==='downloading'&&exportTransfer.totalBytes!==undefined?
     Math.min(100,Math.floor((exportTransfer.receivedBytes??0)/exportTransfer.totalBytes*100)):undefined;
+  const preparationPercent=exportTransfer.phase==='preparing'&&exportTransfer.totalUnits!==undefined?
+    Math.floor((exportTransfer.completedUnits??0)/exportTransfer.totalUnits*100):undefined;
+  const preparationLabel=preparationPercent===undefined?'Waiting for server progress.':
+    `Current stage: ${exportTransfer.completedUnits} / ${exportTransfer.totalUnits} · ${preparationPercent}% (not overall completion)`;
   const transferLabel=exportTransfer.phase==='downloading'?
     `${sizeLabel(exportTransfer.receivedBytes??0)}${exportTransfer.totalBytes!==undefined?` / ${sizeLabel(exportTransfer.totalBytes)}`:' received — total size unavailable'}${transferPercent!==undefined?` · ${transferPercent}%`:''}`:null;
   return <><section className="hypothesis-comparison" aria-label="Hypothesis skill results table">
@@ -68,15 +77,15 @@ export default function HypothesisResultsTable({results, runTag, plannedSkills, 
     <div id={panelId} hidden={!expanded} className="hypothesis-comparison-body">
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-paper-line p-3">
       <div><h3 className="font-semibold">Hypothesis comparison</h3><p className="text-xs text-ink-soft">Each row is one evaluation.</p></div>
-      <div className="flex flex-wrap gap-2">{(['table','complete','zip'] as const).map(kind=><button key={kind} type="button" disabled={!!exportBusy||!tags.length} onClick={()=>void download(kind)} className="flex items-center gap-2 rounded border border-paper-line px-3 py-2 text-sm font-semibold disabled:opacity-50"><Download size={15}/>{exportBusy===kind?(exportTransfer.phase==='downloading'?'Downloading…':exportTransfer.phase==='verifying'?'Checking file…':'Preparing export…'):kind==='table'?'Download table CSV':kind==='complete'?'Download complete evidence CSV':'Download linked results ZIP'}</button>)}</div>
+      <div className="flex flex-wrap gap-2">{(['table','complete','zip'] as const).map(kind=><button key={kind} type="button" title={exportDescriptions[kind]} aria-description={exportDescriptions[kind]} disabled={!!exportBusy||!tags.length} onClick={()=>void download(kind)} className="flex items-center gap-2 rounded border border-paper-line px-3 py-2 text-sm font-semibold disabled:opacity-50"><Download size={15}/>{exportBusy===kind?(exportTransfer.phase==='downloading'?'Downloading…':exportTransfer.phase==='verifying'?'Checking file…':'Preparing export…'):kind==='table'?'Download table CSV':kind==='complete'?'Download complete evidence CSV':'Download linked results ZIP'}</button>)}</div>
     </header>
     {exportBusy&&<div className="hypothesis-export-progress">
       <div className="hypothesis-export-meter">
         <strong role="status">{exportProgress}</strong>
-        <div className="hypothesis-export-details"><span>{transferLabel??(exportTransfer.phase==='preparing'?'Completion percentage is unavailable during preparation.':'File received; checking before saving.')}</span><span>Elapsed {Math.floor(exportElapsed/60)}:{String(exportElapsed%60).padStart(2,'0')}</span></div>
-        <progress max={100} value={transferPercent} aria-label={exportTransfer.phase==='downloading'?'Export download progress':exportTransfer.phase==='verifying'?'Export file verification':'Export preparation progress'} aria-valuetext={transferLabel??exportProgress}/>
+        <div className="hypothesis-export-details"><span>{transferLabel??(exportTransfer.phase==='preparing'?preparationLabel:'File received; checking before saving.')}</span><span>Elapsed {Math.floor(exportElapsed/60)}:{String(exportElapsed%60).padStart(2,'0')}</span></div>
+        <progress max={100} value={transferPercent??preparationPercent} aria-label={exportTransfer.phase==='downloading'?'Export download progress':exportTransfer.phase==='verifying'?'Export file verification':'Export preparation progress'} aria-valuetext={transferLabel??preparationLabel}/>
         <small>{exportTransfer.phase==='preparing'?'The server is collecting saved evidence and preparing the file. Large exports can take a few minutes. ':'Downloading and checking the prepared file. '}You can keep using this page.</small>
-        {exportElapsed>=60&&exportTransfer.phase==='preparing'&&<small>Still waiting for the server response. This does not confirm server progress; an error will be shown if the request times out.</small>}
+        {exportElapsed>=60&&exportTransfer.phase==='preparing'&&<small>Waiting for the prepared file. Updates above show the latest information received from the server.</small>}
       </div><button type="button" onClick={()=>exportController.current?.abort()}>Cancel export</button>
     </div>}
     {exportError&&<p role="alert" className="border-b border-paper-line p-3 text-sm text-amber-800">{exportError}</p>}

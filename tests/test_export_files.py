@@ -2,6 +2,7 @@
 import asyncio
 import copy
 import csv
+import gzip
 import io
 import json
 import sys
@@ -85,6 +86,51 @@ def test_complete_csv_and_zip_csv_have_identical_contents(bundle):
     finally:
         target.close()
         archive.close()
+
+
+@pytest.mark.parametrize('header, expected', [('', False), ('br, gzip', True),
+    ('gzip;q=0, *;q=1', False), ('gzip;q=0.5', True), ('identity', False),
+    ('*;q=1', True), ('gzip;q=invalid', False)])
+def test_csv_encoding_negotiation(header, expected):
+    assert files.accepts_gzip(header) is expected
+
+
+def test_gzip_csv_preserves_every_byte_and_reports_decoded_size(bundle, monkeypatch):
+    monkeypatch.setattr(linked_outputs, 'bundle', AsyncMock(return_value=bundle))
+    original, original_size = files.build_file(bundle, 'complete')
+    with original:
+        expected = original.read()
+
+    async def run():
+        response = await files.download(['continued'], 'complete', gzip_csv=True)
+        assert response.headers['Content-Encoding'] == 'gzip'
+        assert response.headers['Vary'] == 'Accept-Encoding'
+        assert response.headers['X-Memstara-Export-Bytes'] == str(original_size)
+        wire = b''.join([chunk async for chunk in response.body_iterator])
+        assert len(wire) == int(response.headers['Content-Length'])
+        assert len(wire) < original_size
+        assert gzip.decompress(wire) == expected
+
+    asyncio.run(run())
+
+
+def test_real_csv_route_negotiates_compression_without_changing_download(bundle, monkeypatch):
+    from fastapi.testclient import TestClient
+    import main
+    import history_epoch
+    monkeypatch.setattr(linked_outputs, 'bundle', AsyncMock(return_value=bundle))
+    monkeypatch.setattr(history_epoch, 'read', lambda: {'revision': 'csv-test', 'busy': False})
+    monkeypatch.setattr(history_epoch, 'invalidate', AsyncMock())
+    client = TestClient(main.app)
+    url = '/api/experiments/linked-download?run_tags=continued&format=complete'
+    compressed = client.get(url, headers={'Accept-Encoding': 'gzip'})
+    plain = client.get(url, headers={'Accept-Encoding': 'identity'})
+    assert compressed.status_code == plain.status_code == 200
+    assert compressed.headers['content-encoding'] == 'gzip'
+    assert 'content-encoding' not in plain.headers
+    assert compressed.content == plain.content
+    assert len(compressed.content) == int(compressed.headers['X-Memstara-Export-Bytes'])
+    assert 'complete-evidence.csv' in compressed.headers['content-disposition']
 
 
 def test_512_mib_evidence_is_streamed_and_compressed_without_dropping_records(bundle):

@@ -5,10 +5,12 @@ by TemporaryFile and closed after delivery; no experiment artifact is changed.
 CSV columns follow the existing browser exports, with nested values as JSON cells.
 """
 import asyncio
+import gzip
 import json
 import logging
 import math
 import re
+import shutil
 import tempfile
 import time
 import zipfile
@@ -213,16 +215,36 @@ def manifest(bundle):
             'interpretation_foreign_keys': 'interpretation_output_ids', 'explanation_foreign_keys': 'explanation_output_ids'}}
 
 
-def build_file(bundle, format):
+def build_file(bundle, format, progress=None, cancelled=None):
+    class CheckedWriter:
+        def __init__(self, output):
+            self.output = output
+
+        def write(self, data):
+            if cancelled is not None and cancelled.is_set():
+                raise InterruptedError('Export cancelled')
+            return self.output.write(data)
+
     target = tempfile.TemporaryFile()
     try:
-        if format == 'complete':
-            write_evidence(target, bundle['executions'])
+        if format == 'table':
+            write_summary(CheckedWriter(target), bundle['results'])
+            if progress:
+                progress('Formatting summary CSV', 1, 1)
+        elif format == 'complete':
+            write_evidence(CheckedWriter(target), bundle['executions'])
         elif format == 'zip':
-            with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as archive:
+            with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=1, allowZip64=True) as archive:
+                completed = 0
                 def put(name, writer, value):
+                    nonlocal completed
+                    if progress:
+                        progress('Preparing ZIP: ' + name, completed, 8)
                     with archive.open(name, 'w', force_zip64=True) as entry:
-                        writer(entry, value)
+                        writer(CheckedWriter(entry), value)
+                    completed += 1
+                    if progress:
+                        progress('Preparing ZIP: ' + name, completed, 8)
                 put('results.csv', write_summary, bundle['results'])
                 for name in ('results', 'interpretations', 'explanations'):
                     put(name + '.json', write_json, bundle[name])
@@ -236,6 +258,8 @@ def build_file(bundle, format):
                     'Narratives are verbatim JSON strings. Missing/ambiguous links remain explicit in the manifest.\n'
                     'Multiple model fits can share one saved result and its agent output IDs.\n'
                     'No new model calls or experiments were started. CSV has formula-safe quoted cells.\n')
+                if progress:
+                    progress('ZIP files assembled', 8, 8)
         else:
             raise ValueError('Unsupported linked download format')
         size = target.tell()
@@ -246,21 +270,57 @@ def build_file(bundle, format):
         raise
 
 
-async def download(tags, format):
+def accepts_gzip(value):
+    """Honor explicit gzip refusal, even when a wildcard accepts other encodings."""
+    qualities = {}
+    for item in value.lower().split(','):
+        parts = [part.strip() for part in item.split(';')]
+        quality = 1.0
+        for parameter in parts[1:]:
+            if parameter.startswith('q='):
+                try:
+                    quality = float(parameter[2:])
+                except ValueError:
+                    quality = 0.0
+        qualities[parts[0]] = quality
+    return 0 < qualities.get('gzip', qualities.get('*', 0)) <= 1
+
+
+def compress_csv(source):
+    """Compress transport bytes without materializing or changing the original CSV."""
+    target = tempfile.TemporaryFile()
+    try:
+        with gzip.GzipFile(fileobj=target, mode='wb', compresslevel=1, mtime=0) as compressed:
+            shutil.copyfileobj(source, compressed, length=1024 * 1024)
+        size = target.tell()
+        target.seek(0)
+        return target, size
+    except BaseException:
+        target.close()
+        raise
+    finally:
+        source.close()
+
+
+async def download(tags, format, gzip_csv=False):
     # A second large snapshot must not multiply preparation memory in this worker.
     if _preparation_lock.locked():
         raise HTTPException(429, 'Another full-evidence export is being prepared. Please wait and retry.',
                             headers={'Retry-After': '10'})
     async with _preparation_lock:
-        return await _download(tags, format)
+        return await _download(tags, format, gzip_csv)
 
 
-async def _download(tags, format):
+async def _download(tags, format, gzip_csv=False):
     from linked_outputs import bundle
     started = time.monotonic()
     value = await bundle(tags, True)
     try:
         target, size = await asyncio.to_thread(build_file, value, format)
+        original_size = size
+        compressed = gzip_csv and format == 'complete'
+        if compressed:
+            target, size = await asyncio.to_thread(compress_csv, target)
     except (OSError, ValueError, zipfile.BadZipFile) as error:
         logger.warning('Linked export preparation failed: format=%s error_type=%s', format, type(error).__name__)
         raise HTTPException(503, 'The export file could not be prepared. Saved results are unchanged.') from error
@@ -280,4 +340,7 @@ async def _download(tags, format):
             'X-Memstara-Export-Results': str(len(value['results'])),
             'X-Memstara-Export-Executions': str(len(value['run_tags'])),
             'X-Memstara-Export-Warnings': str(len(value['warnings'])),
-            'X-Memstara-Export-Bytes': str(size)}, background=BackgroundTask(target.close))
+            # Fetch transparently decompresses gzip: the receipt must describe the
+            # CSV delivered to JavaScript, while Content-Length describes the wire.
+            'X-Memstara-Export-Bytes': str(original_size), 'Vary': 'Accept-Encoding',
+            **({'Content-Encoding': 'gzip'} if compressed else {})}, background=BackgroundTask(target.close))

@@ -120,11 +120,8 @@ def test_bundle_continuation_result_snapshot_and_registry_gap(monkeypatch):
     monkeypatch.setattr(linked, 'expand', lambda selected: ['old', 'retry'])
     monkeypatch.setattr(archive, 'configs', lambda: configs('old', 'retry'))
     monkeypatch.setattr(archive, 'lookup', lambda tag, **kwargs: artifact())
-    conn = AsyncMock()
-    conn.fetch.return_value = [row('old'), row('retry', number=2)]
-    async def read(store, callback, fallback):
-        return await callback(conn)
-    monkeypatch.setattr(linked.pools, 'guarded', read)
+    reader = AsyncMock(return_value=[row('old'), row('retry', number=2)])
+    monkeypatch.setattr(linked, 'read_export_results', reader)
     async def registry(tag):
         if tag == 'old':
             raise HTTPException(404, 'Not registered')
@@ -136,14 +133,14 @@ def test_bundle_continuation_result_snapshot_and_registry_gap(monkeypatch):
     assert result['executions'][0]['registry_status'] == 'not_registered'
     assert result['executions'][1]['report']['text'] == 'Recorded numeric report'
     assert result['executions'][1]['results'] == [result['results'][1]]
-    conn.fetch.assert_awaited_once()
+    reader.assert_awaited_once_with(['old', 'retry'], linked.decoded)
 
 
 def test_failed_database_never_exports_an_empty_success(monkeypatch):
     monkeypatch.setattr(linked, 'expand', lambda selected: selected)
     monkeypatch.setattr(archive, 'configs', lambda: configs('old'))
     monkeypatch.setattr(archive, 'lookup', lambda tag, **kwargs: artifact())
-    monkeypatch.setattr(linked.pools, 'guarded', AsyncMock(return_value=None))
+    monkeypatch.setattr(linked, 'read_export_results', AsyncMock(side_effect=HTTPException(503, 'Result export unavailable')))
     with pytest.raises(HTTPException) as error:
         asyncio.run(linked.bundle(['old']))
     assert error.value.status_code == 503
@@ -154,13 +151,7 @@ def test_large_export_normalization_runs_off_the_api_event_loop(monkeypatch):
     monkeypatch.setattr(linked, 'expand', lambda selected: selected)
     monkeypatch.setattr(archive, 'configs', lambda: configs('old'))
     monkeypatch.setattr(archive, 'lookup', lambda tag, **kwargs: artifact())
-    conn = AsyncMock()
-    conn.fetch.return_value = [row()]
-
-    async def read(store, callback, fallback):
-        return await callback(conn)
-
-    monkeypatch.setattr(linked.pools, 'guarded', read)
+    monkeypatch.setattr(linked, 'read_export_results', AsyncMock(return_value=[row()]))
     encode = linked.jsonable_encoder
     threads = []
 

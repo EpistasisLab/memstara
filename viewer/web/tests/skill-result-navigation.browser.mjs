@@ -23,6 +23,7 @@ try{for(const [width,theme] of [[1440,'light'],[768,'dark'],[390,'light'],[320,'
  await page.waitForFunction(()=>typeof window.deliverChartSnapshot==='function');
  await page.evaluate(({rows,theme})=>{document.documentElement.dataset.theme=theme;window.deliverChartSnapshot(rows);},{rows:snapshot(rows),theme});
  const panel=page.locator('#results-panel'),comparison=page.getByRole('region',{name:'Hypothesis skill performance distributions'});
+ await comparison.getByRole('button',{name:/Compare performance by hypothesis skill/}).click();
  const card=panel.getByRole('article',{name:'Selected interpretation outputs'});
  await expect(comparison).toContainText('24 evaluations');
  await expect(card).toContainText('Original after-resume interpretation for result 4.');

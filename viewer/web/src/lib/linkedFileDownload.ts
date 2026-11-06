@@ -8,14 +8,23 @@ function downloadFailure(error:unknown):Error {
 }
 
 /** Receive a binary file, never turn the complete evidence into one JS string. */
-export async function readLinkedFile(tags:string[],kind:'zip'|'complete',onProgress?:(message:string,progress?:ExportProgress)=>void,signal?:AbortSignal):Promise<PreparedExport>{
+export async function readLinkedFile(tags:string[],kind:'zip'|'complete'|'table',onProgress?:(message:string,progress?:ExportProgress)=>void,signal?:AbortSignal,preparedUrl?:string):Promise<PreparedExport>{
  const selected=[...new Set(tags.filter(Boolean))];
  if(!selected.length)throw Error('Choose a recorded execution first.');
  const query=new URLSearchParams({run_tags:selected.join(','),format:kind});
+ // Bound stalled preparation/transfer, not the total duration of a healthy large download.
+ const controller=new AbortController();
+ const cancel=()=>controller.abort(signal?.reason);
+ const expire=()=>controller.abort(new DOMException('Export made no progress','TimeoutError'));
+ let idleTimer=setTimeout(expire,180000);
+ const activity=()=>{clearTimeout(idleTimer);idleTimer=setTimeout(expire,180000);};
+ signal?.addEventListener('abort',cancel,{once:true});
+ if(signal?.aborted)cancel();
  try{
-  const response=await fetch(`/api/experiments/linked-download?${query}`,{
-   credentials:'same-origin',signal:signal??AbortSignal.timeout(180000),headers:{Accept:kind==='zip'?'application/zip':'text/csv'},
+  const response=await fetch(preparedUrl??`/api/experiments/linked-download?${query}`,{
+   credentials:'same-origin',signal:controller.signal,headers:{Accept:kind==='zip'?'application/zip':'text/csv'},
   });
+  activity();
   if(!response.ok){
    if(response.status===401)throw Error('Your browser login expired. Reload the page and sign in again.');
    if(response.status===404)throw Error('The download API is not available. Update both the API and web services, then refresh this page.');
@@ -43,6 +52,7 @@ export async function readLinkedFile(tags:string[],kind:'zip'|'complete',onProgr
    // another complete copy as a JavaScript array of chunks (especially for CSV).
    const measured=response.body.pipeThrough(new TransformStream<Uint8Array,Uint8Array>({
     transform(value,controller){
+     activity();
      receivedBytes+=value.byteLength;
      if(totalBytes!==undefined&&receivedBytes>totalBytes)throw Error('The export transfer size does not match its receipt. No substitute file was downloaded.');
      if(performance.now()-lastUpdate>=200){report();lastUpdate=performance.now();}
@@ -63,4 +73,5 @@ export async function readLinkedFile(tags:string[],kind:'zip'|'complete',onProgr
   }
   return {blob,results:Number(counts[0]),executions:Number(counts[1]),warnings:Number(counts[2])};
  }catch(error){throw downloadFailure(error);}
+ finally{clearTimeout(idleTimer);signal?.removeEventListener('abort',cancel);}
 }

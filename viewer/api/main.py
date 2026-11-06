@@ -56,7 +56,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -118,9 +118,21 @@ async def linked_export(run_tags: str = Query(min_length=1, max_length=6000), in
 
 
 @app.get('/api/experiments/linked-download')
-async def linked_download(run_tags: str = Query(min_length=1, max_length=6000), format: Literal['zip', 'complete'] = 'zip'):
-    from export_files import download
-    return await download(run_tags.split(','), format)
+async def linked_download(request: Request, run_tags: str = Query(min_length=1, max_length=6000), format: Literal['zip', 'complete'] = 'zip'):
+    from export_files import accepts_gzip, download
+    return await download(run_tags.split(','), format, gzip_csv=accepts_gzip(request.headers.get('accept-encoding', '')))
+
+
+@app.get('/api/experiments/prepare-download')
+async def prepare_download(run_tags: str = Query(min_length=1, max_length=6000), format: Literal['table', 'zip'] = 'zip'):
+    from prepared_exports import prepare
+    return await prepare(run_tags.split(','), format)
+
+
+@app.get('/api/experiments/prepared-file/{identifier}')
+async def prepared_file(identifier: str):
+    from prepared_exports import download
+    return await asyncio.to_thread(download, identifier)
 
 
 @app.get('/api/cost-details')
@@ -216,13 +228,15 @@ async def loop_telemetry(run_tag: str = Query(min_length=1, max_length=200),
 
 
 @app.get("/api/snapshot")
-async def snapshot(run_tag: str | None = Query(default=None)) -> dict[str, Any]:
+async def snapshot(request: Request, run_tag: str | None = Query(default=None)):
     # ★ The workhorse endpoint. The frontend calls this one thing every 2 seconds.
     # Given no `run_tag`, scene picks the most recent run itself.
     # All the work is inside scene.snapshot and this only passes it along — the
     # interpretation has to live in one place or the screens start contradicting
     # each other.
-    return await scene.snapshot(run_tag)
+    from snapshot_response import response
+    value = await scene.snapshot(run_tag)
+    return await asyncio.to_thread(response, value, request.headers.get('accept-encoding', ''))
 
 
 @app.get("/api/task/{task_id}")

@@ -167,10 +167,9 @@ export const useViewer = create<ViewerState>((set, get) => ({
       const url = askedFor
         ? `/api/snapshot?run_tag=${encodeURIComponent(askedFor)}`
         : "/api/snapshot";
-      // The API returns a structured degraded snapshot after four seconds. Keep the
-      // browser timeout slightly above that ceiling so it never sits in Loading after
-      // the API has already decided what happened.
-      const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+      // Assembly has its own server deadline. Allow time for transfer and decoding
+      // of retained results as well, especially on a cold load over a slower link.
+      const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       const snapshot: Snapshot = await res.json();
       // Left this run while its answer was in the air. Applying it would draw one run's
@@ -213,7 +212,9 @@ export const useViewer = create<ViewerState>((set, get) => ({
         refetchWanted = true;
         return;
       }
-      set({ error: e instanceof Error ? e.message : String(e), loading: false });
+      set({ error: e instanceof Error && e.name === 'TimeoutError'
+        ? 'The selected execution did not finish loading within 30 seconds. Retrying automatically.'
+        : e instanceof Error ? e.message : String(e), loading: false });
     } finally {
       inFlight = false;
       // Terminates: the recursive call clears the flag before doing anything, and only a
