@@ -139,6 +139,8 @@ CREATE INDEX IF NOT EXISTS memstara_blackboard_claim_idx
 -- The index used when gathering the rows of one run (run_tag).
 CREATE INDEX IF NOT EXISTS memstara_blackboard_run_idx
     ON memstara_blackboard (run_tag);
+CREATE INDEX IF NOT EXISTS memstara_blackboard_run_trial_idx
+    ON memstara_blackboard (run_tag, trial, task_id);
 
 CREATE TABLE IF NOT EXISTS memstara_results (
     -- The results table (the record). Unlike the board it only accumulates and never
@@ -207,6 +209,8 @@ CREATE TABLE IF NOT EXISTS memstara_results (
 -- The index used when gathering one run's results.
 CREATE INDEX IF NOT EXISTS memstara_results_run_idx
     ON memstara_results (run_tag);
+CREATE INDEX IF NOT EXISTS memstara_results_run_trial_idx
+    ON memstara_results (run_tag, trial, result_id);
 
 CREATE TABLE IF NOT EXISTS memstara_questions (
     -- The question bank. Neither a board nor a results table: it holds what the

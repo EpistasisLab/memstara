@@ -10,8 +10,10 @@ from memstara.pipeline.exploration import record_round, round_summary
 
 
 def plan():
+    from memstara.combinations import build_plan, DEFAULT_SKILLS
+
     return {'run_tag': 'test', 'config_hash': 'hash', 'y_column': 'FIXED_TARGET',
-            'combination_plan': {'total_loops': 4},
+            'combination_plan': build_plan({stage: [skill] for stage, skill in DEFAULT_SKILLS.items()}, 4),
             'hypothesis_policy': {'version': 'knowledge_only_v1', 'question_contract': 'fixed_target_v1',
                                   'combination_questions': policy.VERSION}}
 

@@ -83,7 +83,7 @@ def test_feedback_file_cannot_be_reused_by_another_run(plan):
 def test_next_question_turn_receives_observed_results(plan, monkeypatch):
     async def tool(registry, name, args):
         if name == 'read_board':
-            assert args == {'run_tag': 'this-run'}
+            assert args == {'run_tag': 'this-run', 'feedback_before_trial': 1}
             return {'tasks': [task()]}
         return {'questions': []}
     monkeypatch.setattr(board, 'call_board_tool', tool)

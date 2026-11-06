@@ -281,6 +281,7 @@ def test_execution_tools_removed_and_output_saved(frozen, result, tmp_path):
         )
     )
     assert entry["status"] == "completed" and text
+    assert read.call_args.args[2] == {"run_tag": frozen["run_tag"], "trial_start": 0, "trial_end": 1}
     assert call.call_args.kwargs["tools"] == []
     assert "old broad prompt" not in call.call_args.args[1]
     assert (tmp_path / "run" / "explanation_io" / "loop-1.json").is_file()

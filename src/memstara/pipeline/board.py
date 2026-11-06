@@ -450,6 +450,7 @@ async def setup_tools() -> MCPServerRegistry:
 # a debugger cannot show. Without collecting them, the records stay in core's DB but
 # **which run was which stage cannot be told.**
 _CURRENT_LOOP: ContextVar[int | None] = ContextVar("memstara_loop", default=None)
+_CURRENT_TRIAL_RANGE: ContextVar[tuple[int, int] | None] = ContextVar("memstara_trial_range", default=None)
 _CALLS: list[dict[str, Any]] = []
 _CURRENT_FLAVORS: ContextVar[dict | None] = ContextVar("memstara_flavors", default=None)
 
@@ -1181,18 +1182,22 @@ async def board_state(registry: MCPServerRegistry, run_tag: str, *, state_only=F
 
     from memstara.pipeline.board_reads import verified_read, BoardReadError
 
+    query = {'run_tag': run_tag, **({'state_only': True} if state_only else {})}
+    bounds = _CURRENT_TRIAL_RANGE.get() if state_only else None
+    if bounds is not None:
+        query.update(trial_start=bounds[0], trial_end=bounds[1])
+
     async def read_once():
         async with asyncio.timeout(30):
-            raw = await call_server_tool(server.id, "read_board",
-                                         {'run_tag': run_tag, **({'state_only': True} if state_only else {})},
-                                         registry=registry)
+            raw = await call_server_tool(server.id, "read_board", query, registry=registry)
         return decode_board_state(board_tool_text(raw))
 
     directory = _TRACE_DIR.parent if _TRACE_DIR else None
     try:
         return await verified_read(read_once, directory=directory, operation={
             'server': 'memstara-blackboard', 'tool': 'read_board', 'run_tag': run_tag,
-            'loop': _CURRENT_LOOP.get(), 'state_only': state_only, 'timeout_seconds': 30})
+            'loop': _CURRENT_LOOP.get(), 'state_only': state_only, 'timeout_seconds': 30,
+            'trial_start': query.get('trial_start'), 'trial_end': query.get('trial_end')})
     except BoardReadError as exc:
         from memstara.pipeline.failures import stop_execution
 
@@ -1360,6 +1365,40 @@ async def call_board_tool(registry: MCPServerRegistry, tool: str, args: dict[str
     directory = _TRACE_DIR.parent if _TRACE_DIR else None
     correlation = str(uuid.uuid4())
     operation = {'server': 'memstara-blackboard', 'tool': tool, 'loop': _CURRENT_LOOP.get(), 'timeout_seconds': 30}
+    operation.update({key: args[key] for key in
+                      ('trial_start', 'trial_end', 'origin_wave', 'feedback_before_trial') if key in args})
+    if tool in {'read_results', 'read_questions', 'read_board'}:
+        # Retry only read-only operations. Never replay a claim or a submission.
+        from memstara.pipeline.board_reads import verified_read, response_error, BoardReadError
+
+        async def read_once():
+            async with asyncio.timeout(30):
+                raw = await call_server_tool(server.id, tool, args, registry=registry)
+            text = board_tool_text(raw)
+            try:
+                response = json.loads(text)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError("Blackboard tool returned invalid JSON") from exc
+            if not isinstance(response, dict):
+                raise BoardReadError('InvalidResponse')
+            if response.get('error'):
+                raise response_error(response)
+            collection = {'read_results': 'results', 'read_questions': 'questions', 'read_board': 'tasks'}[tool]
+            if not isinstance(response.get(collection), list):
+                raise BoardReadError('InvalidCollection')
+            audit(directory, 1, 'read_payload', operation=operation, correlation_id=correlation,
+                  response_bytes=len(text.encode('utf-8')), rows=len(response[collection]))
+            return response
+
+        try:
+            return await verified_read(read_once, directory=directory, attempts=3, operation=operation)
+        except BoardReadError as exc:
+            from memstara.pipeline.failures import stop_execution
+
+            stop_execution(directory, 'board', _CURRENT_LOOP.get(), exc,
+                           code='board_read_unavailable',
+                           message=f'Internal {tool} read failed ({exc.code}). Saved results are retained; '
+                           'see board_read_events.jsonl for scope and recovery attempts.')
     began = time.monotonic()
     audit(directory, 1, 'tool_started', operation=operation, correlation_id=correlation)
     try:
@@ -1448,7 +1487,9 @@ async def questions_for_wave(
 
     snapshot = scoped(snapshot, wave)
     if learning_enabled(snapshot):
-        history = await call_board_tool(registry, "read_board", {"run_tag": run_tag}) if wave else {"tasks": []}
+        history = await call_board_tool(registry, "read_board", {
+            "run_tag": run_tag, "feedback_before_trial": wave * snapshot["trials"]
+        }) if wave else {"tasks": []}
         if not isinstance(history, dict) or "tasks" not in history or history.get("error"):
             raise RuntimeError("Cannot read prior iteration evidence; refusing to silently generate without feedback")
         context = summarize(history["tasks"], snapshot, wave)
@@ -1528,7 +1569,9 @@ async def questions_for_wave(
         for attempt in range(2):
             # Recover a saved but not yet executed question from THIS wave only.
             # Never reassign an older question to a different feedback context.
-            current = await call_board_tool(registry, "read_questions", {"status": "open", "limit": 200})
+            current = await call_board_tool(registry, "read_questions", {
+                "status": "open", "limit": 200, "origin_run": run_tag, "origin_wave": wave
+            })
             if not isinstance(current, dict) or current.get("error") or "questions" not in current:
                 raise RuntimeError("Question bank unavailable; generation cannot safely be replayed")
             fresh = [
@@ -1564,7 +1607,9 @@ async def questions_for_wave(
                     if not task.done():
                         task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
-        after = await call_board_tool(registry, "read_questions", {"status": "open", "limit": 200})
+        after = await call_board_tool(registry, "read_questions", {
+            "status": "open", "limit": 200, "origin_run": run_tag, "origin_wave": wave
+        })
         if not isinstance(after, dict) or after.get("error") or "questions" not in after:
             raise RuntimeError("Question bank unavailable after generation")
         fresh = [
@@ -1678,6 +1723,7 @@ def chosen_playbooks(args: argparse.Namespace) -> dict[str, list[str]]:
 async def run(args: argparse.Namespace, run_dir: Path) -> int:
     """The body of the run. (1) through (6) of "How to read this file" at the top are
     here, in that order."""
+    _CURRENT_TRIAL_RANGE.set(None)
     from memstara.control.catalog import ensure_explanation_enabled, ensure_hypothesis_enabled
 
     ensure_hypothesis_enabled(chosen_playbooks(args).get("hypothesis", []))
@@ -1990,6 +2036,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
 
             note(execution_label(wave + 1, combination_plan) + " · starting research process")
             _CURRENT_LOOP.set(wave + 1)
+            _CURRENT_TRIAL_RANGE.set((wave * args.trials, (wave + 1) * args.trials))
             if combination_plan:
                 from memstara.combinations import prepare_loop
 
@@ -2610,6 +2657,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         # workbench and disappears when it is cleared; the finished drawer is the record
         # that stays.
         _CURRENT_LOOP.set(None)
+        _CURRENT_TRIAL_RANGE.set(None)
         summary = round_summary(run_dir)
         if not seeded_total and (summary or {}).get("skipped", 0):
             atomic_json(

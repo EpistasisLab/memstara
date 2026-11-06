@@ -1063,11 +1063,19 @@ async def attach_match_trace(task_id: int, match_trace: str) -> str:
 
 
 @mcp.tool()
-async def read_board(run_tag: str = "", state_only: bool = False) -> str:
+async def read_board(
+    run_tag: str = "", state_only: bool = False,
+    trial_start: int | None = None, trial_end: int | None = None,
+    feedback_before_trial: int | None = None,
+) -> str:
     """Every task of a run, finished or not. The reporting stage uses this.
 
     Args:
         run_tag: which run; "" reads the whole board.
+        trial_start: inclusive trial bound for current-loop scheduling.
+        trial_end: exclusive trial bound for current-loop scheduling.
+        feedback_before_trial: return only the latest 12 terminal tasks before this
+            trial, matching the iterative-discovery feedback contract.
 
     Returns:
         JSON list of tasks with what each stage left on them, including the ones that
@@ -1081,7 +1089,26 @@ async def read_board(run_tag: str = "", state_only: bool = False) -> str:
     try:
         conn = await asyncpg.connect(_dsn(), timeout=10, command_timeout=20)
         try:
-            if state_only:
+            if feedback_before_trial is not None:
+                # Project only fields consumed by iteration_learning.summarize.
+                # Select the same last 12 tasks in SQL, not after transporting all history.
+                rows = await conn.fetch(
+                    """SELECT task_id, run_tag, trial, status, question_id, perspective,
+                              hypothesis, columns, columns_used, auc, feature_importance,
+                              left(interpretation, 6000) AS interpretation, left(error, 1000) AS error,
+                              jsonb_build_object(
+                                  'question_contract', evaluation->'question_contract',
+                                  'comparison', evaluation->'comparison',
+                                  'explanation', COALESCE(evaluation->'explanation', '{}'::jsonb),
+                                  'data_quality', COALESCE(evaluation->'data_quality', '{}'::jsonb)
+                              ) AS evaluation
+                       FROM memstara_blackboard
+                       WHERE ($1 = '' OR run_tag = $1) AND status IN ('done', 'failed')
+                         AND trial >= 0 AND trial < $2
+                       ORDER BY trial DESC, task_id DESC LIMIT 12""",
+                    run_tag, feedback_before_trial,
+                )
+            elif state_only:
                 # Driver scheduling must not resend all historical match traces,
                 # fitted-model evidence and narratives on every one-second poll.
                 rows = await conn.fetch(
@@ -1090,7 +1117,9 @@ async def read_board(run_tag: str = "", state_only: bool = False) -> str:
                               jsonb_build_object('interpretation_branch',
                                   evaluation->'interpretation_branch') AS evaluation
                        FROM memstara_blackboard WHERE ($1 = '' OR run_tag = $1)
-                       ORDER BY trial, task_id""", run_tag)
+                         AND ($2::integer IS NULL OR trial >= $2)
+                         AND ($3::integer IS NULL OR trial < $3)
+                       ORDER BY trial, task_id""", run_tag, trial_start, trial_end)
             else:
                 rows = await conn.fetch(
                 """
@@ -1112,9 +1141,13 @@ async def read_board(run_tag: str = "", state_only: bool = False) -> str:
                        interpretation, attempts, error, evaluation
                 FROM memstara_blackboard
                 WHERE ($1 = '' OR run_tag = $1)
+                  AND ($2::integer IS NULL OR trial >= $2)
+                  AND ($3::integer IS NULL OR trial < $3)
                 ORDER BY trial, task_id
                 """,
                 run_tag,
+                trial_start,
+                trial_end,
             )
         finally:
             await conn.close()
@@ -1153,13 +1186,15 @@ async def read_results(
             return json.dumps({"error": "This tool is scoped to its pipeline run"})
         run_tag = scope
     try:
-        conn = await asyncpg.connect(_dsn())
+        conn = await asyncpg.connect(_dsn(), timeout=10, command_timeout=20)
         try:
             rows = await conn.fetch(
                 """
                 SELECT result_id, task_id, run_tag, trial, perspective, hypothesis,
                        columns, columns_used, columns_missing,
-                       okf_concept_ids, match_trace, question_id,
+                       okf_concept_ids, question_id,
+                       CASE WHEN $4 THEN match_trace ELSE '[]'::jsonb END AS match_trace,
+                       jsonb_array_length(COALESCE(match_trace, '[]'::jsonb)) AS match_trace_calls,
                        y_column, auc, feature_importance, model, interpretation, created_at, evaluation, hypothesis_id
                 FROM memstara_results
                 WHERE ($1 = '' OR run_tag = $1)
@@ -1170,11 +1205,12 @@ async def read_results(
                 run_tag,
                 trial_start,
                 trial_end,
+                include_match_trace,
             )
         finally:
             await conn.close()
     except Exception as e:  # noqa: BLE001
-        return _err(e)
+        return json.dumps({"error": "Result storage read unavailable", "error_type": type(e).__name__})
 
     out = []
     for r in rows:
@@ -1191,7 +1227,7 @@ async def read_results(
             d[k] = json.loads(d[k]) if d[k] else ([] if k != "feature_importance" else {})
         # Summarised rather than dropped: a caller that cannot see the field at all has
         # no way to learn the record is there to ask for.
-        d["match_trace_calls"] = len(d["match_trace"])
+        d.setdefault("match_trace_calls", len(d["match_trace"]))
         if not include_match_trace:
             del d["match_trace"]
         out.append(d)
@@ -1300,7 +1336,9 @@ async def read_question_catalog(limit: int = 200) -> str:
 
 
 @mcp.tool()
-async def read_questions(status: str = "open", limit: int = 200) -> str:
+async def read_questions(
+    status: str = "open", limit: int = 200, origin_run: str = "", origin_wave: int | None = None
+) -> str:
     """What this project has already thought to ask. Read this before proposing more.
 
     The question bank spans runs. That is the point of reading it: without it every run
@@ -1329,6 +1367,9 @@ async def read_questions(status: str = "open", limit: int = 200) -> str:
         curator, which is exactly how it would propose a duplicate of the question
         another worker has in hand.
     """
+    scope = _pipeline_run()
+    if scope and origin_run and origin_run != scope:
+        return json.dumps({"error": "This tool is scoped to its pipeline run"})
     try:
         conn = await asyncpg.connect(_dsn())
         try:
@@ -1343,12 +1384,14 @@ async def read_questions(status: str = "open", limit: int = 200) -> str:
                        claimed_run, claimed_by
                 FROM memstara_questions
                 WHERE status <> 'cleared' AND ($1 = '' OR status = $1) AND ($3 = '' OR origin_run = $3)
+                  AND ($4::integer IS NULL OR origin_wave = $4)
                 ORDER BY question_id DESC
                 LIMIT $2
                 """,
                 status,
                 max(1, int(limit)),
-                _pipeline_run(),
+                scope or origin_run,
+                origin_wave,
             )
         finally:
             await conn.close()

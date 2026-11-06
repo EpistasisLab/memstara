@@ -213,7 +213,7 @@ def test_driver_response_decode_failure_is_failed_not_completed(tmp_path, monkey
     with pytest.raises(RuntimeError, match='invalid JSON'):
         asyncio.run(board.call_board_tool(None, 'read_questions', {'private': 'patient details'}))
     events = [json.loads(line) for line in (tmp_path/'board_read_events.jsonl').read_text().splitlines()]
-    assert [e['state'] for e in events] == ['tool_started', 'tool_failed']
+    assert [e['state'] for e in events] == ['started', 'failed']
     assert events[-1]['exception']['cause']['error_type'] == 'JSONDecodeError'
     assert 'patient details' not in json.dumps(events) and 'private invalid body' not in json.dumps(events)
 

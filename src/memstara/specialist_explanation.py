@@ -373,9 +373,16 @@ async def execute(snapshot, loop, run_dir, args, kwargs, invoke, read_board_tool
             raise ValueError("Specialist Explanation needs a local run directory")
         if snapshot.get("combination_plan") and loop is None:
             return assemble(snapshot, directory)
-        data = await read_board_tool(kwargs["registry"], "read_results", {"run_tag": snapshot["run_tag"]})
+        # Filter in storage, before MCP serializes or transports prior results.
+        # This specialist's handoff contract maps Loop N to trial N - 1.
+        query = {"run_tag": snapshot["run_tag"]}
+        if loop is not None:
+            query.update(trial_start=loop - 1, trial_end=loop)
+        data = await read_board_tool(kwargs["registry"], "read_results", query)
         if data.get("error") or not isinstance(data.get("results"), list):
             raise ValueError("Could not read completed Interpretation results")
+        if loop is not None and any(row.get("trial") != loop - 1 for row in data["results"]):
+            raise ValueError("Explanation evidence is outside the current loop")
         prepared = await prepare(snapshot, data["results"], loop, directory)
         # A dedicated fresh run receives only the bound expert evidence. The
         # framework final-answer mechanism remains available; broad tools do not.
