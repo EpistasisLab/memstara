@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import sys
+import threading
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -146,3 +147,45 @@ def test_failed_database_never_exports_an_empty_success(monkeypatch):
     with pytest.raises(HTTPException) as error:
         asyncio.run(linked.bundle(['old']))
     assert error.value.status_code == 503
+
+
+def test_large_export_normalization_runs_off_the_api_event_loop(monkeypatch):
+    owner = threading.get_ident()
+    monkeypatch.setattr(linked, 'expand', lambda selected: selected)
+    monkeypatch.setattr(archive, 'configs', lambda: configs('old'))
+    monkeypatch.setattr(archive, 'lookup', lambda tag, **kwargs: artifact())
+    conn = AsyncMock()
+    conn.fetch.return_value = [row()]
+
+    async def read(store, callback, fallback):
+        return await callback(conn)
+
+    monkeypatch.setattr(linked.pools, 'guarded', read)
+    encode = linked.jsonable_encoder
+    threads = []
+
+    def encoder(value):
+        threads.append(threading.get_ident())
+        return encode(value)
+
+    monkeypatch.setattr(linked, 'jsonable_encoder', encoder)
+    result = asyncio.run(linked.bundle(['old']))
+    assert result['results'] and threads and all(thread != owner for thread in threads)
+
+
+def test_http_export_serialization_also_runs_off_the_event_loop(monkeypatch):
+    import main
+    import fastapi.responses
+    owner = threading.get_ident()
+    monkeypatch.setattr(linked, 'bundle', AsyncMock(return_value={'schema_version': linked.VERSION, 'results': []}))
+    response_class = fastapi.responses.JSONResponse
+    threads = []
+
+    def encode_response(value):
+        threads.append(threading.get_ident())
+        return response_class(value)
+
+    monkeypatch.setattr(fastapi.responses, 'JSONResponse', encode_response)
+    response = asyncio.run(main.linked_export('old', False))
+    assert json.loads(response.body)['schema_version'] == linked.VERSION
+    assert threads and all(thread != owner for thread in threads)

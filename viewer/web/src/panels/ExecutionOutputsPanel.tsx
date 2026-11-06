@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, BarChart3, FileText, Layers3, Download } from 'lucide-react';
 import { useViewer } from '../store/viewer';
 import { usePipelines } from '../store/pipelines';
@@ -16,6 +16,8 @@ import { identityLabel } from '../lib/replicateIdentity';
 import { costLabel, usageDuration } from '../lib/loopUsage';
 import type { Result } from '../types';
 import { recordedModels } from '../lib/recordedModel';
+import type {Observation} from '../lib/confusionMetrics';
+import {resultForObservation} from '../lib/skillComparison';
 import './execution-outputs.css';
 
 const views = ['results', 'report', 'agents'] as const;
@@ -74,11 +76,16 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
   const totals = useTelemetryTotals();
   const tag = snapshot?.run_tag ?? '';
   const usage = (totals.data?.experiments ?? totals.data?.executions)?.find(e => e.run_tag === tag);
-  const tiles = useMemo(() => snapshot ? executionTiles(snapshot, usage).filter(tile => tileComplete(tile, view)) : [], [snapshot, usage, view]);
+  const allTiles = useMemo(() => snapshot ? executionTiles(snapshot, usage) : [], [snapshot, usage]);
+  const tiles = allTiles.filter(tile => tileComplete(tile, view));
+  const [chartSelection,setChartSelection]=useState<{tag:string;observation:Observation}|null>(null);
+  const [chartError,setChartError]=useState('');
+  const chartTile=view==='results'&&chartSelection?.tag===tag?allTiles.find(tile=>resultForObservation(tile.results.map(result=>({...result,run_tag:result.run_tag??tag})),chartSelection.observation)):undefined;
   const selection = useOutputNavigation(s => s.selection);
-  const active = selection?.tag === tag ? tiles.find(tile => tile.loop === selection.loop) : undefined;
+  const active = selection?.tag === tag ? tiles.find(tile => tile.loop === selection.loop)??(chartTile?.loop===selection.loop?chartTile:undefined) : undefined;
   const waiting = !!requested && requested !== tag;
   const root = useRef<HTMLDivElement>(null);
+  const comparison=useRef<HTMLDivElement>(null),selectedDocument=useRef<HTMLElement>(null);
   const noticeKeys = useMemo(() => snapshot && active && view !== 'results'
     ? outputNoticeKeys(snapshot, usage, view, active.loop) : [], [snapshot, active, usage, view]);
   useOutputReadReceipt(root, noticeKeys, !!active && !waiting && !error && !snapshot?.stale
@@ -102,8 +109,27 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
     if (view === 'results' && active && !waiting && !error && !snapshot?.stale) useResultNotices.getState().acknowledge(active.results.map(result => ({...result, run_tag: result.run_tag ?? tag})));
   }, [view, active, waiting, error, snapshot?.stale, tag]);
   const open = (tile: ExecutionTile) => {
+    setChartSelection(null);setChartError('');
     positions.set(listKey, {top: root.current?.scrollTop ?? 0, loop: tile.loop});
     useOutputNavigation.getState().open(tag, tile.loop);
+  };
+  const openChartResult=(observation:Observation)=>{
+    const tile=allTiles.find(item=>resultForObservation(item.results.map(result=>({...result,run_tag:result.run_tag??tag})),observation));
+    if(!tile){setChartError('This evaluation could not be linked to a saved result in this experiment. Refresh and try again.');return;}
+    positions.set(listKey,{top:root.current?.scrollTop??0,loop:tile.loop});
+    setChartError('');setChartSelection({tag,observation});
+    useOutputNavigation.getState().open(tag,tile.loop);
+  };
+  useEffect(()=>{
+    if(chartSelection?.tag!==tag||view!=='results'||chartTile?.loop!==detailLoop)return;
+    const frame=requestAnimationFrame(()=>{
+      const document=selectedDocument.current;if(!document)return;
+      document.focus({preventScroll:true});document.scrollIntoView({block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+    });
+    return ()=>cancelAnimationFrame(frame);
+  },[chartSelection,chartTile?.loop,detailLoop,tag,view]);
+  const backToComparison=()=>{
+    comparison.current?.focus({preventScroll:true});comparison.current?.scrollIntoView({block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
   };
   const navigate = (next: OutputView, preserveOutputSelection = false) =>
     useViewer.getState().setView(next, {preserveOutputSelection});
@@ -121,7 +147,10 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
       </select></label>
     </header>
     <nav className="output-view-navigation" aria-label="Output views">{views.map(next => {const Icon = icons[next]; return <button type="button" key={next} aria-current={view === next ? 'page' : undefined} onClick={() => navigate(next)}><Icon size={17} aria-hidden="true"/>{outputViewNames[next]}</button>;})}</nav>
-    {view === 'results' && !waiting && <HypothesisResultsTable key={tag} runTag={tag} results={(snapshot?.results ?? []).map(result => ({...result, run_tag: result.run_tag ?? tag}))} plannedSkills={snapshot?.run_configuration?.combination_plan?.skills?.hypothesis?.map(skill=>skill.id)}/>}
+    {view === 'results' && !waiting && <div ref={comparison} tabIndex={-1} className="result-comparison-anchor" aria-label="Hypothesis performance comparison"><HypothesisResultsTable key={tag} runTag={tag} results={(snapshot?.results ?? []).map(result => ({...result, run_tag: result.run_tag ?? tag}))} plannedSkills={snapshot?.run_configuration?.combination_plan?.skills?.hypothesis?.map(skill=>skill.id)}
+      skillTitles={Object.fromEntries((snapshot?.run_configuration?.combination_plan?.skills?.hypothesis??[]).filter(skill=>skill.title).map(skill=>[skill.id,skill.title!]))} onOpenResult={openChartResult}/>
+      {chartError&&<p role="alert" className="output-notice">{chartError}</p>}
+    </div>}
     {(snapshot?.report?.run_tags?.length ?? 0) > 1 && <p className="output-notice">Includes retained outputs and usage from {snapshot?.report?.run_tags?.length} continued executions of this experiment.</p>}
     {(error || snapshot?.stale || (view === 'agents' && totals.error)) && <p className="output-notice" role="status">Updates are delayed. Showing the last available records for this execution. Missing records do not indicate a completed or empty run.</p>}
     {waiting ? <p className="output-empty" role="status">Loading the selected execution…</p> : !snapshot ? <p className="output-empty" role="status">{requested ? 'Loading execution records…' : 'Select an experiment to browse its outputs.'}</p> : active ? <>
@@ -135,7 +164,13 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
         </button>)}</nav>
       </header>
       <details className="output-data-details"><summary>Model parameters, data columns & recorded metrics</summary>{active.results.length ? active.results.map(result => <section key={result.result_id}><h4>Analysis {result.result_id}</h4><ResultMetadata result={result}/></section>) : <p>No model or column record has been saved for this replicate yet.</p>}</details>
-      {view === 'results' && <div className="output-documents">{active.results.length ? active.results.map(result => <article key={result.result_id} aria-label={`Interpretation output for analysis ${result.result_id}`}><header className="output-document-header"><h4>Interpretation · Analysis {result.result_id}</h4></header><InterpretationOutput result={result} includeLimitations={false}/></article>) : <p className="output-empty">No Interpretation output has been saved for this replicate yet.</p>}</div>}
+      {view === 'results' && <div className="output-documents">{active.results.length ? active.results.map(result => {
+        const observation=chartSelection?.tag===tag?chartSelection.observation:null;
+        const selected=!!(observation&&resultForObservation([{...result,run_tag:result.run_tag??tag}],observation));
+        return <article key={`${result.run_tag??tag}:${result.result_id}`} ref={selected?selectedDocument:undefined} tabIndex={selected?-1:undefined} className={selected?'selected-result-card':undefined} data-chart-selected={selected?'true':undefined} aria-label={`Interpretation output for analysis ${result.result_id}`}>
+          {selected&&observation&&<header className="result-chart-context"><div><strong>Selected from performance comparison</strong><button type="button" onClick={backToComparison}>Back to comparison</button></div><p>Result {observation.resultId} · {observation.model} · Fit {observation.replicate} · Seed {observation.seed??'not recorded'}</p><p>Original execution: {observation.runTag}</p></header>}
+          <header className="output-document-header"><h4>Interpretation · Analysis {result.result_id}</h4></header><InterpretationOutput result={result} includeLimitations={false}/></article>;
+      }) : <p className="output-empty">No Interpretation output has been saved for this replicate yet.</p>}</div>}
       {view === 'report' && <div className="output-documents">{active.explanations.length ? active.explanations.map((output, index) => <article key={`${output.result_id}:${index}`} aria-label={`Explanation output ${index + 1}`}><header className="output-document-header"><h4>Explanation output {index + 1}<span>{output.status}</span></h4><button type="button" disabled={!output.text} onClick={() => downloadOutput(output.text, `${tag}_pipeline-${active.pipeline_number}_replicate-${active.replicate_number}_explanation-${index + 1}.md`)}><Download size={15} aria-hidden="true"/>Download Markdown</button></header>{output.text ? <ReportBody verbatim text={output.text}/> : <p>No Explanation text has been saved for this output yet.</p>}</article>) : <p className="output-empty">No Explanation output has been saved for this replicate yet.</p>}</div>}
       {view === 'agents' && <TelemetryPanel key={`${tag}:${active.loop}:${active.record_run_tag}`} lockedLoop={active.loop} recordRunTag={active.record_run_tag}/>}
     </> : <>

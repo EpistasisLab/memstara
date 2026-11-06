@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {validateLinkedExport,linkedResultsCsv,linkedCompleteCsv,linkedExportFiles,zipFiles,crc32,readLinkedExport} from '../src/lib/linkedOutputExport.ts';
+import {validateLinkedExport,linkedResultsCsv,linkedCompleteCsv,linkedExportFiles,linkedExportEntries,zipBlob,zipFiles,crc32,readLinkedExport} from '../src/lib/linkedOutputExport.ts';
 
 const fixture=()=>({schema_version:'linked_agent_outputs_v1',generated_at:'2026-11-05T05:00:00Z',
  requested_run_tags:['retry'],run_tags:['old','retry'],warnings:[],
@@ -53,4 +53,10 @@ test('reader requests continued scope and fails closed on unavailable API',async
   globalThis.fetch=async()=>({ok:false,json:async()=>({detail:'Archive unavailable'})});
   await assert.rejects(()=>readLinkedExport(['retry']),/Archive unavailable/);
  }finally{globalThis.fetch=original;}
+});
+
+test('incremental ZIP blob preserves every file and reports progress without a final array copy',async()=>{
+ const bundle=fixture(),progress=[],blob=zipBlob(linkedExportEntries(bundle),name=>progress.push(name));
+ assert.equal(blob.type,'application/zip');assert.deepEqual(progress,Object.keys(linkedExportFiles(bundle)));
+ assert.deepEqual(new Uint8Array(await blob.arrayBuffer()),zipFiles(linkedExportFiles(bundle)));
 });

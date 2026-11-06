@@ -18,7 +18,7 @@ try{for(const width of [320,768,1440]){
  if(width===768)await page.evaluate(()=>document.documentElement.dataset.theme='dark');
  await page.evaluate(rows=>window.deliverMetricResults(rows),results);
  const component=page.getByRole('region',{name:'Hypothesis skill performance distributions'});
- await expect(component.getByRole('img')).toHaveCount(1);
+ await expect(component.getByRole('group',{name:/by hypothesis skill/})).toHaveCount(1);
  await expect(component.getByRole('button',{name:/^addiction-psychiatric; pipeline 1;/})).toHaveCount(1);
  await component.getByRole('button',{name:/^addiction-psychiatric; pipeline 1;/}).click();
  await expect(component.getByRole('region',{name:'Selected evaluation evidence'})).toContainText('before-resume');
@@ -33,6 +33,7 @@ try{for(const width of [320,768,1440]){
  await component.getByLabel('Comparison model').selectOption('logistic_regression');
  await expect(component.getByRole('region',{name:'Metric coverage and skill summary'})).toContainText('2 / 3');
  await component.getByLabel('Performance metric').selectOption('fbeta');
+ await component.getByText('Comparison options',{exact:true}).click();
  await component.getByLabel('F-beta weight').fill('2');
  const pending=page.waitForEvent('download');await component.getByRole('button',{name:'Download all metrics CSV'}).click();
  const file=await pending,stream=await file.createReadStream();const chunks=[];for await(const c of stream)chunks.push(c);
@@ -47,10 +48,10 @@ try{for(const width of [320,768,1440]){
  assert.deepEqual(overflow,{body:false,component:false});
  await page.screenshot({path:join(tmpdir(),`memstara-hypothesis-metrics-${width}.png`),fullPage:true});
  await component.getByRole('button',{name:/Show all \d+ metric charts/}).click();
- assert(await component.getByRole('img').count()>=50);
+ assert(await component.getByRole('group',{name:/by hypothesis skill/}).count()>=50);
  await component.getByRole('button',{name:'Hide all metric charts'}).click();
  await page.evaluate(skills=>window.deliverPlannedSkills([...skills,'not-yet-evaluated']),skills);
- await expect(component.getByRole('row',{name:/not-yet-evaluated 0 \/ 0/})).toHaveCount(1);
+ await expect(component.getByRole('row',{name:/Not Yet Evaluated 0 \/ 0/})).toHaveCount(1);
  // Updates replace the same evaluation rather than duplicating it.
  await page.evaluate(rows=>window.deliverMetricResults([...rows,rows[0]]),results);
  await expect(component.getByRole('region',{name:'Metric coverage and skill summary'})).toContainText('6 / 6');

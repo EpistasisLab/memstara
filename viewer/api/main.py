@@ -111,7 +111,10 @@ async def experiment_execution(run_tag: str = Query(min_length=1, max_length=180
 @app.get('/api/experiments/linked-export')
 async def linked_export(run_tags: str = Query(min_length=1, max_length=6000), include_evidence: bool = False):
     from linked_outputs import bundle
-    return await bundle(run_tags.split(','), include_evidence)
+    from fastapi.responses import JSONResponse
+    # Returning Response avoids FastAPI re-encoding a large dictionary on the loop.
+    value = await bundle(run_tags.split(','), include_evidence)
+    return await asyncio.to_thread(JSONResponse, value)
 
 
 @app.get('/api/cost-details')

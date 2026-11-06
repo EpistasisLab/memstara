@@ -45,7 +45,10 @@ export async function readLinkedExport(tags:string[],includeEvidence=false,signa
  if(!selected.length)throw Error('Choose a recorded execution first.');
  const query=new URLSearchParams({run_tags:selected.join(','),include_evidence:String(includeEvidence)});
  const response=await fetch(`/api/experiments/linked-export?${query}`,{signal:signal??AbortSignal.timeout(60000)});
- const body=await response.json();
+ let body;
+ try{body=await response.json();}
+ catch{throw Error(response.status===401?'Your browser login expired. Reload the page and sign in again.':
+  `The export server returned an unreadable response (HTTP ${response.status}). Saved results are unchanged; refresh and retry.`);}
  if(!response.ok)throw Error(typeof body.detail==='string'?body.detail:'Linked evidence could not be exported.');
  validateLinkedExport(body);
  if(selected.some(t=>!body.requested_run_tags.includes(t)))throw Error('Export execution scope did not match the request.');
@@ -64,21 +67,28 @@ export function linkedCompleteCsv(bundle:LinkedExport):string {
 }
 
 export function linkedExportFiles(bundle:LinkedExport):Record<string,string>{
+ return Object.fromEntries(linkedExportEntries(bundle));
+}
+
+/** Encode one file at a time instead of keeping every JSON/CSV string alive. */
+export function* linkedExportEntries(bundle:LinkedExport):Generator<[string,string]>{
  validateLinkedExport(bundle);
  const json=(v:unknown)=>JSON.stringify(v,null,2)+'\n';
  const unresolved=bundle.explanations.filter(d=>!d.result_uids.length).length;
- return {
-  'results.csv':linkedResultsCsv(bundle),
-  'results.json':json(bundle.results),
-  'interpretations.json':json(bundle.interpretations),
-  'explanations.json':json(bundle.explanations),
-  ...(bundle.executions.length?{'complete_evidence.csv':linkedCompleteCsv(bundle),'complete_evidence.json':json(bundle.executions)}:{}),
-  'manifest.json':json({schema_version:bundle.schema_version,generated_at:bundle.generated_at,
+ yield ['results.csv',linkedResultsCsv(bundle)];
+ yield ['results.json',json(bundle.results)];
+ yield ['interpretations.json',json(bundle.interpretations)];
+ yield ['explanations.json',json(bundle.explanations)];
+ if(bundle.executions.length){
+  yield ['complete_evidence.csv',linkedCompleteCsv(bundle)];
+  yield ['complete_evidence.json',json(bundle.executions)];
+ }
+ yield ['manifest.json',json({schema_version:bundle.schema_version,generated_at:bundle.generated_at,
    requested_run_tags:bundle.requested_run_tags,run_tags:bundle.run_tags,
    counts:{results:bundle.results.length,interpretations:bundle.interpretations.length,explanations:bundle.explanations.length,unlinked_explanations:unresolved},
    relationships:{result_key:'result_uid',output_key:'output_id',interpretation_foreign_keys:'interpretation_output_ids',explanation_foreign_keys:'explanation_output_ids'},
-   warnings:bundle.warnings}),
-  'README.txt':`Linked experiment results and agent outputs\n\nSchema: ${bundle.schema_version}\nExported: ${bundle.generated_at}\n\n`+
+   warnings:bundle.warnings})];
+ yield ['README.txt',`Linked experiment results and agent outputs\n\nSchema: ${bundle.schema_version}\nExported: ${bundle.generated_at}\n\n`+
    'Each results.csv row is an evaluation replicate. result_uid identifies its saved result across those rows.\n'+
    'interpretation_output_ids and explanation_output_ids are JSON arrays of foreign keys, not document text.\n'+
    'Resolve each ID against output_id in interpretations.json or explanations.json. The output result_uids list provides the reverse relationship.\n'+
@@ -89,22 +99,24 @@ export function linkedExportFiles(bundle:LinkedExport):Record<string,string>{
    'An Explanation may link to several results through recorded result/task IDs. A legacy per-loop output links automatically only when exactly one result exists in that same execution and loop.\n'+
    'Ambiguous or unmatched Explanations remain in explanations.json with no result_uids and a manifest warning. No relationship is guessed from a neighbouring execution.\n'+
    'results.json includes result-level metadata. Complete evidence files include registered configuration, agent, cost and artifact metadata for every continued execution. Registry gaps are explicit in manifest warnings.\n'+
-   'This is a read-time snapshot of saved records. Running experiments may have outputs that are not yet recorded. CSV cells use standard quoting; spreadsheet-formula-like strings are escaped. Use JSON for exact text analysis.\n',
- };
+   'This is a read-time snapshot of saved records. Running experiments may have outputs that are not yet recorded. CSV cells use standard quoting; spreadsheet-formula-like strings are escaped. Use JSON for exact text analysis.\n'];
 }
 
-// Standard ZIP "store" entries: no dependency, no compression worker or server write.
+// Standard ZIP store entries; the download worker keeps all CPU work off the UI.
+const crcTable=Uint32Array.from({length:256},(_,value)=>{
+ let crc=value;for(let bit=0;bit<8;bit++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);return crc>>>0;
+});
 export function crc32(data:Uint8Array):number{
  let crc=0xffffffff;
- for(const byte of data){crc^=byte;for(let i=0;i<8;i++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}
+ for(const byte of data)crc=(crc>>>8)^crcTable[(crc^byte)&255];
  return (crc^0xffffffff)>>>0;
 }
-export function zipFiles(files:Record<string,string>):Uint8Array<ArrayBuffer>{
- const encoder=new TextEncoder(),local:Uint8Array[]=[],central:Uint8Array[]=[];
- let offset=0,centralSize=0;
- const entries=Object.entries(files);
- if(entries.length>65535)throw Error('ZIP contains too many files.');
- for(const [name,content]of entries){
+function zipChunks(files:Iterable<readonly [string,string]>,onFile?:(name:string)=>void):Uint8Array<ArrayBuffer>[]{
+ const encoder=new TextEncoder(),local:Uint8Array<ArrayBuffer>[]=[],central:Uint8Array<ArrayBuffer>[]=[];
+ let offset=0,centralSize=0,count=0;
+ for(const [name,content]of files){
+  if(++count>65535)throw Error('ZIP contains too many files.');
+  onFile?.(name);
   if(name.includes('..')||name.startsWith('/')||name.includes('\\'))throw Error('Invalid export filename.');
   const filename=encoder.encode(name),data=encoder.encode(content),checksum=crc32(data);
   if(filename.length>65535||data.length>0xffffffff||offset>0xffffffff)throw Error('Export exceeds ZIP32 limits.');
@@ -118,8 +130,15 @@ export function zipFiles(files:Record<string,string>):Uint8Array<ArrayBuffer>{
  }
  if(offset+centralSize+22>0xffffffff)throw Error('Export exceeds ZIP32 limits.');
  const end=new Uint8Array(22),e=new DataView(end.buffer);
- e.setUint32(0,0x06054b50,true);e.setUint16(8,entries.length,true);e.setUint16(10,entries.length,true);e.setUint32(12,centralSize,true);e.setUint32(16,offset,true);
- const output=new Uint8Array(offset+centralSize+end.length);let position=0;
- for(const chunk of [...local,...central,end]){output.set(chunk,position);position+=chunk.length;}
+ e.setUint32(0,0x06054b50,true);e.setUint16(8,count,true);e.setUint16(10,count,true);e.setUint32(12,centralSize,true);e.setUint32(16,offset,true);
+ return [...local,...central,end];
+}
+export function zipFiles(files:Record<string,string>):Uint8Array<ArrayBuffer>{
+ const chunks=zipChunks(Object.entries(files));
+ const output=new Uint8Array(chunks.reduce((size,chunk)=>size+chunk.length,0));let position=0;
+ for(const chunk of chunks){output.set(chunk,position);position+=chunk.length;}
  return output;
+}
+export function zipBlob(files:Iterable<readonly [string,string]>,onFile?:(name:string)=>void):Blob{
+ return new Blob(zipChunks(files,onFile),{type:'application/zip'});
 }

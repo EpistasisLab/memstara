@@ -9,6 +9,7 @@
 .hypothesis-comparison-body>header{padding:20px;border-top:1px solid rgb(var(--line))}
 .hypothesis-comparison-body>header h3{font-size:15px;margin:0 0 6px}
 .hypothesis-comparison-body>header button{min-height:38px;font-size:12px;border-radius:8px}
+.hypothesis-export-progress{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 20px;background:rgb(var(--accent)/.05);font-size:12px;border-block:1px solid rgb(var(--line))}.hypothesis-export-progress span{min-width:0;overflow-wrap:anywhere}.hypothesis-export-progress small{display:block;margin-top:4px;color:rgb(var(--ink-soft));font-size:11px}.hypothesis-export-progress button{border:1px solid rgb(var(--line));border-radius:7px;padding:8px 12px;background:rgb(var(--panel));min-height:36px;white-space:nowrap}
 .hypothesis-comparison-scroll{max-height:460px;overflow:auto;overscroll-behavior:contain}
 .hypothesis-comparison table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
 .hypothesis-comparison thead{position:sticky;top:0;z-index:1;background:rgb(var(--panel))}

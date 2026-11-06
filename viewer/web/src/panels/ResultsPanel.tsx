@@ -4,7 +4,7 @@ import { loopLabel } from '../lib/loopLabel';
 import { useExecutionContext } from '../components/ExecutionContext';
 import { lazy, Suspense } from "react";
 const InterpretationOutput = lazy(() => import("../components/InterpretationOutput"));
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { usePipelines } from "../store/pipelines";
 import type { Result } from "../types";
 import { BarChart3 } from "lucide-react";
@@ -14,6 +14,8 @@ import { useBoard, useResults, useViewer, useSnapshot } from "../store/viewer";
 import { newestResult, unreadResults, useResultNotices } from '../store/resultNotices';
 import { useResultsReadReceipt } from '../lib/useResultsReadReceipt';
 import HypothesisResultsTable from '../components/HypothesisResultsTable';
+import type {Observation} from '../lib/confusionMetrics';
+import {resultForObservation} from '../lib/skillComparison';
 
 const resultKey = (result: Result) => `${result.run_tag || ''}:${result.result_id}`;
 
@@ -29,6 +31,10 @@ const resultKey = (result: Result) => `${result.run_tag || ''}:${result.result_i
 export default function ResultsPanel({ telemetry = false, embedded = false }: { telemetry?: boolean; embedded?: boolean } = {}) {
   const snapshot = useSnapshot();
   const [chosenResult, setChosenResult] = useState('');
+  const [chartSelection,setChartSelection]=useState<Observation|null>(null);
+  const [navigationRequest,setNavigationRequest]=useState(0);
+  const [navigationError,setNavigationError]=useState('');
+  const resultCardRef=useRef<HTMLElement>(null),comparisonRef=useRef<HTMLDivElement>(null);
   const executionContext = useExecutionContext();
   const selectedResults = useResults();
   const savedConfig=snapshot?.run_configuration;
@@ -81,9 +87,31 @@ export default function ResultsPanel({ telemetry = false, embedded = false }: { 
   const activeResult = results?.find(r=>resultKey(r)===chosenResult) ?? newestResult(results ?? []);
   useEffect(()=>{if(activeResult && chosenResult !== resultKey(activeResult))setChosenResult(resultKey(activeResult));},[activeResult,chosenResult]);
   const chooseResult = (key: string) => {
+    setChartSelection(null);setNavigationError('');
     setChosenResult(key);
     const result = results?.find(item => resultKey(item) === key);
     if (!telemetry && result) useResultNotices.getState().acknowledge([result]);
+  };
+  const openChartResult=(observation:Observation)=>{
+    const result=resultForObservation(results??[],observation);
+    if(!result){setNavigationError('This evaluation could not be linked to a loaded result. Refresh the results and try again.');return;}
+    chooseResult(resultKey(result));
+    setChartSelection(observation);setNavigationRequest(value=>value+1);
+  };
+  const chartSelected=!!(activeResult&&chartSelection&&resultForObservation([activeResult],chartSelection));
+  useEffect(()=>{
+    if(!navigationRequest||!chartSelected)return;
+    const frame=requestAnimationFrame(()=>{
+      const card=resultCardRef.current;if(!card)return;
+      card.focus({preventScroll:true});
+      card.scrollIntoView({block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+    });
+    return ()=>cancelAnimationFrame(frame);
+  },[navigationRequest,chartSelected]);
+  const backToComparison=()=>{
+    const comparison=comparisonRef.current;if(!comparison)return;
+    comparison.focus({preventScroll:true});
+    comparison.scrollIntoView({block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
   };
 
   return (
@@ -113,13 +141,22 @@ export default function ResultsPanel({ telemetry = false, embedded = false }: { 
               useResultNotices.getState().acknowledge(results);
             }}>View latest results</button>
           </div>}
-          <HypothesisResultsTable results={results} runTag={scope==='selected'?savedTag:null} plannedSkills={scope==='selected'?savedConfig?.combination_plan?.skills?.hypothesis?.map(skill=>skill.id):undefined}/>
+          <div ref={comparisonRef} tabIndex={-1} className="result-comparison-anchor" aria-label="Hypothesis performance comparison">
+            <HypothesisResultsTable results={results} runTag={scope==='selected'?savedTag:null} plannedSkills={scope==='selected'?savedConfig?.combination_plan?.skills?.hypothesis?.map(skill=>skill.id):undefined}
+              skillTitles={scope==='selected'?Object.fromEntries((savedConfig?.combination_plan?.skills?.hypothesis??[]).filter(skill=>skill.title).map(skill=>[skill.id,skill.title!])):undefined} onOpenResult={openChartResult}/>
+            {navigationError&&<p role="alert" className="text-sm text-amber-800">{navigationError}</p>}
+          </div>
           <label className="analysis-select-label">Analysis
             <select aria-label="Analysis to inspect" value={activeResult ? resultKey(activeResult) : ''} onChange={e => chooseResult(e.target.value)}>
               {results.map(r => <option key={resultKey(r)} value={resultKey(r)}>{resultName(r)}</option>)}
             </select>
           </label>
-          {activeResult && <article key={resultKey(activeResult)} className="selected-result-card rounded-lg border border-paper-line p-4" aria-label="Selected interpretation outputs">
+          {activeResult && <article key={resultKey(activeResult)} ref={resultCardRef} tabIndex={-1} data-chart-selected={chartSelected?'true':undefined} className="selected-result-card rounded-lg border border-paper-line p-4" aria-label="Selected interpretation outputs">
+            {chartSelected&&chartSelection&&<header className="result-chart-context">
+              <div><strong>Selected from performance comparison</strong><button type="button" onClick={backToComparison}>Back to comparison</button></div>
+              <p>Result {chartSelection.resultId} · {chartSelection.model} · Fit {chartSelection.replicate} · Seed {chartSelection.seed??'not recorded'}</p>
+              <p>Original execution: {chartSelection.runTag}. This tile contains the saved Interpretation outputs for this result.</p>
+            </header>}
             <p className="mb-4 text-xs font-semibold text-ink-soft">{resultName(activeResult)}</p>
             <Suspense fallback={<p role="status">Loading interpretation…</p>}>
               <InterpretationOutput result={activeResult} includeLimitations={false}/>

@@ -173,5 +173,7 @@ async def bundle(requested_tags, include_evidence=False):
             record['results'] = [row for row in linked['results'] if row['run_tag'] == tag]
             record['explanation_output_ids'] = [o['output_id'] for o in linked['explanations'] if o['run_tag'] == tag]
             executions.append(record)
-    return jsonable_encoder({'schema_version': VERSION, 'generated_at': datetime.now(UTC).isoformat(),
-                             'requested_run_tags': selected, 'run_tags': tags, **linked, 'executions': executions})
+    # Large exports must not monopolize the API event loop used by status polling.
+    return await asyncio.to_thread(jsonable_encoder, {
+        'schema_version': VERSION, 'generated_at': datetime.now(UTC).isoformat(),
+        'requested_run_tags': selected, 'run_tags': tags, **linked, 'executions': executions})
