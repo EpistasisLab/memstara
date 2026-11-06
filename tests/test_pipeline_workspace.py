@@ -211,7 +211,7 @@ def test_creation_saves_name_and_configuration_together(tmp_path):
     path = tmp_path / 'workspace.json'
     workspace = PipelineWorkspace(path, Manager)
     item = workspace.mutate({'action': 'add', 'name': '  Treatment effects  ',
-        'configuration': {'playbook_hypothesis': 'treatment-toxicity',
+        'configuration': {'playbook_hypothesis': 'hiv-medication-treatment-pathways',
                           'playbook_ml': 'ml_governance',
                           'question': 'Do not reuse this'}})
     assert PipelineWorkspace(path, Manager).items[0] == item

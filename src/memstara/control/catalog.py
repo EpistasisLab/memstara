@@ -426,6 +426,14 @@ def validate_new_design(body: dict) -> None:
     if isinstance(choices, dict) and isinstance(choices.get("hypothesis"), list):
         names += choices["hypothesis"]
     ensure_hypothesis_enabled([name.strip() for name in names if isinstance(name, str)])
+    if any(
+        isinstance(name, str) and canonical_name(name.strip()) in prompts.RETIRED_HYPOTHESIS_SKILLS
+        for name in names
+    ):
+        raise ValueError(
+            "This historical Hypothesis skill is unavailable for new designs. "
+            "Choose one of the five current HIV hypothesis skills. Saved executions remain readable."
+        )
     if any(isinstance(name, str) and canonical_name(name.strip()) == "heart-failure-all" for name in names):
         raise ValueError(
             "The historical all-predictor skill is unavailable for new designs. "

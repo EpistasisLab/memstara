@@ -276,7 +276,9 @@ def build_argv(
 
     # Retired skills may still appear in trusted saved runs. New API designs
     # are rejected by validate_new_design before reaching this execution adapter.
-    known = set(playbooks) | {"random_features", "heart-failure-all"}
+    from memstara.pipeline.prompts import RETIRED_HYPOTHESIS_SKILLS
+
+    known = set(playbooks) | {"random_features", "heart-failure-all"} | RETIRED_HYPOTHESIS_SKILLS
     if combination_plan:
         known.update(item["id"] for entries in combination_plan["skills"].values() for item in entries)
     markable = set(playbook_stages)

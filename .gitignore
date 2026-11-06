@@ -29,6 +29,7 @@ docs/*
 !docs/skill-drafts/
 docs/skill-drafts/*
 !docs/skill-drafts/hiv-medication-treatment-pathways.md
+!docs/skill-drafts/hiv-medication-treatment-pathways-reviewed.md
 !docs/skill-drafts/hiv-shared-symptom-patterns.md
 !docs/skill-drafts/hiv-okf-whole-graph-csv-guided-v2.md
 !docs/skill-drafts/hiv-anemia-associated-findings.md

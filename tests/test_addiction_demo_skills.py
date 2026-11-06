@@ -5,8 +5,7 @@ from memstara.control.catalog import catalog, validate_selection
 from memstara.pipeline.prompts import load_prompt
 
 SKILLS = ['addiction-psychiatric', 'addiction-substance-use',
-          'hiv-okf-whole-graph', 'hiv-no-knowledge', 'hiv-integrated-clinical-knowledge',
-          'hiv-model-knowledge-with-graph-augmentation']
+          'hiv-okf-whole-graph', 'hiv-no-knowledge', 'hiv-medication-treatment-pathways']
 
 
 @pytest.mark.parametrize('name', SKILLS)

@@ -17,6 +17,8 @@ PROFILES = {
             "addiction-substance-use",
             "hiv-okf-whole-graph",
             "hiv-no-knowledge",
+            "hiv-medication-treatment-pathways",
+            # Historical compatibility only; excluded from the selection menu.
             "hiv-integrated-clinical-knowledge",
             "hiv-model-knowledge-with-graph-augmentation",
             "random_features",
@@ -83,13 +85,16 @@ def corpus_profile(profile=None, *, knowledge_mode="okf"):
 
 def menu_bindings():
     from memstara.research_inputs import visible_inputs as list_inputs
+    from memstara.pipeline.prompts import RETIRED_HYPOTHESIS_SKILLS
 
     return {
         "profiles": {
             key: {
                 **profile,
                 "hypothesis": [
-                    skill for skill in profile["hypothesis"] if skill not in ("random_features", "heart-failure-all")
+                    skill for skill in profile["hypothesis"]
+                    if skill not in ("random_features", "heart-failure-all")
+                    and skill not in RETIRED_HYPOTHESIS_SKILLS
                 ],
             }
             for key, profile in PROFILES.items()

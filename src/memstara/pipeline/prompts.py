@@ -68,7 +68,12 @@ DISABLED_HYPOTHESIS_SKILLS = frozenset(
         "treatment-toxicity",
     }
 )
-HIDDEN_PLAYBOOKS = HIDDEN_PLAYBOOKS | DISABLED_HYPOTHESIS_SKILLS
+# Preserve these instructions for recorded runs, but offer only the five approved
+# HIV perspectives when creating or editing an experiment design.
+RETIRED_HYPOTHESIS_SKILLS = frozenset(
+    {"hiv-integrated-clinical-knowledge", "hiv-model-knowledge-with-graph-augmentation"}
+)
+HIDDEN_PLAYBOOKS = HIDDEN_PLAYBOOKS | DISABLED_HYPOTHESIS_SKILLS | RETIRED_HYPOTHESIS_SKILLS
 
 #: A whole `<!-- ... -->` block plus the newlines directly after it. Removing the
 #: trailing newlines as part of the match is what keeps the paragraph spacing of the
