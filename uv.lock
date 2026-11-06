@@ -1451,7 +1451,7 @@ requires-dist = [
     { name = "lime", marker = "extra == 'pilot'", specifier = "==0.2.0.1" },
     { name = "litellm", marker = "extra == 'runtime'", specifier = "==1.97.0" },
     { name = "mcp", specifier = ">=1.29.0,<2.0.0" },
-    { name = "motoro", marker = "extra == 'runtime'", git = "https://github.com/EpistasisLab/motoro.git?rev=f1e7ea8b47b5d81581ffaf57dc595554dc6b21aa" },
+    { name = "motoro", marker = "extra == 'runtime'", git = "https://github.com/EpistasisLab/motoro.git?rev=805fa51455642b01c1fb9aff52fabd28ebfbb6b8" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.15" },
     { name = "numpy" },
     { name = "pandas" },
@@ -1476,8 +1476,8 @@ provides-extras = ["dev", "pilot", "runtime"]
 
 [[package]]
 name = "motoro"
-version = "0.15.0"
-source = { git = "https://github.com/EpistasisLab/motoro.git?rev=f1e7ea8b47b5d81581ffaf57dc595554dc6b21aa#f1e7ea8b47b5d81581ffaf57dc595554dc6b21aa" }
+version = "0.15.1"
+source = { git = "https://github.com/EpistasisLab/motoro.git?rev=805fa51455642b01c1fb9aff52fabd28ebfbb6b8#805fa51455642b01c1fb9aff52fabd28ebfbb6b8" }
 dependencies = [
     { name = "alembic" },
     { name = "asyncpg" },
