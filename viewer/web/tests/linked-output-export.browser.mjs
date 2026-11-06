@@ -69,13 +69,28 @@ try{
  await page.getByRole('button',{name:'Download linked results ZIP',exact:true}).click();
  await expect(page.getByRole('alert')).toContainText('Archive temporarily unavailable');assert.equal(downloads,0);
  failed=false;held=true;
+ // Exercise the rendered worker progress contract with deterministic byte counts.
+ await page.evaluate(()=>{
+  const NativeWorker=window.Worker;
+  window.Worker=class extends NativeWorker{constructor(...args){super(...args);window.activeExportWorker=this;}};
+ });
  await page.getByRole('button',{name:'Download linked results ZIP',exact:true}).click();
  await expect(page.getByRole('button',{name:'Cancel export',exact:true})).toBeVisible();
  await expect.poll(()=>release!==null).toBe(true);
+ const progress=page.getByRole('progressbar',{name:'Export preparation progress'});
+ await expect(progress).toBeVisible();
+ assert.equal(await progress.getAttribute('value'),null,'Preparation must not invent a completion percentage');
+ await expect(page.getByText('Completion percentage is unavailable during preparation.')).toBeVisible();
+ await expect(page.getByText('Elapsed 0:01',{exact:true})).toBeVisible();
+ await page.evaluate(()=>window.activeExportWorker.onmessage({data:{type:'progress',message:'Downloading the prepared export file…',progress:{phase:'downloading',receivedBytes:524288,totalBytes:1048576}}}));
+ await expect(page.getByRole('progressbar',{name:'Export download progress'})).toHaveAttribute('value','50');
+ await expect(page.getByText('512.0 KiB / 1.0 MiB · 50%',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Downloading…',exact:true})).toBeDisabled();
  await page.getByLabel('Performance metric').selectOption('f1');
  await expect(page.getByLabel('Performance metric')).toHaveValue('f1');
  await page.getByRole('button',{name:'Cancel export',exact:true}).click();
  await expect(page.getByRole('status').filter({hasText:'Export cancelled.'})).toHaveCount(1);
+ await expect(page.getByRole('progressbar')).toHaveCount(0);
  held=false;release();await page.waitForTimeout(100);assert.equal(downloads,0);
  large=true;
  await page.evaluate(()=>{

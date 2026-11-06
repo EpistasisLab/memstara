@@ -36,3 +36,35 @@ test('complete CSV downloads as a file and validates the uncompressed receipt si
   assert.deepEqual(new Uint8Array(await (await readLinkedFile(['run'],'complete')).blob.arrayBuffer()),new TextEncoder().encode(data));
  }finally{globalThis.fetch=original;}
 });
+
+test('stream progress reports actual bytes before completion and verifies the finished file',async()=>{
+ const original=globalThis.fetch,events=[];let stream;
+ try{
+  globalThis.fetch=async()=>new Response(new ReadableStream({start(controller){stream=controller;}}),{
+   headers:{...headers,'X-Memstara-Export-Bytes':'8'},
+  });
+  const pending=readLinkedFile(['run'],'zip',(message,progress)=>events.push(progress));
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.deepEqual(events[0],{phase:'downloading',receivedBytes:0,totalBytes:8});
+  await new Promise(resolve=>setTimeout(resolve,210));
+  stream.enqueue(new Uint8Array([80,75,3,4]));
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert(events.some(event=>event.receivedBytes===4&&event.totalBytes===8));
+  assert(!events.some(event=>event.phase==='verifying'));
+  stream.enqueue(new Uint8Array([5,6,7,8]));stream.close();
+  const result=await pending;
+  assert.equal(result.blob.size,8);
+  assert.deepEqual(events.at(-1),{phase:'verifying',receivedBytes:8,totalBytes:8});
+ }finally{globalThis.fetch=original;}
+});
+
+test('unknown transfer length stays indeterminate and interrupted streams do not complete',async()=>{
+ const original=globalThis.fetch,events=[];
+ try{
+  globalThis.fetch=async()=>new Response(new Uint8Array([80,75,3,4]),{headers});
+  await readLinkedFile(['run'],'zip',(message,progress)=>events.push(progress));
+  assert(events.every(event=>event.totalBytes===undefined));
+  globalThis.fetch=async()=>new Response(new ReadableStream({start(controller){controller.error(new TypeError('connection lost'));}}),{headers});
+  await assert.rejects(()=>readLinkedFile(['run'],'zip'),/connection was interrupted/);
+ }finally{globalThis.fetch=original;}
+});

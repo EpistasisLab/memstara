@@ -2,11 +2,12 @@ import { Download, ChevronDown, Table2 } from 'lucide-react';
 import { useId, useState, useRef, useEffect } from 'react';
 import './hypothesis-results-table.css';
 import { hypothesisSummaryRows } from '../lib/hypothesisSummary';
-import {prepareLinkedDownload,type ExportKind} from '../lib/linkedDownload';
+import {prepareLinkedDownload,type ExportKind,type ExportProgress} from '../lib/linkedDownload';
 import HypothesisMetricComparison from './HypothesisMetricComparison';
 import type {Observation} from '../lib/confusionMetrics';
 
 const shown = (value: number | null, digits = 3) => value === null ? '—' : value.toFixed(digits);
+const sizeLabel=(bytes:number)=>bytes<1024?`${bytes} B`:bytes<1048576?`${(bytes/1024).toFixed(1)} KiB`:`${(bytes/1048576).toFixed(1)} MiB`;
 
 export default function HypothesisResultsTable({results, runTag, plannedSkills, skillTitles, onOpenResult}:{results:readonly unknown[];runTag?:string|null;plannedSkills?:readonly string[];skillTitles?:Record<string,string>;onOpenResult?:(observation:Observation)=>void}) {
   const rows = hypothesisSummaryRows(results);
@@ -15,7 +16,15 @@ export default function HypothesisResultsTable({results, runTag, plannedSkills, 
   const [exportBusy,setExportBusy]=useState<'table'|'complete'|'zip'|null>(null),[exportError,setExportError]=useState('');
   const [exportNotice,setExportNotice]=useState('');
   const [exportProgress,setExportProgress]=useState('');
+  const [exportTransfer,setExportTransfer]=useState<ExportProgress>({phase:'preparing'});
+  const [exportElapsed,setExportElapsed]=useState(0);
   const exportController=useRef<AbortController|null>(null);
+  useEffect(()=>{
+    if(!exportBusy)return;
+    const start=performance.now();
+    const timer=setInterval(()=>setExportElapsed(Math.floor((performance.now()-start)/1000)),1000);
+    return ()=>clearInterval(timer);
+  },[exportBusy]);
   useEffect(()=>()=>{const controller=exportController.current;exportController.current=null;controller?.abort();},[]);
   const tags=runTag?[runTag]:[...new Set(rows.map(row=>row.runTag).filter(Boolean))];
   const save=(blob:Blob,filename:string)=>{
@@ -26,9 +35,10 @@ export default function HypothesisResultsTable({results, runTag, plannedSkills, 
     if(exportController.current||!tags.length)return;
     const controller=new AbortController();exportController.current=controller;
     setExportBusy(kind);setExportError('');setExportNotice('');setExportProgress('Starting export…');
+    setExportElapsed(0);setExportTransfer({phase:'preparing'});
     try{
-      const prepared=await prepareLinkedDownload(tags,kind,{signal:controller.signal,onProgress:message=>{
-        if(exportController.current===controller)setExportProgress(message);
+      const prepared=await prepareLinkedDownload(tags,kind,{signal:controller.signal,onProgress:(message,progress)=>{
+        if(exportController.current===controller){setExportProgress(message);setExportTransfer(progress??{phase:'preparing'});}
       }});
       if(controller.signal.aborted||exportController.current!==controller)return;
       const prefix=runTag||'pipeline-results';
@@ -46,6 +56,10 @@ export default function HypothesisResultsTable({results, runTag, plannedSkills, 
       if(exportController.current===controller){exportController.current=null;setExportBusy(null);setExportProgress('');}
     }
   };
+  const transferPercent=exportTransfer.phase==='downloading'&&exportTransfer.totalBytes!==undefined?
+    Math.min(100,Math.floor((exportTransfer.receivedBytes??0)/exportTransfer.totalBytes*100)):undefined;
+  const transferLabel=exportTransfer.phase==='downloading'?
+    `${sizeLabel(exportTransfer.receivedBytes??0)}${exportTransfer.totalBytes!==undefined?` / ${sizeLabel(exportTransfer.totalBytes)}`:' received — total size unavailable'}${transferPercent!==undefined?` · ${transferPercent}%`:''}`:null;
   return <><section className="hypothesis-comparison" aria-label="Hypothesis skill results table">
     <button type="button" className="hypothesis-comparison-toggle" aria-expanded={expanded} aria-controls={panelId} onClick={()=>setExpanded(value=>!value)}>
       <Table2 size={18} aria-hidden="true"/><span><strong>Compare hypothesis results</strong><small>View the table and download CSV</small></span>
@@ -54,9 +68,17 @@ export default function HypothesisResultsTable({results, runTag, plannedSkills, 
     <div id={panelId} hidden={!expanded} className="hypothesis-comparison-body">
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-paper-line p-3">
       <div><h3 className="font-semibold">Hypothesis comparison</h3><p className="text-xs text-ink-soft">Each row is one evaluation.</p></div>
-      <div className="flex flex-wrap gap-2">{(['table','complete','zip'] as const).map(kind=><button key={kind} type="button" disabled={!!exportBusy||!tags.length} onClick={()=>void download(kind)} className="flex items-center gap-2 rounded border border-paper-line px-3 py-2 text-sm font-semibold disabled:opacity-50"><Download size={15}/>{exportBusy===kind?'Preparing export…':kind==='table'?'Download table CSV':kind==='complete'?'Download complete evidence CSV':'Download linked results ZIP'}</button>)}</div>
+      <div className="flex flex-wrap gap-2">{(['table','complete','zip'] as const).map(kind=><button key={kind} type="button" disabled={!!exportBusy||!tags.length} onClick={()=>void download(kind)} className="flex items-center gap-2 rounded border border-paper-line px-3 py-2 text-sm font-semibold disabled:opacity-50"><Download size={15}/>{exportBusy===kind?(exportTransfer.phase==='downloading'?'Downloading…':exportTransfer.phase==='verifying'?'Checking file…':'Preparing export…'):kind==='table'?'Download table CSV':kind==='complete'?'Download complete evidence CSV':'Download linked results ZIP'}</button>)}</div>
     </header>
-    {exportBusy&&<div className="hypothesis-export-progress" role="status"><span>{exportProgress}<small>Preparing the file in the background. You can keep using this page.</small></span><button type="button" onClick={()=>exportController.current?.abort()}>Cancel export</button></div>}
+    {exportBusy&&<div className="hypothesis-export-progress">
+      <div className="hypothesis-export-meter">
+        <strong role="status">{exportProgress}</strong>
+        <div className="hypothesis-export-details"><span>{transferLabel??(exportTransfer.phase==='preparing'?'Completion percentage is unavailable during preparation.':'File received; checking before saving.')}</span><span>Elapsed {Math.floor(exportElapsed/60)}:{String(exportElapsed%60).padStart(2,'0')}</span></div>
+        <progress max={100} value={transferPercent} aria-label={exportTransfer.phase==='downloading'?'Export download progress':exportTransfer.phase==='verifying'?'Export file verification':'Export preparation progress'} aria-valuetext={transferLabel??exportProgress}/>
+        <small>{exportTransfer.phase==='preparing'?'The server is collecting saved evidence and preparing the file. Large exports can take a few minutes. ':'Downloading and checking the prepared file. '}You can keep using this page.</small>
+        {exportElapsed>=60&&exportTransfer.phase==='preparing'&&<small>Still waiting for the server response. This does not confirm server progress; an error will be shown if the request times out.</small>}
+      </div><button type="button" onClick={()=>exportController.current?.abort()}>Cancel export</button>
+    </div>}
     {exportError&&<p role="alert" className="border-b border-paper-line p-3 text-sm text-amber-800">{exportError}</p>}
     {exportNotice&&<p role="status" className="border-b border-paper-line p-3 text-xs">{exportNotice}</p>}
     {!rows.length && <p className="hypothesis-comparison-empty">No recorded evaluations yet.</p>}

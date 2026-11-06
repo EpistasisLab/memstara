@@ -7,8 +7,8 @@ self.onmessage=async(event:MessageEvent<ExportRequest>)=>{
  const {tags,kind}=event.data;
  try{
   if(kind!=='table'){
-   send({type:'progress',message:'Preparing the export file on the server…'});
-   const value=await readLinkedFile(tags,kind,message=>send({type:'progress',message}));
+   send({type:'progress',message:'Preparing the export file on the server…',progress:{phase:'preparing'}});
+   const value=await readLinkedFile(tags,kind,(message,progress)=>send({type:'progress',message,progress}));
    send({type:'complete',value});return;
   }
   send({type:'progress',message:'Fetching saved results and linked outputs…'});

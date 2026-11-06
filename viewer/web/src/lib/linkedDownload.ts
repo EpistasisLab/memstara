@@ -1,10 +1,11 @@
 export type ExportKind='table'|'complete'|'zip';
 export type ExportRequest={tags:string[];kind:ExportKind};
 export type PreparedExport={blob:Blob;results:number;executions:number;warnings:number};
-export type ExportMessage={type:'progress';message:string}|{type:'complete';value:PreparedExport}|{type:'error';message:string};
+export type ExportProgress={phase:'preparing'|'downloading'|'verifying';receivedBytes?:number;totalBytes?:number};
+export type ExportMessage={type:'progress';message:string;progress?:ExportProgress}|{type:'complete';value:PreparedExport}|{type:'error';message:string};
 
 /** Fetching, JSON parsing, CSV formatting and ZIP assembly all stay off the UI. */
-export function prepareLinkedDownload(tags:string[],kind:ExportKind,{signal,onProgress}:{signal?:AbortSignal;onProgress?:(message:string)=>void}={}):Promise<PreparedExport>{
+export function prepareLinkedDownload(tags:string[],kind:ExportKind,{signal,onProgress}:{signal?:AbortSignal;onProgress?:(message:string,progress?:ExportProgress)=>void}={}):Promise<PreparedExport>{
  return new Promise((resolve,reject)=>{
   if(signal?.aborted){reject(new DOMException('Export cancelled.','AbortError'));return;}
   let worker:Worker;
@@ -17,7 +18,7 @@ export function prepareLinkedDownload(tags:string[],kind:ExportKind,{signal,onPr
   signal?.addEventListener('abort',cancel,{once:true});
   worker.onmessage=(event:MessageEvent<ExportMessage>)=>{
    const message=event.data;
-   if(message.type==='progress'){onProgress?.(message.message);return;}
+   if(message.type==='progress'){onProgress?.(message.message,message.progress);return;}
    if(message.type==='error'){fail(Error(message.message));return;}
    if(message.type==='complete'){cleanup();resolve(message.value);}
   };
