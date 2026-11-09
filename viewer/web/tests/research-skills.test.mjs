@@ -59,3 +59,22 @@ test('user Hypothesis skills are hidden for the fixed HIV comparison but remain 
  assert(compatibleResearchSkill({id:'user-interpreter-test',stage:'interpreter'},{research_input_id:'heart'}));
  assert(compatibleResearchSkill({id:'user-report-test',stage:'report'},{research_input_id:'heart'}));
 });
+
+test('an additional server-approved V3 is selectable without changing saved V2 choices',()=>{
+ const id='hiv-okf-whole-graph-v3';
+ const expanded=structuredClone(corpusSkillBindings);
+ expanded.profiles.hiv.hypothesis.push(id);
+ setCorpusSkillBindings(expanded);
+ try {
+  assert(compatibleResearchSkill({id,stage:'hypothesis'},{research_input_id:'hiv'}));
+  assert(!compatibleResearchSkill({id,stage:'hypothesis'},{research_input_id:'heart'}));
+  const current={research_input_id:'hiv',playbook_hypothesis:'hiv-okf-whole-graph',
+   combination_skills:{hypothesis:['hiv-okf-whole-graph'],report:['shared-hiv']}};
+  const reset=resetResearchSkills(current,{research_input_id:'hiv'});
+  assert.equal(reset.playbook_hypothesis,'hiv-okf-whole-graph');
+  assert.deepEqual(reset.combination_skills.hypothesis,['hiv-okf-whole-graph']);
+  assert.deepEqual(current.combination_skills.hypothesis,['hiv-okf-whole-graph']);
+ } finally {
+  setCorpusSkillBindings(corpusSkillBindings);
+ }
+});

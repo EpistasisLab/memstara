@@ -18,6 +18,7 @@ PROFILES = {
             "hiv-okf-whole-graph",
             "hiv-no-knowledge",
             "hiv-medication-treatment-pathways",
+            "hiv-okf-whole-graph-v3",
             # Historical compatibility only; excluded from the selection menu.
             "hiv-integrated-clinical-knowledge",
             "hiv-model-knowledge-with-graph-augmentation",

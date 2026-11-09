@@ -68,7 +68,7 @@ DISABLED_HYPOTHESIS_SKILLS = frozenset(
         "treatment-toxicity",
     }
 )
-# Preserve these instructions for recorded runs, but offer only the five approved
+# Preserve these instructions for recorded runs, but offer only the approved
 # HIV perspectives when creating or editing an experiment design.
 RETIRED_HYPOTHESIS_SKILLS = frozenset(
     {"hiv-integrated-clinical-knowledge", "hiv-model-knowledge-with-graph-augmentation"}

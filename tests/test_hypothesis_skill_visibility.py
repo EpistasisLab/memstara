@@ -14,6 +14,7 @@ def test_catalog_contains_both_corpus_profiles_and_general_choice(tmp_path, monk
     ids = {i['id'] for i in catalog.catalog() if i['stage'] == 'hypothesis'}
     assert ids == {'addiction-psychiatric', 'addiction-substance-use',
                    'hiv-okf-whole-graph', 'hiv-no-knowledge', 'hiv-medication-treatment-pathways',
+                   'hiv-okf-whole-graph-v3',
                    'heart-failure-cardiovascular', 'heart-failure-metabolic-renal',
                    'heart-failure-lifestyle-social', 'heart-failure-all-categories', 'hypothesis_general'}
     for name in ids:
@@ -52,12 +53,12 @@ def test_disabled_hypothesis_cannot_reach_execution(tmp_path, combination):
     assert list(tmp_path.iterdir()) == []
 
 
-def test_hiv_menu_offers_exactly_five_approved_skills(tmp_path, monkeypatch):
+def test_hiv_menu_offers_v3_alongside_existing_approved_skills(tmp_path, monkeypatch):
     from memstara import corpus_skills, research_inputs
     monkeypatch.setenv('MEMSTARA_USER_SKILLS_DIR', str(tmp_path))
     monkeypatch.setattr(research_inputs, 'visible_inputs', lambda: [])
     expected = ['addiction-psychiatric', 'addiction-substance-use', 'hiv-okf-whole-graph',
-                'hiv-no-knowledge', 'hiv-medication-treatment-pathways']
+                'hiv-no-knowledge', 'hiv-medication-treatment-pathways', 'hiv-okf-whole-graph-v3']
     offered = corpus_skills.menu_bindings()['profiles']['hiv']['hypothesis']
     assert offered == expected
     visible = {item['id']: item for item in catalog.catalog()}
@@ -65,6 +66,26 @@ def test_hiv_menu_offers_exactly_five_approved_skills(tmp_path, monkeypatch):
         assert visible[name]['stage'] == 'hypothesis'
         catalog.validate_new_design({'playbook_hypothesis': name})
     catalog.validate_new_design({'combination_skills': {'hypothesis': expected}})
+    profile = {'configuration': {}, 'knowledge': {'hashes': {'index.md': next(
+        key for key, scope in corpus_skills.INDEX_PROFILES.items() if scope == 'hiv')}}}
+    corpus_skills.validate_hypotheses({'hypothesis': expected}, profile)
+
+
+def test_v3_is_separate_and_does_not_replace_frozen_v2(monkeypatch):
+    from memstara import evaluation
+
+    monkeypatch.delenv('MEMSTARA_RUN_CONFIG', raising=False)
+    v2 = catalog.resolve('hiv-okf-whole-graph')
+    v3 = catalog.resolve('hiv-okf-whole-graph-v3')
+    assert v2['title'] == 'HIV — Whole Knowledge Graph (V2)'
+    assert v3['title'] == 'HIV — Whole Knowledge Graph: Integrated Predictors (V3)'
+    assert v2['hash'] != v3['hash']
+    prompt = prompts.load_prompt('board/hypothesis', v3['id'])
+    assert v3['content'].strip() in prompt['system_prompt']
+    frozen = {'goal': 'Original saved goal', 'system_prompt': 'Original saved V2 instructions'}
+    monkeypatch.setattr(evaluation, 'active_plan', lambda: {
+        'prompts': {'board/hypothesis:hiv-okf-whole-graph': frozen}})
+    assert prompts.load_prompt('board/hypothesis', 'hiv-okf-whole-graph') == frozen
 
 
 def test_registered_medication_skill_is_exactly_the_reviewed_document():
