@@ -23,7 +23,7 @@ import "./floor-responsive.css";
 import KnowledgeNode from "../components/KnowledgeNode";
 import PipelineViewport from "../components/PipelineViewport";
 import ResourceEdge from "../components/ResourceEdge";
-import { pipelinePercent, pipelineLoopLabel } from "../lib/pipelineProgress";
+import { pipelinePercent, pipelineLoopLabel, experimentProgressLabel } from "../lib/pipelineProgress";
 import { pipelineState } from "../lib/pipelineState";
 import type { SceneAgent } from "../types";
 import FloorDetailDialog from "../components/FloorDetailDialog";
@@ -131,7 +131,7 @@ export function PipelineStatus({ids}: {ids?: string[]} = {}){
           </div>
         </header>
         {p.progress.exploration && <p className="text-xs text-ink-soft" role="status">
-          {p.progress.exploration.attempted} replicates · {p.progress.exploration.completed} completed · {p.progress.exploration.blocked} blocked
+          {experimentProgressLabel(p)}
         </p>}
         <div className="pipeline-progress-context">
           <span className="pipeline-current-stage">{current}</span>
@@ -216,7 +216,7 @@ export default function PipelineWorkspace(){
         }),
         ...visibleItems.flatMap((p,row)=>[
           {id:`zone-${p.id}`,type:'zone',position:{x:0,y:208+row*252},zIndex:-2,selectable:false,
-            data:{title:`EXPERIMENT ${p.number} · ${p.name}`,caption:`${pipelineLoopLabel(p)} · ${p.progress.exploration?`${p.progress.exploration.completed} completed · ${p.progress.exploration.blocked} blocked`:p.running?'Running':'Ready'}`,width:1370,height:196,execution:true,selected:p.id===selected,onSelect:()=>select(p.id),number:p.number,iteration:p.progress.iteration,loopLabel:pipelineLoopLabel(p),stageIndex:stages.indexOf(p.progress.stage as typeof stages[number])-1,percent:pipelinePercent(p),stageLabel:labels[p.progress.stage as keyof typeof labels]??"Not started",failed:(p.progress.counts?.failed??0)>0||p.progress.exploration?.outcome==='blocked'}},
+            data:{title:`EXPERIMENT ${p.number} · ${p.name}`,caption:`${pipelineLoopLabel(p)} · ${experimentProgressLabel(p)}`,width:1370,height:196,execution:true,selected:p.id===selected,onSelect:()=>select(p.id),number:p.number,iteration:p.progress.iteration,loopLabel:pipelineLoopLabel(p),stageIndex:stages.indexOf(p.progress.stage as typeof stages[number])-1,percent:pipelinePercent(p),stageLabel:labels[p.progress.stage as keyof typeof labels]??"Not started",failed:(p.progress.counts?.failed??0)>0||p.progress.exploration?.outcome==='blocked'}},
           ...stages.map((stage,col)=>({id:`${p.id}-${stage}`,type:'station',position:{x:24+col*224,y:260+row*252},
             data:{pipeline:p,stage,selected:selected===p.id&&inspected?.id===p.id&&inspected?.stage===stage,
               inspect:()=>configureStation(p.id,stage)}})),

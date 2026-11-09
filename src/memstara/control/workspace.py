@@ -137,6 +137,7 @@ class PipelineWorkspace:
 
     def list(self):
         from memstara.control.catalog import catalog_snapshot
+        from memstara.control.experiment_progress import summarize
 
         with self.lock, catalog_snapshot():
             out = []
@@ -194,6 +195,7 @@ class PipelineWorkspace:
                         "running": current,
                         "latest": latest,
                         "progress": progress,
+                        "experiment_progress": summarize(latest),
                         "deleting": bool(item.get("deleting")),
                         "loop_totals": loop_totals(
                             manager.history_records()

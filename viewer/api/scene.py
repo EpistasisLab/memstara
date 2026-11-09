@@ -266,6 +266,11 @@ async def _results(run_tag: str) -> list[dict[str, Any]]:
     return await pools.guarded("memstara", q, [])
 
 
+async def _display_results(run_tag: str) -> list[dict[str, Any]]:
+    from display_results import results
+    return await asyncio.to_thread(results, await _results(run_tag))
+
+
 def _trace_groups(trace: Any, asked: list[str], used: list[str]) -> list[dict[str, Any]]:
     """Flatten a `match_trace` into one group per concept the matcher was asked about.
 
@@ -1127,7 +1132,7 @@ async def _snapshot_uncached(run_tag: str | None, loop: int | None = None, *, te
     tag = run_tag or (runs[0]["run_tag"] if runs else "")
 
     board = await _board(tag)
-    results = await _results(tag)
+    results = await _display_results(tag)
     from run_artifacts import lookup
     # `lookup` reads execution manifests and reports from the mounted run archive.
     # It is intentionally cached, but the first read can still be several megabytes.
@@ -1204,7 +1209,7 @@ async def _snapshot_uncached(run_tag: str | None, loop: int | None = None, *, te
             'scheduled_combinations':(config.get('combination_plan') or {}).get('total_loops')}
         if len(history) > 1:
             configs = await asyncio.to_thread(run_artifacts.configs)
-            groups = await asyncio.gather(*(_results(t) for t in history[:-1]))
+            groups = await asyncio.gather(*(_display_results(t) for t in history[:-1]))
             groups.append(results)
             results = [{**r, **run_artifacts.result_identity(configs.get(t) or {}, t, r['trial'])}
                        for t, group in zip(history, groups, strict=True) for r in group]

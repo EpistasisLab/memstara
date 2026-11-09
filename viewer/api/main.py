@@ -216,7 +216,8 @@ async def pipeline_results(run_tags: str = Query(min_length=1, max_length=6000))
             if task["status"] == "failed":
                 failures.append({key: task[key] for key in ("task_id", "trial", "task_type", "error")} |
                                 run_artifacts.result_identity(configs.get(tag) or {}, tag, task["trial"]))
-    return {"results": output, "failures": failures}
+    from display_results import results as display_results
+    return {"results": await asyncio.to_thread(display_results, output), "failures": failures}
 
 
 @app.get("/api/telemetry")

@@ -4,7 +4,7 @@ import { PanelLeftClose, PanelLeftOpen, Trash2 } from 'lucide-react';
 import type { PipelineDefinition } from '../store/pipelines';
 import PipelineRowActions from './PipelineRowActions';
 import PipelineDeleteDialog from './PipelineDeleteDialog';
-import { pipelineLoopLabel } from '../lib/pipelineProgress';
+import { pipelineLoopLabel, experimentProgressLabel } from '../lib/pipelineProgress';
 import {researchSkillProfile} from '../lib/researchSkills';
 import {useControl} from '../store/control';
 import {usePipelines} from '../store/pipelines';
@@ -75,6 +75,7 @@ export default function PipelineBrowser({items, selected, onSelect, compare, onC
             <span className="pipeline-card-stage pipeline-card-context" title={`Corpus: ${corpus} · Target: ${target}`}>{corpus} · {target}</span>
             <span className="pipeline-card-position"><span className="pipeline-card-loop">{pipelineLoopLabel(p).split(' · ').map((part,i)=>{const match=/^(Pipeline|Replicate) (.+)$/.exec(part);return <span className="pipeline-card-counter" key={i}>{match?<><span>{match[1]} </span><strong>{match[2]}</strong></>:part}</span>})}</span></span>
             {p.progress.stage&&<span className="pipeline-card-stage">{p.running?'Current':'Last'}: {stageNames[p.progress.stage]??p.progress.stage}</span>}
+            {execution&&<span className="pipeline-card-stage">{experimentProgressLabel(p)}</span>}
           </button>
           <PipelineRowActions compact pipeline={p}/>
         </div>})}

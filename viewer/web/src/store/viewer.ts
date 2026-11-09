@@ -183,6 +183,9 @@ export const useViewer = create<ViewerState>((set, get) => ({
       if (previous?.run_tag === snapshot.run_tag) {
         if (!snapshot.health.memstara.up) {
           snapshot.board = previous.board; snapshot.results = previous.results; snapshot.stale = true;
+          snapshot.report = previous.report;
+          snapshot.run_configuration = previous.run_configuration;
+          snapshot.experiment = previous.experiment;
         }
         if (!snapshot.health.core.up) {
           snapshot.scene = previous.scene; snapshot.agents = previous.agents;

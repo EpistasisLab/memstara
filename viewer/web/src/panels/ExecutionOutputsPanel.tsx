@@ -16,6 +16,7 @@ import { identityLabel } from '../lib/replicateIdentity';
 import { costLabel, usageDuration } from '../lib/loopUsage';
 import type { Result } from '../types';
 import { recordedModels } from '../lib/recordedModel';
+import {experimentProgressLabel} from '../lib/pipelineProgress';
 import type {Observation} from '../lib/confusionMetrics';
 import {resultForObservation} from '../lib/skillComparison';
 import './execution-outputs.css';
@@ -72,7 +73,9 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
   const requested = useViewer(s => s.runTag);
   const error = useViewer(s => s.error);
   const items = usePipelines(s => s.items);
+  const selected = usePipelines(s => s.selected);
   const context = useExecutionContext();
+  const selectedOwner = items.find(item => item.id === selected);
   const totals = useTelemetryTotals();
   const tag = snapshot?.run_tag ?? '';
   const usage = (totals.data?.experiments ?? totals.data?.executions)?.find(e => e.run_tag === tag);
@@ -84,6 +87,8 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
   const selection = useOutputNavigation(s => s.selection);
   const active = selection?.tag === tag ? tiles.find(tile => tile.loop === selection.loop)??(chartTile?.loop===selection.loop?chartTile:undefined) : undefined;
   const waiting = !!requested && requested !== tag;
+  const unavailableEmpty = !!snapshot && !tiles.length &&
+    (snapshot.stale || snapshot.health.memstara.up === false || !!error || (view === 'agents' && !!totals.error));
   const root = useRef<HTMLDivElement>(null);
   const comparison=useRef<HTMLDivElement>(null),selectedDocument=useRef<HTMLElement>(null);
   const noticeKeys = useMemo(() => snapshot && active && view !== 'results'
@@ -139,7 +144,8 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
   }}>
     <header className="output-workspace-header">
       <div><p className="output-eyebrow">Experiment outputs</p><h2>{context.name}</h2><p>{tag ? context.startedLabel : 'Choose an experiment with a saved execution.'}</p>
-        {snapshot?.experiment&&<p className="output-experiment-scope">{snapshot.experiment.result_combinations} of {snapshot.experiment.scheduled_combinations??snapshot.experiment.result_combinations} combinations recorded · {snapshot.experiment.run_tags.length} execution {snapshot.experiment.run_tags.length===1?'attempt':'attempts'} · One experiment</p>}
+        {selectedOwner&&<p className="output-experiment-scope" aria-label="Experiment completion">{experimentProgressLabel(selectedOwner)}</p>}
+        {snapshot?.experiment&&<p className="output-experiment-scope">{snapshot.experiment.result_combinations} scheduled replicates with saved results · {snapshot.experiment.scheduled_combinations??snapshot.experiment.result_combinations} planned · {snapshot.experiment.run_tags.length} execution {snapshot.experiment.run_tags.length===1?'session':'sessions'} · One experiment</p>}
       </div>
       <label className="output-experiment-picker">Experiment<select aria-label="Experiment outputs to inspect" value={context.owner?.id ?? ''} onChange={e => {useOutputNavigation.getState().back(); usePipelines.getState().select(e.target.value);}}>
         <option value="" disabled>{tag ? context.name : 'Choose an experiment'}</option>
@@ -147,14 +153,14 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
       </select></label>
     </header>
     <nav className="output-view-navigation" aria-label="Output views">{views.map(next => {const Icon = icons[next]; return <button type="button" key={next} aria-current={view === next ? 'page' : undefined} onClick={() => navigate(next)}><Icon size={17} aria-hidden="true"/>{outputViewNames[next]}</button>;})}</nav>
-    {view === 'results' && !waiting && <div ref={comparison} tabIndex={-1} className="result-comparison-anchor" aria-label="Hypothesis performance comparison"><HypothesisResultsTable key={tag} runTag={tag} results={(snapshot?.results ?? []).map(result => ({...result, run_tag: result.run_tag ?? tag}))} plannedSkills={snapshot?.run_configuration?.combination_plan?.skills?.hypothesis?.map(skill=>skill.id)}
+    {view === 'results' && !waiting && !unavailableEmpty && <div ref={comparison} tabIndex={-1} className="result-comparison-anchor" aria-label="Hypothesis performance comparison"><HypothesisResultsTable key={tag} runTag={tag} results={(snapshot?.results ?? []).map(result => ({...result, run_tag: result.run_tag ?? tag}))} plannedSkills={snapshot?.run_configuration?.combination_plan?.skills?.hypothesis?.map(skill=>skill.id)}
       skillTitles={Object.fromEntries((snapshot?.run_configuration?.combination_plan?.skills?.hypothesis??[]).filter(skill=>skill.title).map(skill=>[skill.id,skill.title!]))} onOpenResult={openChartResult}/>
       {chartError&&<p role="alert" className="output-notice">{chartError}</p>}
     </div>}
     {(snapshot?.report?.run_tags?.length ?? 0) > 1 && <p className="output-notice">Includes retained outputs and usage from {snapshot?.report?.run_tags?.length} continued executions of this experiment.</p>}
     {error && (waiting || !snapshot) && <div className="output-notice" role="alert"><p>Could not load the selected execution. Saved results have not been deleted.</p><p>{error}</p><button type="button" onClick={() => void useViewer.getState().fetchOnce()}>Retry loading</button></div>}
     {!waiting && snapshot && (error || snapshot.stale || (view === 'agents' && totals.error)) && <p className="output-notice" role="status">Updates are delayed. Showing the last available records for this execution. Missing records do not indicate a completed or empty run.</p>}
-    {waiting ? (!error && <p className="output-empty" role="status">Loading the selected execution…</p>) : !snapshot ? (!error && <p className="output-empty" role="status">{requested ? 'Loading execution records…' : 'Select an experiment to browse its outputs.'}</p>) : active ? <>
+    {waiting ? (!error && <p className="output-empty" role="status">Loading the selected execution…</p>) : !snapshot ? (!error && <p className="output-empty" role="status">{requested ? 'Loading execution records…' : 'Select an experiment to browse its outputs.'}</p>) : unavailableEmpty ? <div className="output-notice" role="alert"><p>Saved outputs could not be loaded. This does not mean the experiment has no results.</p><p>The saved result count is unavailable until the connection recovers. Retrying automatically.</p><button type="button" onClick={() => void useViewer.getState().fetchOnce()}>Retry loading</button></div> : active ? <>
       <header className="output-detail-header">
         <button type="button" className="output-back" onClick={() => useOutputNavigation.getState().back()}><ArrowLeft size={17} aria-hidden="true"/>Back to {outputViewNames[view]}</button>
         <div><p className="output-eyebrow">{view === 'results' ? 'Interpretation agent output' : view === 'report' ? 'Explanation agent output' : 'Recorded usage'}</p><h3 ref={heading} tabIndex={-1}>{identityLabel(active)}</h3></div>

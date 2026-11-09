@@ -13,6 +13,8 @@ export interface PipelineDefinition {
   failure?: {code: string; message: string; stage?: string; loop?: number | null} | null;
   latest: (RunningRun & { exit_code?: number }) | null;
   loop_totals?: {attempted:number;completed:number;blocked:number;unknown_executions:number};
+  experiment_progress?: {status:'available'|'unavailable';scheduled?:number;completed?:number;
+    started?:number;attempts?:number;retries?:number;not_started?:number;blocked?:number;run_tags?:string[];message?:string}|null;
   progress: { preparation?: {status: string; message?: string}; exploration?: { attempted: number; completed: number; blocked: number; skipped?: number; outcome: string; reason: string }; stage_percent?: number | null; iteration_completed?: boolean; iteration?: number; stage?: string; updated_at?: string; counts?: Record<string, number> };
 }
 const selectionKey = 'memstara.pipelineSelection';

@@ -105,6 +105,31 @@ try {for(const width of [320,390,768,1440]) {
  await panel.getByRole('button',{name:'Retry loading',exact:true}).click();
  await expect(panel.getByRole('alert')).toHaveCount(0);
  await expect(panel.locator('.execution-output-tile')).toHaveCount(3);
+ if(width===1440){
+   const large={...snapshot,run_tag:'large-history',run_configuration:{...snapshot.run_configuration,waves:1200,
+     combination_plan:{combinations:80,total_loops:1200,repetitions:15,execution_order:'all_pipelines_first'}},
+     report:{explanation_outputs:[],run_tags:['original','retry','large-history']},
+     results:Array.from({length:1200},(_,i)=>({...result,result_id:i+1000,trial:i,iteration:i+1,
+       run_tag:i<366?'original':i<382?'retry':'large-history',interpretation:`Retained result ${i+1}`,
+       evaluation:undefined}))};
+   await page.evaluate(s=>window.deliverOutputs(s),large);
+   await page.evaluate(()=>window.setExperimentProgress({status:'available',scheduled:1200,completed:1200,attempts:1202,retries:2},'large-history'));
+   await expect(panel.getByLabel('Experiment completion')).toHaveText('1,200 / 1,200 completed · 1,202 attempts · 2 retries');
+   await expect(panel.locator('.execution-output-tile')).toHaveCount(1200);
+   await panel.getByRole('button',{name:'Open Results: Pipeline 1 · Replicate 1',exact:true}).click();
+   await expect(panel.locator('.output-documents')).toContainText('Retained result 1');
+   await panel.getByRole('button',{name:'Back to Results',exact:true}).click();
+   await panel.getByRole('button',{name:'Open Results: Pipeline 80 · Replicate 15',exact:true}).click();
+   await expect(panel.locator('.output-documents')).toContainText('Retained result 1200');
+   await panel.getByRole('button',{name:'Back to Results',exact:true}).click();
+   // A degraded first response is unknown, never evidence of an empty experiment.
+   await page.evaluate(s=>window.deliverOutputs({...s,results:[],stale:true,
+     health:{memstara:{up:false,error:'Timed out'},core:{up:false}},report:null}),snapshot);
+   await expect(panel.getByRole('alert')).toContainText('Saved outputs could not be loaded');
+   await expect(panel.getByLabel('Experiment completion')).toContainText('1,200 / 1,200 completed');
+   await expect(panel.getByText('No completed results yet.',{exact:false})).toHaveCount(0);
+   await expect(panel.getByText('0 pipelines · 0 replicates',{exact:true})).toHaveCount(0);
+ }
  await page.evaluate(s=>window.deliverOutputs({...s,run_tag:'different',results:[],report:{explanation_outputs:[]}}),snapshot);
  await expect(panel.locator('.execution-output-tile')).toHaveCount(0);
  await expect(panel.locator('.output-documents')).toHaveCount(0);

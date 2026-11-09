@@ -11,6 +11,7 @@ import '../src/index.css';
 import '../src/readability.css';
 import '../src/workspace-layout.css';
 Object.assign(window,{setOutputOwnerName:(name:string)=>usePipelines.setState(state=>({items:state.items.map(item=>({...item,name}))}))});
+Object.assign(window,{setExperimentProgress:(progress:NonNullable<ReturnType<typeof usePipelines.getState>['items'][number]['experiment_progress']>,tag:string)=>usePipelines.setState(state=>({items:state.items.map(item=>({...item,experiment_progress:progress,latest:{...item.latest!,run_tag:tag}}))}))});
 
 Object.assign(window, {deliverLiveOutputs: (value:Partial<ReturnType<typeof useLiveOutputs.getState>>) => useLiveOutputs.setState(value), deliverOutputs(snapshot: Snapshot, error: string | null = null, requested = snapshot.run_tag) {
   useViewer.setState({snapshot, runTag:requested, error, loading:false, newRunMode:false});

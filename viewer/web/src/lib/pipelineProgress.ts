@@ -1,6 +1,15 @@
 import { executionLoopLabel } from './loopLabel';
 import type { PipelineDefinition } from "../store/pipelines";
 const stages=["hypothesis","data","ml","interpreter","report"];
+
+/** Completion counts are unique schedule positions; retries are separate attempts. */
+export function experimentProgressLabel(pipeline: PipelineDefinition): string {
+  const progress=pipeline.experiment_progress;
+  if(progress?.status==='available')return `${progress.completed?.toLocaleString()} / ${progress.scheduled?.toLocaleString()} completed · ${progress.attempts?.toLocaleString()} attempts · ${progress.retries?.toLocaleString()} retries`;
+  if(progress?.status==='unavailable')return 'Experiment totals unavailable; retained history could not be fully verified.';
+  const local=pipeline.progress.exploration;
+  return local?`Current execution only: ${local.completed} completed · ${local.attempted} attempts`:'Experiment totals not yet available.';
+}
 /** One display rule shared by Experiments and Status; this is not a time estimate. */
 export function pipelinePercent(pipeline: PipelineDefinition): number | null {
   const recorded=pipeline.progress.stage_percent;
