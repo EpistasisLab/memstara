@@ -11,6 +11,8 @@ try {
  await page.route('**/control/**',r=>r.fulfill({status:503,json:{error:'Unavailable during layout test'}}));
  await page.goto(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4175');
  await page.locator('.unified-topbar').waitFor();
+ await page.locator('.workspace-cost-scope .cost-notice').waitFor();
+ await page.evaluate(()=>document.fonts.ready);
  for(const theme of ['light','dark']) for(const width of [1440,1024,768,390,320]) {
   await page.setViewportSize({width,height:900});
   await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
@@ -31,7 +33,7 @@ try {
   assert(fits);await page.keyboard.press('Escape');
   assert.equal(await page.getByRole('button',{name:'Saved analyses',exact:true}).count(),0);
   console.log(JSON.stringify({theme,width,...size,dialogs:'passed'}));
-  if(width===1440||width===390)await page.screenshot({path:`${artifacts}/topbar-${theme}-${width}.png`});
+  if(width===1440||width===390||width===320)await page.screenshot({path:`${artifacts}/topbar-${theme}-${width}.png`});
  }
  assert.deepEqual(errors,[]);
 }finally{await browser.close();}

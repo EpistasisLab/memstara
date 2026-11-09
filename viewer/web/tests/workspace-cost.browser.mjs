@@ -1,5 +1,10 @@
 import {chromium, expect} from '@playwright/test';
 import assert from 'node:assert/strict';
+import {mkdir} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+
+const artifacts=fileURLToPath(new URL('../../../.private-tmp/workspace-cost/',import.meta.url));
+await mkdir(artifacts,{recursive:true,mode:0o700});
 
 const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
 const pipelines=[1,2,3].map(n=>({id:`cost-${n}`,number:n,name:`Research pipeline ${n}`,configuration:{},running:null,latest:{run_tag:`cost-run-${n}`},progress:{}}));
@@ -48,7 +53,7 @@ try {
   await expect(panel.locator('tfoot')).toContainText('$4.7197');
   const geometry=await panel.evaluate(e=>({width:e.clientWidth,scroll:e.scrollWidth,left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right,viewport:innerWidth}));
   assert(geometry.scroll<=geometry.width+1&&geometry.left>=0&&geometry.right<=geometry.viewport,JSON.stringify({width,geometry}));
-  if([1440,390].includes(width))await page.screenshot({path:`/tmp/workspace-cost-${theme}-${width}.png`});
+  if([1440,390,320].includes(width))await page.screenshot({path:`${artifacts}/workspace-cost-${theme}-${width}.png`});
   await page.keyboard.press('Escape');
   await expect(panel).not.toBeVisible();
   await expect(trigger).toBeFocused();

@@ -36,3 +36,10 @@
  .workspace-cost-heading strong { margin-left:auto; }
  .workspace-cost-scope { justify-content:space-between; }
 }
+@media (max-width:360px) {
+ /* Keep the label and unavailable/amount value readable beside Clear. */
+ .workspace-cost-trigger { padding-inline:4px; }
+ .workspace-cost-heading { gap:4px; }
+ .workspace-cost-heading > span { white-space:nowrap; }
+ .workspace-cost-heading strong { font-size:14px; }
+}
