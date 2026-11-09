@@ -16,7 +16,7 @@ try{
    failure:repaired?null:{code:'final_report_assembly_failed',stage:'report_assembly',loop:null,message:'Final report needs recovery'}}]}});
   return route.fulfill({json:{runs:[]}});
  });
- await page.goto((process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4189')+'/tests/report-recovery.fixture.html');
+ await page.goto((process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:4177')+'/tests/report-recovery.fixture.html');
  await expect(page.getByTestId('report-state')).toHaveText('Analyses completed · Report needs attention');
  await expect(page.getByText('Retry unavailable: the failed replicate is not identified.')).not.toBeVisible();
  await page.getByRole('button',{name:'Rebuild report test-hiv-1',exact:true}).click();

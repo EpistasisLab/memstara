@@ -93,9 +93,9 @@ def menu_bindings():
             key: {
                 **profile,
                 "hypothesis": [
-                    skill for skill in profile["hypothesis"]
-                    if skill not in ("random_features", "heart-failure-all")
-                    and skill not in RETIRED_HYPOTHESIS_SKILLS
+                    skill
+                    for skill in profile["hypothesis"]
+                    if skill not in ("random_features", "heart-failure-all") and skill not in RETIRED_HYPOTHESIS_SKILLS
                 ],
             }
             for key, profile in PROFILES.items()

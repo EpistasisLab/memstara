@@ -88,6 +88,7 @@ for(const width of [1440,390]){
  await page.waitForFunction(()=>typeof window.deliverChartSnapshot==='function');
  await page.evaluate(value=>window.deliverChartSnapshot(value),snapshot(rows));
  const panel=page.getByTestId('execution-outputs');
+ await panel.getByText('Compare performance by hypothesis skill',{exact:true}).click();
  await expect(panel.locator('.execution-output-tile')).toHaveCount(8);
  const comparison=page.getByRole('region',{name:'Hypothesis skill performance distributions'});
  const earlier=comparison.getByRole('button',{name:/^hiv-no-knowledge; pipeline 1; result 1; fit 2; lr;.*before-resume$/});

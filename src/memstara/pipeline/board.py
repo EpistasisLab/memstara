@@ -592,10 +592,15 @@ async def _call_agent_uncontrolled(
         if BASE_CALL.get():
             from memstara.pipeline.hybrid import SKILL as hybrid_skill
 
-            entry['skill'] = {'id': hybrid_skill, 'stage': 'hypothesis', 'phase': 'baseline',
-                              'source_skill': 'hiv-no-knowledge', 'agent_id': str(agent_id)}
+            entry["skill"] = {
+                "id": hybrid_skill,
+                "stage": "hypothesis",
+                "phase": "baseline",
+                "source_skill": "hiv-no-knowledge",
+                "agent_id": str(agent_id),
+            }
     if BASE_CALL.get():
-        entry['hybrid_phase'] = 'isolated_baseline'
+        entry["hybrid_phase"] = "isolated_baseline"
     _CALLS.append(entry)
     write_execution_manifest(entry)
 
@@ -677,12 +682,17 @@ async def _call_agent_uncontrolled(
         from memstara.experiment_registry import record_metrics
 
         save_call(_TRACE_DIR.parent, entry)
-        record_metrics(_TRACE_DIR.parent, {
-            "operation": "agent_postprocessing", "agent_run_id": entry["run_id"],
-            "loop": entry.get("loop"), "trace_seconds": trace_finished - post_started,
-            "mirror_seconds": mirror_finished - trace_finished,
-            "console_seconds": time.monotonic() - mirror_finished,
-        })
+        record_metrics(
+            _TRACE_DIR.parent,
+            {
+                "operation": "agent_postprocessing",
+                "agent_run_id": entry["run_id"],
+                "loop": entry.get("loop"),
+                "trace_seconds": trace_finished - post_started,
+                "mirror_seconds": mirror_finished - trace_finished,
+                "console_seconds": time.monotonic() - mirror_finished,
+            },
+        )
 
     # Agent output is usually JSON shaped like {"result": "..."}. Failing that, the raw text.
     try:
@@ -863,11 +873,20 @@ async def call_report(*args, **kwargs) -> tuple[str, dict[str, Any]]:
         from memstara.pipeline.failures import stop_execution
 
         stop_execution(
-            run_dir, "report" if _CURRENT_LOOP.get() is not None else 'report_assembly', _CURRENT_LOOP.get(),
+            run_dir,
+            "report" if _CURRENT_LOOP.get() is not None else "report_assembly",
+            _CURRENT_LOOP.get(),
             RuntimeError(entry.get("error", "Specialist Explanation failed")),
-            **({'code':'final_report_assembly_failed', 'message':
-                'Final report assembly failed. Completed analyses are retained. Rebuild only the report; '
-                'do not rerun completed combinations.'} if _CURRENT_LOOP.get() is None else {})
+            **(
+                {
+                    "code": "final_report_assembly_failed",
+                    "message": "Final report assembly failed. Completed analyses are retained. "
+                    "Rebuild only the report; "
+                    "do not rerun completed combinations.",
+                }
+                if _CURRENT_LOOP.get() is None
+                else {}
+            ),
         )
     return text, entry
 
@@ -1217,7 +1236,7 @@ async def board_state(registry: MCPServerRegistry, run_tag: str, *, state_only=F
 
     from memstara.pipeline.board_reads import verified_read, BoardReadError
 
-    query = {'run_tag': run_tag, **({'state_only': True} if state_only else {})}
+    query = {"run_tag": run_tag, **({"state_only": True} if state_only else {})}
     bounds = _CURRENT_TRIAL_RANGE.get() if state_only else None
     if bounds is not None:
         query.update(trial_start=bounds[0], trial_end=bounds[1])
@@ -1229,10 +1248,20 @@ async def board_state(registry: MCPServerRegistry, run_tag: str, *, state_only=F
 
     directory = _TRACE_DIR.parent if _TRACE_DIR else None
     try:
-        return await verified_read(read_once, directory=directory, operation={
-            'server': 'memstara-blackboard', 'tool': 'read_board', 'run_tag': run_tag,
-            'loop': _CURRENT_LOOP.get(), 'state_only': state_only, 'timeout_seconds': 30,
-            'trial_start': query.get('trial_start'), 'trial_end': query.get('trial_end')})
+        return await verified_read(
+            read_once,
+            directory=directory,
+            operation={
+                "server": "memstara-blackboard",
+                "tool": "read_board",
+                "run_tag": run_tag,
+                "loop": _CURRENT_LOOP.get(),
+                "state_only": state_only,
+                "timeout_seconds": 30,
+                "trial_start": query.get("trial_start"),
+                "trial_end": query.get("trial_end"),
+            },
+        )
     except BoardReadError as exc:
         from memstara.pipeline.failures import stop_execution
 
@@ -1399,10 +1428,11 @@ async def call_board_tool(registry: MCPServerRegistry, tool: str, args: dict[str
 
     directory = _TRACE_DIR.parent if _TRACE_DIR else None
     correlation = str(uuid.uuid4())
-    operation = {'server': 'memstara-blackboard', 'tool': tool, 'loop': _CURRENT_LOOP.get(), 'timeout_seconds': 30}
-    operation.update({key: args[key] for key in
-                      ('trial_start', 'trial_end', 'origin_wave', 'feedback_before_trial') if key in args})
-    if tool in {'read_results', 'read_questions', 'read_board'}:
+    operation = {"server": "memstara-blackboard", "tool": tool, "loop": _CURRENT_LOOP.get(), "timeout_seconds": 30}
+    operation.update(
+        {key: args[key] for key in ("trial_start", "trial_end", "origin_wave", "feedback_before_trial") if key in args}
+    )
+    if tool in {"read_results", "read_questions", "read_board"}:
         # Retry only read-only operations. Never replay a claim or a submission.
         from memstara.pipeline.board_reads import verified_read, response_error, BoardReadError
 
@@ -1415,14 +1445,21 @@ async def call_board_tool(registry: MCPServerRegistry, tool: str, args: dict[str
             except json.JSONDecodeError as exc:
                 raise RuntimeError("Blackboard tool returned invalid JSON") from exc
             if not isinstance(response, dict):
-                raise BoardReadError('InvalidResponse')
-            if response.get('error'):
+                raise BoardReadError("InvalidResponse")
+            if response.get("error"):
                 raise response_error(response)
-            collection = {'read_results': 'results', 'read_questions': 'questions', 'read_board': 'tasks'}[tool]
+            collection = {"read_results": "results", "read_questions": "questions", "read_board": "tasks"}[tool]
             if not isinstance(response.get(collection), list):
-                raise BoardReadError('InvalidCollection')
-            audit(directory, 1, 'read_payload', operation=operation, correlation_id=correlation,
-                  response_bytes=len(text.encode('utf-8')), rows=len(response[collection]))
+                raise BoardReadError("InvalidCollection")
+            audit(
+                directory,
+                1,
+                "read_payload",
+                operation=operation,
+                correlation_id=correlation,
+                response_bytes=len(text.encode("utf-8")),
+                rows=len(response[collection]),
+            )
             return response
 
         try:
@@ -1430,12 +1467,17 @@ async def call_board_tool(registry: MCPServerRegistry, tool: str, args: dict[str
         except BoardReadError as exc:
             from memstara.pipeline.failures import stop_execution
 
-            stop_execution(directory, 'board', _CURRENT_LOOP.get(), exc,
-                           code='board_read_unavailable',
-                           message=f'Internal {tool} read failed ({exc.code}). Saved results are retained; '
-                           'see board_read_events.jsonl for scope and recovery attempts.')
+            stop_execution(
+                directory,
+                "board",
+                _CURRENT_LOOP.get(),
+                exc,
+                code="board_read_unavailable",
+                message=f"Internal {tool} read failed ({exc.code}). Saved results are retained; "
+                "see board_read_events.jsonl for scope and recovery attempts.",
+            )
     began = time.monotonic()
-    audit(directory, 1, 'tool_started', operation=operation, correlation_id=correlation)
+    audit(directory, 1, "tool_started", operation=operation, correlation_id=correlation)
     try:
         async with asyncio.timeout(30):
             raw = await call_server_tool(server.id, tool, args, registry=registry)
@@ -1447,11 +1489,25 @@ async def call_board_tool(registry: MCPServerRegistry, tool: str, args: dict[str
         if not isinstance(response, dict):
             raise RuntimeError("Blackboard tool response must be a JSON object")
     except Exception as exc:
-        audit(directory, 1, 'tool_failed', type(exc).__name__, operation=operation,
-              correlation_id=correlation, elapsed_seconds=time.monotonic()-began, exception=exception_details(exc))
+        audit(
+            directory,
+            1,
+            "tool_failed",
+            type(exc).__name__,
+            operation=operation,
+            correlation_id=correlation,
+            elapsed_seconds=time.monotonic() - began,
+            exception=exception_details(exc),
+        )
         raise
-    audit(directory, 1, 'tool_completed', operation=operation, correlation_id=correlation,
-          elapsed_seconds=time.monotonic()-began)
+    audit(
+        directory,
+        1,
+        "tool_completed",
+        operation=operation,
+        correlation_id=correlation,
+        elapsed_seconds=time.monotonic() - began,
+    )
     return response
 
 
@@ -1512,19 +1568,27 @@ async def questions_for_wave(
     from memstara.pipeline.iteration_learning import enabled as learning_enabled, summarize, save_feedback, instructions
 
     snapshot = active_plan()
-    from memstara.pipeline.hybrid import selected as hybrid_selected, prepare_baseline, instructions as hybrid_instructions
+    from memstara.pipeline.hybrid import (
+        selected as hybrid_selected,
+        prepare_baseline,
+        instructions as hybrid_instructions,
+    )
 
     hybrid_condition = hybrid_selected(snapshot, wave)
     if hybrid_condition:
-        await prepare_baseline(snapshot, wave, registry, by_stage['hybrid_base'], call_agent)
-        snapshot = {**snapshot, '_hybrid_question': True}
+        await prepare_baseline(snapshot, wave, registry, by_stage["hybrid_base"], call_agent)
+        snapshot = {**(snapshot or {}), "_hybrid_question": True}
     from memstara.pipeline.feature_selection import scoped
 
     snapshot = scoped(snapshot, wave)
     if learning_enabled(snapshot):
-        history = await call_board_tool(registry, "read_board", {
-            "run_tag": run_tag, "feedback_before_trial": wave * snapshot["trials"]
-        }) if wave else {"tasks": []}
+        history = (
+            await call_board_tool(
+                registry, "read_board", {"run_tag": run_tag, "feedback_before_trial": wave * snapshot["trials"]}
+            )
+            if wave
+            else {"tasks": []}
+        )
         if not isinstance(history, dict) or "tasks" not in history or history.get("error"):
             raise RuntimeError("Cannot read prior iteration evidence; refusing to silently generate without feedback")
         context = summarize(history["tasks"], snapshot, wave)
@@ -1604,15 +1668,17 @@ async def questions_for_wave(
         for attempt in range(2):
             # Recover a saved but not yet executed question from THIS wave only.
             # Never reassign an older question to a different feedback context.
-            current = await call_board_tool(registry, "read_questions", {
-                "status": "open", "limit": 200, "origin_run": run_tag, "origin_wave": wave
-            })
+            current = await call_board_tool(
+                registry, "read_questions", {"status": "open", "limit": 200, "origin_run": run_tag, "origin_wave": wave}
+            )
             if not isinstance(current, dict) or current.get("error") or "questions" not in current:
                 raise RuntimeError("Question bank unavailable; generation cannot safely be replayed")
             fresh = [
                 q
                 for q in current["questions"]
-                if q.get("origin_run") == run_tag and q.get("origin_wave") == wave and not q.get("times_used", 0)
+                if q.get("origin_run") == run_tag
+                and q.get("origin_wave") == wave
+                and not q.get("times_used", 0)
                 and q.get("question_id") not in excluded_question_ids
                 and (writer is None or q.get("writer") == writer)
             ]
@@ -1642,15 +1708,17 @@ async def questions_for_wave(
                     if not task.done():
                         task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
-        after = await call_board_tool(registry, "read_questions", {
-            "status": "open", "limit": 200, "origin_run": run_tag, "origin_wave": wave
-        })
+        after = await call_board_tool(
+            registry, "read_questions", {"status": "open", "limit": 200, "origin_run": run_tag, "origin_wave": wave}
+        )
         if not isinstance(after, dict) or after.get("error") or "questions" not in after:
             raise RuntimeError("Question bank unavailable after generation")
         fresh = [
             q
             for q in after["questions"]
-            if q.get("origin_run") == run_tag and q.get("origin_wave") == wave and not q.get("times_used", 0)
+            if q.get("origin_run") == run_tag
+            and q.get("origin_wave") == wave
+            and not q.get("times_used", 0)
             and q.get("question_id") not in excluded_question_ids
             and (writer is None or q.get("writer") == writer)
         ]
@@ -1803,8 +1871,11 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                     "mode": "retry_incomplete_combinations" if retry_loops else "new_attempt_from_failed_loop",
                     **({"selected_loops": retry_loops} if retry_loops else {}),
                     "prior_results": "retained_in_source_execution",
-                    **({"skill_updates": json.loads(args.retry_skill_updates)}
-                       if getattr(args, "retry_skill_updates", "") else {}),
+                    **(
+                        {"skill_updates": json.loads(args.retry_skill_updates)}
+                        if getattr(args, "retry_skill_updates", "")
+                        else {}
+                    ),
                     "validation_reserve": "new_execution_partition",
                 },
             )
@@ -1951,11 +2022,11 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         from memstara.evaluation import active_plan
 
         required = {**BOARD_TOOLS, "question": QUESTION_TOOLS}
-        if (active_plan() or {}).get('hybrid_policy'):
+        if (active_plan() or {}).get("hybrid_policy"):
             from memstara.pipeline.hybrid import BASE_TOOLS
 
-            by_stage['hybrid_base'] = tools_for(registry, {'memstara-blackboard'}, only=set(BASE_TOOLS))
-            required['hybrid_base'] = BASE_TOOLS
+            by_stage["hybrid_base"] = tools_for(registry, {"memstara-blackboard"}, only=set(BASE_TOOLS))
+            required["hybrid_base"] = set(BASE_TOOLS)
         if args.report_only:
             required = {"report": BOARD_TOOLS["report"]}
         elif args.no_curator:
@@ -2233,6 +2304,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 from_bank: bool = from_bank,
                 skill_note: str = skill_note,
                 agents=agents,
+                wave=wave,
             ):
                 """Call one hypothesis worker and attach what its matcher calls saw.
 
@@ -2287,13 +2359,18 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
 
                 plan = scoped(active_plan(), wave)
                 if (plan or {}).get("no_knowledge_condition"):
-                    claimed = await call_board_tool(registry, "claim_question", {
-                        "run_tag": args.run_tag, "worker": wid, "question_id": q["question_id"]})
+                    claimed = await call_board_tool(
+                        registry,
+                        "claim_question",
+                        {"run_tag": args.run_tag, "worker": wid, "question_id": q["question_id"]},
+                    )
                     if claimed.get("error") or claimed.get("question_id") != q["question_id"]:
                         raise RuntimeError("Could not claim the assigned no-knowledge question")
-                    ask = (f"Map the controller-claimed question {q['question_id']} for run {args.run_tag!r}, "
-                           f"worker {wid!r}, trial {i}. Question: {text!r}. "
-                           "Use only CSV predictor metadata and general model knowledge. ")
+                    ask = (
+                        f"Map the controller-claimed question {q['question_id']} for run {args.run_tag!r}, "
+                        f"worker {wid!r}, trial {i}. Question: {text!r}. "
+                        "Use only CSV predictor metadata and general model knowledge. "
+                    )
                 from memstara.pipeline.hybrid import selected as hybrid_selected
 
                 if enabled(plan):
@@ -2308,15 +2385,19 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                             "Use these document IDs as okf_concept_ids and source_id in feature_mapping. "
                         )
                     if (plan or {}).get("no_knowledge_condition"):
-                        ask += (f"Preserve perspective={text!r} and hypothesis={hypothesis_text(contract)!r}. "
-                                "Map every assigned concept to exact CSV columns. Supply feature_mapping with "
-                                'source_id="" and a general-knowledge rationale; okf_concept_ids=[] and path_uses=[]. ')
+                        ask += (
+                            f"Preserve perspective={text!r} and hypothesis={hypothesis_text(contract)!r}. "
+                            "Map every assigned concept to exact CSV columns. Supply feature_mapping with "
+                            'source_id="" and a general-knowledge rationale; okf_concept_ids=[] and path_uses=[]. '
+                        )
                     elif hybrid_selected(plan, wave):
-                        ask += (f" Preserve perspective={text!r} and hypothesis={hypothesis_text(contract)!r}. "
-                                "Use the question's proposed_mapping exactly, including frozen baseline rows "
-                                'with source_id="". Read the augmentation sources; cite only those sources in '
-                                "okf_concept_ids and attribute actual paths in path_uses. The driver records "
-                                "the baseline/augmentation provenance separately. Do not remove baseline columns.")
+                        ask += (
+                            f" Preserve perspective={text!r} and hypothesis={hypothesis_text(contract)!r}. "
+                            "Use the question's proposed_mapping exactly, including frozen baseline rows "
+                            'with source_id="". Read the augmentation sources; cite only those sources in '
+                            "okf_concept_ids and attribute actual paths in path_uses. The driver records "
+                            "the baseline/augmentation provenance separately. Do not remove baseline columns."
+                        )
                     else:
                         ask += (
                             " Preserve the assigned question exactly. Pass perspective exactly as the question text "
@@ -2347,7 +2428,9 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                 await harvest_match_trace(registry, call)
                 return answer_text
 
-            async def produce_hypotheses(questions=questions, base=base, from_bank=from_bank, seed_one=seed_one):
+            async def produce_hypotheses(
+                questions=questions, base=base, from_bank=from_bank, seed_one=seed_one, wave=wave, agents=agents
+            ):
                 # Keep each question with its author, serializing that author's
                 # calls even when question-bank order differs from slot order.
                 assignments: list[list[int]] = [[] for _ in range(args.hypothesis_agents)]
@@ -2359,7 +2442,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                     slot = writer_slots.get(question.get("writer"), index % args.hypothesis_agents)
                     assignments[slot].append(index)
 
-                async def produce_slot(slot):
+                async def produce_slot(slot, *, loop_wave, loop_agents):
                     for index in assignments[slot]:
                         from memstara.pipeline.recovery import ensure_artifact
 
@@ -2380,27 +2463,48 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                             from memstara.pipeline.executable_question import seed as seed_executable
                             from memstara.pipeline.question_repair import save_feedback
 
-                            writer = questions[index].get("writer") or ("hypothesis" if slot == 0 else f"hypothesis#{slot + 1}")
+                            writer = questions[index].get("writer") or (
+                                "hypothesis" if slot == 0 else f"hypothesis#{slot + 1}"
+                            )
 
-                            async def answer(candidate, attempt):
+                            async def answer(candidate, attempt, trial=trial):
                                 return await seed_one(trial, candidate, slot)
 
-                            async def regenerate(rejected, reason):
-                                save_feedback(active_plan() or {}, wave, writer, {
-                                    "rejected": [{"code": "unmapped_predictor_concepts", "why": reason}],
-                                })
+                            async def regenerate(rejected, reason, writer=writer):
+                                save_feedback(
+                                    active_plan() or {},
+                                    loop_wave,
+                                    writer,
+                                    {
+                                        "rejected": [{"code": "unmapped_predictor_concepts", "why": reason}],
+                                    },
+                                )
                                 replacements, _ = await questions_for_wave(
-                                    registry, {writer: agents[writer]}, by_stage,
-                                    run_tag=args.run_tag, wave=wave, want=1, skill=args.skill,
-                                    excluded_question_ids=frozenset(rejected), writer=writer,
+                                    registry,
+                                    {writer: loop_agents[writer]},
+                                    by_stage,
+                                    run_tag=args.run_tag,
+                                    wave=loop_wave,
+                                    want=1,
+                                    skill=args.skill,
+                                    excluded_question_ids=frozenset(rejected),
+                                    writer=writer,
                                 )
                                 return replacements[0] if replacements else None
 
                             questions[index] = await seed_executable(
-                                questions[index], root=run_dir,
-                                identity={"run_tag": args.run_tag, "config_hash": (active_plan() or {}).get("config_hash"),
-                                          "trial": trial, "wave": wave, "writer": writer},
-                                present=present, answer=answer, regenerate=regenerate,
+                                questions[index],
+                                root=run_dir,
+                                identity={
+                                    "run_tag": args.run_tag,
+                                    "config_hash": (active_plan() or {}).get("config_hash"),
+                                    "trial": trial,
+                                    "wave": loop_wave,
+                                    "writer": writer,
+                                },
+                                present=present,
+                                answer=answer,
+                                regenerate=regenerate,
                                 wait=_EXECUTION_GATE.wait if _EXECUTION_GATE else None,
                             )
                         else:
@@ -2410,7 +2514,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
 
                 async with asyncio.TaskGroup() as group:
                     for slot in range(args.hypothesis_agents):
-                        group.create_task(produce_slot(slot))
+                        group.create_task(produce_slot(slot, loop_wave=wave, loop_agents=agents))
                 # The presence test. One read of the board, and a trial with no row of its own
                 # is one whose worker never called create_task.
                 state = await board_state(registry, args.run_tag, state_only=True)
@@ -2785,7 +2889,7 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
         finalize_rounds(run_dir, report_ok)
         summary = round_summary(run_dir)
         if summary:
-            journal = json.loads((run_dir / 'iteration_outcomes.json').read_text())
+            journal = json.loads((run_dir / "iteration_outcomes.json").read_text())
             write_progress(run_dir, max(map(int, journal)), "report", completed=summary["outcome"] == "completed")
 
         # The last state of the board is saved whole as well. It is what a later retrace
@@ -2842,19 +2946,20 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
             # A service shutdown during an acknowledged pause is not user Stop.
             # Keep call receipts, tasks and checkpoint open for a fresh process.
             close_active_round(run_dir, "interrupted", "Paused execution preserved for Resume.")
-            record_stop(run_dir, 'paused', loop=_CURRENT_LOOP.get(), code='pause_preserved', run_tag=args.run_tag)
+            record_stop(run_dir, "paused", loop=_CURRENT_LOOP.get(), code="pause_preserved", run_tag=args.run_tag)
             raise
         if ownership_lost():
             # Preserve unfinished checkpoint calls/phases: their effects must not
             # be blindly replayed. No database cleanup after losing ownership.
             close_active_round(run_dir, "interrupted", "Database execution ownership lost; saved results retained.")
-            record_stop(run_dir, 'interrupted', loop=_CURRENT_LOOP.get(), code='execution_ownership_lost',
-                        run_tag=args.run_tag)
+            record_stop(
+                run_dir, "interrupted", loop=_CURRENT_LOOP.get(), code="execution_ownership_lost", run_tag=args.run_tag
+            )
             raise
         if checkpoint:
             checkpoint.finish()
         close_active_round(run_dir, "interrupted", "Stopped by the user; this attempt was not completed.")
-        record_stop(run_dir, 'cancelled', loop=_CURRENT_LOOP.get(), code='execution_cancelled', run_tag=args.run_tag)
+        record_stop(run_dir, "cancelled", loop=_CURRENT_LOOP.get(), code="execution_cancelled", run_tag=args.run_tag)
         if seed_task is not None and not seed_task.done():
             seed_task.cancel()
             await asyncio.gather(seed_task, return_exceptions=True)
@@ -3027,7 +3132,7 @@ async def main() -> int:
 
     # The control service supplies this path before the full argument parser runs.
     early = argparse.ArgumentParser(add_help=False)
-    early.add_argument('--run-dir')
+    early.add_argument("--run-dir")
     execution, _ = early.parse_known_args()
     with execution_guard(), ExitStack() as leases:
         if execution.run_dir:
@@ -3504,7 +3609,7 @@ async def _main() -> int:
             # Somebody is already running under this name.
             from memstara.pipeline.board_reads import record_stop
 
-            record_stop(run_dir, 'startup_rejected', code='execution_already_owned', run_tag=args.run_tag)
+            record_stop(run_dir, "startup_rejected", code="execution_already_owned", run_tag=args.run_tag)
             print(f"\n{e}", file=sys.stderr)
             return 2
         except Exception as exc:
@@ -3519,16 +3624,22 @@ async def _main() -> int:
                 json.dumps(
                     {
                         "error_type": type(exc).__name__,
-                        'at': datetime.now(UTC).isoformat(),
-                        'run_tag': args.run_tag,
-                        'loop': _CURRENT_LOOP.get(),
-                        'last_recorded_call': ({k: _CALLS[-1].get(k) for k in
-                            ('run_id', 'loop', 'stage', 'status', 'started_at', 'ended_at')} if _CALLS else None),
+                        "at": datetime.now(UTC).isoformat(),
+                        "run_tag": args.run_tag,
+                        "loop": _CURRENT_LOOP.get(),
+                        "last_recorded_call": (
+                            {
+                                k: _CALLS[-1].get(k)
+                                for k in ("run_id", "loop", "stage", "status", "started_at", "ended_at")
+                            }
+                            if _CALLS
+                            else None
+                        ),
                         "frames": [
                             {"file": frame.filename, "line": frame.lineno, "function": frame.name}
                             for frame in traceback.extract_tb(exc.__traceback__)
                         ],
-                        'exceptions': exception_details(exc),
+                        "exceptions": exception_details(exc),
                     },
                     indent=2,
                 ),
@@ -3537,26 +3648,32 @@ async def _main() -> int:
             message = (
                 str(exc)
                 if isinstance(exc, (DataQualityError, PipelineExecutionFailure))
-                else 'Pipeline could not safely continue; inspect failure_frames.json for nested causes '
-                     'and board_read_events.jsonl for tool attempts and timing.'
+                else "Pipeline could not safely continue; inspect failure_frames.json for nested causes "
+                "and board_read_events.jsonl for tool attempts and timing."
             )
             from memstara.pipeline.failures import read_failure
 
             original_failure = read_failure(run_dir) or {}
             message = original_failure.get("message", message)
-            incident = record_stop(run_dir, 'failed', loop=_CURRENT_LOOP.get(),
-                stage=original_failure.get('stage'), code=original_failure.get('code', type(exc).__name__),
-                error=exc, run_tag=args.run_tag)
+            incident = record_stop(
+                run_dir,
+                "failed",
+                loop=_CURRENT_LOOP.get(),
+                stage=original_failure.get("stage"),
+                code=original_failure.get("code", type(exc).__name__),
+                error=exc,
+                run_tag=args.run_tag,
+            )
             (run_dir / "pipeline_status.json").write_text(
                 json.dumps(
                     {
                         "status": "failed",
                         "error_type": type(exc).__name__,
                         "message": message,
-                        'diagnostics_file': 'failure_frames.json',
-                        'diagnostics_history': 'stop_events.jsonl',
-                        'incident_id': incident['event_id'],
-                        'controller_loop': _CURRENT_LOOP.get(),
+                        "diagnostics_file": "failure_frames.json",
+                        "diagnostics_history": "stop_events.jsonl",
+                        "incident_id": incident["event_id"],
+                        "controller_loop": _CURRENT_LOOP.get(),
                         **{k: original_failure[k] for k in ("code", "stage", "loop") if k in original_failure},
                     },
                     indent=2,
@@ -3570,8 +3687,9 @@ async def _main() -> int:
             # do next rather than leaving a bare traceback.
             from memstara.pipeline.board_reads import record_stop
 
-            record_stop(run_dir, 'interrupted', loop=_CURRENT_LOOP.get(), code='keyboard_interrupt',
-                        run_tag=args.run_tag)
+            record_stop(
+                run_dir, "interrupted", loop=_CURRENT_LOOP.get(), code="keyboard_interrupt", run_tag=args.run_tag
+            )
             print("\n\ninterrupted. the board is still there.")
             print("  see the state:  python -m memstara.blackboard --show")
             print(f"  report only:    python -m memstara.pipeline.board --report-only --run-tag {args.run_tag}")
@@ -3589,8 +3707,14 @@ async def _main() -> int:
                 except Exception as exc:
                     from memstara.pipeline.board_reads import record_stop
 
-                    record_stop(run_dir, 'reconciliation_failed', loop=_CURRENT_LOOP.get(),
-                                code='experiment_registry_reconcile_failed', error=exc, run_tag=args.run_tag)
+                    record_stop(
+                        run_dir,
+                        "reconciliation_failed",
+                        loop=_CURRENT_LOOP.get(),
+                        code="experiment_registry_reconcile_failed",
+                        error=exc,
+                        run_tag=args.run_tag,
+                    )
                     raise
 
 

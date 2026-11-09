@@ -226,8 +226,8 @@ def load_prompt(name: str, playbook: str = "") -> dict[str, str]:
     if name == "board/hypothesis" and playbook == "hiv-no-knowledge":
         path = PROMPTS_DIR / "board/hypothesis_no_knowledge.md"
         front, body = _read(path)
-    elif name == 'board/hypothesis' and playbook == 'hiv-model-knowledge-with-graph-augmentation':
-        path = PROMPTS_DIR / 'board/hypothesis_hybrid.md'
+    elif name == "board/hypothesis" and playbook == "hiv-model-knowledge-with-graph-augmentation":
+        path = PROMPTS_DIR / "board/hypothesis_hybrid.md"
         front, body = _read(path)
 
     if "goal" not in front:

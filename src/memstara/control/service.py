@@ -64,6 +64,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from memstara.control.workspace import PipelineWorkspace
+from memstara.control.history import HistoryReset
 from memstara.control.request import build_argv, _MAX_HYPOTHESIS_AGENTS
 from memstara.agent_labels import AGENT_LABELS
 from memstara.control.catalog import catalog, delete_user_skill, reference_knowledge, register, validate_selection
@@ -219,7 +220,7 @@ class _Runs:
                     **{k: v for k, v in record.items() if k != "process_identity"},
                     **recovery_status(record["run_dir"]),
                     **infrastructure_status(record["run_dir"]),
-                    'report_recovered': recovered(record['run_dir']),
+                    "report_recovered": recovered(record["run_dir"]),
                 }
                 for record in self._done
             ]
@@ -429,8 +430,6 @@ RUNS = _Runs()
 # Saved configurations can reference deployment-configured external skills.
 load_env()
 WORKSPACE = PipelineWorkspace(RUNS_DIR / "pipeline_workspace.json", _Runs)
-from memstara.control.history import HistoryReset
-
 HISTORY = HistoryReset(WORKSPACE, RUNS)
 
 
@@ -637,29 +636,29 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path.rstrip("/")
 
-        if path == '/control/history-reset':
+        if path == "/control/history-reset":
             try:
                 self._send(200, HISTORY.status())
             except (OSError, ValueError, RuntimeError):
-                self._send(503, {'error': 'History reset state is unavailable; no reset was requested.'})
+                self._send(503, {"error": "History reset state is unavailable; no reset was requested."})
             return
 
-        if path.startswith('/control/history-reset/backups/') and path.endswith('/download'):
-            identifier = path[len('/control/history-reset/backups/'):-len('/download')]
+        if path.startswith("/control/history-reset/backups/") and path.endswith("/download"):
+            identifier = path[len("/control/history-reset/backups/") : -len("/download")]
             try:
                 archive = HISTORY.backup_file(identifier)
                 self.send_response(200)
-                self.send_header('Content-Type', 'application/gzip')
-                self.send_header('Content-Length', str(archive.stat().st_size))
-                self.send_header('Content-Disposition', f'attachment; filename="memstara-history-{identifier}.tar.gz"')
-                self.send_header('Cache-Control', 'no-store')
+                self.send_header("Content-Type", "application/gzip")
+                self.send_header("Content-Length", str(archive.stat().st_size))
+                self.send_header("Content-Disposition", f'attachment; filename="memstara-history-{identifier}.tar.gz"')
+                self.send_header("Cache-Control", "no-store")
                 self.end_headers()
-                with archive.open('rb') as stream:
+                with archive.open("rb") as stream:
                     import shutil
 
                     shutil.copyfileobj(stream, self.wfile)
             except (OSError, ValueError, KeyError):
-                self._send(404, {'error': 'A verified backup with this ID is not available.'})
+                self._send(404, {"error": "A verified backup with this ID is not available."})
             return
 
         if path == "/control/pricing":
@@ -901,14 +900,19 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(urlsplit(self.path).query)
             try:
                 result = recorded_instructions(
-                    found[1], tag, query.get("stage", [""])[0],
-                    query.get("skill", [""])[0], query.get("hash", [""])[0],
+                    found[1],
+                    tag,
+                    query.get("stage", [""])[0],
+                    query.get("skill", [""])[0],
+                    query.get("hash", [""])[0],
                 )
                 self._send(200, result)
             except FileNotFoundError:
                 self._send(404, {"error": "Recorded instructions are unavailable for this execution and skill"})
             except (ValueError, TypeError, KeyError):
-                self._send(409, {"error": "Recorded instructions do not match the requested execution and skill version"})
+                self._send(
+                    409, {"error": "Recorded instructions do not match the requested execution and skill version"}
+                )
             except OSError:
                 self._send(503, {"error": "Recorded instructions could not be read"})
             return
@@ -940,7 +944,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             ensure_idle(HISTORY.root)
         except (OSError, ValueError, RuntimeError):
-            self._send(409, {'error': 'History maintenance is active; settings and skills are locked.'})
+            self._send(409, {"error": "History maintenance is active; settings and skills are locked."})
             return
         path = urlsplit(self.path).path.rstrip("/")
         prefix = "/control/playbooks/"
@@ -981,12 +985,16 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, {"error": str(e)})
             return
 
-        if path == '/control/history-reset':
+        if path == "/control/history-reset":
             try:
                 self._send(202, HISTORY.begin(body))
             except (OSError, ValueError, RuntimeError) as error:
-                message = str(error) if isinstance(error, (ValueError, RuntimeError)) else 'History reset could not be queued.'
-                self._send(409, {'error': message})
+                message = (
+                    str(error)
+                    if isinstance(error, (ValueError, RuntimeError))
+                    else "History reset could not be queued."
+                )
+                self._send(409, {"error": message})
             return
 
         from memstara.control.history_gate import ensure_idle
@@ -994,7 +1002,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             ensure_idle(HISTORY.root)
         except (OSError, ValueError, RuntimeError):
-            self._send(409, {'error': 'History maintenance is active or needs review. Wait or retry clearing history.'})
+            self._send(409, {"error": "History maintenance is active or needs review. Wait or retry clearing history."})
             return
 
         if path == "/control/pricing":
@@ -1145,8 +1153,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, result)
             return
 
-        if path.startswith('/control/runs/') and path.endswith('/rebuild-report'):
-            tag = path[len('/control/runs/'):-len('/rebuild-report')]
+        if path.startswith("/control/runs/") and path.endswith("/rebuild-report"):
+            tag = path[len("/control/runs/") : -len("/rebuild-report")]
             try:
                 from memstara.rebuild_report import rebuild, publish
 
@@ -1155,7 +1163,7 @@ class Handler(BaseHTTPRequestHandler):
                     manager = WORKSPACE.locate_manager(tag) or RUNS
                     located = manager.locate(tag)
                     if not located or manager.running():
-                        raise ValueError('Select an ended execution before rebuilding the report')
+                        raise ValueError("Select an ended execution before rebuilding the report")
                     result = rebuild(located[1])
                 import asyncio
                 from memstara.control.history_gate import execution_guard
@@ -1163,13 +1171,13 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     with execution_guard():
                         asyncio.run(publish(located[1]))
-                    result['registry_synced'] = True
+                    result["registry_synced"] = True
                 except Exception:
-                    result['registry_synced'] = False
-                    result['warning'] = 'Report rebuilt; the registry mirror still needs reconciliation.'
-                self._send(200,result)
-            except (OSError,ValueError,RuntimeError) as error:
-                self._send(409,{'error':str(error)})
+                    result["registry_synced"] = False
+                    result["warning"] = "Report rebuilt; the registry mirror still needs reconciliation."
+                self._send(200, result)
+            except (OSError, ValueError, RuntimeError) as error:
+                self._send(409, {"error": str(error)})
             return
 
         if path == "/control/runs":
@@ -1178,7 +1186,7 @@ class Handler(BaseHTTPRequestHandler):
                     ensure_idle(HISTORY.root)
                     self._start(body)
                 except RuntimeError as error:
-                    self._send(409, {'error': str(error)})
+                    self._send(409, {"error": str(error)})
             return
 
         if path.startswith("/control/runs/") and path.rsplit("/", 1)[-1] in ("pause", "resume"):
@@ -1402,10 +1410,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 _ROUTES = [
-    'GET /control/history-reset',
-    'POST /control/history-reset',
-    'GET /control/history-reset/backups/{id}/download',
-    'POST /control/runs/{tag}/rebuild-report',
+    "GET /control/history-reset",
+    "POST /control/history-reset",
+    "GET /control/history-reset/backups/{id}/download",
+    "POST /control/runs/{tag}/rebuild-report",
     "GET  /control/question-memory",
     "POST /control/question-memory/clear",
     "GET /control/health",

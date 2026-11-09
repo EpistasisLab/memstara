@@ -21,7 +21,7 @@ def profile(scope):
 def test_corpus_profiles_have_distinct_specialties_and_random(scope):
     assert corpus_profile(profile(scope)) == scope
     selected = PROFILES[scope]['hypothesis']
-    assert len(selected) == (8 if scope == 'hiv' else 6) and selected[-1] == 'random_features'
+    assert len(selected) == (9 if scope == 'hiv' else 6) and selected[-1] == 'random_features'
     validate_skills({'hypothesis': selected}, profile(scope))
     for name in [s for s in selected if s not in ('random_features', 'heart-failure-all')]:
         item = next(item for item in catalog(include_hidden=True) if item['id'] == name)
@@ -92,7 +92,7 @@ def test_hiv_explanations_are_selectable_and_heart_failure_is_rejected(monkeypat
     reports = PROFILES[scope]['report']
     assert len(reports) == 2
     from memstara.corpus_skills import menu_bindings
-    assert len(menu_bindings()['profiles']['hiv']['hypothesis']) * 2 * 2 * 2 * len(reports) == 80
+    assert len(menu_bindings()['profiles']['hiv']['hypothesis']) * 2 * 2 * 2 * len(reports) == 96
     for name in reports:
         assert rows[name]['stage'] == 'report'
         assert rows[name]['content'].strip() in load_prompt('board/report', playbook=name)['system_prompt']

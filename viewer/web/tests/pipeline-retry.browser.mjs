@@ -20,7 +20,8 @@ try{for(const width of [390,1440]){
  await expect(page.getByText('Retry unavailable: the failed replicate is not identified.')).toBeVisible();
  const retry=page.getByRole('button',{name:'Retry remaining replicates Failed',exact:true});await retry.click();
  const dialog=page.getByRole('dialog',{name:'Retry remaining replicates',exact:true});
- await expect(dialog).toContainText('not checkpoint resume');assert.equal(requests.length,0);
+ await expect(dialog).toContainText('Selected work starts again with new model calls and training.');
+ await expect(dialog).toContainText('The original attempt stays saved.');assert.equal(requests.length,0);
  await dialog.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(requests.length,0);
  await retry.click();await dialog.getByRole('button',{name:'Retry from Replicate 3',exact:true}).click();
  await expect(dialog.getByRole('alert')).toContainText('Saved evidence requires review');

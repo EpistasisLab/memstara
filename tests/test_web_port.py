@@ -14,7 +14,7 @@ spec.loader.exec_module(module)
 
 def test_resolved_binding_and_private_env_preserved(tmp_path):
     assert module.requested({'services': {'web': {'ports': [
-        {'target': 80, 'host_ip': '127.0.0.1', 'published': '5173'}]}}}) == '5173'
+        {'target': 80, 'host_ip': '0.0.0.0', 'published': '5173'}]}}}) == '5173'
     env = tmp_path / '.env'
     env.write_text('# Keep this comment\nAPI_KEY=private-sentinel\nMEMSTARA_WEB_PORT=5173\n')
     module.save(tmp_path, '49155')
@@ -37,12 +37,12 @@ printf '%s\\n' "$*" >> "$CALLS"
 case "$*" in
   *"web_port.py requested") echo 5173 ;;
   "compose ps --status running -q web") [ "$CASE" != own ] || echo own-web ;;
-  "compose port web 80") echo 127.0.0.1:5173 ;;
+  "compose port web 80") echo 0.0.0.0:5173 ;;
   "ps --format "*) [ "$CASE" != published ] || echo '0.0.0.0:5173->80/tcp' ;;
   "create "*)
     cidfile=$3
     case "$*" in
-      *127.0.0.1::80*) echo fallback > "$cidfile" ;;
+      *0.0.0.0::80*) echo fallback > "$cidfile" ;;
       *) echo preferred > "$cidfile" ;;
     esac ;;
   "start preferred")
@@ -50,7 +50,7 @@ case "$*" in
       occupied) echo 'bind: address already in use' >&2; exit 1 ;;
       failure) echo 'Docker engine is unavailable' >&2; exit 1 ;;
     esac ;;
-  "port fallback 80/tcp") echo 127.0.0.1:49155 ;;
+  "port fallback 80/tcp") echo 0.0.0.0:49155 ;;
   *) exit 0 ;;
 esac
 ''')
@@ -72,10 +72,10 @@ def test_docker_publisher_selection_and_cleanup(tmp_path, case):
     elif case != 'published':
         assert 'rm -f preferred' in calls
     if case in ('occupied', 'published'):
-        assert '127.0.0.1::80' in calls
+        assert '0.0.0.0::80' in calls
         assert 'web_port.py save /project 49155' in calls
         assert 'rm -f fallback' in calls
         assert 'Port 5173 is in use' in result.stdout
     else:
         assert 'web_port.py save' not in calls
-        assert '127.0.0.1::80' not in calls
+        assert '0.0.0.0::80' not in calls

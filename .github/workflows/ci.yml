@@ -59,7 +59,7 @@ jobs:
       - run: uv lock --check
       - run: uv sync --frozen --extra dev --extra runtime
       - name: Required runtime identity
-        run: uv run --frozen --extra dev --extra runtime python -c "import importlib.metadata; import motoro; assert importlib.metadata.version('motoro') == '0.15.0'"
+        run: uv run --frozen --extra dev --extra runtime python -c "import importlib.metadata; import motoro; assert importlib.metadata.version('motoro') == '0.15.1'"
       - name: Lint
         run: uv run --frozen --extra dev --extra runtime ruff check src/ tests/integration tests/live tests/test_mcp_protocol.py tests/test_saved_skill_compatibility.py tests/test_research_input_matrix.py scripts/check_distribution.py scripts/check_runtime_distribution.py
       - name: Import boundaries
@@ -158,6 +158,15 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npx playwright install --with-deps chromium
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v7
+      - name: Install locked Python dependencies for linked export fixtures
+        working-directory: .
+        run: uv sync --frozen --extra dev
+      - name: Select isolated export fixture Python
+        run: echo "MEMSTARA_TEST_PYTHON=$GITHUB_WORKSPACE/.venv/bin/python" >> "$GITHUB_ENV"
       - run: npm run test:browser
       - uses: actions/upload-artifact@v6
         if: always()

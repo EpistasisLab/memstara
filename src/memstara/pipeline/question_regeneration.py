@@ -5,6 +5,7 @@ import hashlib
 import json
 from contextvars import ContextVar
 from pathlib import Path
+from typing import Any
 
 from memstara.pipeline.checkpoint import atomic_json
 
@@ -15,9 +16,12 @@ _context: ContextVar[dict | None] = ContextVar("question_regeneration", default=
 # Rotate the diagnostic task, not the target, data or scientific validation rules.
 REPAIR_FOCUS = (
     "Reassess actual predictor definitions and recorded timing; a clinical topic alone does not establish leakage.",
-    "Try a materially different candidate using the permitted knowledge and available measurements, not a reworded refusal.",
-    "Separate the permitted evidence, the proposed inference and the exact measurement; explain rather than invent their connection.",
-    "Check concrete validator feedback and the complete allowed predictor catalog before concluding that no candidate is feasible.",
+    "Try a materially different candidate using the permitted knowledge and available measurements, "
+    "not a reworded refusal.",
+    "Separate the permitted evidence, the proposed inference and the exact measurement; "
+    "explain rather than invent their connection.",
+    "Check concrete validator feedback and the complete allowed predictor catalog "
+    "before concluding that no candidate is feasible.",
 )
 
 
@@ -35,8 +39,11 @@ def writer_feedback(writer):
     # Preserve the response in its audit file, but never recycle a model's own
     # unvalidated refusal as the next request's evidence. Actual tool rejections
     # remain available through question_repair.retry_instructions.
-    receipt = {"policy": FEEDBACK_VERSION, "previous_attempt": previous.get("attempt"),
-               "previous_response_sha256": hashlib.sha256(response.encode()).hexdigest() if response else None}
+    receipt = {
+        "policy": FEEDBACK_VERSION,
+        "previous_attempt": previous.get("attempt"),
+        "previous_response_sha256": hashlib.sha256(response.encode()).hexdigest() if response else None,
+    }
     return (
         f"\nQUESTION REGENERATION ROUND {context['attempt']} in this SAME Loop. "
         "Do not advance to another Loop or report an empty proposal as success. "
@@ -46,7 +53,7 @@ def writer_feedback(writer):
         "A previous writer's refusal is an unverified model judgment, not a validator decision or "
         "a corpus fact. Its narrative is deliberately not repeated. Use actual tool rejection codes "
         "and newly checked permitted evidence. Diagnostic focus for this round: "
-        + REPAIR_FOCUS[(context['attempt'] - 1) % len(REPAIR_FOCUS)]
+        + REPAIR_FOCUS[(context["attempt"] - 1) % len(REPAIR_FOCUS)]
         + " If no candidate is defensible, record the specific obstacle honestly; never invent one "
         "just to finish. Audit receipt (not scientific evidence): " + json.dumps(receipt)
     )
@@ -59,8 +66,15 @@ def remember_writer(writer, response):
     if not isinstance(response, str):
         raise ValueError("Question writer response must be text")
     path = context["folder"] / (hashlib.sha256(writer.encode()).hexdigest() + ".json")
-    atomic_json(path, {"identity": context["identity"], "attempt": context["attempt"],
-                       "feedback_policy": FEEDBACK_VERSION, "response": response[-6000:]})
+    atomic_json(
+        path,
+        {
+            "identity": context["identity"],
+            "attempt": context["attempt"],
+            "feedback_policy": FEEDBACK_VERSION,
+            "response": response[-6000:],
+        },
+    )
 
 
 def verify_feedback(root, identity):
@@ -89,7 +103,9 @@ async def until_saved(operation, *, root, wave, run_tag, config_hash, wait=None)
     folder.mkdir(parents=True, exist_ok=True)
     identity = {"version": VERSION, "run_tag": run_tag, "config_hash": config_hash, "wave": wave}
     state_path = folder / "state.json"
-    state = json.loads(state_path.read_text()) if state_path.exists() else {"identity": identity, "attempt": 1}
+    state: dict[str, Any] = (
+        json.loads(state_path.read_text()) if state_path.exists() else {"identity": identity, "attempt": 1}
+    )
     if state.get("identity") != identity or type(state.get("attempt")) is not int or state["attempt"] < 1:
         raise ValueError("Question regeneration state does not match this execution")
     while True:

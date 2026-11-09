@@ -1,8 +1,8 @@
 {
   // ==========================================================================
-  //  This project's Python is the conda environment `memstara` (3.12.13).
-  //  motoro, the repository next door, is installed editable, so editing its
-  //  source takes effect immediately.
+  //  Select a Python 3.12 or 3.13 environment for this workspace.
+  //  A local .venv may be a virtual environment or a link to a conda environment.
+  //  Runtime dependency versions are pinned in pyproject.toml and uv.lock.
   // ==========================================================================
 
   // -- Read by the new Python Environments extension (ms-python.vscode-python-envs) --
@@ -11,16 +11,12 @@
   // often ignored, because environment selection is taken over by this one. So
   // **this workspace is pinned to the conda manager.**
   //
-  // This machine has 115 conda environments and memstara is the last of them, so
-  // waiting for auto-detection means it shows up late in the list or not at all.
-  // The two lines below skip that search.
+  // Developers can override the manager in their personal VS Code settings.
   "python-envs.defaultEnvManager": "ms-python.python:conda",
 
   // Where to look for environments inside the workspace. The default is
-  // [".venv", "*/.venv"], but the `.venv` here is a **symlink** pointing at the
-  // conda environment (see .venv.README). The conda folder is named directly, in
-  // case the link is not recognised.
-  "python-envs.globalSearchPaths": ["/Users/choih2/miniconda3/envs/memstara"],
+  // [".venv", "*/.venv"]. Keep personal conda installation paths out of Git.
+  "python-envs.globalSearchPaths": [],
 
   // Do not use uv as the default tool. This environment was built with conda + pip,
   // and letting uv touch it makes it try to rebuild litellm from source, and fail.
@@ -28,8 +24,8 @@
 
   // -- Read by the older Python extension (ms-python.python) -----------------
   //  A fallback for when the new extension is disabled, or the old UI is in use.
-  "python.defaultInterpreterPath": "/Users/choih2/miniconda3/envs/memstara/bin/python",
-  "python.condaPath": "/Users/choih2/miniconda3/bin/conda",
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.condaPath": "conda",
 
   // So a new terminal opens in this environment. If `python` resolves to conda base
   // or the system 3.9, it reports that neither pandas nor asyncpg exists.

@@ -155,7 +155,7 @@ def hypothesis_tools(tools, plan, wave):
     from memstara.pipeline.hybrid import BASE_CALL, BASE_TOOLS
 
     if BASE_CALL.get():
-        return [t for t in tools if (t.get('tool_name') or t.get('name')) in BASE_TOOLS]
+        return [t for t in tools if (t.get("tool_name") or t.get("name")) in BASE_TOOLS]
 
     if no_knowledge(plan, wave):
         scope(plan, wave)  # Fail closed for historical, unisolated controls.

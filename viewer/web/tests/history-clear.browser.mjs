@@ -24,7 +24,7 @@ try{
  });
  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
  const other=await context.newPage();other.on('pageerror',e=>errors.push(e.message));
- const url=(process.env.MEMSTARA_TEST_URL||'http://127.0.0.1:4189')+'/tests/history-clear.fixture.html';
+ const url=(process.env.MEMSTARA_FIXTURE_URL||'http://127.0.0.1:4177')+'/tests/history-clear.fixture.html';
  await page.goto(url);await other.goto(url);
  const cost=page.getByRole('button',{name:'Estimated total. Show pipeline cost breakdown',exact:true});
  await expect(cost).toContainText('$12.0000');

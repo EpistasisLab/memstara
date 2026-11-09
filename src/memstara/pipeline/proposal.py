@@ -15,8 +15,8 @@ import uuid
 
 from memstara.pipeline.checkpoint import Checkpoint, atomic_json
 from memstara.combinations import execution_label
+from memstara.proposal_contract import STAGES
 
-STAGES = ("question", "hypothesis", "data", "ml", "interpreter", "report")
 TASKS = {
     "question": "Write a research question for the objective and available knowledge.",
     "hypothesis": "Propose a testable hypothesis and 4–20 provisional predictor concepts with reasons.",

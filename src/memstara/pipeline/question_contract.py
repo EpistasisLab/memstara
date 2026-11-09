@@ -78,8 +78,8 @@ def make_contract(item, plan):
     from memstara.pipeline.hybrid import selected as hybrid_selected, contract_metadata
 
     hybrid = None
-    if not plan.get('no_knowledge_condition') and hybrid_selected(plan, item.get('origin_wave', 0)):
-        hybrid = contract_metadata(plan, item.get('origin_wave', 0), item.get('proposed_mapping'))
+    if not plan.get("no_knowledge_condition") and hybrid_selected(plan, item.get("origin_wave", 0)):
+        hybrid = contract_metadata(plan, item.get("origin_wave", 0), item.get("proposed_mapping"))
     target = plan.get("y_column")
     if not isinstance(target, str) or not target or item.get("target", target) != target:
         raise ValueError("Question target must exactly match the fixed run target")
@@ -151,13 +151,17 @@ def make_contract(item, plan):
 
     ablated = ablation_enabled(plan)
     sources = item.get("source_ids")
-    if hybrid and not hybrid['augmentation_columns']:
-        if sources not in (None, []) or item.get('okf_tags') not in (None, []):
-            raise ValueError('A baseline-only hybrid proposal cannot claim graph sources or tags')
+    if hybrid and not hybrid["augmentation_columns"]:
+        if sources not in (None, []) or item.get("okf_tags") not in (None, []):
+            raise ValueError("A baseline-only hybrid proposal cannot claim graph sources or tags")
         sources = []
     elif ablated:
-        if (sources not in (None, []) or item.get("okf_tags") not in (None, [])
-                or item.get("path_uses") or item.get("okf_concept_ids")):
+        if (
+            sources not in (None, [])
+            or item.get("okf_tags") not in (None, [])
+            or item.get("path_uses")
+            or item.get("okf_concept_ids")
+        ):
             raise ValueError("OKF ablation must not claim source documents or corpus tags")
         sources = []
     elif plan.get("recovery_policy") or sources is not None:
@@ -185,7 +189,7 @@ def make_contract(item, plan):
         "rationale": rationale,
         **lineage,
         **({"evidence_mode": "no_okf"} if ablated else {}),
-        **({'evidence_mode': 'hybrid', 'hybrid': hybrid} if hybrid else {}),
+        **({"evidence_mode": "hybrid", "hybrid": hybrid} if hybrid else {}),
         **({"source_ids": sources} if sources is not None else {}),
     }
     if item.get("text") not in (None, "", question_text(contract)):
@@ -204,7 +208,7 @@ def make_contract(item, plan):
         if hybrid:
             from memstara.pipeline.feature_selection import validate
 
-            validate(columns, plan, item['origin_wave'])
+            validate(columns, plan, item["origin_wave"])
     return contract
 
 
@@ -234,7 +238,7 @@ def knowledge_reasoning_instructions(plan):
     No Knowledge and the hybrid baseline retain their separate source policies.
     This clarifies scientific judgment; it does not relax server-side validation.
     """
-    if not enabled(plan) or plan.get("no_knowledge_condition") or plan.get('_hybrid_question'):
+    if not enabled(plan) or plan.get("no_knowledge_condition") or plan.get("_hybrid_question"):
         return ""
     from memstara.paths import PROMPTS_DIR
 
@@ -245,13 +249,15 @@ def generation_instructions(plan):
     if not enabled(plan):
         return ""
     if plan.get("no_knowledge_condition"):
-        return (f" The ONLY prediction target is {plan['y_column']!r}. Call propose_questions with "
-                "a questions array; inside each proposal supply predictor_concepts, "
-                "a general-knowledge rationale, source_ids=[], okf_tags=[], and proposed_mapping "
-                'with exact CSV columns and source_id="". Omit text and target; the server binds them. '
-                "Do not cite retrieved documents or supply prior-result lineage.")
-    if plan.get('_hybrid_question'):
-        return ' Preserve the frozen baseline and justify only actual graph-grounded additions.'
+        return (
+            f" The ONLY prediction target is {plan['y_column']!r}. Call propose_questions with "
+            "a questions array; inside each proposal supply predictor_concepts, "
+            "a general-knowledge rationale, source_ids=[], okf_tags=[], and proposed_mapping "
+            'with exact CSV columns and source_id="". Omit text and target; the server binds them. '
+            "Do not cite retrieved documents or supply prior-result lineage."
+        )
+    if plan.get("_hybrid_question"):
+        return " Preserve the frozen baseline and justify only actual graph-grounded additions."
     from memstara.pipeline.iteration_learning import enabled as learning_enabled
 
     rationale = (
@@ -286,12 +292,12 @@ def validate_mapping(mapping, contract, columns, source_ids):
             raise ValueError("Each feature_mapping entry must be an object")
         if row.get("concept") not in concepts or row.get("column") not in columns:
             raise ValueError("Feature mapping must reference the assigned concepts and selected columns exactly")
-        baseline = (contract.get('hybrid') or {}).get('baseline_mapping', [])
-        original = next((b for b in baseline if b.get('column') == row.get('column')), None)
+        baseline = (contract.get("hybrid") or {}).get("baseline_mapping", [])
+        original = next((b for b in baseline if b.get("column") == row.get("column")), None)
         if original is not None and row != original:
-            raise ValueError('Frozen hybrid baseline mappings cannot change')
-        requires_empty = contract.get('evidence_mode') == 'no_okf' or original is not None
-        if (row.get('source_id') != '' if requires_empty else row.get('source_id') not in source_ids):
+            raise ValueError("Frozen hybrid baseline mappings cannot change")
+        requires_empty = contract.get("evidence_mode") == "no_okf" or original is not None
+        if row.get("source_id") != "" if requires_empty else row.get("source_id") not in source_ids:
             raise ValueError("Feature mapping must cite a selected knowledge source ID")
         rationale = row.get("rationale")
         if not isinstance(rationale, str) or not rationale.strip() or len(rationale) > 2000:

@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from memstara import research_inputs
 from memstara.heart_failure_demo import prepare
@@ -47,7 +48,7 @@ def bootstrap(root=REPO_ROOT, inputs=None, destination=None):
         fcntl.flock(lock, fcntl.LOCK_EX)
         from memstara.research_visibility import selection_policy
 
-        result = {"bundled": None, "user_inputs": [], "execution_started": False}
+        result: dict[str, Any] = {"bundled": None, "user_inputs": [], "execution_started": False}
         if selection_policy(inputs)["register_bundled_demo"]:
             source = root / "examples/heart-failure/dataset.csv"
             corpus = root / "examples/heart-failure/okf"

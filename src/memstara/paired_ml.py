@@ -109,13 +109,13 @@ def execute(path, target, evaluation, snapshot, proposal):
     accepted = config.validate(proposal, snapshot, evaluation)
     record = config.identity(path, snapshot, evaluation, accepted)
     handoff = json.loads(path.with_suffix(".comparison.json").read_text())
-    if handoff.get('hybrid') and accepted['folds'] < 2:
-        raise ValueError('Hybrid comparison requires at least two training CV folds')
+    if handoff.get("hybrid") and accepted["folds"] < 2:
+        raise ValueError("Hybrid comparison requires at least two training CV folds")
     recorded_splits = (handoff.get("data_allocation") or {}).get("replicates", [])
     if accepted["folds"] and any(accepted["folds"] > min(r["train_class_counts"].values()) for r in recorded_splits):
         raise ValueError("Reduce training CV folds to the smallest training class count")
     variants = 2 + len(handoff.get("groups", {})) if snapshot.get("comparison_policy") else 1
-    if handoff.get('hybrid'):
+    if handoff.get("hybrid"):
         variants = 3
     if exceeds_limit(limits, "max_fits", evaluation["replicates"] * (accepted["folds"] + 2) * variants):
         raise ValueError("Reduce training CV folds: selected-model fit count exceeds the resource budget")
@@ -127,10 +127,10 @@ def execute(path, target, evaluation, snapshot, proposal):
 
     with (root / ".paired-ml.lock").open("a") as lock, ExitStack() as leases:
         execution_lock = None
-        if os.environ.get('MEMSTARA_RUN_CONFIG'):
-            frozen = Path(os.environ['MEMSTARA_RUN_CONFIG'])
-            if json.loads(frozen.read_text()).get('run_tag') != snapshot.get('run_tag'):
-                raise ValueError('ML history ownership differs from the frozen execution')
+        if os.environ.get("MEMSTARA_RUN_CONFIG"):
+            frozen = Path(os.environ["MEMSTARA_RUN_CONFIG"])
+            if json.loads(frozen.read_text()).get("run_tag") != snapshot.get("run_tag"):
+                raise ValueError("ML history ownership differs from the frozen execution")
             execution_lock = leases.enter_context(execution_files_guard(frozen.parent))
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -280,7 +280,7 @@ def fit(request):
         raise DataQualityError("Encoded design matrix exceeds ML memory budget")
     handoff = json.loads(path.with_suffix(".comparison.json").read_text())
     variants = 2 + len(handoff.get("groups", {})) if snapshot.get("comparison_policy") else 1
-    if handoff.get('hybrid'):
+    if handoff.get("hybrid"):
         variants = 3
     models_to_fit = (proposal["primary_model"],)
     estimated_fits = len(models_to_fit) * evaluation["replicates"] * (proposal["folds"] + 2) * variants
@@ -295,11 +295,12 @@ def fit(request):
             atomic(path.with_suffix(".paired-progress.json"), {"phase": name, "completed_models": results})
             plan = {**evaluation, "engine": name, "folds": proposal["folds"], "search_trials": 1}
             configuration = proposal["models"][name]
-            if handoff.get('hybrid'):
+            if handoff.get("hybrid"):
                 from memstara.hybrid_evaluation import score_hybrid
 
-                measured = score_hybrid(path, request['target'], plan, snapshot,
-                                        configuration=configuration, xai_request=specialist)
+                measured = score_hybrid(
+                    path, request["target"], plan, snapshot, configuration=configuration, xai_request=specialist
+                )
             elif snapshot.get("comparison_policy"):
                 measured = score_comparisons(
                     path, request["target"], plan, snapshot, configuration=configuration, xai_request=specialist

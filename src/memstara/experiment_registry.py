@@ -15,6 +15,7 @@ from pathlib import Path
 import time
 import uuid
 import weakref
+from typing import Any
 
 import asyncpg
 
@@ -143,11 +144,17 @@ async def register_experiment(conn, experiment_id, definition, combinations):
 def artifacts(root, board, output_root, *, candidates=None, fingerprints=None, metrics=None):
     """Index run files and explicit analysis references, never arbitrary external paths."""
     output_root = output_root.resolve()
-    paths = set(candidates) if candidates is not None else set(
-        p
-        for p in root.rglob("*")
-        if p.is_file() and not p.is_symlink()
-        and p.name not in {"registry_status.json", "registry_metrics.jsonl"} and not p.name.endswith(".tmp")
+    paths = (
+        set(candidates)
+        if candidates is not None
+        else set(
+            p
+            for p in root.rglob("*")
+            if p.is_file()
+            and not p.is_symlink()
+            and p.name not in {"registry_status.json", "registry_metrics.jsonl"}
+            and not p.name.endswith(".tmp")
+        )
     )
 
     def visit(value):
@@ -221,7 +228,7 @@ def appended_costs(path, cursor=None):
     return rows, (*identity, end)
 
 
-_mirrors = weakref.WeakKeyDictionary()
+_mirrors: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, dict[str, Any]]] = weakref.WeakKeyDictionary()
 
 
 def mirror_state(root):
@@ -253,7 +260,7 @@ async def sync_incremental(root, call):
 
 def proposal_evidence(root, config, call):
     """Proposal adapter IDs identify local stage records, not Motoro agent runs."""
-    from memstara.pipeline.proposal import STAGES
+    from memstara.proposal_contract import STAGES
 
     empirical = config.get("empirical_evaluation", {})
     if (
@@ -363,7 +370,7 @@ async def _sync(root: Path, *, evidence=True, delta=None, cache=None):
     started = time.monotonic()
     incremental = delta is not None and cache is not None
     observed = pending(root)
-    metrics = {"operation": "registry_sync", "mode": "incremental" if incremental else "full"}
+    metrics: dict[str, Any] = {"operation": "registry_sync", "mode": "incremental" if incremental else "full"}
     config = read(root / "config.json", {})
     if not config:
         return
@@ -374,9 +381,11 @@ async def _sync(root: Path, *, evidence=True, delta=None, cache=None):
         # Console/trace metadata can change after an earlier mirror; consume
         # those explicitly changed per-agent records without scanning history.
         pending_calls = {
-            row["run_id"]: row for path in observed
+            row["run_id"]: row
+            for path in observed
             if path.parent == root / "call_records" and path.is_file()
-            for row in [read(path, {})] if row.get("run_id")
+            for row in [read(path, {})]
+            if row.get("run_id")
         }
         pending_calls.update({call["run_id"]: call for call in delta})
         calls = list(pending_calls.values())
@@ -392,7 +401,7 @@ async def _sync(root: Path, *, evidence=True, delta=None, cache=None):
     costs, cursor = appended_costs(root / "cost_ledger.jsonl", cache["cost_cursor"] if incremental else None)
     cost_ids = set(cache["cost_ids"]) if incremental else set()
     cost_ids.update(row["id"] for row in costs)
-    records = []
+    records: list[tuple[dict, dict]] = []
     evidence_keys = dict(cache.get("evidence_keys", {})) if incremental else {}
     evidence_reads = 0
     if evidence and calls:
@@ -420,8 +429,12 @@ async def _sync(root: Path, *, evidence=True, delta=None, cache=None):
                 evidence_keys[call["run_id"]] = evidence_key
     else:
         records = [(c, {}) for c in calls if c.get("run_id")]
-    metrics.update(calls_loaded=len(calls), motoro_calls=evidence_reads,
-                   cost_receipts_read=len(costs), evidence_seconds=time.monotonic() - started)
+    metrics.update(
+        calls_loaded=len(calls),
+        motoro_calls=evidence_reads,
+        cost_receipts_read=len(costs),
+        evidence_seconds=time.monotonic() - started,
+    )
     db_started = time.monotonic()
     conn = await asyncpg.connect(dsn(), timeout=10, command_timeout=30)
     try:
@@ -495,7 +508,8 @@ async def _sync(root: Path, *, evidence=True, delta=None, cache=None):
                 )
                 saved_rows = await conn.fetch(
                     "SELECT id,receipt FROM memstara_execution_costs WHERE run_tag=$1 AND id=ANY($2::text[])",
-                    tag, [receipt["id"] for receipt in costs],
+                    tag,
+                    [receipt["id"] for receipt in costs],
                 )
                 saved = {row["id"]: json.loads(row["receipt"]) for row in saved_rows}
                 if any(saved.get(receipt["id"]) != receipt for receipt in costs):
@@ -503,16 +517,13 @@ async def _sync(root: Path, *, evidence=True, delta=None, cache=None):
             loops = {c.get("loop") for c in (delta or [])}
             if incremental:
                 loops.update(cache.get("loops", []))
-            loops = sorted(n for n in loops if type(n) is int and n > 0)
+            selected_loops = sorted(n for n in loops if type(n) is int and n > 0)
             board_query = "SELECT subset_path,evaluation FROM memstara_blackboard WHERE run_tag=$1"
-            board_args = [tag]
-            if incremental and loops:
+            board_args: list[Any] = [tag]
+            if incremental and selected_loops:
                 board_query += " AND trial=ANY($2::int[])"
-                board_args.append([n - 1 for n in loops])
-            board = [
-                dict(r)
-                for r in await conn.fetch(board_query, *board_args)
-            ]
+                board_args.append([n - 1 for n in selected_loops])
+            board = [dict(r) for r in await conn.fetch(board_query, *board_args)]
             for row in board:
                 if isinstance(row["evaluation"], str):
                     row["evaluation"] = json.loads(row["evaluation"])
@@ -525,20 +536,37 @@ async def _sync(root: Path, *, evidence=True, delta=None, cache=None):
             if incremental:
                 # Growing journals are independently persisted and verified by
                 # full final/manual reconciliation, not rehashed on every call.
-                deferred = {"calls_checkpoint.json", "runs.json", "factors.json", "control.log",
-                            "run.jsonl", "registry_metrics.jsonl", "registry_status.json"}
+                deferred = {
+                    "calls_checkpoint.json",
+                    "runs.json",
+                    "factors.json",
+                    "control.log",
+                    "run.jsonl",
+                    "registry_metrics.jsonl",
+                    "registry_status.json",
+                }
                 candidates = {p for p in observed if p.name not in deferred and p.suffix != ".jsonl"}
-                candidates.update(root / name for name in (
-                    "config.json", "execution.json", "progress.json", "report.md", "pipeline_status.json"))
+                candidates.update(
+                    root / name
+                    for name in ("config.json", "execution.json", "progress.json", "report.md", "pipeline_status.json")
+                )
                 for call in delta:
                     if call.get("step_evidence", {}).get("path"):
                         candidates.add(root / call["step_evidence"]["path"])
             indexed = await asyncio.to_thread(
-                artifacts, root, board, Path(DEFAULT_OUTPUT_DIR), candidates=candidates,
-                fingerprints=fingerprints, metrics=metrics,
+                artifacts,
+                root,
+                board,
+                Path(DEFAULT_OUTPUT_DIR),
+                candidates=candidates,
+                fingerprints=fingerprints,
+                metrics=metrics,
             )
-            metrics.update(artifact_seconds=time.monotonic() - artifact_started, artifacts_written=len(indexed),
-                           board_rows=len(board))
+            metrics.update(
+                artifact_seconds=time.monotonic() - artifact_started,
+                artifacts_written=len(indexed),
+                board_rows=len(board),
+            )
             await conn.executemany(
                 "INSERT INTO memstara_execution_artifacts VALUES($1,$2,$3,$4,$5) "
                 "ON CONFLICT(run_tag,path) DO UPDATE SET sha256=EXCLUDED.sha256,bytes=EXCLUDED.bytes",
@@ -563,9 +591,14 @@ async def _sync(root: Path, *, evidence=True, delta=None, cache=None):
             }
         )
     )
-    return {"call_hashes": call_hashes, "cost_cursor": cursor, "cost_ids": cost_ids,
-            "artifacts": fingerprints, "evidence_keys": evidence_keys,
-            "loops": [c.get("loop") for c in (delta or [])]}
+    return {
+        "call_hashes": call_hashes,
+        "cost_cursor": cursor,
+        "cost_ids": cost_ids,
+        "artifacts": fingerprints,
+        "evidence_keys": evidence_keys,
+        "loops": [c.get("loop") for c in (delta or [])],
+    }
 
 
 async def reconcile(root):

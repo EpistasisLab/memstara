@@ -109,7 +109,9 @@ class Checkpoint:
                 raise RecoveryBlocked("Invalid saved checkpoint operation")
             if phase["status"] == "done":
                 if "result" not in phase and "result_ref" not in phase:
-                    raise RecoveryBlocked("Completed checkpoint operation has no saved result; recovery requires review")
+                    raise RecoveryBlocked(
+                        "Completed checkpoint operation has no saved result; recovery requires review"
+                    )
                 if "result_ref" in phase:
                     self.phase_result(key, phase)  # Full integrity check once on recovery.
 
@@ -182,7 +184,8 @@ class Checkpoint:
         location = directory / (hashlib.sha256(key.encode()).hexdigest() + ".json")
         atomic_json(location, {"key": key, "result": result})
         self.state["phases"][key] = {
-            "status": "done", "result_ref": {
+            "status": "done",
+            "result_ref": {
                 "path": location.relative_to(self.path.parent).as_posix(),
                 "sha256": hashlib.sha256(location.read_bytes()).hexdigest(),
             },

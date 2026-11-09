@@ -72,12 +72,14 @@ def instructions(snapshot: dict | None) -> str:
     if any(row.get("column") == target for row in features):
         raise ValueError("Outcome leaked into predictor context")
     if snapshot.get("no_knowledge_condition"):
-        return (f"\nThere are {len(features)} eligible original predictors. Use lookup_predictor_catalog "
-                "to search or page the complete frozen metadata; no outcome values are returned. "
-                "Every concept needs an exact CSV column in proposed_mapping with an empty source_id "
-                "and a measurement rationale. A column name is not evidence of association. "
-                "Timing, units and undocumented coding must not be assumed. No retrieved knowledge "
-                "or previous experiment results may inform selection.\n")
+        return (
+            f"\nThere are {len(features)} eligible original predictors. Use lookup_predictor_catalog "
+            "to search or page the complete frozen metadata; no outcome values are returned. "
+            "Every concept needs an exact CSV column in proposed_mapping with an empty source_id "
+            "and a measurement rationale. A column name is not evidence of association. "
+            "Timing, units and undocumented coding must not be assumed. No retrieved knowledge "
+            "or previous experiment results may inform selection.\n"
+        )
     return (
         "\nAVAILABLE PREDICTORS (frozen for this run; metadata only):\n"
         + json.dumps(context, ensure_ascii=False, separators=(",", ":"))
@@ -97,10 +99,10 @@ def instructions(snapshot: dict | None) -> str:
             "predictor concept in propose_questions. For no-knowledge controls source_id must be empty. "
             "Explain what the column measures; similarity rank is not proof. If only a defensible proxy "
             "exists, make the measured concept and its limitation explicit in the question. "
-            if snapshot.get("question_feasibility_policy") == "explicit_columns_v1" else ""
+            if snapshot.get("question_feasibility_policy") == "explicit_columns_v1"
+            else ""
         )
-        +
-        "Choose a KG/OKF-supported mechanism whose necessary predictors have clinically defensible "
+        + "Choose a KG/OKF-supported mechanism whose necessary predictors have clinically defensible "
         "representations here. State the intended concept-to-column correspondence in the rationale. "
         "If a necessary concept is absent or its meaning is uncertain, choose another supported "
         "mechanism; do not invent a column, assume an unlisted measurement, drop an essential "

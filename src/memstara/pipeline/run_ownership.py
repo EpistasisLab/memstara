@@ -178,7 +178,7 @@ def record_interruption(root, reason):
     atomic_json(root / "pipeline_status.json", payload)
     from memstara.pipeline.board_reads import record_stop
 
-    record_stop(root, 'interrupted', code=reason)
+    record_stop(root, "interrupted", code=reason)
 
 
 def record_cleanup_warning(root):
@@ -197,7 +197,7 @@ def record_cleanup_warning(root):
     atomic_json(root / "infrastructure_status.json", payload)
     from memstara.pipeline.board_reads import record_stop
 
-    record_stop(root, 'cleanup_warning', code='execution_lock_cleanup_unverified')
+    record_stop(root, "cleanup_warning", code="execution_lock_cleanup_unverified")
     try:
         status = json.loads((root / "pipeline_status.json").read_text())
     except (ValueError, OSError):

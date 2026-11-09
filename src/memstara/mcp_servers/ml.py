@@ -53,9 +53,7 @@ def _make_model(engine: str, seed: int):
 
 
 @mcp.tool()
-async def get_ml_configuration(
-    path: str = "", y_column: str = "", task_id: int | None = None, worker: str = ""
-) -> str:
+async def get_ml_configuration(path: str = "", y_column: str = "", task_id: int | None = None, worker: str = "") -> str:
     """Get the selected model's parameters and permitted choices before proposing ml_plan.
 
     In a pipeline, supply task_id from claim_task and the same worker; omit path
@@ -80,12 +78,13 @@ async def get_ml_configuration(
             raise ValueError("Target differs from the run target")
         plan, _ = load_effective(p, snapshot, snapshot["evaluation"])
         settings = context(for_dataset(snapshot, p), plan)
-        handoff = json.loads(p.with_suffix('.comparison.json').read_text()) if snapshot.get('hybrid_policy') else {}
-        if handoff.get('hybrid'):
-            settings['hybrid_evaluation'] = {
-                'minimum_training_cv_folds': 2,
-                'instruction': 'Use at least two folds; baseline and augmentation share these exact settings. '
-                               'Training CV chooses the candidate; the test set is evaluation only.'}
+        handoff = json.loads(p.with_suffix(".comparison.json").read_text()) if snapshot.get("hybrid_policy") else {}
+        if handoff.get("hybrid"):
+            settings["hybrid_evaluation"] = {
+                "minimum_training_cv_folds": 2,
+                "instruction": "Use at least two folds; baseline and augmentation share these exact settings. "
+                "Training CV chooses the candidate; the test set is evaluation only.",
+            }
         return json.dumps(settings)
     except MLInputError as exc:
         return json.dumps(exc.response())
@@ -234,8 +233,9 @@ async def train_and_score_async(
     except MLInputError as exc:
         return json.dumps(exc.response())
     except Exception as exc:
-        return json.dumps({"error": f"Task input lookup failed ({type(exc).__name__})",
-                           "code": "ml_task_lookup_failed"})
+        return json.dumps(
+            {"error": f"Task input lookup failed ({type(exc).__name__})", "code": "ml_task_lookup_failed"}
+        )
     return await asyncio.to_thread(
         train_and_score,
         path,

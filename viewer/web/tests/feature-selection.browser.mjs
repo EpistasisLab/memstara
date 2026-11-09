@@ -47,7 +47,7 @@ try {
   await expect(evidence).not.toContainText('Synthetic random control');
   await expect(evidence).not.toContainText('allowed 4–20');
   await expect(evidence.locator('table')).toHaveCount(0);
-  await page.getByText('Data columns & recorded metrics',{exact:true}).click();
+  await page.getByText('Model parameters, data columns & recorded metrics',{exact:true}).click();
   for(const name of features)await expect(page.locator('.output-data-details')).toContainText(name);
   assert(await evidence.evaluate(el=>el.scrollWidth<=el.clientWidth+2));
   assert.deepEqual(errors,[]);

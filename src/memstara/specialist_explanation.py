@@ -355,19 +355,19 @@ def assemble(snapshot, directory):
     from memstara.logical_experiment import report_index
     from memstara.pipeline.checkpoint import atomic_json
 
-    index,reports = report_index(snapshot,Path(directory).parent)
-    atomic_json(Path(directory).parent/'experiment_index.json',index)
-    missing = index['missing_loops']
-    text = "\n\n".join(reports[loop]['output'] for loop in sorted(reports))
+    index, reports = report_index(snapshot, Path(directory).parent)
+    atomic_json(Path(directory).parent / "experiment_index.json", index)
+    missing = index["missing_loops"]
+    text = "\n\n".join(reports[loop]["output"] for loop in sorted(reports))
     return text, {
         "status": "failed" if missing else "completed",
         "error": "Missing per-condition Explanation reports" if missing else None,
         "specialist_explanation": {
             "status": "incomplete" if missing else "completed",
-            "reports": [reports[loop]['summary'] for loop in sorted(reports)],
-            'logical_experiment_id':index['id'],
-            'source_run_tags':[attempt['run_tag'] for attempt in index['attempts']],
-            'expected_combinations':index['expected_combinations'],
+            "reports": [reports[loop]["summary"] for loop in sorted(reports)],
+            "logical_experiment_id": index["id"],
+            "source_run_tags": [attempt["run_tag"] for attempt in index["attempts"]],
+            "expected_combinations": index["expected_combinations"],
             "missing_loops": missing,
             "aggregation": "verbatim saved reports; no new LLM call",
         },
@@ -420,7 +420,7 @@ async def execute(snapshot, loop, run_dir, args, kwargs, invoke, read_board_tool
         value = {"status": "failed", "error": error, "specialist_explanation": {"status": "failed", "loop": loop}}
         from memstara.pipeline.board_reads import exception_details
 
-        value['diagnostics'] = exception_details(exc)
+        value["diagnostics"] = exception_details(exc)
         if directory:
             write_record(
                 directory,

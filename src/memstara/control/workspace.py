@@ -17,45 +17,56 @@ def execution_progress(record):
 
     The historical files remain untouched. The repair is explicit in the response.
     """
-    root = Path(record['run_dir'])
+    root = Path(record["run_dir"])
     try:
-        progress = json.loads((root / 'progress.json').read_text())
+        progress = json.loads((root / "progress.json").read_text())
     except (OSError, ValueError):
         return {}
     try:
-        config = json.loads((root / 'config.json').read_text())
-        loops = (config.get('retry_selection') or {}).get('loops', [])
-        current = progress.get('iteration')
+        config = json.loads((root / "config.json").read_text())
+        loops = (config.get("retry_selection") or {}).get("loops", [])
+        current = progress.get("iteration")
         if loops and current not in loops:
-            manifest = json.loads((root / 'execution.json').read_text())
-            calls = [c for c in manifest.get('calls', []) if c.get('loop') in loops]
+            manifest = json.loads((root / "execution.json").read_text())
+            calls = [c for c in manifest.get("calls", []) if c.get("loop") in loops]
             if calls:
-                call = max(calls, key=lambda c: (c['loop'], c.get('started_at') or 0))
-                stage = str(call.get('stage', '')).split('#', 1)[0]
-                stage = ('hypothesis' if stage.startswith(('question', 'hypothesis')) else
-                         'interpreter' if stage.startswith('interpret') else stage)
-                progress = {**progress, 'recorded_iteration': current, 'iteration': call['loop'],
-                            'identity_source': 'execution_manifest', 'stage': stage}
-        journal_path = root / 'iteration_outcomes.json'
+                call = max(calls, key=lambda c: (c["loop"], c.get("started_at") or 0))
+                stage = str(call.get("stage", "")).split("#", 1)[0]
+                stage = (
+                    "hypothesis"
+                    if stage.startswith(("question", "hypothesis"))
+                    else "interpreter"
+                    if stage.startswith("interpret")
+                    else stage
+                )
+                progress = {
+                    **progress,
+                    "recorded_iteration": current,
+                    "iteration": call["loop"],
+                    "identity_source": "execution_manifest",
+                    "stage": stage,
+                }
+        journal_path = root / "iteration_outcomes.json"
         if loops and journal_path.is_file():
             journal = json.loads(journal_path.read_text())
             valid = {key: value for key, value in journal.items() if key.isdigit() and int(key) in loops}
             if valid:
                 latest_key = max(valid, key=int)
                 latest = dict(valid[latest_key])
-                status_path = root / 'pipeline_status.json'
+                status_path = root / "pipeline_status.json"
                 status = json.loads(status_path.read_text()) if status_path.is_file() else {}
-                if latest.get('outcome') in ('running', 'analysis_complete') and status.get('status') == 'failed':
-                    latest['outcome'] = 'blocked'
-                    latest['reason'] = status.get('message', 'Execution failed; inspect diagnostics')
+                if latest.get("outcome") in ("running", "analysis_complete") and status.get("status") == "failed":
+                    latest["outcome"] = "blocked"
+                    latest["reason"] = status.get("message", "Execution failed; inspect diagnostics")
                     valid[latest_key] = latest
-                progress['exploration'] = {
-                    'attempted': len(valid),
-                    'completed': sum(v.get('outcome') == 'completed' for v in valid.values()),
-                    'blocked': sum(v.get('outcome') == 'blocked' for v in valid.values()),
-                    'skipped': sum(v.get('outcome') == 'skipped' for v in valid.values()),
-                    'outcome': latest.get('outcome'), 'reason': latest.get('reason', ''),
-                    'count_source': 'original_selected_loop_ids',
+                progress["exploration"] = {
+                    "attempted": len(valid),
+                    "completed": sum(v.get("outcome") == "completed" for v in valid.values()),
+                    "blocked": sum(v.get("outcome") == "blocked" for v in valid.values()),
+                    "skipped": sum(v.get("outcome") == "skipped" for v in valid.values()),
+                    "outcome": latest.get("outcome"),
+                    "reason": latest.get("reason", ""),
+                    "count_source": "original_selected_loop_ids",
                 }
     except (OSError, ValueError, TypeError):
         pass
@@ -419,7 +430,10 @@ class PipelineWorkspace:
                 from memstara.control.retry import configuration_for_retry
 
                 configuration = configuration_for_retry(
-                    latest, configuration, key, incomplete=mode == "retry_incomplete",
+                    latest,
+                    configuration,
+                    key,
+                    incomplete=mode == "retry_incomplete",
                     updated_skills=mode == "retry_updated_skills",
                 )
             return launch(manager, {**copy.deepcopy(item), "configuration": configuration})

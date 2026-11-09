@@ -129,7 +129,7 @@ def close_active_round(run_dir, outcome, reason):
     progress = json.loads(progress_path.read_text()) if progress_path.exists() else {}
     # Retry journals contain sparse original Loop IDs (e.g. 29..50). Their
     # length is an attempt count, never the identity of the active combination.
-    journal = json.loads((run_dir / 'iteration_outcomes.json').read_text())
+    journal = json.loads((run_dir / "iteration_outcomes.json").read_text())
     iteration = max(int(key) for key in journal)
     record_round(run_dir, iteration, outcome, reason)
     write_progress(run_dir, iteration, progress.get("stage", "hypothesis"))

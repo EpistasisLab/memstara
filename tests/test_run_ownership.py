@@ -173,7 +173,8 @@ def test_uncertain_call_stays_blocked_and_saved_phase_never_repeats(connection, 
 
     asyncio.run(run())
     state = json.loads(cp.path.read_text())
-    assert not state["finished"] and state["phases"]["completed"]["result"] == "already saved"
+    assert not state["finished"]
+    assert cp.phase_result("completed", state["phases"]["completed"]) == "already saved"
     assert "active" in state["calls"].values()
     with pytest.raises(RecoveryBlocked, match="external effects"):
         Checkpoint(tmp_path, resume=True)

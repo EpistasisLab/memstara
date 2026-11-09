@@ -87,6 +87,9 @@ def isolated_operational_environment(request, tmp_path_factory, monkeypatch):
     # Offline ML tools must never publish synthetic bundles into an installation.
     test_outputs = tmp_path_factory.mktemp('offline_outputs')
     os.environ['MEMSTARA_OUTPUT_DIR'] = str(test_outputs)
+    # Synthetic research fixtures must not inherit the installation's allowlist.
+    test_inputs = tmp_path_factory.mktemp('offline_inputs')
+    os.environ['MEMSTARA_INPUTS_DIR'] = str(test_inputs)
     from memstara.matcher import config as matcher_config
     monkeypatch.setattr(matcher_config, 'CATALOG_JSON', test_outputs / 'matcher_catalog.json')
     env._loaded_source, env._provenance = None, {}

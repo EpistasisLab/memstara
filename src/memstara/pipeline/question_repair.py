@@ -98,8 +98,12 @@ async def preflight_mapping(contract, plan):
             if predictor_column_error(columns, plan):
                 raise ValueError("Selected columns are not available in the frozen catalog")
         except (ValueError, KeyError, TypeError) as exc:
-            return {"code": "unmapped_predictor_concepts", "why": str(exc),
-                    "action": "Read the full catalog and declare exact columns with a defensible rationale for every concept."}
+            return {
+                "code": "unmapped_predictor_concepts",
+                "why": str(exc),
+                "action": "Read the full catalog and declare exact columns "
+                "with a defensible rationale for every concept.",
+            }
     import asyncio
     import re
 
@@ -151,8 +155,9 @@ async def preflight_mapping(contract, plan):
             # A declared exact column can be verified by the answering stage even
             # when embedding search fails to retrieve a synonym. No nearest-rank
             # candidate is treated as proof of clinical equivalence.
-            if any(m.get("concept") == concept and m.get("column") in allowed
-                   for m in contract.get("proposed_mapping", [])):
+            if any(
+                m.get("concept") == concept and m.get("column") in allowed for m in contract.get("proposed_mapping", [])
+            ):
                 continue
             missing.append(
                 {"concept": concept, "reason": row.get("note") or "No candidate in frozen predictor catalog"}

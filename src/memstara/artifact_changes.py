@@ -8,7 +8,7 @@ from pathlib import Path
 from threading import RLock
 
 _lock = RLock()
-_roots = {}
+_roots: dict[Path, dict[Path, int]] = {}
 _generation = 0
 
 

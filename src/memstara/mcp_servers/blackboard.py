@@ -67,7 +67,7 @@ def _pipeline_run() -> str:
 
 @mcp.tool()
 async def freeze_hybrid_candidate(
-    questions: list[QuestionProposal], origin_run: str, origin_wave: int, writer: str = ''
+    questions: list[QuestionProposal], origin_run: str, origin_wave: int, writer: str = ""
 ) -> str:
     """Freeze one isolated model-knowledge candidate before graph retrieval.
 
@@ -79,10 +79,10 @@ async def freeze_hybrid_candidate(
 
     try:
         plan = active_plan() or {}
-        if origin_run != plan.get('run_tag') or not isinstance(questions, list) or len(questions) != 1:
-            raise ValueError('Freeze one candidate for this execution only')
+        if origin_run != plan.get("run_tag") or not isinstance(questions, list) or len(questions) != 1:
+            raise ValueError("Freeze one candidate for this execution only")
         record = save_baseline(plan, origin_wave, questions[0])
-        return json.dumps({'frozen': True, 'baseline_sha256': record['sha256'], 'columns': record['columns']})
+        return json.dumps({"frozen": True, "baseline_sha256": record["sha256"], "columns": record["columns"]})
     except (ValueError, OSError, KeyError, TypeError) as exc:
         return _err(exc)
 
@@ -222,7 +222,7 @@ async def create_task(
 
                         if ablation_enabled(snapshot) and ids:
                             raise ValueError("OKF ablation tasks must not claim knowledge source IDs")
-                        baseline_only = bool(contract.get('hybrid')) and not contract['hybrid']['augmentation_columns']
+                        baseline_only = bool(contract.get("hybrid")) and not contract["hybrid"]["augmentation_columns"]
                         if not cols or (not ids and not ablation_enabled(snapshot) and not baseline_only):
                             raise ValueError("Grounded feature columns and knowledge concept IDs are required")
                     except ValueError as exc:
@@ -277,7 +277,7 @@ async def create_task(
                             },
                             "question_contract": contract,
                             "feature_mapping": feature_mapping,
-                            **({'hybrid': contract['hybrid']} if contract and contract.get('hybrid') else {}),
+                            **({"hybrid": contract["hybrid"]} if contract and contract.get("hybrid") else {}),
                             "critic": critic,
                             "knowledge_provenance": hypothesis_provenance(
                                 ids,
@@ -313,20 +313,38 @@ async def lookup_predictor_catalog(queries: list[str], offset: int = 0, limit: i
     plan = active_plan() or {}
     if plan.get("question_feasibility_policy") != "explicit_columns_v1":
         return json.dumps({"error": "Full catalog lookup is not enabled for this execution"})
-    if not isinstance(queries, list) or len(queries) > 12 or any(
-        not isinstance(q, str) or not q.strip() or len(q) > 160 for q in queries
-    ) or type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 40:
+    if (
+        not isinstance(queries, list)
+        or len(queries) > 12
+        or any(not isinstance(q, str) or not q.strip() or len(q) > 160 for q in queries)
+        or type(offset) is not int
+        or offset < 0
+        or type(limit) is not int
+        or not 1 <= limit <= 40
+    ):
         return json.dumps({"error": "Use up to 12 nonempty queries, a nonnegative offset, and limit 1–40"})
     # The catalog defines availability only. Frozen selection policy still
     # validates which columns may actually be used when the question is saved.
     features = (plan.get("feature_context") or {}).get("features", [])
-    matches = [row for row in features if row.get("column") != plan.get("y_column") and (
-        not queries or any(q.casefold() in (row["column"] + " " + row.get("meaning", "")).casefold() for q in queries)
-    )]
-    return json.dumps({"source": "full_frozen_predictor_catalog", "total": len(matches),
-                       "matches": matches[offset:offset + limit],
-                       "next_offset": offset + limit if offset + limit < len(matches) else None,
-                       "note": "Literal search only: zero matches is not proof that no synonym exists. Similarity alone is not clinical equivalence."})
+    matches = [
+        row
+        for row in features
+        if row.get("column") != plan.get("y_column")
+        and (
+            not queries
+            or any(q.casefold() in (row["column"] + " " + row.get("meaning", "")).casefold() for q in queries)
+        )
+    ]
+    return json.dumps(
+        {
+            "source": "full_frozen_predictor_catalog",
+            "total": len(matches),
+            "matches": matches[offset : offset + limit],
+            "next_offset": offset + limit if offset + limit < len(matches) else None,
+            "note": "Literal search only: zero matches is not proof that no synonym exists. "
+            "Similarity alone is not clinical equivalence.",
+        }
+    )
 
 
 @mcp.tool()
@@ -349,9 +367,15 @@ async def read_context_payload(reference: str, pointer: str = "", offset: int = 
             raise ValueError("Context retrieval is not enabled for this execution")
         return json.dumps(read(Path(source).resolve().parent, reference, pointer, offset, limit))
     except (OSError, ValueError, KeyError, TypeError, IndexError) as exc:
-        return json.dumps({"error": "Context payload unavailable or invalid selection", "error_type": type(exc).__name__,
-                           "hint": "Use the original context_reference and exact JSON pointers from its index. "
-                           "Use a nonnegative offset and limit 1..12000. Do not guess field names or read a response envelope as evidence."})
+        return json.dumps(
+            {
+                "error": "Context payload unavailable or invalid selection",
+                "error_type": type(exc).__name__,
+                "hint": "Use the original context_reference and exact JSON pointers from its index. "
+                "Use a nonnegative offset and limit 1..12000. "
+                "Do not guess field names or read a response envelope as evidence.",
+            }
+        )
 
 
 @mcp.tool()
@@ -852,11 +876,15 @@ async def submit_result(
                         from memstara.pipeline.feature_selection import validate_measured
 
                         try:
-                            if previous.get('hybrid'):
+                            if previous.get("hybrid"):
                                 from memstara.hybrid_evaluation import validate_receipt
 
-                                fitted = validate_receipt(measured.get('features'), previous['hybrid'],
-                                    previous['feature_selection']['features'], measured.get('hybrid_selection'))
+                                fitted = validate_receipt(
+                                    measured.get("features"),
+                                    previous["hybrid"],
+                                    previous["feature_selection"]["features"],
+                                    measured.get("hybrid_selection"),
+                                )
                             else:
                                 fitted = validate_measured(measured.get("features"), previous["feature_selection"])
                         except (ValueError, KeyError) as exc:
@@ -1068,8 +1096,10 @@ async def attach_match_trace(task_id: int, match_trace: str) -> str:
 
 @mcp.tool()
 async def read_board(
-    run_tag: str = "", state_only: bool = False,
-    trial_start: int | None = None, trial_end: int | None = None,
+    run_tag: str = "",
+    state_only: bool = False,
+    trial_start: int | None = None,
+    trial_end: int | None = None,
     feedback_before_trial: int | None = None,
 ) -> str:
     """Every task of a run, finished or not. The reporting stage uses this.
@@ -1110,7 +1140,8 @@ async def read_board(
                        WHERE ($1 = '' OR run_tag = $1) AND status IN ('done', 'failed')
                          AND trial >= 0 AND trial < $2
                        ORDER BY trial DESC, task_id DESC LIMIT 12""",
-                    run_tag, feedback_before_trial,
+                    run_tag,
+                    feedback_before_trial,
                 )
             elif state_only:
                 # Driver scheduling must not resend all historical match traces,
@@ -1123,10 +1154,14 @@ async def read_board(
                        FROM memstara_blackboard WHERE ($1 = '' OR run_tag = $1)
                          AND ($2::integer IS NULL OR trial >= $2)
                          AND ($3::integer IS NULL OR trial < $3)
-                       ORDER BY trial, task_id""", run_tag, trial_start, trial_end)
+                       ORDER BY trial, task_id""",
+                    run_tag,
+                    trial_start,
+                    trial_end,
+                )
             else:
                 rows = await conn.fetch(
-                """
+                    """
                 SELECT task_id, run_tag, trial, perspective, status, task_type,
                        hypothesis, columns, okf_concept_ids, match_trace, question_id,
                        subset_path, y_column, columns_used, columns_missing,
@@ -1149,10 +1184,10 @@ async def read_board(
                   AND ($3::integer IS NULL OR trial < $3)
                 ORDER BY trial, task_id
                 """,
-                run_tag,
-                trial_start,
-                trial_end,
-            )
+                    run_tag,
+                    trial_start,
+                    trial_end,
+                )
         finally:
             await conn.close()
     except Exception as e:  # noqa: BLE001
@@ -1587,13 +1622,20 @@ async def propose_questions(
 
     comparison_wave = int(origin_wave) if independent_questions(plan) else None
     if not parsed:
-        response = {"added": [], "duplicates": [], "skipped": [], "rejected": [{
-            "code": "empty_question_batch",
-            "why": "No candidate was submitted, so no scientific or mapping validation occurred.",
-            "action": "Reassess the fixed contract and permitted evidence, then submit a concrete "
-                      "supported proposal. An empty list does not establish corpus exhaustion or "
-                      "predictor leakage. If support remains insufficient, report the precise limitation.",
-        }]}
+        response: dict[str, Any] = {
+            "added": [],
+            "duplicates": [],
+            "skipped": [],
+            "rejected": [
+                {
+                    "code": "empty_question_batch",
+                    "why": "No candidate was submitted, so no scientific or mapping validation occurred.",
+                    "action": "Reassess the fixed contract and permitted evidence, then submit a concrete "
+                    "supported proposal. An empty list does not establish corpus exhaustion or "
+                    "predictor leakage. If support remains insufficient, report the precise limitation.",
+                }
+            ],
+        }
         save_feedback(plan, origin_wave, writer, response)
         return json.dumps(response, ensure_ascii=False)
     # Model/candidate work must finish BEFORE opening a database transaction.
@@ -1619,7 +1661,7 @@ async def propose_questions(
         prepared.append(item)
     parsed = prepared
     if not parsed and preflight_rejected:
-        response: dict[str, Any] = {"added": [], "duplicates": [], "skipped": [], "rejected": preflight_rejected}
+        response = {"added": [], "duplicates": [], "skipped": [], "rejected": preflight_rejected}
         save_feedback(plan, origin_wave, writer, response)
         return json.dumps(response, ensure_ascii=False)
     added: list[dict] = []
@@ -1674,8 +1716,10 @@ async def propose_questions(
                         continue
                     from memstara.pipeline.ablation import enabled as ablation_enabled
 
-                    baseline_only = bool(contract.get('hybrid')) and not contract['hybrid']['augmentation_columns']
-                    if not tags and not (ablation_enabled(plan) or contract.get("kind") == "random_feature_control" or baseline_only):
+                    baseline_only = bool(contract.get("hybrid")) and not contract["hybrid"]["augmentation_columns"]
+                    if not tags and not (
+                        ablation_enabled(plan) or contract.get("kind") == "random_feature_control" or baseline_only
+                    ):
                         rejected.append(
                             {
                                 "text": text,

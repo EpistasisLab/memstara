@@ -427,8 +427,7 @@ def validate_new_design(body: dict) -> None:
         names += choices["hypothesis"]
     ensure_hypothesis_enabled([name.strip() for name in names if isinstance(name, str)])
     if any(
-        isinstance(name, str) and canonical_name(name.strip()) in prompts.RETIRED_HYPOTHESIS_SKILLS
-        for name in names
+        isinstance(name, str) and canonical_name(name.strip()) in prompts.RETIRED_HYPOTHESIS_SKILLS for name in names
     ):
         raise ValueError(
             "This historical Hypothesis skill is unavailable for new designs. "

@@ -1,4 +1,5 @@
 """Installation-specific research visibility; stored studies remain unchanged."""
+
 import json
 import os
 import re
@@ -17,13 +18,16 @@ def selection_policy(inputs=None):
         raise ValueError("Invalid app research selection configuration")
     enabled = value.get("register_bundled_demo", True)
     hidden = value.get("hidden_research_ids", [])
-    if not isinstance(enabled, bool) or not isinstance(hidden, list) or any(
-        not isinstance(item, str) or not re.fullmatch(r"[a-f0-9]{32}", item) for item in hidden
+    if (
+        not isinstance(enabled, bool)
+        or not isinstance(hidden, list)
+        or any(not isinstance(item, str) or not re.fullmatch(r"[a-f0-9]{32}", item) for item in hidden)
     ):
         raise ValueError("Invalid app research selection configuration")
     sources = value.get("allowed_sources")
     if sources is not None and (
-        not isinstance(sources, dict) or set(sources) != {"dataset_path", "knowledge_path"}
+        not isinstance(sources, dict)
+        or set(sources) != {"dataset_path", "knowledge_path"}
         or not isinstance(sources["dataset_path"], str)
         or not Path(sources["dataset_path"]).is_absolute()
     ):
@@ -33,8 +37,7 @@ def selection_policy(inputs=None):
         choices = knowledge if isinstance(knowledge, list) else [knowledge]
         if not choices or any(not isinstance(path, str) or not Path(path).is_absolute() for path in choices):
             raise ValueError("Invalid allowed research sources")
-    return {"register_bundled_demo": enabled, "hidden_research_ids": hidden,
-            "allowed_sources": sources}
+    return {"register_bundled_demo": enabled, "hidden_research_ids": hidden, "allowed_sources": sources}
 
 
 def visible_records(records, inputs=None):

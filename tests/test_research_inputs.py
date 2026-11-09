@@ -64,7 +64,7 @@ def test_registered_domain_skills_survive_preparation_and_cached_resume(sample, 
     from memstara.research_inputs import validate_skills
     record = register(sample)
     monkeypatch.setitem(INDEX_PROFILES, record['knowledge']['hashes']['index.md'], scope)
-    books = {'hypothesis': PROFILES[scope]['hypothesis'], 'report': PROFILES[scope]['report']}
+    books = {'hypothesis': PROFILES[scope]['hypothesis'], 'report': ['shared-hiv']}
     assert corpus_profile(record) == scope
     validate_skills(books, record)
     for profile in (prepare(record['id']), prepare(record['id'])):
@@ -97,7 +97,7 @@ def test_ui_arguments_reach_cli_environment_check_with_prepared_domain(sample, s
     monkeypatch.setattr('memstara.stage_models.deployment_profiles', lambda: {})
     monkeypatch.setattr(board, 'load_env', lambda: None)
     # Activate really prepares the child environment; monkeypatch tracks rollback.
-    for key in ('MEMSTARA_DATASET_PATH', 'AGENTIC_OKF_BUNDLE_DIR', 'MEMSTARA_OUTPUT_DIR',
+    for key in ('MEMSTARA_DATASET_PATH', 'AGENTIC_OKF_BUNDLE_DIR',
                 'MEMSTARA_USER_SKILLS_DIR', 'MEMSTARA_SKILL_ALIASES_PATH',
                 'MEMSTARA_LEAKAGE_RULES_PATH', 'MEMSTARA_OUTCOME_COLUMN', 'MEMSTARA_OKF_FIELDS'):
         monkeypatch.delenv(key, raising=False)
@@ -105,7 +105,7 @@ def test_ui_arguments_reach_cli_environment_check_with_prepared_domain(sample, s
                'data': ['data_training_heavy', 'data_balanced_stratified'],
                'ml': ['ml_logistic_regression', 'ml_xgboost'],
                'interpreter': ['shared-shap', 'shared-lime'],
-               'report': PROFILES[scope]['report']}
+               'report': ['shared-hiv', 'shared-addiction']}
     body = {'research_input_id': record['id'], 'trials': 1,
             **{('playbook_explanation' if stage == 'report' else 'playbook_' + stage): ids[0]
                for stage, ids in choices.items()}}
@@ -411,11 +411,11 @@ def test_unbound_profiles_do_not_silently_apply_domain_skills(monkeypatch):
     from memstara.research_inputs import validate_skills
     monkeypatch.delenv('AGENTIC_OKF_BUNDLE_DIR', raising=False)
     validate_skills({'hypothesis':['hypothesis_general', 'random_features'],
-                     'report':['shared-heart-failure-cardiovascular']})
+                     'report':['shared-hiv']})
     with pytest.raises(ValueError, match='disabled'):
         validate_skills({'hypothesis':['comorbidity']})
     with pytest.raises(ValueError, match='disabled for new execution'):
-        validate_skills({'report':['shared-hiv']})
+        validate_skills({'report':['shared-heart-failure-cardiovascular']})
     with pytest.raises(ValueError, match='disabled for new execution'):
         validate_skills({'report':['report_general']})
 

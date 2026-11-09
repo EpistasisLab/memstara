@@ -184,12 +184,13 @@ def test_cleanup_rejects_unknown_or_escaping_targets_and_keeps_epoch_metadata(se
 
 def test_complete_backup_contains_both_databases_files_and_verified_manifest(setup,monkeypatch):
     _,root,_,_=setup
-    monkeypatch.setenv('MEMSTARA_DATABASE_URL','postgresql://synthetic:private@board/database')
-    monkeypatch.setenv('MOTORO_DATABASE_URL','postgresql://synthetic:private@runtime/database')
+    password = 'synthetic-secret-not-for-argv'
+    monkeypatch.setenv('MEMSTARA_DATABASE_URL',f'postgresql://synthetic:{password}@board/database')
+    monkeypatch.setenv('MOTORO_DATABASE_URL',f'postgresql://synthetic:{password}@runtime/database')
     calls=[]
     async def utility(args,**kwargs):
         calls.append(args)
-        assert 'private' not in ' '.join(args)
+        assert password not in ' '.join(args)
         if args[0]=='pg_dump':Path(args[-1]).write_bytes(b'synthetic PG dump')
     monkeypatch.setattr(history,'utility',utility)
     key=str(uuid4())

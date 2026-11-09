@@ -102,11 +102,22 @@ def record_repair_recovery(context, files, attempt):
 
     for filename in sorted(files):
         with (Path(context[0]) / filename).open("a") as stream:
-            stream.write(json.dumps(dict(
-                at=datetime.now(UTC).isoformat(), run_id=context[1], stage=context[2],
-                loop=call_loop.get(), attempt=attempt, max_attempts=6, state="recovered",
-                recovery_scope="model_turn", scientific_acceptance="requires_tool_receipt",
-            )) + "\n")
+            stream.write(
+                json.dumps(
+                    dict(
+                        at=datetime.now(UTC).isoformat(),
+                        run_id=context[1],
+                        stage=context[2],
+                        loop=call_loop.get(),
+                        attempt=attempt,
+                        max_attempts=6,
+                        state="recovered",
+                        recovery_scope="model_turn",
+                        scientific_acceptance="requires_tool_receipt",
+                    )
+                )
+                + "\n"
+            )
 
 
 def request_options(kwargs):
@@ -264,8 +275,10 @@ class PipelineLLMService(LLMService):
 
         # A text-only stage cannot retrieve omitted evidence. Preserve its input.
         tools = args[0] if args and isinstance(args[0], list) else kwargs.get("tools", [])
-        if context and enabled(active_plan()) and any(
-            "read_context_payload" in json.dumps(tool, default=str) for tool in tools
+        if (
+            context
+            and enabled(active_plan())
+            and any("read_context_payload" in json.dumps(tool, default=str) for tool in tools)
         ):
             prepared = prepare(prepared, context)
         if context and context[2] == "report":
@@ -501,8 +514,7 @@ class PipelineLLMService(LLMService):
                             "Keep the response concise and complete the pending task through its required tool. "
                             "If an interpretation task is already claimed, call submit_result with the "
                             "required interpretation and task_id; do not claim it again. "
-                            "Do not return an empty answer or invent missing evidence. "
-                            + submission_instructions
+                            "Do not return an empty answer or invent missing evidence. " + submission_instructions
                         ),
                     }
                 )

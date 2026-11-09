@@ -26,8 +26,8 @@ def record_snapshot():
 
 
 @lru_cache(maxsize=1024)
-def _record_version(path, modified, changed, size, inode):
-    return json.loads(Path(path).read_text())
+def _record_version(content: bytes):
+    return json.loads(content)
 
 
 def records(root: Path):
@@ -44,10 +44,9 @@ def records(root: Path):
             continue
         path = Path(directory) / "control_record.json"
         try:
-            stat = path.stat()
-            record = copy.deepcopy(
-                _record_version(str(path), stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size, stat.st_ino)
-            )
+            # Same-size writes can share timestamps on coarse filesystems.
+            # Cache parsing by content; the request snapshot still scans once.
+            record = copy.deepcopy(_record_version(path.read_bytes()))
             if isinstance(record, dict):
                 found.append((path, record))
                 subdirectories[:] = []

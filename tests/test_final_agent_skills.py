@@ -7,8 +7,8 @@ from memstara.pipeline.prompts import load_prompt
 @pytest.mark.parametrize('role,book', [
     ('interpreter', 'shared-shap'),
     ('interpreter', 'shared-lime'),
-    ('report', 'shared-heart-failure-cardiovascular'),
-    ('report', 'shared-heart-failure-comorbidity'),
+    ('report', 'shared-hiv'),
+    ('report', 'shared-addiction'),
 ])
 def test_current_skill_is_selectable_and_reaches_prompt(role, book, monkeypatch):
     monkeypatch.setattr('memstara.evaluation.active_plan', lambda: None)

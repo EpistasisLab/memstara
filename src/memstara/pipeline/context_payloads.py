@@ -36,13 +36,18 @@ def index(value, pointer="", depth=0):
     if isinstance(value, dict):
         if depth >= 3 or len(value) > 60:
             return {"$pointer": pointer, "$keys": list(value)[:60], "$key_count": len(value)}
-        return {key: index(item, pointer + "/" + key.replace("~", "~0").replace("/", "~1"), depth + 1)
-                for key, item in value.items()}
+        return {
+            key: index(item, pointer + "/" + key.replace("~", "~0").replace("/", "~1"), depth + 1)
+            for key, item in value.items()
+        }
     if isinstance(value, list):
         if len(value) <= 12 and all(not isinstance(item, (dict, list)) for item in value):
             return value
-        return {"$pointer": pointer, "$items": len(value),
-                "$sample": [index(item, pointer + "/" + str(i), depth + 1) for i, item in enumerate(value[:2])]}
+        return {
+            "$pointer": pointer,
+            "$items": len(value),
+            "$sample": [index(item, pointer + "/" + str(i), depth + 1) for i, item in enumerate(value[:2])],
+        }
     if isinstance(value, str) and len(value) > 600:
         return {"$pointer": pointer, "$characters": len(value), "$preview": value[:300]}
     return value
@@ -67,10 +72,17 @@ def reference(root, owner, content):
         value = content
     preview = index(value)
     if len(json.dumps(preview)) > LIMIT // 2:
-        preview = {"$keys": list(value) if isinstance(value, dict) else None,
-                   "$characters": len(content)}
-    return json.dumps({"context_reference": ref, "partial_view": True, "index": preview,
-                      "instruction": "This is an index, not the full evidence. Use read_context_payload with this reference and a JSON pointer to inspect omitted fields before relying on them. Never infer missing values or rerun a completed tool merely to recover its output."})
+        preview = {"$keys": list(value) if isinstance(value, dict) else None, "$characters": len(content)}
+    return json.dumps(
+        {
+            "context_reference": ref,
+            "partial_view": True,
+            "index": preview,
+            "instruction": "This is an index, not the full evidence. Use read_context_payload with this reference "
+            "and a JSON pointer to inspect omitted fields before relying on them. "
+            "Never infer missing values or rerun a completed tool merely to recover its output.",
+        }
+    )
 
 
 def read(root, ref, pointer="", offset=0, limit=8000):
@@ -102,24 +114,34 @@ def read(root, ref, pointer="", offset=0, limit=8000):
                 value = value[part]
         selected = structured(value)
         text = json.dumps(selected, ensure_ascii=False)
-    result = {"reference": ref, "pointer": pointer, "offset": offset, "characters": len(text),
-            "content": text[offset:offset + limit],
-            "next_offset": offset + limit if offset + limit < len(text) else None}
+    result = {
+        "reference": ref,
+        "pointer": pointer,
+        "offset": offset,
+        "characters": len(text),
+        "content": text[offset : offset + limit],
+        "next_offset": offset + limit if offset + limit < len(text) else None,
+    }
     if offset == 0 and isinstance(selected, (dict, list)):
         preview = index(selected, pointer)
         if len(json.dumps(preview)) > 4000:
-            preview = {"$pointer": pointer, "$keys": list(selected)[:60]} if isinstance(selected, dict) else {
-                "$pointer": pointer, "$items": len(selected)}
+            preview = (
+                {"$pointer": pointer, "$keys": list(selected)[:60]}
+                if isinstance(selected, dict)
+                else {"$pointer": pointer, "$items": len(selected)}
+            )
         result["index"] = preview
-        result["instruction"] = "Use exact field pointers from this index to read only needed evidence. " \
-                                "For another page, keep reference and pointer unchanged and use next_offset."
+        result["instruction"] = (
+            "Use exact field pointers from this index to read only needed evidence. "
+            "For another page, keep reference and pointer unchanged and use next_offset."
+        )
     return result
 
 
 def structured_text(text, root, owner):
     """Keep instructions around embedded JSON intact (e.g. predictor catalog)."""
     decoder = json.JSONDecoder()
-    pieces = []
+    pieces: list[str] = []
     cursor = 0
     scan = 0
     while scan < len(text):
@@ -132,7 +154,7 @@ def structured_text(text, root, owner):
             scan = start + 1
             continue
         if size > LIMIT:
-            pieces.extend((text[cursor:start], reference(root, owner, text[start:start + size])))
+            pieces.extend((text[cursor:start], reference(root, owner, text[start : start + size])))
             cursor = start + size
         scan = start + size
     pieces.append(text[cursor:])
@@ -141,8 +163,11 @@ def structured_text(text, root, owner):
 
 def prepare(messages, context):
     result = copy.deepcopy(messages)
-    tool_names = {call.get("id"): call.get("function", {}).get("name", "")
-                  for message in result for call in message.get("tool_calls", [])}
+    tool_names = {
+        call.get("id"): call.get("function", {}).get("name", "")
+        for message in result
+        for call in message.get("tool_calls", [])
+    }
     reader_ids = {key for key, name in tool_names.items() if name.endswith("read_context_payload")}
     # Retrieved evidence must not become a new opaque payload containing an old
     # payload. Retain a bounded recent window; older pages point straight to the
@@ -162,12 +187,14 @@ def prepare(messages, context):
         except ValueError:
             continue
         if isinstance(page, dict) and all(k in page for k in ("reference", "pointer", "offset", "next_offset")):
-            message["content"] = json.dumps({
-                **{k: page[k] for k in ("reference", "pointer", "offset", "next_offset")},
-                "content_omitted": True,
-                "instruction": "Previously retrieved page omitted from this request's context. "
-                "Read the SAME reference, pointer and offset again only if needed; do not rerun the source tool.",
-            })
+            message["content"] = json.dumps(
+                {
+                    **{k: page[k] for k in ("reference", "pointer", "offset", "next_offset")},
+                    "content_omitted": True,
+                    "instruction": "Previously retrieved page omitted from this request's context. "
+                    "Read the SAME reference, pointer and offset again only if needed; do not rerun the source tool.",
+                }
+            )
     latest_exchange = max((i for i, m in enumerate(result) if m.get("tool_calls")), default=0)
     for i, message in enumerate(result):
         # Never alter tool-call IDs/arguments, system instructions, or saved history.

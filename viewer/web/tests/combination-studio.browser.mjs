@@ -12,6 +12,7 @@ try{
  await p.route('**/control/**',async r=>{
   assert.equal(r.request().method(),'GET','No real execution allowed');
   const u=new URL(r.request().url());
+  if(u.pathname.endsWith('/skill-instructions'))return r.fulfill({status:404,json:{error:'This execution has no saved instructions for this skill'}});
   if(u.pathname.endsWith('/combinations')){const loop=Number(u.searchParams.get('loop'));
    if(loop===3&&!liveFixture)return r.fulfill({status:503,json:{error:'Fixture history unavailable'}});
    const agents=stages.map(s=>({...catalog.find(c=>c.stage===s)}));
@@ -82,7 +83,10 @@ try{
  pipeline.latest={run_tag:'fixture-run',exit_code:0};pipeline.progress={iteration:2};await p.reload();
  await p.getByText('Pipeline 2 · Replicate 1 · Latest execution',{exact:true}).waitFor();
  await studio.getByRole('button',{name:'Inspect Substance use mechanisms instructions',exact:true}).click();
- await p.getByRole('dialog',{name:'Substance use mechanisms',exact:true}).getByText('The recorded version is not available',{exact:false}).waitFor();await p.keyboard.press('Escape');
+ const recorded=p.getByRole('dialog',{name:'Substance use mechanisms',exact:true});
+ await recorded.getByRole('alert').filter({hasText:'This execution has no saved instructions for this skill'}).waitFor();
+ assert.equal(await recorded.locator('table:visible').count(),0,'Current instructions cannot replace missing recorded evidence');
+ await p.keyboard.press('Escape');
  pipeline.progress={iteration:3};
  await studio.getByRole('alert').waitFor();
  assert.equal(await studio.locator('.cf-active-room').count(),0,'Unavailable records cannot show running agents');
