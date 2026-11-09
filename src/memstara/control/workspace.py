@@ -215,6 +215,32 @@ class PipelineWorkspace:
         with self.lock:
             action = body.get("action")
             item: dict[str, Any] | None
+            if action == "restore":
+                from memstara.control.restore import definition
+
+                restored = definition(self.path.parent, body.get("run_tag"), body.get("number"))
+                existing = next((p for p in self.items if p["id"] == restored["id"]), None)
+                if existing:
+                    if existing.get("deleting"):
+                        raise ValueError("Wait for deletion to finish before restoring this experiment")
+                    return copy.deepcopy(existing)
+                if any(p["number"] == restored["number"] for p in self.items):
+                    raise ValueError("That experiment number is already in use")
+                # Preserve evidence and current live managers. An old skill may no
+                # longer be launchable; listing historical work must still work.
+                restored["configuration"] = self.read_configuration(restored["configuration"])[0]
+                from uuid import uuid4
+
+                backup = self.path.with_name(f"workspace-before-restore-{uuid4().hex}.json")
+                atomic_json(backup, self.items, overwrite=False)
+                previous = self.items
+                self.items = sorted([*previous, restored], key=lambda p: p["number"])
+                try:
+                    self._save()
+                except OSError:
+                    self.items = previous
+                    raise
+                return {**copy.deepcopy(restored), "restoration_backup": backup.name}
             if action == "add":
                 used = {p["number"] for p in self.items}
                 number = next(n for n in range(1, len(used) + 2) if n not in used)
