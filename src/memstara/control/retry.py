@@ -6,13 +6,22 @@ from pathlib import Path
 from typing import Any
 
 
-def configuration_for_retry(record, configuration, pipeline_id, *, incomplete=False):
+def configuration_for_retry(record, configuration, pipeline_id, *, incomplete=False, updated_skills=False):
     root = Path(record["run_dir"])
     try:
-        failure, saved, frozen, outcomes = [
+        saved, frozen, outcomes = [
             json.loads((root / name).read_text())
-            for name in ("pipeline_status.json", "resume_arguments.json", "config.json", "iteration_outcomes.json")
+            for name in ("resume_arguments.json", "config.json", "iteration_outcomes.json")
         ]
+        if not (root / "pipeline_status.json").exists() and (root / "pause.request").exists():
+            # A stopped durable-pause attempt keeps its checkpoint open. The
+            # workspace has already verified that its driver is no longer live.
+            progress = json.loads((root / "progress.json").read_text())
+            if progress.get("exploration", {}).get("outcome") != "interrupted":
+                raise ValueError("The paused execution has not stopped")
+            failure = {"status": "interrupted"}
+        else:
+            failure = json.loads((root / "pipeline_status.json").read_text())
     except (OSError, ValueError) as exc:
         raise ValueError("Retry source records are unavailable or invalid") from exc
     if not all(isinstance(value, dict) for value in (failure, saved, frozen, outcomes)):
@@ -95,10 +104,15 @@ def configuration_for_retry(record, configuration, pipeline_id, *, incomplete=Fa
     if plan:
         from memstara.combinations import validate_plan
 
+        if updated_skills:
+            plan, changes = update_pending_hypothesis_skills(plan, loop)
+            result["_retry_skill_updates"] = changes
         result["_retry_combination_plan"] = validate_plan(plan)
         result["combination_skills"] = {
             stage: [entry["id"] for entry in entries] for stage, entries in plan["skills"].items()
         }
+    elif updated_skills:
+        raise ValueError("Updated-skill retry requires an original combination schedule")
     from memstara.seed_schedule import VERSION as seed_version
 
     if frozen.get("seed_policy") == seed_version and not frozen.get("seed_schedule"):
@@ -108,3 +122,33 @@ def configuration_for_retry(record, configuration, pipeline_id, *, incomplete=Fa
             key: copy.deepcopy(frozen[key]) for key in ("seed_schedule", "dataset_sha256", "y_column")
         }
     return result
+
+
+def update_pending_hypothesis_skills(plan, first_loop):
+    """Explicitly revise unused hypothesis versions, never a completed design arm."""
+    from memstara.combinations import loop_flavors, validate_plan
+    from memstara.control.catalog import resolve
+
+    revised = copy.deepcopy(plan)
+    changes = []
+    for stage, entries in revised["skills"].items():
+        for index, old in enumerate(entries):
+            current = resolve(old["id"])
+            if not current or current.get("stage") != stage:
+                raise ValueError("A recorded skill is unavailable")
+            new = {key: current[key] for key in ("id", "title", "hash")}
+            if old == new:
+                continue
+            if stage != "hypothesis" or old["id"] != new["id"]:
+                raise ValueError("Only pending hypothesis skill versions may change")
+            if any(
+                agent["stage"] == stage and agent["id"] == old["id"]
+                for loop in range(1, first_loop)
+                for agent in loop_flavors(plan, loop)["agents"]
+            ):
+                raise ValueError("This skill was scheduled before the retry boundary; use a new experiment")
+            entries[index] = new
+            changes.append({"stage": stage, "id": old["id"], "before": old, "after": new})
+    if not changes:
+        raise ValueError("No pending hypothesis skill version changed; use ordinary retry")
+    return validate_plan(revised), changes

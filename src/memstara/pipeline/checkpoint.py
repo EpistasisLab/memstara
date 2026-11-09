@@ -35,6 +35,9 @@ def atomic_json(path, value, *, overwrite=True):
             os.fsync(fd)
         finally:
             os.close(fd)
+        from memstara.artifact_changes import changed
+
+        changed(path)
     finally:
         if created:
             temporary.unlink(missing_ok=True)
@@ -104,8 +107,32 @@ class Checkpoint:
         for key, phase in phases.items():
             if not key or not isinstance(phase, dict) or phase.get("status") not in ("active", "done"):
                 raise RecoveryBlocked("Invalid saved checkpoint operation")
-            if phase["status"] == "done" and "result" not in phase:
-                raise RecoveryBlocked("Completed checkpoint operation has no saved result; recovery requires review")
+            if phase["status"] == "done":
+                if "result" not in phase and "result_ref" not in phase:
+                    raise RecoveryBlocked("Completed checkpoint operation has no saved result; recovery requires review")
+                if "result_ref" in phase:
+                    self.phase_result(key, phase)  # Full integrity check once on recovery.
+
+    def phase_result(self, key, phase):
+        if "result_ref" not in phase:
+            return phase["result"]  # Legacy checkpoints remain readable.
+        reference = phase["result_ref"]
+        expected = "checkpoint_phases/" + hashlib.sha256(key.encode()).hexdigest() + ".json"
+        if not isinstance(reference, dict) or reference.get("path") != expected:
+            raise RecoveryBlocked("Invalid checkpoint result reference")
+        path = self.path.parent / expected
+        if path.is_symlink() or not path.resolve().is_relative_to(self.path.parent.resolve()):
+            raise RecoveryBlocked("Checkpoint result escapes the execution")
+        try:
+            raw = path.read_bytes()
+            if hashlib.sha256(raw).hexdigest() != reference.get("sha256"):
+                raise RecoveryBlocked("Checkpoint result integrity changed")
+            value = json.loads(raw)
+            if value.get("key") != key or "result" not in value:
+                raise RecoveryBlocked("Checkpoint result identity changed")
+            return value["result"]
+        except (OSError, ValueError, AttributeError) as exc:
+            raise RecoveryBlocked("Checkpoint result is unavailable or invalid") from exc
 
     def problem(self):
         if self.state.get("finished"):
@@ -142,7 +169,7 @@ class Checkpoint:
         if previous:
             if previous["status"] != "done":
                 raise RecoveryBlocked("Interrupted checkpoint operation requires review: " + key)
-            return previous["result"]
+            return self.phase_result(key, previous)
         self.state["phases"][key] = {"status": "active"}
         self.save()
         token = current_phase.set(key)
@@ -150,7 +177,16 @@ class Checkpoint:
             result = await operation()
         finally:
             current_phase.reset(token)
-        self.state["phases"][key] = {"status": "done", "result": result}
+        directory = self.path.parent / "checkpoint_phases"
+        directory.mkdir(mode=0o700, exist_ok=True)
+        location = directory / (hashlib.sha256(key.encode()).hexdigest() + ".json")
+        atomic_json(location, {"key": key, "result": result})
+        self.state["phases"][key] = {
+            "status": "done", "result_ref": {
+                "path": location.relative_to(self.path.parent).as_posix(),
+                "sha256": hashlib.sha256(location.read_bytes()).hexdigest(),
+            },
+        }
         self.save()
         return result
 

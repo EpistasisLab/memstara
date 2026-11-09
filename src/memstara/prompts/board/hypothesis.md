@@ -22,6 +22,8 @@ question. In create_task, copy the exact required_hypothesis and question text g
 by the driver or claim_question. Do not rewrite the outcome to suit the knowledge.
 If there is no defensible connection to the fixed outcome, propose no question.
 
+{{_knowledge_reasoning}}
+
 ## Writing the questions
 
 You are a question agent. You do not investigate anything. You decide WHAT GETS ASKED, and a hypothesis agent answers it afterwards.

@@ -171,6 +171,7 @@ def build_argv(
         "_retry_combination_plan",
         "_retry_seed_schedule",
         "_retry_experiment_policy",
+        "_retry_skill_updates",
     }
     unknown = sorted(set(body) - set(DEFAULTS) - retry_fields)
     if unknown:
@@ -436,4 +437,6 @@ def build_argv(
             argv += ["--retry-seed-schedule", json.dumps(body["_retry_seed_schedule"], allow_nan=False)]
         if body.get("_retry_experiment_policy") is not None:
             argv += ["--retry-experiment-policy", json.dumps(body["_retry_experiment_policy"], allow_nan=False)]
+        if body.get("_retry_skill_updates"):
+            argv += ["--retry-skill-updates", json.dumps(body["_retry_skill_updates"], allow_nan=False)]
     return argv

@@ -220,7 +220,22 @@ def write_record(directory, phase, payload):
     path = directory / f"{phase}-{digest(payload)}.json"
     if not path.exists():
         atomic(path, payload)
+    from memstara.artifact_changes import changed
+
+    changed(path)
     return {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+
+
+def model_records(directory, run_id):
+    """Read one agent's records; old executions retain their legacy fallback."""
+    indexed = Path(directory) / "models" / hashlib.sha256(str(run_id).encode()).hexdigest()
+    paths = indexed.glob("model-*.json") if indexed.is_dir() else Path(directory).glob("model-*.json")
+    records = []
+    for path in sorted(paths):
+        value = json.loads(path.read_text())
+        if value.get("run_id") == run_id:
+            records.append(value)
+    return records
 
 
 async def prepare(snapshot, rows, loop, directory):
@@ -312,11 +327,7 @@ def finish(prepared, text, entry, directory, *, normalization=None):
         "execution": entry,
         "output_normalization": list(normalization or []),
         "citation_audit": citation_audit,
-        "model_runtime": [
-            json.loads(p.read_text())
-            for p in Path(directory).glob("model-*.json")
-            if json.loads(p.read_text()).get("run_id") == entry.get("run_id")
-        ],
+        "model_runtime": model_records(directory, entry.get("run_id")),
         "run_tag": payload["run_tag"],
         "config_hash": payload["config_hash"],
         "loop": payload["loop"],
@@ -430,7 +441,8 @@ def record_model(config, context, loop):
         "model": config.model,
         "settings": {name: getattr(config, name, None) for name in ("temperature", "max_tokens", "top_p")},
     }
-    return write_record(Path(context[0]) / "explanation_io", "model", payload)
+    directory = Path(context[0]) / "explanation_io" / "models" / hashlib.sha256(str(context[1]).encode()).hexdigest()
+    return write_record(directory, "model", payload)
 
 
 async def preflight(snapshot, run_dir):

@@ -28,6 +28,8 @@ from memstara.pipeline.snapshot import freeze
 def test_registered_typed_data_reaches_frozen_split_real_ml_and_replay(tmp_path, monkeypatch, engine):
     monkeypatch.setattr(os, 'environ', dict(os.environ))
     monkeypatch.setenv('MEMSTARA_RESEARCH_INPUTS_DIR', str(tmp_path / 'registry'))
+    # Synthetic acceptance inputs must not inherit a production source allowlist.
+    monkeypatch.setenv('MEMSTARA_INPUTS_DIR', str(tmp_path / 'user-inputs'))
     output = tmp_path / 'outputs'
     output.mkdir()
     monkeypatch.setenv('MEMSTARA_OUTPUT_DIR', str(output))

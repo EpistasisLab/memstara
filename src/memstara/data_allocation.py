@@ -291,10 +291,17 @@ def prepare(value, task, snapshot, subset):
 
 def load_effective(path, snapshot, default):
     """ML uses only a verified server handoff, never ML-agent split overrides."""
+    from memstara.ml_task_inputs import MLInputError
+
+    if not Path(path).is_file():
+        raise MLInputError("ml_subset_missing", "The requested CSV file does not exist.",
+                           "For pipeline tools use the claimed task_id and worker, not a retyped path.")
     sidecar = Path(path).with_suffix(".comparison.json")
     if not sidecar.exists():
         if (snapshot or {}).get("data_allocation_policy"):
-            raise ValueError("Data handoff is required before ML evaluation")
+            raise MLInputError("ml_handoff_missing", "Data handoff is required before ML evaluation: "
+                               "the CSV exists but its allocation receipt is missing.",
+                               "Restore the original Data handoff; do not invent a new split.")
         return default, None
     context = json.loads(sidecar.read_text())
     record = context.get("data_allocation")

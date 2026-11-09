@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 pytest.importorskip('motoro')
-from memstara.pipeline.llm import PipelineLLMService
+from memstara.pipeline.llm import PipelineLLMService, question_submission_instructions
 from memstara.pipeline.diagnostics import call_context
 from memstara.pipeline.failures import PipelineExecutionFailure
 
@@ -141,3 +141,72 @@ def test_another_stage_failure_prevents_schema_retry(context, monkeypatch):
         asyncio.run(service.complete_with_tools(NS(model='qwen-test', fallback_models=[]), [], []))
     invoke.assert_awaited_once()
     assert json.loads((context / 'pipeline_failure.json').read_text())['stage'] == 'data'
+
+
+QUESTION_TOOLS = [{'type': 'function', 'function': {
+    'name': 'propose_questions', 'parameters': {
+        'type': 'object', 'required': ['questions'], 'additionalProperties': False,
+        'properties': {'questions': {'type': 'array', 'items': {
+            'type': 'object', 'required': ['predictor_concepts', 'rationale'],
+            'properties': {'predictor_concepts': {'type': 'array', 'items': {'type': 'string'}},
+                           'rationale': {'type': 'string'}},
+        }}},
+    },
+}}]
+
+
+@pytest.mark.parametrize('bad_args,capped', [
+    ({}, False),
+    ({'questions': [{'predictor_concepts': ['measured feature'], 'rationale': 'Evidence'}],
+      'rationale': 'Misplaced rationale'}, False),
+    ({}, True),  # Production Loop 129: missing questions at the output ceiling.
+])
+def test_question_envelope_repair_validates_before_return(context, monkeypatch, bad_args, capped):
+    from motoro.services.llm_service import _validate_tool_call_args
+
+    service = PipelineLLMService()
+    reason = 'propose_questions: tool_args_schema_invalid: ' + _validate_tool_call_args(
+        'propose_questions', bad_args, QUESTION_TOOLS)
+    good_args = {'questions': [{'predictor_concepts': ['measured feature'], 'rationale': 'Evidence'}]}
+    valid_call = NS(name='propose_questions', arguments=good_args)
+    valid = NS(record=NS(failure_reason=None, completion_tokens=100), tool_calls=[valid_call])
+    observed = []
+
+    async def once(config, messages, tools, principal_id):
+        observed.append((config.max_tokens, copy.deepcopy(messages)))
+        assert tools == QUESTION_TOOLS
+        if len(observed) == 1:
+            return NS(record=NS(failure_reason=reason, completion_tokens=4096 if capped else 50),
+                      tool_calls=[]), reason
+        assert _validate_tool_call_args('propose_questions', good_args, tools) is None
+        return valid, None
+
+    monkeypatch.setattr(service, '_complete_with_tools_once', once)
+    history = [{'role': 'user', 'content': 'Generate a supported hypothesis.'}]
+    original = copy.deepcopy(history)
+    tools_before = copy.deepcopy(QUESTION_TOOLS)
+    config = NS(model='claude-haiku-5-5', max_tokens=4096, fallback_models=[])
+    result = asyncio.run(service.complete_with_tools(config, history, QUESTION_TOOLS))
+    assert result is valid and result.tool_calls == [valid_call]
+    assert len(observed) == 2
+    assert [x[0] for x in observed] == [4096, 8192 if capped else 4096]
+    assert history == original and QUESTION_TOOLS == tools_before and config.max_tokens == 4096
+    assert 'INSIDE each proposal' in observed[0][1][-1]['content']
+    assert 'INSIDE each proposal' in observed[1][1][-1]['content']
+    # Repair never inserts a fabricated candidate or blank submission.
+    assert all('tool_calls' not in m for _, messages in observed for m in messages)
+    log = context / ('model_completion_repairs.jsonl' if capped else 'tool_argument_repairs.jsonl')
+    events = [json.loads(line) for line in log.read_text().splitlines()]
+    assert [e['state'] for e in events] == ['retry', 'recovered']
+    assert events[-1]['scientific_acceptance'] == 'requires_tool_receipt'
+    assert not (context / 'pipeline_failure.json').exists()
+
+
+def test_submission_guidance_does_not_add_tools_or_leak_knowledge_to_other_roles():
+    assert question_submission_instructions([]) == ''
+    other = copy.deepcopy(QUESTION_TOOLS)
+    other[0]['function']['name'] = 'freeze_hybrid_candidate'
+    assert question_submission_instructions(other) == ''
+    guidance = question_submission_instructions(QUESTION_TOOLS)
+    assert 'okf_read' not in guidance and 'okf_search' not in guidance
+    assert 'never substitute an empty list' in guidance

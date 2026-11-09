@@ -541,6 +541,16 @@ async def _call_agent_uncontrolled(
         prompt += selection_instructions(plan, wave)
         tools = hypothesis_tools(tools, plan, wave)
         plan = scoped(plan, wave)
+        from memstara.pipeline.question_contract import knowledge_reasoning_instructions
+
+        # Keep these rules visible after the potentially long predictor catalog
+        # and regeneration context, including for historical frozen system prompts.
+        prompt += knowledge_reasoning_instructions(plan)
+    if stage.split("#", 1)[0] == "ml":
+        from memstara.ml_task_inputs import INSTRUCTIONS as ml_input_instructions
+
+        # Operational binding also applies when replaying a frozen older prompt.
+        prompt += "\n\n" + ml_input_instructions
     tools = filter_tools(tools, plan)
     if enabled(plan) and not skill_authored_stage:
         prompt += "\n" + INSTRUCTIONS
@@ -587,7 +597,7 @@ async def _call_agent_uncontrolled(
     if BASE_CALL.get():
         entry['hybrid_phase'] = 'isolated_baseline'
     _CALLS.append(entry)
-    write_execution_manifest()
+    write_execution_manifest(entry)
 
     # ── this is where the LLM runs ─────────────────────────────────────────
     # `execute_run` is a function of motoro. Inside, it repeats reason -> act
@@ -617,7 +627,7 @@ async def _call_agent_uncontrolled(
     except BaseException as exc:
         entry["status"] = "cancelled" if isinstance(exc, asyncio.CancelledError) else "failed"
         entry["error"] = type(exc).__name__
-        write_execution_manifest()
+        write_execution_manifest(entry)
         if isinstance(exc, Exception):
             stop_execution(_TRACE_DIR.parent if _TRACE_DIR else None, stage, _CURRENT_LOOP.get(), exc)
         raise
@@ -626,11 +636,11 @@ async def _call_agent_uncontrolled(
         if context_token is not None:
             call_context.reset(context_token)
         entry["duration_seconds"] = time.time() - entry["started_at"]
-        write_execution_manifest()
+        write_execution_manifest(entry)
     entry["status"] = getattr(result.status, "value", str(result.status))
     if result.error:
         entry["error"] = str(result.error)
-    write_execution_manifest()
+    write_execution_manifest(entry)
     # Latch immediately, before trace reads or another worker can start a new request.
     if result.error or result.status != "completed":
         stop_execution(
@@ -644,11 +654,14 @@ async def _call_agent_uncontrolled(
     # instant you stop at a breakpoint on the line after `await call_agent(...)` you can
     # open `trace/00_hypothesis0.txt` and read what just happened — which tool was
     # called with which arguments and what came back.
+    post_started = time.monotonic()
     await _trace_one(entry)
+    trace_finished = time.monotonic()
     from memstara.experiment_registry import sync_after_agent as sync_registry
 
     if _TRACE_DIR:
-        await sync_registry(_TRACE_DIR.parent)
+        await sync_registry(_TRACE_DIR.parent, call=entry)
+    mirror_finished = time.monotonic()
 
     # Spell out on screen what that person actually did. The untruncated version is in
     # the file under trace/.
@@ -659,6 +672,17 @@ async def _call_agent_uncontrolled(
     from memstara.pipeline.reporting import show_console_summary
 
     await show_console_summary(show_what_agent_did, entry, _TRACE_DIR)
+    if _TRACE_DIR:
+        from memstara.execution_journal import save_call
+        from memstara.experiment_registry import record_metrics
+
+        save_call(_TRACE_DIR.parent, entry)
+        record_metrics(_TRACE_DIR.parent, {
+            "operation": "agent_postprocessing", "agent_run_id": entry["run_id"],
+            "loop": entry.get("loop"), "trace_seconds": trace_finished - post_started,
+            "mirror_seconds": mirror_finished - trace_finished,
+            "console_seconds": time.monotonic() - mirror_finished,
+        })
 
     # Agent output is usually JSON shaped like {"result": "..."}. Failing that, the raw text.
     try:
@@ -667,7 +691,7 @@ async def _call_agent_uncontrolled(
         return result.output or "", entry
 
 
-def write_execution_manifest() -> None:
+def write_execution_manifest(call=None) -> None:
     """Publish call identities and states atomically for the run-scoped viewer."""
     if _TRACE_DIR is None:
         return
@@ -702,9 +726,12 @@ def write_execution_manifest() -> None:
         encoding="utf-8",
     )
     temporary.replace(root / "execution.json")
-    from memstara.pipeline.checkpoint import atomic_json
+    from memstara.execution_journal import save_call
+    from memstara.artifact_changes import changed
 
-    atomic_json(root / "calls_checkpoint.json", _CALLS)
+    changed(root / "execution.json")
+    if call is not None:
+        save_call(root, call)
 
 
 async def settle_finished_workers(
@@ -1088,7 +1115,11 @@ async def _trace_one(call: dict[str, Any]) -> None:
         print(f"  trace failed {call['seq']:02d} {call['stage']}: {type(e).__name__}", file=sys.stderr)
     finally:
         try:
-            write_execution_manifest()
+            from memstara.artifact_changes import changed
+
+            changed(path)
+            changed(llm_path)
+            write_execution_manifest(call)
         except (OSError, TypeError, ValueError):
             print("Trace manifest write failed; audit evidence is incomplete", file=sys.stderr)
 
@@ -1117,6 +1148,10 @@ async def write_traces(run_dir: Path) -> int:
     # The list itself is left behind too. It is what src/memstara/trace/board.py, or a person
     # retracing by hand, reads later.
     (run_dir / "runs.json").write_text(json.dumps(_CALLS, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    from memstara.pipeline.checkpoint import atomic_json
+
+    atomic_json(run_dir / "calls_checkpoint.json", _CALLS)
 
     for call in _CALLS:
         await _trace_one(call)
@@ -1768,6 +1803,8 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
                     "mode": "retry_incomplete_combinations" if retry_loops else "new_attempt_from_failed_loop",
                     **({"selected_loops": retry_loops} if retry_loops else {}),
                     "prior_results": "retained_in_source_execution",
+                    **({"skill_updates": json.loads(args.retry_skill_updates)}
+                       if getattr(args, "retry_skill_updates", "") else {}),
                     "validation_reserve": "new_execution_partition",
                 },
             )
@@ -1786,8 +1823,10 @@ async def run(args: argparse.Namespace, run_dir: Path) -> int:
     global _TRACE_DIR
     _TRACE_DIR = run_dir / "trace"
     _TRACE_DIR.mkdir(parents=True, exist_ok=True)
-    if args.resume and (run_dir / "calls_checkpoint.json").exists():
-        _CALLS[:] = json.loads((run_dir / "calls_checkpoint.json").read_text())
+    if args.resume:
+        from memstara.execution_journal import load_calls
+
+        _CALLS[:] = load_calls(run_dir)
     print()
     print("=" * 74)
     print(f" board pipeline — run named '{args.run_tag}'")
@@ -3153,6 +3192,7 @@ async def _main() -> int:
     ap.add_argument("--retry-source-run", default="", help="Original failed run retained as evidence")
     ap.add_argument("--retry-seed-schedule", default="", help="Recorded seed schedule from the retry source")
     ap.add_argument("--retry-experiment-policy", default="", help="Original scientific policy for a retry")
+    ap.add_argument("--retry-skill-updates", default="", help="Recorded pending hypothesis version changes")
     ap.add_argument("--resume", action="store_true", help="Recover this execution from its durable checkpoint")
     args = ap.parse_args()
     if args.start_loop < 1 or (args.start_loop > 1 and not args.retry_source_run):

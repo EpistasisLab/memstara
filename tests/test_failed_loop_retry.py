@@ -145,3 +145,103 @@ def test_retry_preserves_frozen_explanation_length(source):
     (Path(record['run_dir']) / 'config.json').write_text(json.dumps({'explanation_words': 375}))
     result = configuration_for_retry(record, {**config, 'explanation_words': 900}, 'p')
     assert result['explanation_words'] == 375
+
+
+@pytest.fixture
+def changed_pending_skill(source, monkeypatch):
+    from pathlib import Path
+    from memstara.combinations import build_plan, DEFAULT_SKILLS
+    from memstara.control import catalog
+
+    record, config = source
+    choices = {stage: [skill] for stage, skill in DEFAULT_SKILLS.items()}
+    choices['hypothesis'] = ['addiction-psychiatric', 'hiv-okf-whole-graph']
+    plan = build_plan(choices, 5, execution_order='pipeline_replicates_first')
+    root = Path(record['run_dir'])
+    (root / 'config.json').write_text(json.dumps({'combination_plan': plan}))
+    original_resolve = catalog.resolve
+    changed = {'hiv-okf-whole-graph'}
+
+    def resolve(name):
+        item = dict(original_resolve(name))
+        if name in changed:
+            item.update(hash='f' * 64, title=item['title'] + ' revised')
+        return item
+
+    monkeypatch.setattr(catalog, 'resolve', resolve)
+    return record, config, root, plan, changed
+
+
+def test_updated_skill_retry_is_explicit_preserves_source_and_schedule(changed_pending_skill):
+    from memstara.combinations import loop_flavors
+    record, config, root, plan, _ = changed_pending_skill
+    before = {p.name: p.read_bytes() for p in root.iterdir()}
+    with pytest.raises(ValueError, match='skill versions changed'):
+        configuration_for_retry(record, config, 'p')
+    result = configuration_for_retry(record, config, 'p', updated_skills=True)
+    assert result['_retry_from_loop'] == 6
+    revised = result['_retry_combination_plan']
+    assert result['_retry_skill_updates'][0]['before'] == plan['skills']['hypothesis'][1]
+    assert result['_retry_skill_updates'][0]['after']['hash'] == 'f' * 64
+    for loop in range(1, 11):
+        old, new = loop_flavors(plan, loop), loop_flavors(revised, loop)
+        assert (old['combination'], old['repetition']) == (new['combination'], new['repetition'])
+        if loop < 6:
+            assert old == new
+    assert before == {p.name: p.read_bytes() for p in root.iterdir()}
+
+
+@pytest.mark.parametrize('kind', ['previous_hypothesis', 'data', 'unchanged'])
+def test_updated_skill_retry_rejects_other_design_changes(changed_pending_skill, kind):
+    record, config, _, plan, changed = changed_pending_skill
+    if kind == 'previous_hypothesis':
+        changed.add('addiction-psychiatric')
+        message = 'before the retry boundary'
+    elif kind == 'data':
+        changed.add(plan['skills']['data'][0]['id'])
+        message = 'Only pending hypothesis'
+    else:
+        changed.clear()
+        message = 'No pending hypothesis'
+    with pytest.raises(ValueError, match=message):
+        configuration_for_retry(record, config, 'p', updated_skills=True)
+
+
+def test_updated_skill_retry_accepts_stopped_durable_pause_only(changed_pending_skill):
+    record, config, root, _, _ = changed_pending_skill
+    (root / 'pipeline_status.json').unlink()
+    outcomes = json.loads((root / 'iteration_outcomes.json').read_text())
+    outcomes['6']['outcome'] = 'interrupted'
+    (root / 'iteration_outcomes.json').write_text(json.dumps(outcomes))
+    (root / 'pause.request').touch()
+    (root / 'progress.json').write_text(json.dumps({'exploration': {'outcome': 'running'}}))
+    with pytest.raises(ValueError):
+        configuration_for_retry(record, config, 'p', updated_skills=True)
+    (root / 'progress.json').write_text(json.dumps({'exploration': {'outcome': 'interrupted'}}))
+    result = configuration_for_retry(record, config, 'p', updated_skills=True)
+    assert result['_retry_from_loop'] == 6
+    (root / 'pause.request').unlink()
+    with pytest.raises(ValueError):
+        configuration_for_retry(record, config, 'p', updated_skills=True)
+
+
+def test_ordinary_retry_after_code_fix_accepts_stopped_pause_without_changing_skills(source):
+    from pathlib import Path
+    record, config = source
+    root = Path(record['run_dir'])
+    (root / 'pipeline_status.json').unlink()
+    outcomes = json.loads((root / 'iteration_outcomes.json').read_text())
+    outcomes['6']['outcome'] = 'interrupted'
+    (root / 'iteration_outcomes.json').write_text(json.dumps(outcomes))
+    (root / 'pause.request').touch()
+    (root / 'progress.json').write_text(json.dumps({'exploration': {'outcome': 'interrupted'}}))
+    before = {p.name: p.read_bytes() for p in root.iterdir()}
+    result = configuration_for_retry(record, config, 'p')
+    assert result['_retry_from_loop'] == 6 and '_retry_skill_updates' not in result
+    assert before == {p.name: p.read_bytes() for p in root.iterdir()}
+    (root / 'progress.json').write_text(json.dumps({'exploration': {'outcome': 'running'}}))
+    with pytest.raises(ValueError):
+        configuration_for_retry(record, config, 'p')
+    (root / 'pause.request').unlink()
+    with pytest.raises(ValueError):
+        configuration_for_retry(record, config, 'p')

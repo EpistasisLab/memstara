@@ -201,8 +201,10 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
         from memstara.pipeline.diagnostics import install
 
         install()
-    from memstara.experiment_registry import sync
+    from memstara.experiment_registry import sync, sync_after_agent
+    from memstara.execution_journal import load_calls, save_call
 
+    incremental_mirror = persist is None
     persist = persist or sync
     state = freeze(args, root, chosen_playbooks(args))
     checkpoint = Checkpoint(root, resume=args.resume)
@@ -210,7 +212,7 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
         atomic_json(root / "resume_arguments.json", vars(args))
     atomic_json(root / "pipeline_status.json", {"status": "running", "mode": "proposal", "report_completed": False})
     await persist(root, evidence=False)
-    calls = json.loads((root / "runs.json").read_text()) if args.resume and (root / "runs.json").exists() else []
+    calls = load_calls(root) if args.resume else []
     source_ids = {row["id"] for row in state["knowledge_evidence"]}
     from memstara.pipeline.diagnostics import call_context, call_loop
     from memstara.pipeline.exploration import write_progress
@@ -271,8 +273,7 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
                 calls.append(record)
 
                 def save_calls():
-                    atomic_json(root / "runs.json", calls)
-                    atomic_json(root / "calls_checkpoint.json", calls)
+                    save_call(root, record)
                     atomic_json(root / "execution.json", {"calls": calls, "mode": "proposal"})
 
                 save_calls()
@@ -396,7 +397,10 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
                     call_loop.reset(loop_token)
 
             outputs.append(await checkpoint.phase(key, execute_stage))
-            await persist(root, evidence=False)
+            if incremental_mirror:
+                await sync_after_agent(root, call=outputs[-1])
+            else:
+                await persist(root, evidence=False)
         report = [
             "# Research proposal — empirical evaluation not executed",
             "",
@@ -435,6 +439,8 @@ async def run(args, root, *, invoke=invoke_model, persist=None):
         atomic_json(root / "report_status.json", {"status": "completed", "mode": "proposal"})
         checkpoint.advance(loop)
     checkpoint.finish()
+    atomic_json(root / "runs.json", calls)
+    atomic_json(root / "calls_checkpoint.json", calls)
     write_progress(root, args.waves, "report", completed=True)
     atomic_json(
         root / "pipeline_status.json",

@@ -66,6 +66,49 @@ def interpretation_saved(messages):
     return False
 
 
+def question_submission_instructions(tools):
+    """Clarify the tool envelope without inventing a scientific proposal.
+
+    Apply at the request boundary, including resumed executions with frozen
+    prompts. Do not expose this tool to stages that do not have it.
+    """
+    for tool in tools:
+        function = tool.get("function", {})
+        name = function.get("name", "")
+        if name.rsplit(".", 1)[-1] != "propose_questions":
+            continue
+        schema = function.get("parameters", {})
+        if "questions" not in schema.get("required", []):
+            continue
+        return (
+            f"Submission format for {name}: the outer tool arguments MUST contain the key "
+            "questions, whose value is an array of proposal objects. Put predictor_concepts, "
+            "rationale, proposed_mapping, source_ids and okf_tags INSIDE each proposal in "
+            "questions, never beside questions in the outer arguments. Only origin_run, "
+            "origin_wave and writer belong beside questions when needed by the declared schema. "
+            "Submit the requested number of concrete proposals; never substitute an empty list "
+            "or invented evidence to satisfy the schema. Keep each rationale concise, preserve "
+            "required evidence and limitations, and finish the complete tool arguments before "
+            "adding optional commentary. Do not repeat an already accepted submission."
+        )
+    return ""
+
+
+def record_repair_recovery(context, files, attempt):
+    """Close repair receipts only after a usable, validated turn is returned."""
+    if not context:
+        return
+    from memstara.pipeline.diagnostics import call_loop
+
+    for filename in sorted(files):
+        with (Path(context[0]) / filename).open("a") as stream:
+            stream.write(json.dumps(dict(
+                at=datetime.now(UTC).isoformat(), run_id=context[1], stage=context[2],
+                loop=call_loop.get(), attempt=attempt, max_attempts=6, state="recovered",
+                recovery_scope="model_turn", scientific_acceptance="requires_tool_receipt",
+            )) + "\n")
+
+
 def request_options(kwargs):
     options = _options.get()
     if options is None:
@@ -398,6 +441,10 @@ class PipelineLLMService(LLMService):
         from memstara.pipeline.failures import stop_execution
 
         history = copy.deepcopy(messages)
+        submission_instructions = question_submission_instructions(tools)
+        if submission_instructions:
+            history.append({"role": "user", "content": submission_instructions})
+        pending_repairs = set()
         current_config = config
         for attempt in range(6):
             result = await self._request(super().complete_with_tools, current_config, history, tools, *args, **kwargs)
@@ -413,6 +460,7 @@ class PipelineLLMService(LLMService):
                 and not interpretation_saved(history)
             )
             if capped or empty_interpretation:
+                pending_repairs.add("model_completion_repairs.jsonl")
                 # This completion has not reached Motoro's tool executor. Reissue
                 # only this uncommitted turn, retaining every earlier tool receipt.
                 next_limit = min(limit * 2, max(16384, getattr(config, "max_tokens", 4096)))
@@ -453,15 +501,18 @@ class PipelineLLMService(LLMService):
                             "Keep the response concise and complete the pending task through its required tool. "
                             "If an interpretation task is already claimed, call submit_result with the "
                             "required interpretation and task_id; do not claim it again. "
-                            "Do not return an empty answer or invent missing evidence."
+                            "Do not return an empty answer or invent missing evidence. "
+                            + submission_instructions
                         ),
                     }
                 )
                 continue
             reason = getattr(getattr(result, "record", None), "failure_reason", None)
             if not reason:
+                record_repair_recovery(context, pending_repairs, attempt + 1)
                 return result
             repairable = any(code in reason for code in ("tool_args_schema_invalid", "tool_args_parse_error"))
+            pending_repairs.add("tool_argument_repairs.jsonl")
             context = call_context.get()
             if context:
                 with (Path(context[0]) / "tool_argument_repairs.jsonl").open("a") as stream:
@@ -504,7 +555,8 @@ class PipelineLLMService(LLMService):
                             "Re-issue the intended tool calls using the declared schema. "
                             "Object parameters (including filters) must be JSON objects, not "
                             "JSON-encoded strings. Use only allowed keys and values. Do not repeat "
-                            "earlier successful actions; none of the rejected calls were executed."
+                            "earlier successful actions; none of the rejected calls were executed. "
+                            + submission_instructions
                         ),
                     },
                 ]

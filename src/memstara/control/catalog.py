@@ -23,7 +23,7 @@ ROLES = ("hypothesis", "data", "ml", "interpreter", "report")
 HYPOTHESIS_DISPLAY_TITLES = {
     "addiction-sdoh": "HIV — Social Determinants of Health",
     "hiv-no-knowledge": "HIV — No Knowledge",
-    "hiv-okf-whole-graph": "HIV — Whole Knowledge Graph",
+    "hiv-okf-whole-graph": "HIV — Whole Knowledge Graph (V2)",
     "hiv-psychiatric-or-substance-use": "HIV — Psychiatric or Substance Use Disorders",
 }
 
@@ -432,7 +432,7 @@ def validate_new_design(body: dict) -> None:
     ):
         raise ValueError(
             "This historical Hypothesis skill is unavailable for new designs. "
-            "Choose one of the five current HIV hypothesis skills. Saved executions remain readable."
+            "Choose a currently offered HIV hypothesis skill. Saved executions remain readable."
         )
     if any(isinstance(name, str) and canonical_name(name.strip()) == "heart-failure-all" for name in names):
         raise ValueError(

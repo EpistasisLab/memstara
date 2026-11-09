@@ -39,7 +39,8 @@ async def test_empty_batches_do_not_complete_or_advance_loop(tmp_path, fast):
     result = await checkpoint.phase("0:questions", lambda: regeneration.until_saved(generate, **arguments(tmp_path)))
     assert result == ([{"question_id": 7}], False)
     assert len(set(prompts)) == 5
-    assert "Try another supported mechanism" in prompts[-1]
+    assert "Try another supported mechanism" not in prompts[-1]
+    assert "previous_response_sha256" in prompts[-1]
     assert checkpoint.state["next_wave"] == 0
     assert checkpoint.state["phases"]["0:questions"]["status"] == "done"
     assert read_state(tmp_path)["attempt"] == 5
@@ -97,7 +98,8 @@ async def test_restart_uses_durable_attempt_and_feedback(tmp_path, fast):
 
     async def resume():
         prompt = regeneration.writer_feedback("hypothesis")
-        assert "ROUND 2" in prompt and "predictor was unavailable" in prompt
+        assert "ROUND 2" in prompt and "predictor was unavailable" not in prompt
+        assert "previous_response_sha256" in prompt
         return [{"question_id": 9}], False
 
     assert await regeneration.until_saved(resume, **arguments(tmp_path)) == ([{"question_id": 9}], False)
@@ -194,7 +196,8 @@ async def test_real_question_helper_regenerates_with_feedback_and_distinct_cache
     )
     assert result[0][0]["question_id"] == 11
     assert len(prompts) == len(set(prompts)) == 5
-    assert "Need a different supported predictor" in prompts[2]
+    assert "Need a different supported predictor" not in prompts[2]
+    assert "previous_response_sha256" in prompts[2]
     assert len(list((tmp_path / "completed_agents").glob("*.json"))) == 5
     assert checkpoint.state["next_wave"] == 0
     assert not checkpoint.state["calls"]

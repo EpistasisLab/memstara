@@ -53,20 +53,27 @@ def _make_model(engine: str, seed: int):
 
 
 @mcp.tool()
-async def get_ml_configuration(path: str, y_column: str) -> str:
+async def get_ml_configuration(
+    path: str = "", y_column: str = "", task_id: int | None = None, worker: str = ""
+) -> str:
     """Get the selected model's parameters and permitted choices before proposing ml_plan.
 
+    In a pipeline, supply task_id from claim_task and the same worker; omit path
+    and y_column. The server loads the exact path and target from the claimed task.
+    Path/target arguments are only for standalone calls and are ignored with task_id.
     The server owns predictor/split identity and resource limits. The ML Agent chooses
     the selected model's exposed parameters, scaling, cutoff and training CV.
     """
     from memstara.evaluation import active_plan
     from memstara.data_allocation import load_effective
     from memstara.ml_configuration import context, enabled, for_dataset
+    from memstara.ml_task_inputs import resolve, MLInputError
 
     try:
+        snapshot = active_plan()
+        path, y_column = await resolve(path, y_column, task_id, worker, snapshot, _output_dir())
         p = Path(path).resolve()
         p.relative_to(_output_dir())
-        snapshot = active_plan()
         if snapshot is None or not enabled(snapshot):
             return json.dumps({"required": False, "instruction": "Use the frozen single-model run policy."})
         if snapshot["y_column"] != y_column:
@@ -80,6 +87,8 @@ async def get_ml_configuration(path: str, y_column: str) -> str:
                 'instruction': 'Use at least two folds; baseline and augmentation share these exact settings. '
                                'Training CV chooses the candidate; the test set is evaluation only.'}
         return json.dumps(settings)
+    except MLInputError as exc:
+        return json.dumps(exc.response())
     except Exception as exc:
         return json.dumps({"error": str(exc) if isinstance(exc, ValueError) else type(exc).__name__})
 
@@ -101,6 +110,7 @@ def train_and_score(
     candidate selection use training folds; the hold-out is reserved for evaluation.
     """
     from memstara.evaluation import DataQualityError, active_plan, score, validate
+    from memstara.ml_task_inputs import MLInputError
     import hashlib
     import tempfile
 
@@ -181,14 +191,16 @@ def train_and_score(
             temporary = Path(f.name)
         temporary.replace(destination)
         return json.dumps(result)
+    except MLInputError as exc:
+        return json.dumps(exc.response())
     except Exception as e:
         return json.dumps({"error": f"{type(e).__name__}: {e}"})
 
 
 @mcp.tool(name="train_and_score")
 async def train_and_score_async(
-    path: str,
-    y_column: str,
+    path: str = "",
+    y_column: str = "",
     test_size: float = 0.25,
     seed: int = 42,
     engine: str = "",
@@ -196,8 +208,15 @@ async def train_and_score_async(
     replicates: int = 1,
     search_trials: int = 1,
     ml_plan: dict | None = None,
+    task_id: int | None = None,
+    worker: str = "",
 ) -> str:
     """Evaluate a model without blocking MCP. Frozen run settings override these options.
+
+    For a pipeline supply task_id from claim_task and the same worker; omit path
+    and y_column. The server reads these from the task, ignoring supplied strings.
+    Only the claimed ML task in this run may be evaluated. Standalone callers may
+    continue to supply path and y_column without task_id.
 
     ml_plan: omit when get_ml_configuration returns plan_source=server_frozen.
     Otherwise submit the complete proposal for new paired-model runs.
@@ -207,7 +226,16 @@ async def train_and_score_async(
     test_size: reserved hold-out fraction. No cleaning or imputation is performed.
     """
     import asyncio
+    from memstara.evaluation import active_plan
+    from memstara.ml_task_inputs import resolve, MLInputError
 
+    try:
+        path, y_column = await resolve(path, y_column, task_id, worker, active_plan(), _output_dir())
+    except MLInputError as exc:
+        return json.dumps(exc.response())
+    except Exception as exc:
+        return json.dumps({"error": f"Task input lookup failed ({type(exc).__name__})",
+                           "code": "ml_task_lookup_failed"})
     return await asyncio.to_thread(
         train_and_score,
         path,

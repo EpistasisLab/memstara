@@ -228,11 +228,25 @@ def validate_saved(contract, text, plan):
     return contract
 
 
+def knowledge_reasoning_instructions(plan):
+    """Keep the KG decision rules consistent in the system and final call context.
+
+    No Knowledge and the hybrid baseline retain their separate source policies.
+    This clarifies scientific judgment; it does not relax server-side validation.
+    """
+    if not enabled(plan) or plan.get("no_knowledge_condition") or plan.get('_hybrid_question'):
+        return ""
+    from memstara.paths import PROMPTS_DIR
+
+    return "\n\n" + (PROMPTS_DIR / "board/_knowledge_reasoning.md").read_text().strip()
+
+
 def generation_instructions(plan):
     if not enabled(plan):
         return ""
     if plan.get("no_knowledge_condition"):
-        return (f" The ONLY prediction target is {plan['y_column']!r}. Supply predictor_concepts, "
+        return (f" The ONLY prediction target is {plan['y_column']!r}. Call propose_questions with "
+                "a questions array; inside each proposal supply predictor_concepts, "
                 "a general-knowledge rationale, source_ids=[], okf_tags=[], and proposed_mapping "
                 'with exact CSV columns and source_id="". Omit text and target; the server binds them. '
                 "Do not cite retrieved documents or supply prior-result lineage.")
@@ -248,13 +262,16 @@ def generation_instructions(plan):
     return (
         f" The ONLY prediction target is {plan['y_column']!r}; this is an outcome, never an input feature. "
         "Knowledge graph endpoints are candidate predictor concepts, not alternative outcomes. "
-        "For propose_questions supply predictor_concepts "
+        "Call propose_questions with a questions array. Inside each proposal supply predictor_concepts "
         "(a list of phenotype/measurement names), source_ids (exact document IDs read with okf_read), "
         f"okf_tags, and {rationale}. "
         "Omit target and text: the server binds them to the fixed run target. "
         "Read the source's actual section headings and concrete Instances; relation names such as "
         "SYMPTOMMANIFESTATIONOFDISEASE or ISA are not clinical predictors. Do not put prediction "
-        "instructions in predictor_concepts. If the knowledge cannot support this target, propose no questions."
+        "instructions in predictor_concepts. Distinguish retrieved relationships from the hypothesis "
+        "linking them to the fixed target; an exact-target edge is not required. If no defensible "
+        "candidate remains after checking the permitted sources and predictors, report the concrete "
+        "limitation; an empty proposal is not completed work."
     )
 
 

@@ -126,4 +126,7 @@ def write_private(path, value):
         os.fsync(fd)
     finally:
         os.close(fd)
+    from memstara.artifact_changes import changed
+
+    changed(path)
     return {"sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)}

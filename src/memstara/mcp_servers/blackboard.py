@@ -667,6 +667,10 @@ async def submit_result(
                 )
                 if cur is None:
                     return json.dumps({"error": f"no task {task_id}"})
+                # Only Data publishes a subset. Later stages identify the task,
+                # never rewrite its path (including accidental LLM transcription).
+                if cur["task_type"] != "data":
+                    subset_path = ""
                 if branch and (worker != branch["worker"] or worker != cur["claimed_by"]):
                     return json.dumps({"error": "Only the assigned interpreter may submit this branch."})
                 # Blocks writing a result to a task that was never claimed.
@@ -1534,6 +1538,10 @@ async def propose_questions(
 
     Args:
         questions: Array of objects (a JSON-encoded array is also accepted).
+            This required outer argument contains every proposal. Put rationale,
+            predictor_concepts, proposed_mapping, source_ids and okf_tags inside
+            each proposal, not at the top level of the tool arguments. Keep
+            rationale concise and complete the entire array before commentary.
             Supply predictor_concepts (concrete phenotype/measurement names),
             source_ids (exact document IDs from okf_read), okf_tags (array of corpus tags), and rationale.
             Omit text and target:
@@ -1578,6 +1586,16 @@ async def propose_questions(
     from memstara.pipeline.combination_questions import enabled as independent_questions
 
     comparison_wave = int(origin_wave) if independent_questions(plan) else None
+    if not parsed:
+        response = {"added": [], "duplicates": [], "skipped": [], "rejected": [{
+            "code": "empty_question_batch",
+            "why": "No candidate was submitted, so no scientific or mapping validation occurred.",
+            "action": "Reassess the fixed contract and permitted evidence, then submit a concrete "
+                      "supported proposal. An empty list does not establish corpus exhaustion or "
+                      "predictor leakage. If support remains insufficient, report the precise limitation.",
+        }]}
+        save_feedback(plan, origin_wave, writer, response)
+        return json.dumps(response, ensure_ascii=False)
     # Model/candidate work must finish BEFORE opening a database transaction.
     prepared = []
     preflight_rejected = []

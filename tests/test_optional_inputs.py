@@ -16,6 +16,8 @@ def example(tmp_path, monkeypatch):
     from memstara.paths import REPO_ROOT
     monkeypatch.chdir(REPO_ROOT)
     monkeypatch.setenv('MEMSTARA_RESEARCH_INPUTS_DIR', str(tmp_path / 'registry'))
+    # Synthetic proposal tests must not inherit a deployed study's source allowlist.
+    monkeypatch.setenv('MEMSTARA_INPUTS_DIR', str(tmp_path / 'input-policy'))
     return json.loads((REPO_ROOT / 'examples/research-inputs/research.json').read_text())
 
 

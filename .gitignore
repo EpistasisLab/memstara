@@ -32,12 +32,16 @@ docs/skill-drafts/*
 !docs/skill-drafts/hiv-medication-treatment-pathways-reviewed.md
 !docs/skill-drafts/hiv-shared-symptom-patterns.md
 !docs/skill-drafts/hiv-okf-whole-graph-csv-guided-v2.md
+!docs/skill-drafts/hiv-okf-whole-graph-v2.md
+!docs/skill-drafts/hiv-okf-whole-graph-v3.md
 !docs/skill-drafts/hiv-anemia-associated-findings.md
 !docs/skill-drafts/hiv-model-knowledge-with-graph-augmentation.md
 !docs/skill-drafts/hiv-integrated-clinical-knowledge.md
 !docs/skill-drafts/hiv-complication-linked-pathways.md
 !docs/hiv_hypothesis_skill_overview_EN.md
 !docs/pipeline_stop_diagnostics_20261105_EN.md
+!docs/incremental_execution_sync_audit_20261106_EN.md
+!docs/whole_graph_question_regeneration_fix_20261106_EN.md
 daily_log/
 papers/
 .DS_Store
@@ -88,3 +92,6 @@ config/azure-pricing-meters.local.json
 # Generated private Docker installation identity and credentials.
 /.memstara/
 /compose.override.yaml
+
+# Private investigation artifacts and local temporary environments.
+/.private-tmp/

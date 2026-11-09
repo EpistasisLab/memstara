@@ -377,6 +377,12 @@ def freeze(args, run_dir: Path, books: dict) -> dict:
     from memstara.pipeline.retry_selection import from_arguments
 
     retry_loops = from_arguments(args, args.waves)
+    if getattr(args, "retry_skill_updates", ""):
+        state["retry_skill_updates"] = {
+            "source_run_tag": args.retry_source_run,
+            "first_loop": args.start_loop,
+            "changes": json.loads(args.retry_skill_updates),
+        }
     if retry_loops:
         state["retry_selection"] = {"source_run_tag": args.retry_source_run, "loops": retry_loops}
     from memstara.pipeline.hybrid import freeze_policy as freeze_hybrid
