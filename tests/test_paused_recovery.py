@@ -138,3 +138,34 @@ def test_completed_agent_survives_enclosing_phase_commit_gap(tmp_path):
     gate.checkpoint = cp
     result = asyncio.run(cp.phase('final_report', lambda: gate.call(agent, 'new-id', 'same prompt', stage='report', tools=[])))
     assert result == {'report':'complete'} and calls == [1]
+
+
+def test_context_reader_does_not_block_an_acknowledged_interpretation_pause(tmp_path):
+    frozen(tmp_path)
+    cp = Checkpoint(tmp_path)
+    meta = recovery.metadata(tmp_path, ('id', 'prompt'), {
+        'stage': 'interpret#1',
+        'tools': [{'tool_name': name} for name in ('claim_task', 'read_context_payload', 'submit_result')],
+    }, None)
+    assert meta['safe'] is True
+    cp.call_started('interpretation', meta)
+    recovery.paused(tmp_path, 'interpretation', meta)
+    restored = Checkpoint(tmp_path, resume=True)
+    assert restored.state['calls'] == {'interpretation': 'active'}
+    unknown = recovery.metadata(tmp_path, (), {'stage': 'interpret#1',
+        'tools': [{'tool_name': 'read_context_payload'}, {'tool_name': 'send_email'}]}, None)
+    assert unknown['safe'] is False
+
+
+def test_old_unsafe_context_receipt_is_not_silently_reclassified(tmp_path):
+    frozen(tmp_path)
+    cp = Checkpoint(tmp_path)
+    meta = recovery.metadata(tmp_path, (), {'stage': 'interpret#1',
+        'tools': [{'tool_name': 'read_context_payload'}]}, None)
+    meta['safe'] = False
+    cp.call_started('legacy', meta)
+    recovery.paused(tmp_path, 'legacy', meta)
+    before = cp.path.read_bytes()
+    with pytest.raises(RecoveryBlocked, match='external effects require review'):
+        Checkpoint(tmp_path, resume=True)
+    assert cp.path.read_bytes() == before

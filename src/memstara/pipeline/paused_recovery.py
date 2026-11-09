@@ -29,6 +29,9 @@ TOOLS = frozenset(
         "get_ml_configuration",
         "train_and_score",
         "read_results",
+        # Opaque, integrity-checked reads within this execution. This tool is
+        # added to agents by context_payloads and cannot mutate tasks or files.
+        "read_context_payload",
     }
 )
 
