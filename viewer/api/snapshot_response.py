@@ -1,15 +1,20 @@
 """Serialize and compress large snapshots off the shared API event loop."""
 import gzip
+import json
 
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 from export_files import accepts_gzip
 
 
 def response(snapshot, accept_encoding):
-    rendered = JSONResponse(jsonable_encoder(snapshot))
     headers = {'Vary': 'Accept-Encoding', 'Cache-Control': 'no-store'}
-    body = rendered.body
+    # Rows already contain JSON-native values. Walking and copying every nested
+    # prediction/replicate through jsonable_encoder made retained experiments
+    # exceed the browser deadline. Convert only exceptional leaves (e.g. dates)
+    # while the standard encoder serializes the native tree directly.
+    body = json.dumps(snapshot, ensure_ascii=False, allow_nan=False,
+                      separators=(',', ':'), default=jsonable_encoder).encode('utf-8')
     if len(body) >= 1024 and accepts_gzip(accept_encoding):
         body = gzip.compress(body, compresslevel=1, mtime=0)
         headers['Content-Encoding'] = 'gzip'

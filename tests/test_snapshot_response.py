@@ -50,3 +50,22 @@ def test_snapshot_http_route_serializes_off_loop_and_retains_json_types(monkeypa
     assert response.json()['created_at'] == '2026-11-06T00:00:00+00:00'
     assert response.headers['content-encoding'] == 'gzip'
     assert dict(threads)['scene'] != dict(threads)['render']
+
+
+def test_native_evidence_is_not_recursively_copied_before_serialization(monkeypatch):
+    """Growing retained histories must not pay for a second Python tree walk."""
+    created = datetime(2026, 11, 9, tzinfo=timezone.utc)
+    converted = []
+    original = snapshot_response.jsonable_encoder
+    def convert(value):
+        converted.append(value)
+        return original(value)
+    monkeypatch.setattr(snapshot_response, 'jsonable_encoder', convert)
+    rows = [{'result_id': i, 'evaluation': {'replicates': [
+        {'y_true': [0, 1] * 200, 'y_score': [0.2, 0.8] * 200,
+         'confusion_matrix': [[200, 0], [0, 200]]}]}} for i in range(410)]
+    response = snapshot_response.response({'results': rows, 'created_at': created}, 'gzip')
+    restored = json.loads(gzip.decompress(response.body))
+    assert restored['results'] == rows
+    assert restored['created_at'] == created.isoformat()
+    assert converted == [created]
