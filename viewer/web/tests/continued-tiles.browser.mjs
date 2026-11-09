@@ -46,7 +46,7 @@ try{
   await panel.getByRole('navigation',{name:'Output views'}).getByRole('button',{name:view,exact:true}).click();
   await expect(panel.locator('.execution-output-tile')).toHaveCount(64);
   await expect(panel.getByRole('heading',{name:'test-hiv-1',exact:true})).toBeVisible();
-  await expect(panel.locator('.output-experiment-scope')).toHaveText('64 of 64 combinations recorded · 3 execution attempts · One experiment');
+  await expect(panel.getByText('64 scheduled replicates with saved results · 64 planned · 3 execution sessions · One experiment',{exact:true})).toBeVisible();
   const old=panel.getByRole('button',{name:`Open ${view}: Pipeline 1 · Replicate 1`,exact:true});
   await old.click();
   if(view==='Results')await expect(panel.locator('.output-documents')).toContainText('Interpretation 1');

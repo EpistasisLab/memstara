@@ -84,7 +84,8 @@ try{
  await expect(progress).toBeVisible();
  assert.equal(await progress.getAttribute('value'),null,'Preparation must not invent a completion percentage');
  await expect(page.getByText('Waiting for server progress.',{exact:true})).toBeVisible();
- await expect(page.getByText('Elapsed 0:01',{exact:true})).toBeVisible();
+ // A loaded runner can render after the one-second interval has already passed.
+ await expect(page.getByText(/^Elapsed \d+:\d{2}$/)).toHaveText(/^Elapsed (?!0:00$)\d+:\d{2}$/);
  await page.evaluate(()=>window.activeExportWorker.onmessage({data:{type:'progress',message:'Preparing ZIP: complete_evidence.csv',progress:{phase:'preparing',completedUnits:4,totalUnits:8}}}));
  await expect(progress).toHaveAttribute('value','50');
  await expect(page.getByText('Current stage: 4 / 8 · 50% (not overall completion)',{exact:true})).toBeVisible();
