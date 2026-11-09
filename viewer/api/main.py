@@ -395,6 +395,18 @@ async def developer_execution(run_tag: str = Query(min_length=1, max_length=200)
     return await execution(run_tag, loop)
 
 
+@app.get('/api/developer/trends/catalog')
+async def developer_trends_catalog():
+    from developer_trends import read_catalog
+    return await asyncio.to_thread(read_catalog)
+
+
+@app.get('/api/developer/trends')
+async def developer_trends(run_tag: str = Query(min_length=1, max_length=200)):
+    from developer_trends import trends
+    return await trends(run_tag)
+
+
 @app.get("/api/developer/steps")
 async def developer_steps(run_id: uuid.UUID,
                           run_tag: str = Query(min_length=1, max_length=200),

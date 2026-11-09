@@ -19,7 +19,6 @@ import ExecutionOutputsPanel from "./panels/ExecutionOutputsPanel";
 import AccessTab from "./tabs/AccessTab";
 import BoardTab from "./tabs/BoardTab";
 import TaskTab from "./tabs/TaskTab";
-import WorkspaceActions from "./components/WorkspaceActions";
 import { useLiveOutputs } from "./store/liveOutputs";
 import { IDLE_REFRESH_MS, LIVE_REFRESH_MS, pollContinuously } from './lib/liveRefresh';
 import { useControl } from "./store/control";
@@ -84,7 +83,7 @@ export default function App() {
     <InterfaceHelp />
     <AgentConfigPanel />
     <PipelineCreationDialog />
-    <WindowWorkspace toolbar={<WorkspaceActions only="history"/>} items={[
+    <WindowWorkspace items={[
       { id: "control", title: "Control", content: <ControlPanel /> },
       { id: "pipeline", title: `${VIEWS[view].label}${pipeline && view !== "discovery" ? ` · ${pipeline.name}${(view === "agents" || view === "report" || view === "results") ? "" : ` · ${pipelineLoopLabel(pipeline)}`}` : ""}`, content: <TopRegion /> },
     ]} />

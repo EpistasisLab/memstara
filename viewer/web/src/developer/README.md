@@ -1,5 +1,36 @@
 # Code Atlas
 
+## Hidden performance diagnostics
+
+Open `/developer.html?view=performance`. This view is intentionally absent from the
+research workspace navigation. It uses the deployment's existing HTTP login; it
+does not introduce a separate developer authorization role or a secret password.
+
+Select an experiment/continuation chain to load completed Pipeline/Replicate points
+in first-recorded-start order. Time and input/output/total-token line charts share
+an agent filter and a zoom range. Hover or keyboard navigation reveals measurements;
+the expandable table retains precise values and original execution IDs. Refresh is
+manual by default; optional 30-second polling pauses while the page is hidden and
+never overlaps its own request. No model calls or execution-control requests occur.
+
+The API reads compact `execution.json`, outcome/configuration/lineage metadata, and
+one bulk Motoro `agent_runs` query. It does not read prompts, outputs, full step
+histories, or recursively scan execution artifacts. Explicit retry ancestors are
+included; fresh runs with the same name stay separate. Distinct invocation IDs
+prevent double counting, including failed attempts before a completed replicate.
+Missing metadata/DB access returns an error instead of silently dropping history.
+
+Agent activity is the union of recorded invocation intervals: parallel overlap is
+counted once and inter-call gaps are excluded. It still includes tools and waits
+inside a call, so it is not CPU time or exact pause-subtracted pipeline processing.
+Elapsed time includes waits, pauses and retry gaps. A per-agent filter substitutes
+the agent's first-to-last span. Unknown/partial records are labeled; missing values
+are gaps, not zero. Unassigned calls and unfinished replicates are counted separately.
+Completed replicates without start timestamps remain in the table but not the charts.
+
+Endpoints: `GET /api/developer/trends/catalog` and
+`GET /api/developer/trends?run_tag=<saved execution ID>`; both are read-only.
+
 For configuration, model routing, execution controls, and debugging procedures,
 see the [developer operations guide](../../../../DEVELOPER_GUIDE.md). This document
 focuses on the code exploration interface.

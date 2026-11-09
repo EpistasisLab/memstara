@@ -1,5 +1,9 @@
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
+import {mkdir} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+const artifacts=fileURLToPath(new URL('../../../.private-tmp/topbar/',import.meta.url));
+await mkdir(artifacts,{recursive:true,mode:0o700});
 const browser=await chromium.launch({executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,headless:true});
 try {
  const page=await browser.newPage(); page.setDefaultTimeout(15000); const errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -11,7 +15,7 @@ try {
   await page.setViewportSize({width,height:900});
   await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
   const size=await page.locator('.unified-topbar').evaluate(el=>({width:el.clientWidth,scroll:el.scrollWidth,height:el.getBoundingClientRect().height}));
-  assert(size.scroll<=size.width+2,JSON.stringify({theme,width,size}));assert(size.height<(width>1100?85:145));
+  assert(size.scroll<=size.width+2,JSON.stringify({theme,width,size}));assert(size.height<(width>1100?85:145),JSON.stringify({theme,width,size}));
   assert(await page.getByRole('button',{name:'Estimated total. Show pipeline cost breakdown',exact:true}).isVisible());
   await page.getByRole('button',{name:'Workspace settings',exact:true}).click();
   const settings=page.getByRole('dialog',{name:'Workspace settings',exact:true});
@@ -25,10 +29,9 @@ try {
   const overview=page.getByRole('dialog',{name:'Workspace summary',exact:true});
   const fits=await overview.evaluate(e=>e.scrollWidth<=e.clientWidth+2&&e.getBoundingClientRect().bottom<=innerHeight);
   assert(fits);await page.keyboard.press('Escape');
-  await page.getByRole('button',{name:'Saved analyses',exact:true}).click();
-  await page.getByRole('dialog',{name:'Saved analyses',exact:true}).waitFor();await page.keyboard.press('Escape');
+  assert.equal(await page.getByRole('button',{name:'Saved analyses',exact:true}).count(),0);
   console.log(JSON.stringify({theme,width,...size,dialogs:'passed'}));
-  if(width===1440||width===390)await page.screenshot({path:`/tmp/topbar-${theme}-${width}.png`});
+  if(width===1440||width===390)await page.screenshot({path:`${artifacts}/topbar-${theme}-${width}.png`});
  }
  assert.deepEqual(errors,[]);
 }finally{await browser.close();}
