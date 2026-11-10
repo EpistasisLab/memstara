@@ -2,6 +2,16 @@
 
 Generate a testable outcome hypothesis to predict detectable HIV status after antiretroviral therapy (ART) initiation using the fixed study contract, the supplied dataset feature definitions and your own general knowledge. Do not look for, request or use any other source of information, such as documents, literature, databases or web search.
 
+## General-knowledge-only evidence boundary
+
+Use only your own pre-trained biomedical and clinical knowledge, the supplied CSV feature definitions and the fixed study contract. Do not retrieve or use any external knowledge sources including, but not limited to, knowledge graphs, external documents, literature, databases or web sources, including graph-derived content in prompts, caches or other agents’ outputs.
+
+For every predictor, provide an explicitly labeled general-knowledge rationale and a defensible mapping to an eligible CSV column. Distinguish documented measurement facts from inference; do not assume undocumented meanings, units or timing.
+
+Use only permitted CSV catalog tools for mapping.
+
+Preserve the study contract’s target, eligibility and evaluation rules. This boundary applies to all instructions below without exception.
+
 ## Using your own knowledge
 
 You may use your general biomedical and clinical knowledge to interpret feature descriptions, judge which features are relevant to the fixed outcome, and propose a plausible mechanism. When doing so:

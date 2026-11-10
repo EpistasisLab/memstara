@@ -4,6 +4,16 @@ Develop a testable, integrated predictor hypothesis for the fixed HIV outcome un
 
 The objective is joint prediction of the same outcome using multiple supported clinical dimensions. A single question can encompass several mechanisms; it need not be restricted to one specialty, one metapath or one narrow association. Select **4–20 distinct original CSV predictor columns**, excluding the target, under the existing driver policy. The range is a constraint, not a request to select either endpoint.
 
+## OKF-only evidence boundary
+
+Use only the selected OKF actually retrieved in this execution as biomedical knowledge for question generation and hypothesis mapping. Do not use pre-trained or general biomedical knowledge, remembered literature, web sources or other agents’ unsupported claims to introduce predictor concepts, relationships, mechanisms, covariates or explanations. This restriction also applies to familiar HIV markers, medications and demographic predictors.
+
+Before including a concept in a question, identify its explicit supporting passage, named entity or concrete path instance in the retrieved OKF. Record the exact source ID and the relevant evidence in the existing rationale and mapping fields.
+Use CSV definitions and the semantic matcher only to map OKF-supported concepts to eligible original columns.
+Apply this boundary to every predictor. Familiarity, a feature-count minimum or prior predictive performance cannot replace OKF support. For example, do not add predictors from domain context or knowledge alone. All predictors require explicit support in the retrieved OKF.
+
+The fixed study contract still defines the target, eligibility and evaluation rules. It does not supply missing biomedical evidence. This boundary governs all domain examples and selection advice below; none grants an exception.
+
 ## Using knowledge graph metapaths
 
 The knowledge sources are AddictionKB metapaths serialized in open knowledge format (OKF). A metapath describes a sequence of node and edge types; a path instance names the entities following that pattern. When reading them:
@@ -38,7 +48,7 @@ Inspect several distinct regions when available, but do not require every catego
 
 Choose the set by weighing:
 
-* **Outcome relevance and support:** every selected predictor has a defensible mapping to retrieved OKF evidence and an explicit rationale connecting it to the fixed outcome. General knowledge may explain that reasoning but must not be presented as retrieved evidence.
+* **Outcome relevance and support:** every selected predictor has a defensible mapping to retrieved OKF evidence and an explicit rationale connecting it to the fixed outcome. Base that reasoning only on retrieved OKF relationships and supplied measurement definitions; do not supplement missing evidence with general biomedical knowledge.
 * **Complementarity:** include different clinically relevant dimensions when they plausibly contribute distinct information. Multiple mechanisms can support one integrated predictive hypothesis. Expected incremental value is a hypothesis, not an established performance gain.
 * **Measurement and redundancy:** preserve exact original column names. Distinguish direct measurements from proxies, and ingredient, brand and combination-product indicators from independent exposures. Avoid redundant representations unless their separate information is justified.
 * **Eligibility and timing:** follow the study contract. Exclude the target, target-derived proxies, identifiers, unavailable measurements and known post-outcome information. An HIV-related graph node or a medication/comorbidity label alone does not establish leakage. If timing is unspecified and exploratory classification is permitted, disclose the uncertainty rather than claiming prospective prediction or automatically excluding those categories.

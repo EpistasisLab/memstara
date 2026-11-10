@@ -2,6 +2,16 @@
 
 Search the entire OKF knowledge scope available to this HIV pipeline without choosing a clinical category in advance to develop a testable outcome hypothesis for the fixed HIV outcome under the supplied study contract. Here, unbiased means no preselected specialty or subdomain filter. It does not mean that the source graph or its literature is free from sampling, publication or representation bias. Because no category filter narrows the search, those graph biases have more influence on what surfaces, and the search must correct for them.
 
+## OKF-only evidence boundary
+
+Use only the selected OKF actually retrieved in this execution as biomedical knowledge for question generation and hypothesis mapping. Do not use pre-trained or general biomedical knowledge, remembered literature, web sources or other agents’ unsupported claims to introduce predictor concepts, relationships, mechanisms, covariates or explanations. This restriction also applies to familiar HIV markers, medications and demographic predictors.
+
+Before including a concept in a question, identify its explicit supporting passage, named entity or concrete path instance in the retrieved OKF. Record the exact source ID and the relevant evidence in the existing rationale and mapping fields.
+Use CSV definitions and the semantic matcher only to map OKF-supported concepts to eligible original columns.
+Apply this boundary to every predictor. Familiarity, a feature-count minimum or prior predictive performance cannot replace OKF support. For example, do not add predictors from domain context or knowledge alone. All predictors require explicit support in the retrieved OKF.
+
+The fixed study contract still defines the target, eligibility and evaluation rules. It does not supply missing biomedical evidence. This boundary governs all domain examples and selection advice below; none grants an exception.
+
 ## Using knowledge graph metapaths
 
 The knowledge sources are AddictionKB metapaths serialized in open knowledge format (OKF). When reading them:
@@ -30,7 +40,7 @@ On regeneration, use the supplied failure reason to change the candidate, graph 
 
 * Hub bias: highly connected nodes (for example, broadly studied genes, common comorbidities or general inflammation terms) appear on many paths simply because they have many edges. Do not treat frequent appearance as specificity.
 * Evidence density: heavily studied areas produce more paths and documents. Sparse regions are not necessarily weak; they may be under-curated.
-* Familiarity: a whole-graph search can easily surface well-established risk factors. State whether the candidate is already well established for this outcome. Prefer a candidate that tests something informative over one that restates known associations, unless the known association is being tested in a new way.
+* Familiarity: do not favor a candidate because it is familiar from general knowledge. Describe established or novel status only to the extent supported by the retrieved OKF; otherwise report it as unknown. Prefer an informative test of documented relationships without importing external claims about known risk factors.
 * Category representation: some categories contribute more source documents to the graph than others. Note when the shortlist is dominated by one category and whether that reflects the evidence or the corpus.
 
 ## Selection criteria
@@ -41,7 +51,7 @@ Compare shortlisted candidates on:
 * Evidence quality, including edge evidence type and provenance
 * Feature availability and how directly features measure the concept
 * Temporality: follow the supplied study contract. If timing is unspecified and exploratory classification is permitted, report the uncertainty without claiming prospective or post-ART prediction. If verified baseline timing is required, missing timing remains an eligibility barrier.
-* Redundancy with other candidates and with established predictors
+* Redundancy with other candidates and predictors documented in the retrieved OKF
 * Leakage: assess the actual CSV predictor's definition, derivation and documented timing; exclude the target, target-derived proxies and known post-outcome information. An HIV-related node in a graph path alone does not establish predictor leakage or temporal eligibility.
 * Informativeness: what the experiment would teach if the association holds or fails
 

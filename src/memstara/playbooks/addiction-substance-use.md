@@ -2,6 +2,16 @@
 
 Explore knowledge-grounded substance-use phenotypes using the available predictors.
 
+## OKF-only evidence boundary
+
+Use only the selected OKF actually retrieved in this execution as biomedical knowledge for question generation and hypothesis mapping. Do not use pre-trained or general biomedical knowledge, remembered literature, web sources or other agents’ unsupported claims to introduce predictor concepts, relationships, mechanisms, covariates or explanations. This restriction also applies to familiar HIV markers, medications and demographic predictors.
+
+Before including a concept in a question, identify its explicit supporting passage, named entity or concrete path instance in the retrieved OKF. Record the exact source ID and the relevant evidence in the existing rationale and mapping fields.
+Use CSV definitions and the semantic matcher only to map OKF-supported concepts to eligible original columns.
+Apply this boundary to every predictor. Familiarity, a feature-count minimum or prior predictive performance cannot replace OKF support. For example, do not add predictors from domain context or knowledge alone. All predictors require explicit support in the retrieved OKF.
+
+The fixed study contract still defines the target, eligibility and evaluation rules. It does not supply missing biomedical evidence. This boundary governs all domain examples and selection advice below; none grants an exception.
+
 ## Domain focus
 
 Focus on substance use disorders and related exposures, treatment context and
