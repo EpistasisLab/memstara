@@ -39,8 +39,8 @@ try{
  await page.evaluate(()=>window.setOutputOwnerName('test-hiv-1'));
  await page.evaluate(s=>window.deliverOutputs(s),snapshot);
  await page.evaluate(results=>window.deliverLiveOutputs({tags:'selected',updatedAt:new Date().toISOString(),results,
-  continuationGroups:{selected:['original','continued','selected']}}),results);
- await expect(page.locator('.topbar-result-count')).toHaveText('64 results loaded');
+  continuationGroups:{selected:['original','continued','selected']},savedCounts:{results:64,questions:64,run_tags:['original','continued','selected']}}),results);
+ await expect(page.locator('.topbar-result-count')).toHaveText('64 saved results');
  const panel=page.getByTestId('execution-outputs');
  for(const view of ['Results','Conclusions','Usage']){
   await panel.getByRole('navigation',{name:'Output views'}).getByRole('button',{name:view,exact:true}).click();

@@ -185,14 +185,18 @@ def test_live_summary_uses_same_continuation_scope_as_tiles(history, monkeypatch
     import discovery
     conn = AsyncMock()
     conn.fetch.return_value = []
+    conn.fetchrow.return_value = {'results': 1457, 'questions': 801}
     async def read(store, callback, fallback):
         return await callback(conn)
     monkeypatch.setattr(discovery.pools, 'guarded', read)
     result = asyncio.run(discovery.live_outputs(['retry']))
     assert result['run_tags'] == ['old', 'retry']
     assert result['continuation_groups'] == {'retry': ['old', 'retry']}
+    assert result['saved_counts'] == {'results': 1457, 'questions': 801, 'run_tags': ['old', 'retry']}
+    assert conn.fetchrow.call_args.args[1] == ['old', 'retry']
     assert all(call.args[1] == ['old', 'retry'] for call in conn.fetch.call_args_list)
     conn.fetch.reset_mock()
     fresh = asyncio.run(discovery.live_outputs(['fresh']))
     assert fresh['run_tags'] == ['fresh']
+    assert conn.fetchrow.call_args.args[1] == ['fresh']
     assert all(call.args[1] == ['fresh'] for call in conn.fetch.call_args_list)

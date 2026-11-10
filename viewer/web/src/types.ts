@@ -184,6 +184,7 @@ export interface Result extends ReplicateIdentity {
   run_tag?: string; pipeline_id?: string; pipeline_name?: string; iteration?: number | null;
   hypothesis_id?: string;
   evaluation?: {
+    skills?: Record<string, string[]>;
     knowledge_provenance?: unknown;
     paired_models?: {primary_model: string; primary_selection: string; same_features: boolean; same_splits: boolean; xgboost_minus_lr_auc: number};
     ml_configuration?: {requested: unknown; effective: unknown; resource_limits: unknown};
@@ -333,6 +334,7 @@ export interface RunConfiguration {
 }
 
 export interface Snapshot {
+  skill_configurations?: Record<string, Pick<RunConfiguration, 'combination_plan' | 'books'>>;
   output_revision?: string;
   experiment?: {id:string;name?:string;head_run_tag:string;run_tags:string[];scheduled_combinations?:number;result_combinations:number};
   run_configuration?: RunConfiguration | null;

@@ -35,6 +35,28 @@ export interface HypothesisSummaryRow {
   explanationStatus: string;
 }
 
+export type HypothesisSortColumn = 'hypothesisSkill' | 'pipeline' | 'seed' | 'model' | 'auroc'
+  | 'trueNegative' | 'falsePositive' | 'falseNegative' | 'truePositive';
+export type HypothesisTableSort = {column: HypothesisSortColumn; direction: 'ascending' | 'descending'};
+const tableCollator = new Intl.Collator('en', {numeric: true, sensitivity: 'base'});
+
+/** Sort display rows only. Missing measurements stay last in either direction. */
+export function sortHypothesisSummaryRows(rows: readonly HypothesisSummaryRow[], sort: HypothesisTableSort | null) {
+  if (!sort) return [...rows];
+  const missing = (value: string | number | null) => value === null
+    || (typeof value === 'number' ? !Number.isFinite(value) : !value.trim() || value === 'Not recorded');
+  const direction = sort.direction === 'ascending' ? 1 : -1;
+  return rows.map((row, index) => ({row, index})).sort((a, b) => {
+    const left = a.row[sort.column], right = b.row[sort.column];
+    const leftMissing = missing(left), rightMissing = missing(right);
+    if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
+    if (leftMissing) return a.index - b.index;
+    const order = typeof left === 'number' && typeof right === 'number'
+      ? left - right : tableCollator.compare(String(left), String(right));
+    return direction * order || a.index - b.index;
+  }).map(({row}) => row);
+}
+
 const object = (value: unknown): UnknownRecord => value && typeof value === 'object' && !Array.isArray(value) ? value as UnknownRecord : {};
 const number = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
 const text = (value: unknown): string => typeof value === 'string' ? value : '';

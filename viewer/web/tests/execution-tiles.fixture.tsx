@@ -6,11 +6,13 @@ import ExecutionOutputsPanel from '../src/panels/ExecutionOutputsPanel';
 import {useViewer} from '../src/store/viewer';
 import {usePipelines} from '../src/store/pipelines';
 import {useLiveOutputs} from '../src/store/liveOutputs';
+import {useControl, type SkillInfo} from '../src/store/control';
 import type {Snapshot} from '../src/types';
 import '../src/index.css';
 import '../src/readability.css';
 import '../src/workspace-layout.css';
 Object.assign(window,{setOutputOwnerName:(name:string)=>usePipelines.setState(state=>({items:state.items.map(item=>({...item,name}))}))});
+Object.assign(window,{deliverOutputCatalog:(catalog:SkillInfo[])=>useControl.setState({catalog})});
 Object.assign(window, {requestOutputRecords: (tag: string) => useViewer.getState().setRunTag(tag),
   refreshOutputRecords: () => useViewer.getState().fetchOnce()});
 Object.assign(window,{setExperimentProgress:(progress:NonNullable<ReturnType<typeof usePipelines.getState>['items'][number]['experiment_progress']>,tag:string)=>usePipelines.setState(state=>({items:state.items.map(item=>({...item,experiment_progress:progress,latest:{...item.latest!,run_tag:tag}}))}))});

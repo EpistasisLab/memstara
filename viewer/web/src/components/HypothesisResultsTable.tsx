@@ -1,12 +1,20 @@
-import { Download, ChevronDown, Table2 } from 'lucide-react';
+import { Download, ChevronDown, Table2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useId, useState, useRef, useEffect, useMemo } from 'react';
 import './hypothesis-results-table.css';
-import { hypothesisSummaryRows } from '../lib/hypothesisSummary';
+import { hypothesisSummaryRows, sortHypothesisSummaryRows, type HypothesisSortColumn, type HypothesisTableSort } from '../lib/hypothesisSummary';
 import {prepareLinkedDownload,type ExportKind,type ExportProgress} from '../lib/linkedDownload';
 import HypothesisMetricComparison from './HypothesisMetricComparison';
 import type {Observation} from '../lib/confusionMetrics';
 
 const shown = (value: number | null, digits = 3) => value === null ? '—' : value.toFixed(digits);
+// Temporarily hidden at the user's request; retain the comparison for restoration.
+const SHOW_PERFORMANCE_COMPARISON = false;
+const columns: {key: HypothesisSortColumn; label: string}[] = [
+  {key: 'hypothesisSkill', label: 'Hypothesis skill'}, {key: 'pipeline', label: 'Pipeline / run'},
+  {key: 'seed', label: 'Seed'}, {key: 'model', label: 'Model'}, {key: 'auroc', label: 'AUROC'},
+  {key: 'trueNegative', label: 'TN'}, {key: 'falsePositive', label: 'FP'},
+  {key: 'falseNegative', label: 'FN'}, {key: 'truePositive', label: 'TP'},
+];
 const sizeLabel=(bytes:number)=>bytes<1024?`${bytes} B`:bytes<1048576?`${(bytes/1024).toFixed(1)} KiB`:`${(bytes/1048576).toFixed(1)} MiB`;
 const exportDescriptions:Record<ExportKind,string>={
   table:'Summary CSV with one row per evaluation: hypothesis skill, execution and result IDs, seed, model parameters, performance metrics, confusion matrix, hypothesis, and linked Interpretation/Explanation output IDs. Includes continued executions. Best for comparing performance.',
@@ -16,6 +24,8 @@ const exportDescriptions:Record<ExportKind,string>={
 
 export default function HypothesisResultsTable({results, runTag, plannedSkills, skillTitles, onOpenResult}:{results:readonly unknown[];runTag?:string|null;plannedSkills?:readonly string[];skillTitles?:Record<string,string>;onOpenResult?:(observation:Observation)=>void}) {
   const rows = useMemo(() => hypothesisSummaryRows(results), [results]);
+  const [sort, setSort] = useState<HypothesisTableSort | null>(null);
+  const sortedRows = useMemo(() => sortHypothesisSummaryRows(rows, sort), [rows, sort]);
   const [expanded,setExpanded]=useState(false);
   const panelId=useId();
   const [exportBusy,setExportBusy]=useState<'table'|'complete'|'zip'|null>(null),[exportError,setExportError]=useState('');
@@ -77,7 +87,7 @@ export default function HypothesisResultsTable({results, runTag, plannedSkills, 
     <div id={panelId} hidden={!expanded} className="hypothesis-comparison-body">
     {expanded && <>
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-paper-line p-3">
-      <div><h3 className="font-semibold">Hypothesis comparison</h3><p className="text-xs text-ink-soft">Each row is one evaluation.</p></div>
+      <div><h3 className="font-semibold">Hypothesis comparison</h3><p className="text-xs text-ink-soft">Each row is one evaluation. Click a column heading to sort. Missing values appear last.</p></div>
       <div className="flex flex-wrap gap-2">{(['table','complete','zip'] as const).map(kind=><button key={kind} type="button" title={exportDescriptions[kind]} aria-description={exportDescriptions[kind]} disabled={!!exportBusy||!tags.length} onClick={()=>void download(kind)} className="flex items-center gap-2 rounded border border-paper-line px-3 py-2 text-sm font-semibold disabled:opacity-50"><Download size={15}/>{exportBusy===kind?(exportTransfer.phase==='downloading'?'Downloading…':exportTransfer.phase==='verifying'?'Checking file…':'Preparing export…'):kind==='table'?'Download table CSV':kind==='complete'?'Download complete evidence CSV':'Download linked results ZIP'}</button>)}</div>
     </header>
     {exportBusy&&<div className="hypothesis-export-progress">
@@ -92,8 +102,17 @@ export default function HypothesisResultsTable({results, runTag, plannedSkills, 
     {exportError&&<p role="alert" className="border-b border-paper-line p-3 text-sm text-amber-800">{exportError}</p>}
     {exportNotice&&<p role="status" className="border-b border-paper-line p-3 text-xs">{exportNotice}</p>}
     {!rows.length && <p className="hypothesis-comparison-empty">No recorded evaluations yet.</p>}
-    <div className="hypothesis-comparison-scroll" tabIndex={0} role="region" aria-label="Scrollable hypothesis comparison"><table><thead><tr>{['Hypothesis skill','Pipeline / run','Seed','Model','AUROC','TN','FP','FN','TP'].map(label=><th key={label} scope="col" className={label==='Model'?'hypothesis-model':undefined}>{label}</th>)}</tr></thead>
-      <tbody>{rows.map((row,index)=><tr key={`${row.runTag}:${row.resultId}:${row.evaluationReplicate}:${index}`} className="border-t border-paper-line">
+    <div className="hypothesis-comparison-scroll" tabIndex={0} role="region" aria-label="Scrollable hypothesis comparison"><table><thead><tr>{columns.map(({key,label})=>{
+      const selected = sort?.column === key;
+      const direction = selected && sort.direction === 'ascending' ? 'descending' : 'ascending';
+      const Icon = selected ? sort.direction === 'ascending' ? ArrowUp : ArrowDown : ArrowUpDown;
+      return <th key={key} scope="col" aria-sort={selected ? sort.direction : undefined} className={key==='model'?'hypothesis-model':undefined}>
+        <button type="button" className="hypothesis-column-sort" aria-label={`${label}: sort ${direction}`} title={`Sort ${direction}`} onClick={()=>setSort({column:key,direction})}>
+          <span>{label}</span><Icon size={14} aria-hidden="true"/>
+        </button>
+      </th>;
+    })}</tr></thead>
+      <tbody>{sortedRows.map((row,index)=><tr key={`${row.runTag}:${row.resultId}:${row.evaluationReplicate}:${index}`} className="border-t border-paper-line">
         <td title={row.hypothesisSkill}>{row.hypothesisSkill.replaceAll('-',' ')}</td><td title={row.pipeline}><span className="hypothesis-run-label">{row.pipeline}</span></td>
         <td className="p-2 tabular-nums">{row.seed??'—'}</td><td className="hypothesis-model">{row.model||'—'}</td><td className="hypothesis-auroc tabular-nums">{shown(row.auroc)}</td>
         <td className="p-2 tabular-nums">{row.trueNegative??'—'}</td><td className="p-2 tabular-nums">{row.falsePositive??'—'}</td>
@@ -102,5 +121,5 @@ export default function HypothesisResultsTable({results, runTag, plannedSkills, 
     <p className="hypothesis-comparison-footnote">— means not recorded. CSV preserves full identifiers and numerical precision. Result rows link to Interpretation and Explanation by output ID arrays. Download the linked ZIP for original agent text in separate JSON files, including continued executions.</p>
     </>}
     </div>
-  </section><HypothesisMetricComparison results={results} runTag={runTag} plannedSkills={plannedSkills} skillTitles={skillTitles} onOpenResult={onOpenResult}/></>;
+  </section>{SHOW_PERFORMANCE_COMPARISON && <HypothesisMetricComparison results={results} runTag={runTag} plannedSkills={plannedSkills} skillTitles={skillTitles} onOpenResult={onOpenResult}/>}</>;
 }

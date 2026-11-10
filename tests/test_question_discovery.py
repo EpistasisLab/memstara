@@ -68,6 +68,7 @@ class LiveOutputsTests(unittest.TestCase):
     def test_live_result_query_reads_migrated_columns_without_serializing_trace(self):
         conn = AsyncMock()
         conn.fetch.return_value = []
+        conn.fetchrow.return_value = {'results': 1457, 'questions': 801}
         async def guarded(store, callback, fallback): return await callback(conn)
         with patch.object(discovery.pools, 'guarded', guarded), patch.object(discovery.run_artifacts, 'lookup', return_value={}):
             result = asyncio.run(discovery.live_outputs(['run-a', 'run-b']))
@@ -81,11 +82,18 @@ class LiveOutputsTests(unittest.TestCase):
         self.assertNotIn('match_trace', sql)
         self.assertEqual(result['record_limit'], 200)
         self.assertEqual(result['results'], [])
+        self.assertEqual(result['saved_counts'], {'results': 1457, 'questions': 801, 'run_tags': ['run-a', 'run-b']})
+        count_sql, count_tags = conn.fetchrow.call_args.args
+        self.assertEqual(count_tags, tags)
+        self.assertIn('count(*) FROM memstara_results', count_sql)
+        self.assertNotIn('LIMIT', count_sql)
+        self.assertNotIn('evaluation', count_sql)
 
     def test_task_timestamp_changes_do_not_invent_new_agent_outputs(self):
         from datetime import timedelta
         conn = AsyncMock()
         q = question(12)
+        conn.fetchrow.return_value = {'results': 0, 'questions': 1}
         task = dict(task_id=90, question_id=12, run_tag='run-a', trial=0,
                     hypothesis='Recorded relationship', columns_used='["feature"]', auc=.71,
                     interpretation='', task_type='ml', status='in_progress', updated_at=q['created_at'])
@@ -104,6 +112,7 @@ class LiveOutputsTests(unittest.TestCase):
     def test_changed_report_body_is_detected_beyond_preview_length(self):
         conn = AsyncMock()
         conn.fetch.return_value = []
+        conn.fetchrow.return_value = {'results': 0, 'questions': 0}
         artifact = {'config': {}, 'report': {'status': 'completed', 'text': 'a' * 600}}
         async def guarded(store, callback, fallback): return await callback(conn)
         with patch.object(discovery.pools, 'guarded', guarded), patch.object(discovery.run_artifacts, 'lookup', return_value=artifact):
@@ -195,8 +204,9 @@ class WorkspaceRunCountTests(unittest.TestCase):
 
     def test_five_result_executions_are_accepted_without_losing_scope(self):
         import main
+        import output_results
         from types import SimpleNamespace
-        with patch.object(main.scene, '_results', AsyncMock(return_value=[])) as results, patch.object(
+        with patch.object(output_results, 'results', AsyncMock(return_value=[])) as results, patch.object(
             main.scene, '_board', AsyncMock(return_value=[])
         ), patch.object(main.run_artifacts, 'configs', return_value={}), patch.object(
             main.pools, 'health', SimpleNamespace(as_dict=lambda: {'memstara': {'up': True}})

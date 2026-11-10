@@ -4,6 +4,7 @@ import { usePipelines } from '../store/pipelines';
 import { useLiveOutputs } from '../store/liveOutputs';
 import { useViewer } from '../store/viewer';
 import { liveOutputScope } from '../lib/liveOutputScope';
+import {scopedSavedCounts, workspaceOutputHeads} from '../lib/savedOutputCounts';
 import './exploration-summary.css';
 import type { WorkspaceCostState } from '../lib/useWorkspaceCost';
 
@@ -16,10 +17,9 @@ export default function ExplorationSummary({costState}: {costState: WorkspaceCos
   const [now, setNow] = useState(() => Date.now());
   const [seen, setSeen] = useState<Set<number>>(() => new Set());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-  const heads = pipelines.flatMap(p => p.latest ? [p.latest.run_tag] : []);
+  const heads = workspaceOutputHeads(pipelines);
   const tags = liveOutputScope(heads, live.tags, live.continuationGroups);
-  const results = live.results.filter(r => r.run_tag && tags.has(r.run_tag));
-  const questions = live.questions.filter(q => tags.has(q.origin_run));
+  const counts = heads.length ? scopedSavedCounts(live.savedCounts, tags) : {results: 0, questions: 0};
   const fresh = new Set(live.events.filter(e => tags.has(e.run_tag) && e.stage === 'result' && e.fresh && e.result_id !== null).map(e => e.result_id!));
   const unread = [...fresh].filter(id => !seen.has(id)).length;
   const active = pipelines.filter(p => p.running && p.running.execution_state !== 'paused');
@@ -53,9 +53,9 @@ export default function ExplorationSummary({costState}: {costState: WorkspaceCos
         <span className="summary-card-description">New arrivals this visit; not validated discoveries</span>
       </button>
       <button onClick={() => navigate('discovery')}>
-        <span className="summary-card-label"><Layers3 size={16}/><span>Results loaded</span><ArrowUpRight size={13}/></span>
-        <strong>{ready ? results.length : '—'}</strong>
-        <span className="summary-card-description">{ready ? `${questions.length} questions loaded · not lifetime totals` : 'Waiting for execution records'}</span>
+        <span className="summary-card-label"><Layers3 size={16}/><span>Saved results</span><ArrowUpRight size={13}/></span>
+        <strong>{ready && !stale && counts ? counts.results.toLocaleString() : '—'}</strong>
+        <span className="summary-card-description">{ready && !stale && counts ? `${counts.questions.toLocaleString()} saved questions · current workspace` : stale ? 'Count updates delayed' : 'Saved count unavailable; waiting for records'}</span>
       </button>
       <button className={issues.length || stale ? 'summary-warning' : ''} onClick={() => { if (issues[0]) { usePipelines.getState().focus(issues[0].id); navigate('scene'); } else navigate(stale ? 'agents' : 'chain'); }}>
         <span className="summary-card-label"><AlertCircle size={16}/><span>Pipelines to inspect</span><ArrowUpRight size={13}/></span>
@@ -74,6 +74,6 @@ export default function ExplorationSummary({costState}: {costState: WorkspaceCos
         <span className="cost-refresh-note">Updates every 10 seconds</span>
       </button>
     </div>
-    <p className="summary-scope-note">{stale ? 'Updates are delayed; retained results may be out of date. ' : ''}Results reflect records loaded in this browser (up to 600 results and 400 questions), including continued executions. Cost includes prior attempts in each current experiment. Select a card to inspect its details.</p>
+    <p className="summary-scope-note">{stale ? 'Updates are delayed; retained results may be out of date. ' : ''}Saved counts cover all recorded results and non-cleared questions in current workspace experiments, including continued executions, as of the latest refresh. Result records are not completed replicates. Live activity is a recent sample; its browser cache does not limit these totals. Cost includes prior attempts in each current experiment.</p>
   </section>;
 }

@@ -17,6 +17,10 @@
 .hypothesis-comparison th{padding:13px 16px;white-space:nowrap;border-bottom:1px solid rgb(var(--line));font-weight:600;text-align:right}
 .hypothesis-comparison td{padding:15px 16px!important;border-bottom:1px solid rgb(var(--line));text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .hypothesis-comparison th:nth-child(-n+2),.hypothesis-comparison td:nth-child(-n+2),.hypothesis-comparison .hypothesis-model{text-align:left}
+.hypothesis-column-sort{display:inline-flex;align-items:center;justify-content:flex-end;gap:7px;width:100%;min-height:32px;background:transparent;color:inherit;font:inherit;cursor:pointer;text-align:inherit}
+.hypothesis-comparison th:nth-child(-n+2) .hypothesis-column-sort,.hypothesis-model .hypothesis-column-sort{justify-content:flex-start}
+.hypothesis-column-sort svg{flex-shrink:0;color:rgb(var(--ink-soft))}
+.hypothesis-column-sort:hover,.hypothesis-comparison th[aria-sort] .hypothesis-column-sort,.hypothesis-comparison th[aria-sort] .hypothesis-column-sort svg{color:rgb(var(--accent))}
 .hypothesis-comparison td:first-child{min-width:180px;max-width:260px;white-space:normal;line-height:1.5;font-weight:600}
 .hypothesis-comparison .hypothesis-auroc{font-weight:700;background:rgba(128,128,128,.05)}
 .hypothesis-comparison tbody tr:hover{background:rgba(128,128,128,.05)}

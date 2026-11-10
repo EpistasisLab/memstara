@@ -93,6 +93,23 @@ def test_detail_preserves_original_identity_and_text_for_retained_attempt(monkey
         asyncio.run(output_snapshot.detail('child', 3))
 
 
+def test_skill_choices_are_scoped_to_original_execution_and_exclude_prompts(monkeypatch):
+    parent = {'books': {'hypothesis': ['old']}, 'combination_plan': {'skills': {
+        'hypothesis': [{'id': 'old', 'hash': 'old-version'}]}}, 'prompts': {'private': 'not in summary'}}
+    child = {'books': {'hypothesis': ['new']}, 'combination_plan': {'skills': {
+        'hypothesis': [{'id': 'new', 'hash': 'new-version'}]}}}
+    configs = {'parent': parent, 'child': child, 'unrelated': {'books': {'hypothesis': ['unrelated']}}}
+    monkeypatch.setattr(output_snapshot, 'archive_scope', lambda tag: (
+        ['parent', 'child'], {'config': child}, {}, configs))
+    monkeypatch.setattr(output_results, 'results', AsyncMock(return_value=[]))
+    history, item, report, rows = asyncio.run(output_snapshot.records('child'))
+    summary = output_snapshot.make_summary('child', history, item, report, rows)
+    assert set(summary['skill_configurations']) == {'parent', 'child'}
+    assert summary['skill_configurations']['parent']['combination_plan']['skills']['hypothesis'][0]['hash'] == 'old-version'
+    assert summary['skill_configurations']['child']['books']['hypothesis'] == ['new']
+    assert 'prompts' not in summary['skill_configurations']['parent']
+
+
 def test_version_cache_fetches_only_changed_rows_and_observes_deletes(monkeypatch):
     async def run():
         from collections import OrderedDict

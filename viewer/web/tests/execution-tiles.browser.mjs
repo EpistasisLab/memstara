@@ -29,10 +29,11 @@ try {for(const width of [320,390,768,1440]) {
  await expect(panel.locator('.execution-output-tile')).toHaveCount(3);
  for (const view of ['Results','Conclusions','Usage']) {
    await panel.getByRole('navigation',{name:'Output views'}).getByRole('button',{name:view,exact:true}).click();
-   const tile=panel.getByRole('button',{name:`Open ${view}: Pipeline 1 · Replicate 2`,exact:true});
-   await expect(tile).toContainText('random_state=42');
-   await expect(tile).toContainText('Decision threshold: 0.15');
-   await expect(tile).toContainText('warm_start=false');
+   const tile=panel.getByRole('article',{name:'Pipeline 1 · Replicate 2',exact:true});
+   await expect(tile).not.toContainText('Recorded parameters');
+   await expect(tile.locator('.output-predictor-meta')).toHaveCount(0);
+   await expect(tile.locator('.output-tile-overview > div:last-child dd')).toHaveText('2');
+   await expect(tile).toContainText('Rep: 2');
    await checkLayout();
  }
  await panel.getByRole('navigation',{name:'Output views'}).getByRole('button',{name:'Results',exact:true}).click();
@@ -50,6 +51,10 @@ try {for(const width of [320,390,768,1440]) {
  await expect(last).toBeFocused();
  assert(Math.abs(await panel.evaluate(el=>el.scrollTop)-scroll)<5);
  await panel.getByRole('button',{name:'Open Results: Pipeline 1 · Replicate 2',exact:true}).click();
+ await panel.locator('.output-data-details summary').click();
+ await expect(panel.locator('.output-data-details')).toContainText('random_state=42');
+ await expect(panel.locator('.output-data-details')).toContainText('Decision threshold: 0.15');
+ await expect(panel.locator('.output-data-details')).toContainText('warm_start=false');
  await expect(panel.locator('.output-documents')).toContainText('SHAP source text stays unchanged: 0.812345.');
  await expect(panel.locator('.output-documents')).toContainText('LIME original output for P1 R2.');
  await expect(panel.locator('.output-documents')).not.toContainText('OTHER REPLICATE');

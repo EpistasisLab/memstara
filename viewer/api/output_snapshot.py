@@ -64,6 +64,12 @@ def archive_scope(tag):
 
 async def records(tag):
     history, item, report, configs = await asyncio.to_thread(archive_scope, tag)
+    # Send frozen choices once per execution, not prompts once per result tile.
+    # A continued execution must not relabel earlier results with its new skills.
+    item = {**item, 'skill_configurations': {
+        source: {key: config[key] for key in ('combination_plan', 'books') if key in config}
+        for source in history if (config := configs.get(source)) is not None
+    }}
     groups = []
     # Bound cold DB work instead of opening one connection per retained session.
     for source in history:
@@ -78,6 +84,7 @@ def make_summary(tag, history, item, report, rows):
     value = {
         'run_tag': tag, 'scene_scope': 'outputs', 'stale': False,
         'run_configuration': config, 'pipeline': item.get('pipeline'),
+        'skill_configurations': item.get('skill_configurations', {}),
         'experiment': {'id': history[0], 'head_run_tag': tag, 'run_tags': history,
             'name': config.get('pipeline_name'),
             'scheduled_combinations': (config.get('combination_plan') or {}).get('total_loops'),

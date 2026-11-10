@@ -50,6 +50,7 @@ export const INTERFACE_HELP:Record<string,string>={
   'Active pipelines':'Pipelines reported as running now, out of the configured pipelines. This is not the number of agents or completed replicates.',
   'New findings':'Completed result updates received since this page opened and not yet acknowledged here. They are not automatically recommended or validated discoveries.',
   'Recent results':'Results retained for current workspace executions. The question count refers to received records, not lifetime totals.',
+  'Saved results':'Database result records across current workspace experiments, including continued executions. These are not completed-replicate counts; live activity and pagination do not limit the total.',
   'Attention':'Pipelines with recorded failed tasks or nonzero exits. Review the affected pipeline; a historical failure may have been retried.',
   'Elapsed time':'Time since the earliest currently running pipeline started. The accompanying cost covers recorded agent calls for the latest workspace executions and refreshes every 10 seconds.',
   'Replicate to inspect':'Choose a recorded replicate within this pipeline execution. All Usage tabs follow this selection. All replicates includes execution-wide records; switching does not start or stop the pipeline.',

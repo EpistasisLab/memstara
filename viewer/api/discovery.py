@@ -100,7 +100,13 @@ async def live_outputs(tags: list[str]) -> dict[str, Any]:
         results = await conn.fetch(queries.RESULTS.replace('SELECT result_id,', 'SELECT question_id, result_id,')
                                    .replace("WHERE ($1 = '' OR run_tag = $1)", 'WHERE run_tag = ANY($1::text[])')
                                    .replace('ORDER BY result_id', 'ORDER BY result_id DESC LIMIT 200'), tags)
-        return questions, tasks, results
+        # Count identities in the same scope without loading historical JSON or
+        # agent documents. A bounded activity sample is never a saved total.
+        counts = await conn.fetchrow('''SELECT
+            (SELECT count(*) FROM memstara_results WHERE run_tag = ANY($1::text[])) AS results,
+            (SELECT count(*) FROM memstara_questions
+             WHERE status <> 'cleared' AND origin_run = ANY($1::text[])) AS questions''', tags)
+        return questions, tasks, results, dict(counts)
     try:
         async with asyncio.timeout(30):
             rows = await pools.guarded('memstara', read, None)
@@ -122,7 +128,7 @@ async def live_outputs(tags: list[str]) -> dict[str, Any]:
         entry['detail'] = (detail or '')[:500]
         events.append(entry)
 
-    question_rows, task_rows, result_rows = rows
+    question_rows, task_rows, result_rows, counts = rows
     questions = []
     for q in question_rows:
         questions.append({**dict(q), 'okf_tags': scene._jsonb(q['okf_tags'], []), 'created_at': scene._iso(q['created_at'])})
@@ -168,6 +174,7 @@ async def live_outputs(tags: list[str]) -> dict[str, Any]:
     # The cap is explicit; browsing archives remains available through the question bank.
     return dict(events=events, questions=questions, results=results, reports=reports,
                 run_tags=tags, continuation_groups=histories,
+                saved_counts={**counts, 'run_tags': tags},
                 generated_at=datetime.now(timezone.utc).isoformat(), record_limit=200)
 
 
