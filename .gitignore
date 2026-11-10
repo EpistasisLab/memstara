@@ -44,6 +44,7 @@ docs/skill-drafts/*
 !docs/whole_graph_question_regeneration_fix_20261106_EN.md
 daily_log/
 papers/
+photos/
 .DS_Store
 ~$*
 *.[hH][eE][iI][cC]
