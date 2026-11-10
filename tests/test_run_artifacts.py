@@ -121,13 +121,14 @@ def test_pipeline_results_keeps_all_outputs_and_run_identity(monkeypatch):
     import pytest
     pytest.importorskip("fastapi", reason="Viewer API dependencies are installed in its container")
     import main as api
+    import output_results
     async def results(tag):
         return [{"result_id": 1 if tag == "a" else 2, "trial": 0},
                 {"result_id": 3 if tag == "a" else 4, "trial": 3}]
     async def board(tag):
         return []
     monkeypatch.setattr(api.scene, "_board", board)
-    monkeypatch.setattr(api.scene, "_results", results)
+    monkeypatch.setattr(output_results, "results", results)
     monkeypatch.setattr(api.run_artifacts, "configs", lambda: {
         tag: {"pipeline_id": tag, "pipeline_name": tag, "trials": 1} for tag in ("a", "b")})
     monkeypatch.setattr(api.pools.health, "as_dict", lambda: {"memstara": {"up": True}})

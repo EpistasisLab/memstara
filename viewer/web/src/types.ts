@@ -180,6 +180,7 @@ export interface SpecialistXai {
     limitation?: string; artifact_path?: string; artifact_sha256?: string; explanation_id?: string}>;
 }
 export interface Result extends ReplicateIdentity {
+  detail_deferred?: boolean;
   run_tag?: string; pipeline_id?: string; pipeline_name?: string; iteration?: number | null;
   hypothesis_id?: string;
   evaluation?: {
@@ -205,7 +206,7 @@ export interface Result extends ReplicateIdentity {
     hypothesis_policy?: { version?: string; kind?: string; validation_status?: string };
     interpretations_complete?: boolean;
     interpretation_limitations?: string;
-    interpretations?: { limitations?: string; slot: number; worker: string; skill: string; status: string; text: string; error: string }[];
+    interpretations?: { has_text?: boolean; text_revision?: string; limitations?: string; slot: number; worker: string; skill: string; status: string; text: string; error: string }[];
     interpreter?: { worker: string; skill: string };
     seed?: number; test_size?: number; auc_std?: number;
     config_hash?: string;
@@ -332,10 +333,11 @@ export interface RunConfiguration {
 }
 
 export interface Snapshot {
+  output_revision?: string;
   experiment?: {id:string;name?:string;head_run_tag:string;run_tags:string[];scheduled_combinations?:number;result_combinations:number};
   run_configuration?: RunConfiguration | null;
   scene_scope?: string;
-  report?: { status: string; text: string; run_tags?: string[]; explanation_outputs?: (import("./lib/replicateIdentity").ReplicateIdentity & {run_tag?: string; loop: number; result_id: number | null; text: string; status: string})[]; error?: string | null; specialist_explanation?: ExplanationEvidence | null } | null;
+  report?: { status: string; text: string; run_tags?: string[]; explanation_outputs?: (import("./lib/replicateIdentity").ReplicateIdentity & {has_text?: boolean; text_revision?: string; run_tag?: string; loop: number; result_id: number | null; text: string; status: string})[]; error?: string | null; specialist_explanation?: ExplanationEvidence | null } | null;
   pipeline?: { status: string; report_completed?: boolean; message?: string; reason?: string; code?: string; stage?: string; loop?: number | null } | null;
   run_tag: string;
   runs: RunSummary[];

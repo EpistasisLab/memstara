@@ -31,6 +31,8 @@ async def invalidate():
         'telemetry': ('_cache', '_inflight'),
         'scene': ('_snapshot_cache', '_snapshot_locks'),
         'flat_history': ('_cache',),
+        'output_snapshot': ('_cache', '_pending'),
+        'output_results': ('_cache', '_locks'),
     }.items():
         module = sys.modules.get(name)
         if not module:
@@ -43,11 +45,16 @@ async def invalidate():
                         item.cancel()
                         tasks.append(item)
                 value.clear()
-    if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
     totals = sys.modules.get('telemetry_totals')
     if totals:
+        pending = getattr(totals, '_pending', None)
+        if isinstance(pending, asyncio.Task) and not pending.done():
+            pending.cancel()
+            tasks.append(pending)
+        totals._pending = None
         totals._cache = None
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
     outputs = sys.modules.get('explanation_outputs')
     if outputs:
         for name in ('_outputs_at_version', 'trace_output'):

@@ -247,7 +247,13 @@ async def _results(run_tag: str) -> list[dict[str, Any]]:
     # been settled as found.
     async def q(conn: asyncpg.Connection) -> list[dict[str, Any]]:
         rows = await conn.fetch(queries.RESULTS, run_tag)
-        return [
+        return _result_rows(rows)
+
+    return await pools.guarded("memstara", q, [])
+
+
+def _result_rows(rows):
+    return [
             {"result_id": r["result_id"], "task_id": r["task_id"], "trial": r["trial"],
              "perspective": r["perspective"], "hypothesis": r["hypothesis"],
              "columns_used": _jsonb(r["columns_used"], []),
@@ -262,9 +268,6 @@ async def _results(run_tag: str) -> list[dict[str, Any]]:
              "interpretation": r["interpretation"], "created_at": _iso(r["created_at"])}
             for r in rows
         ]
-
-    return await pools.guarded("memstara", q, [])
-
 
 async def _display_results(run_tag: str) -> list[dict[str, Any]]:
     from display_results import results

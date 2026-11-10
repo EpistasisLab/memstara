@@ -198,7 +198,8 @@ async def pipeline_results(run_tags: str = Query(min_length=1, max_length=6000))
         async with asyncio.timeout(4):
             from continuations import expand
             tags = await asyncio.to_thread(expand, tags)
-            groups = await asyncio.gather(*(scene._results(tag) for tag in tags))
+            from output_results import results as cached_results
+            groups = await asyncio.gather(*(cached_results(tag) for tag in tags))
             boards = await asyncio.gather(*(scene._board(tag) for tag in tags))
             configs = await asyncio.to_thread(run_artifacts.configs)
     except TimeoutError:
@@ -237,6 +238,30 @@ async def snapshot(request: Request, run_tag: str | None = Query(default=None)):
     # each other.
     from snapshot_response import response
     value = await scene.snapshot(run_tag)
+    return await asyncio.to_thread(response, value, request.headers.get('accept-encoding', ''))
+
+
+@app.get('/api/output-summary')
+async def output_summary(request: Request, run_tag: str = Query(min_length=1, max_length=200)):
+    import output_snapshot
+    from snapshot_response import response
+    from fastapi.responses import Response
+    value = await output_snapshot.snapshot(run_tag)
+    etag = '"' + value['output_revision'] + '"'
+    if not value['stale'] and request.headers.get('if-none-match') == etag:
+        return Response(status_code=304, headers={'ETag': etag, 'Cache-Control': 'private, no-cache'})
+    result = await asyncio.to_thread(response, value, request.headers.get('accept-encoding', ''))
+    if not value['stale']:
+        result.headers['ETag'] = etag
+    return result
+
+
+@app.get('/api/output-detail')
+async def output_detail(request: Request, run_tag: str = Query(min_length=1, max_length=200),
+                        loop: int = Query(ge=1)):
+    import output_snapshot
+    from snapshot_response import response
+    value = await output_snapshot.detail(run_tag, loop)
     return await asyncio.to_thread(response, value, request.headers.get('accept-encoding', ''))
 
 
@@ -364,9 +389,11 @@ async def workspace_cost(run_tags: str = Query(default="", max_length=6000)):
 
 
 @app.get('/api/telemetry/totals')
-async def telemetry_totals():
+async def telemetry_totals(request: Request):
     from telemetry_totals import totals
-    return await totals()
+    from snapshot_response import response
+    value = await totals()
+    return await asyncio.to_thread(response, value, request.headers.get('accept-encoding', ''))
 
 
 @app.get('/api/telemetry/conversation')

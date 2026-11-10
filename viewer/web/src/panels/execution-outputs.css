@@ -99,6 +99,9 @@
 .output-empty {padding:36px 20px;border:1px dashed rgb(var(--line));border-radius:12px;font-size:13px;color:rgb(var(--ink-soft));line-height:1.7;}
 .output-notice {padding:12px 16px;margin-bottom:18px;border:1px solid #eac567;border-radius:9px;background:#fffbeb;color:#86520c;font-size:12px;line-height:1.6;}
 .execution-outputs>.telemetry-workspace {height:auto;overflow:visible;padding:0;}
+.output-pagination {display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0 20px;font-size:12px;}
+.output-pagination button,.output-pagination select {border:1px solid #cbd5e1;border-radius:6px;padding:7px 10px;background:white;}
+.output-pagination button:disabled {opacity:.45;cursor:default;}
 @container (max-width:650px) {
   .output-workspace-header {flex-direction:column;gap:16px;}
   .output-experiment-picker {width:100%;}

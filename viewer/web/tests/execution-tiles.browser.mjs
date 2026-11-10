@@ -101,7 +101,7 @@ try {for(const width of [320,390,768,1440]) {
  await expect(panel.getByRole('alert')).toContainText('503 Service Unavailable');
  await expect(panel.getByText('Loading the selected execution…',{exact:true})).toHaveCount(0);
  await expect(panel.locator('.output-documents')).toHaveCount(0);
- await page.route('**/api/snapshot?run_tag=new-selection',route=>route.fulfill({json:{...snapshot,run_tag:'new-selection'}}));
+ await page.route('**/api/output-summary?run_tag=new-selection',route=>route.fulfill({json:{...snapshot,run_tag:'new-selection'}}));
  await panel.getByRole('button',{name:'Retry loading',exact:true}).click();
  await expect(panel.getByRole('alert')).toHaveCount(0);
  await expect(panel.locator('.execution-output-tile')).toHaveCount(3);
@@ -115,10 +115,12 @@ try {for(const width of [320,390,768,1440]) {
    await page.evaluate(s=>window.deliverOutputs(s),large);
    await page.evaluate(()=>window.setExperimentProgress({status:'available',scheduled:1200,completed:1200,attempts:1202,retries:2},'large-history'));
    await expect(panel.getByLabel('Experiment completion')).toHaveText('1,200 / 1,200 completed · 1,202 attempts · 2 retries');
-   await expect(panel.locator('.execution-output-tile')).toHaveCount(1200);
+   await expect(panel.locator('.execution-output-tile')).toHaveCount(100);
+   await expect(panel.locator('.output-list-heading')).toContainText('1200 replicates');
    await panel.getByRole('button',{name:'Open Results: Pipeline 1 · Replicate 1',exact:true}).click();
    await expect(panel.locator('.output-documents')).toContainText('Retained result 1');
    await panel.getByRole('button',{name:'Back to Results',exact:true}).click();
+   await panel.getByLabel('Output page',{exact:true}).selectOption({value:'11'});
    await panel.getByRole('button',{name:'Open Results: Pipeline 80 · Replicate 15',exact:true}).click();
    await expect(panel.locator('.output-documents')).toContainText('Retained result 1200');
    await panel.getByRole('button',{name:'Back to Results',exact:true}).click();

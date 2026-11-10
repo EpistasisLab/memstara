@@ -80,6 +80,8 @@ let inFlight = false;
  *  several times POLL_MS, and re-firing for every tick it swallowed would turn a busy
  *  database into a continuously polled one. Only a run switch sets it. */
 let refetchWanted = false;
+const outputView = (view: ViewId) => ['results', 'report', 'agents'].includes(view);
+let requestController: AbortController | null = null;
 
 export const useViewer = create<ViewerState>((set, get) => ({
   snapshot: null,
@@ -101,7 +103,13 @@ export const useViewer = create<ViewerState>((set, get) => ({
     if (['results', 'report', 'agents'].includes(view) && !options?.preserveOutputSelection)
       useOutputNavigation.getState().back();
     try { localStorage.setItem("memstara-workspace-v1", view === "clinician" ? "clinician" : "research"); } catch { /* Session still works. */ }
+    const changedScope = outputView(view) !== outputView(get().view);
     set({ view });
+    if (changedScope) {
+      refetchWanted = true;
+      requestController?.abort();
+      void get().fetchOnce();
+    }
   },
   toggleRail: () => set((s) => ({ railCollapsed: !s.railCollapsed })),
   setRunTag: (runTag) => {
@@ -122,6 +130,7 @@ export const useViewer = create<ViewerState>((set, get) => ({
     // asked for until the next tick — up to POLL_MS of the old run's board, results and
     // feed sitting under the new run's label.
     refetchWanted = true;
+    requestController?.abort();
     void get().fetchOnce();
   },
   selectTask: (selectedTask) => set({ selectedTask, view: selectedTask ? "task" : get().view }),
@@ -147,6 +156,7 @@ export const useViewer = create<ViewerState>((set, get) => ({
     // what clicking the run selector does — and the response carries nothing that says
     // which of the two it answered, so the question has to be asked before sending.
     let askedFor = get().runTag;
+    const outputs = outputView(get().view);
     try {
       // Bootstrap through the lightweight run index. The old no-tag snapshot had to
       // discover the latest run and assemble all five panels in the same request; on a
@@ -165,17 +175,30 @@ export const useViewer = create<ViewerState>((set, get) => ({
         }
       }
       const url = askedFor
-        ? `/api/snapshot?run_tag=${encodeURIComponent(askedFor)}`
+        ? `/api/${outputs ? 'output-summary' : 'snapshot'}?run_tag=${encodeURIComponent(askedFor)}`
         : "/api/snapshot";
       // Assembly has its own server deadline. Allow time for transfer and decoding
       // of retained results as well, especially on a cold load over a slower link.
-      const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
+      requestController = new AbortController();
+      const prior = get().snapshot;
+      const revision = outputs && prior?.run_tag === askedFor ? prior.output_revision : undefined;
+      const res = await fetch(url, { signal: AbortSignal.any([requestController.signal, AbortSignal.timeout(30000)]),
+        headers: revision ? {'If-None-Match': `"${revision}"`} : undefined });
+      if (get().runTag !== askedFor || outputs !== outputView(get().view)) {refetchWanted = true; return;}
+      if (res.status === 202 && outputs) {
+        set({error: null, loading: !prior});
+        return;
+      }
+      if (res.status === 304 && prior) {
+        set({snapshot: prior.stale ? {...prior, stale: false} : prior, error: null, loading: false, fetchedAt: Date.now()});
+        return;
+      }
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       const snapshot: Snapshot = await res.json();
       // Left this run while its answer was in the air. Applying it would draw one run's
       // board, results and feed under another run's label, which reads as a wrong run
       // rather than as a late one.
-      if (get().runTag !== askedFor) {
+      if (get().runTag !== askedFor || outputs !== outputView(get().view)) {
         refetchWanted = true;
         return;
       }
@@ -187,12 +210,12 @@ export const useViewer = create<ViewerState>((set, get) => ({
           snapshot.run_configuration = previous.run_configuration;
           snapshot.experiment = previous.experiment;
         }
-        if (!snapshot.health.core.up) {
+        if (!snapshot.health.core.up && !outputs) {
           snapshot.scene = previous.scene; snapshot.agents = previous.agents;
           snapshot.feed = previous.feed; snapshot.access = previous.access; snapshot.stale = true;
         }
       }
-      if(previous?.run_tag===snapshot.run_tag){
+      if(previous?.run_tag===snapshot.run_tag && !outputs){
         snapshot.results=retainEqual(previous.results,snapshot.results);
         snapshot.board=retainEqual(previous.board,snapshot.board);
       }
@@ -211,7 +234,7 @@ export const useViewer = create<ViewerState>((set, get) => ({
       // A failure belonging to a run nobody is looking at any more is not worth putting
       // a badge on the screen for; the retry below will produce a current one if the
       // API really is down.
-      if (get().runTag !== askedFor) {
+      if (get().runTag !== askedFor || outputs !== outputView(get().view)) {
         refetchWanted = true;
         return;
       }
@@ -219,6 +242,7 @@ export const useViewer = create<ViewerState>((set, get) => ({
         ? 'The selected execution did not finish loading within 30 seconds. Retrying automatically.'
         : e instanceof Error ? e.message : String(e), loading: false });
     } finally {
+      requestController = null;
       inFlight = false;
       // Terminates: the recursive call clears the flag before doing anything, and only a
       // user switching runs can set it again.

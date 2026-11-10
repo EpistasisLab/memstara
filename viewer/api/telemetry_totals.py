@@ -4,6 +4,7 @@ import time
 import uuid
 import statistics
 import math
+from collections import defaultdict
 from datetime import UTC, datetime
 from fastapi import HTTPException
 from db import pools
@@ -13,6 +14,21 @@ from loop_history import call_loops
 
 _cache = None
 _lock = asyncio.Lock()
+_pending = None
+
+
+def selected_rows(ids, rows):
+    # The aggregation indexes Motoro records once, not once per replicate.
+    if isinstance(rows, dict):
+        return [rows[key] for key in ids if key in rows]
+    return list({str(r['id']): r for r in rows if str(r['id']) in ids}.values())
+
+
+def by_loop(calls):
+    groups = defaultdict(list)
+    for call in calls:
+        groups[call.get('loop')].append(call)
+    return groups
 
 
 def scoped_outcomes(execution):
@@ -42,7 +58,7 @@ def scoped_outcomes(execution):
 
 def metrics(calls, rows):
     ids = {c['run_id'] for c in calls if c.get('run_id')}
-    selected = list({str(r['id']): r for r in rows if str(r['id']) in ids}.values())
+    selected = selected_rows(ids, rows)
     cost = costs.summarize(ids, selected)
     missing_tokens = len(ids) - len(selected) + sum(not r.get('tokens_recorded', True) for r in selected)
     pending = any(r['status'] not in ('completed', 'failed', 'cancelled') for r in selected)
@@ -55,7 +71,7 @@ def metrics(calls, rows):
 def recorded_span(calls, rows):
     """Observed Motoro wall-clock span, not a sum or an assertion of liveness."""
     ids = {c['run_id'] for c in calls if c.get('run_id')}
-    selected = {str(r['id']): r for r in rows if str(r['id']) in ids}
+    selected = {str(r['id']): r for r in selected_rows(ids, rows)}
     spans = []
     complete = bool(ids) and len(selected) == len(ids)
     for row in selected.values():
@@ -122,7 +138,7 @@ def inventory():
     for tag, config in archive.configs().items():
         if config.get('pipeline_id') not in configured:
             continue
-        item = archive.lookup(tag)
+        item = archive.lookup(tag, include_reports=False)
         if not item:
             continue
         directory = archive.directory_for(tag)
@@ -147,19 +163,21 @@ def continued_usage(executions, rows):
             raise HTTPException(503, 'Continuation usage archive is unavailable')
         records = [{**indexed[t],'outcomes':scoped_outcomes(indexed[t])} for t in history]
         calls = [c for e in records for c in e['calls']]
+        grouped = by_loop(calls)
+        source_loops = {e['tag']: set(by_loop(e['calls'])) for e in records}
         numbers = {c['loop'] for c in calls if c['loop'] is not None}
         numbers.update(int(n) for e in records for n in e['outcomes'] if str(n).isdigit() and int(n) > 0)
         loops = []
         for n in sorted(numbers):
             attempts = [e['outcomes'][str(n)] for e in records if str(n) in e['outcomes']]
             outcome = attempts[-1] if attempts else {}
-            selected = [c for c in calls if c['loop'] == n]
+            selected = grouped[n]
             metric = loop_metrics(selected, rows, outcome)
             if len(attempts) > 1:
                 # Failed attempts still cost money. Span includes retry gaps and
                 # must not enter the fully measured per-attempt average cohort.
                 metric.update(recorded_span(selected, rows), attribution='approximate')
-            sources = [e['tag'] for e in records if str(n) in e['outcomes'] or any(c['loop'] == n for c in e['calls'])]
+            sources = [e['tag'] for e in records if str(n) in e['outcomes'] or n in source_loops[e['tag']]]
             loops.append({'number': n, 'run_tags': sources, **archive.identity(current['configuration'], n), **metric})
         result.append({'run_tag': current['tag'], 'run_tags': history,
                        'pipeline_id': current['pipeline_id'], 'model': current.get('model'),
@@ -170,10 +188,10 @@ def continued_usage(executions, rows):
     return result
 
 
-async def totals():
+async def _compute_totals():
     global _cache
     try:
-        async with asyncio.timeout(5):
+        async with asyncio.timeout(30):
             async with _lock:
                 if _cache and time.monotonic() - _cache[0] < 4:
                     return _cache[1]
@@ -185,6 +203,7 @@ async def totals():
                 rows = await pools.guarded('core', query, None) if ids else []
                 if rows is None:
                     raise HTTPException(503, 'Usage records are unavailable; totals are not zero.')
+                rows = {str(row['id']): row for row in rows}
                 pipelines = []
                 for key, definition in configured.items():
                     records = [e for e in executions if e['pipeline_id'] == key]
@@ -193,10 +212,11 @@ async def totals():
                                       **metrics([c for e in records for c in e['calls']], rows)})
                 details = []
                 for e in executions:
+                    grouped = by_loop(e['calls'])
                     numbers = {c['loop'] for c in e['calls'] if c['loop'] is not None}
                     numbers.update(int(n) for n in e['outcomes'] if str(n).isdigit() and int(n) > 0)
                     loops = [{'number': n, **archive.identity(e.get('configuration', {}), n), **loop_metrics(
-                        [c for c in e['calls'] if c['loop'] == n], rows,
+                        grouped[n], rows,
                         e['outcomes'].get(str(n), {}))} for n in sorted(numbers)]
                     details.append({'run_tag': e['tag'], 'pipeline_id': e['pipeline_id'],
                                     'model': e.get('model'), 'provider': e.get('provider'),
@@ -212,3 +232,19 @@ async def totals():
                 return result
     except TimeoutError:
         raise HTTPException(503, 'Totals lookup timed out; please retry.') from None
+
+
+async def totals():
+    """Share cold preparation across polls without cancelling it at each HTTP deadline."""
+    global _pending
+    if _cache and time.monotonic() - _cache[0] < 4:
+        return _cache[1]
+    if _pending is None or _pending.done():
+        _pending = asyncio.create_task(_compute_totals())
+        _pending.add_done_callback(lambda task: task.exception() if not task.cancelled() else None)
+    try:
+        return await asyncio.wait_for(asyncio.shield(_pending), 4.5)
+    except (TimeoutError, HTTPException):
+        if _cache:
+            return {**_cache[1], 'stale': True}
+        raise HTTPException(503, 'Usage is being prepared. Recorded costs are unchanged; retry shortly.') from None

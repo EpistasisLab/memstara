@@ -14,6 +14,6 @@ function revision(value: unknown): string {
 export function outputNoticeKeys(snapshot: Snapshot, usage: ExecutionUsage | undefined, view: NoticeView, loop?: number): string[] {
   return executionTiles(snapshot, usage).filter(tile => tileComplete(tile, view) && (loop === undefined || tile.loop === loop))
     .map(tile => `${snapshot.run_tag}:${view}:${tile.loop}:${revision(view === 'report'
-      ? tile.explanations.map(output => [output.result_id, output.text]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
+      ? tile.explanations.map(output => [output.result_id, output.text_revision ?? output.text]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
       : [tile.usage?.calls, tile.usage?.tokens, tile.usage?.tokens_status, tile.usage?.cost, tile.usage?.seconds, tile.usage?.duration_status])}`);
 }

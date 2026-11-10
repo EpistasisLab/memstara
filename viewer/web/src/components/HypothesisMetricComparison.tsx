@@ -49,6 +49,7 @@ export default function HypothesisMetricComparison({results,plannedSkills,skillT
    <span className="hmc-heading-count">{observations.length} evaluations</span><ChevronDown size={18} aria-hidden="true" style={{transform:expanded?'rotate(180deg)':undefined}}/>
   </button>
   <div id={panel} hidden={!expanded} className="hmc-body">
+   {expanded && <>
    <div className="hmc-overview" aria-label="Comparison coverage"><span><b>{groups.length}</b>Hypothesis skills</span><span><b>{filtered.length}</b>Evaluations in view</span><span><b>{runs}</b>Execution attempts</span><span className={finite<filtered.length?'hmc-coverage-warning':''}><b>{finite} / {filtered.length}</b>Calculable for this metric</span></div>
    <div className="hmc-controls">
     <label>Metric<select aria-label="Performance metric" value={metric.id} onChange={event=>setMetricId(event.target.value)}>{[...new Set(confusionMetrics.map(item=>item.category))].map(category=><optgroup label={category} key={category}>{confusionMetrics.filter(item=>item.category===category).map(item=><option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}</select></label>
@@ -87,6 +88,7 @@ export default function HypothesisMetricComparison({results,plannedSkills,skillT
    <details className="hmc-details"><summary>Metric definitions and formulas ({confusionMetrics.length})</summary><p>N = TN + FP + FN + TP. Positive means the recorded encoded class 1 for target {currentTarget||'not recorded'}. Definitions use the original recorded threshold.</p><div className="hmc-table-scroll" tabIndex={0}><table><thead><tr><th>Metric</th><th>Formula</th><th>Meaning</th></tr></thead><tbody>{confusionMetrics.map(item=><tr key={item.id}><th scope="row">{item.label}</th><td>{item.formula}</td><td>{item.description}</td></tr>)}</tbody></table></div>
     <p>References: <a href="https://scikit-learn.org/stable/modules/model_evaluation.html" target="_blank" rel="noreferrer">scikit-learn metrics</a> · <a href="https://www.ncbi.nlm.nih.gov/sites/books/NBK98249/table/appendix.t1/" target="_blank" rel="noreferrer">AHRQ diagnostic measures</a>.</p>
    </details>
+   </>}
   </div>
  </section>;
 }

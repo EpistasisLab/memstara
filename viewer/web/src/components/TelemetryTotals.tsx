@@ -5,7 +5,8 @@ import {controlResponse} from '../lib/controlResponse';
 import LoopUsage from "./LoopUsage";
 import CostEvidence from './CostEvidence';
 import { costLabel, usageDuration } from "../lib/loopUsage";
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useState, useSyncExternalStore, type ReactNode } from 'react';
+import {sharedPoller} from '../lib/sharedPoller';
 import { Activity, AlertCircle, Clock3, Coins, Database, GitCompareArrows, Layers3, LoaderCircle, ReceiptText } from 'lucide-react';
 import { usePipelines } from '../store/pipelines';
 
@@ -13,18 +14,18 @@ export type Metric = {calls:number;tokens:number;tokens_status?:string;cost:{usd
 export type Distribution = {mean:number;median:number;min:number;max:number};
 export type LoopSummary = {sample_count:number;completed_count:number;excluded_completed:number;other_loops:number;seconds:Distribution|null;usd:Distribution|null;tokens:Distribution|null;basis:string};
 export type ExecutionUsage = Metric & {run_tags?:string[];run_tag:string;pipeline_id:string;model?:string;provider?:string;loops:(Metric&ReplicateIdentity&{number:number;run_tags?:string[]})[];loop_summary:LoopSummary;unassigned:Metric};
-export type Totals = {scope:string;updated_at:string;total:Metric;pipelines:(Metric&{id:string;name:string;executions:number})[];experiments?:ExecutionUsage[];executions:ExecutionUsage[];loop_summary:LoopSummary};
+export type Totals = {stale?:boolean;scope:string;updated_at:string;total:Metric;pipelines:(Metric&{id:string;name:string;executions:number})[];experiments?:ExecutionUsage[];executions:ExecutionUsage[];loop_summary:LoopSummary};
+const totalsPoller = sharedPoller<Totals>(async signal => {
+  const response = await fetch('/api/telemetry/totals', {signal});
+  const body = await controlResponse(response);
+  if (!response.ok) throw Error(body.detail || 'Totals unavailable');
+  validateTelemetryResponse(body);
+  return body;
+});
+const noSubscription = () => () => {};
 export function useTelemetryTotals(enabled=true){
-  const [data,setData]=useState<Totals|null>(null);const [error,setError]=useState('');
-  const [revision,setRevision]=useState(0),[refreshing,setRefreshing]=useState(false);
-  const refresh=useCallback(()=>setRevision(n=>n+1),[]);
-  useEffect(()=>{if(!enabled)return;let disposed=false;let timer:ReturnType<typeof setTimeout>;let controller:AbortController;
-    const poll=async()=>{controller=new AbortController();setRefreshing(true);const deadline=setTimeout(()=>controller.abort(),6500);
-      try{const r=await fetch('/api/telemetry/totals',{signal:controller.signal});const body=await controlResponse(r);if(!r.ok)throw Error(body.detail||'Totals unavailable');validateTelemetryResponse(body);if(!disposed){setData(body);setError('');}}
-      catch(e){if(!disposed)setError(e instanceof Error?e.message:'Totals unavailable');}
-      finally{clearTimeout(deadline);if(!disposed){setRefreshing(false);timer=setTimeout(poll,6000);}}};
-    void poll();return()=>{disposed=true;clearTimeout(timer);controller?.abort();};},[revision,enabled]);
-  return {data,error,refresh,refreshing};
+  const state = useSyncExternalStore(enabled ? totalsPoller.subscribe : noSubscription, totalsPoller.getSnapshot);
+  return {...state, error: state.error || (state.data?.stale ? 'Showing the last available usage while measurements refresh.' : ''), refresh: totalsPoller.refresh};
 }
 export function TelemetryState({title,loading=false,children}:{title:string;loading?:boolean;children:ReactNode}){
   const Icon=loading?LoaderCircle:Activity;

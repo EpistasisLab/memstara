@@ -5,6 +5,7 @@ import { interpretationOutputs } from './interpretationOutputs.ts';
 
 export type OutputView = 'results' | 'report' | 'agents';
 export const outputViewNames = {results: 'Results', report: 'Conclusions', agents: 'Usage'} as const;
+export const hasOutputText = (output: {text?: string; has_text?: boolean}) => output.has_text ?? !!output.text?.trim();
 export type ExecutionTile = ReplicateIdentity & {
   loop: number;
   record_run_tag: string;
@@ -75,10 +76,10 @@ export function executionTiles(snapshot: Snapshot, usage?: ExecutionUsage): Exec
 export function tileComplete(tile: ExecutionTile, view: OutputView): boolean {
   if (view === 'results') return tile.results.length > 0 && tile.results.every(result => {
     const outputs = interpretationOutputs(result);
-    return outputs.length > 0 && outputs.every(output => output.status === 'done' && !!output.text?.trim());
+    return outputs.length > 0 && outputs.every(output => output.status === 'done' && hasOutputText(output));
   });
   if (view === 'report') return tile.explanations.length > 0
-    && tile.explanations.every(output => output.status === 'completed' && !!output.text?.trim());
+    && tile.explanations.every(output => output.status === 'completed' && hasOutputText(output));
   return tile.usage?.status === 'completed';
 }
 
@@ -86,9 +87,9 @@ export function tileStatus(tile: ExecutionTile, view: OutputView): string {
   if (tileComplete(tile, view)) return 'Ready';
   if (view === 'results') {
     const outputs = tile.results.flatMap(interpretationOutputs);
-    if (outputs.some(o => o.text)) return 'Partial output';
+    if (outputs.some(hasOutputText)) return 'Partial output';
   } else if (view === 'report') {
-    if (tile.explanations.some(o => o.text)) return 'Partial output';
+    if (tile.explanations.some(hasOutputText)) return 'Partial output';
   } else if (tile.usage) return tile.usage.status?.replaceAll('_', ' ') || 'Recorded';
   return tile.failed ? 'Needs attention' : 'Awaiting output';
 }

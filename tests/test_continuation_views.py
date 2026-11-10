@@ -104,9 +104,10 @@ def test_workspace_cost_retains_prior_failed_attempts_without_double_count(histo
 
 def test_results_keep_original_execution_and_trial(history, monkeypatch):
     import main
+    import output_results
     async def results(tag):
         return [{'result_id': 1 if tag == 'old' else 2, 'trial': 0 if tag == 'old' else 1}]
-    monkeypatch.setattr(main.scene, '_results', results)
+    monkeypatch.setattr(output_results, 'results', results)
     monkeypatch.setattr(main.scene, '_board', AsyncMock(return_value=[]))
     monkeypatch.setattr(main.pools.health, 'as_dict', lambda: {'memstara': {'up': True}})
     result = asyncio.run(main.pipeline_results('retry'))

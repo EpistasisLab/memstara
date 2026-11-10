@@ -1,5 +1,5 @@
 import { Download, ChevronDown, Table2 } from 'lucide-react';
-import { useId, useState, useRef, useEffect } from 'react';
+import { useId, useState, useRef, useEffect, useMemo } from 'react';
 import './hypothesis-results-table.css';
 import { hypothesisSummaryRows } from '../lib/hypothesisSummary';
 import {prepareLinkedDownload,type ExportKind,type ExportProgress} from '../lib/linkedDownload';
@@ -15,7 +15,7 @@ const exportDescriptions:Record<ExportKind,string>={
 };
 
 export default function HypothesisResultsTable({results, runTag, plannedSkills, skillTitles, onOpenResult}:{results:readonly unknown[];runTag?:string|null;plannedSkills?:readonly string[];skillTitles?:Record<string,string>;onOpenResult?:(observation:Observation)=>void}) {
-  const rows = hypothesisSummaryRows(results);
+  const rows = useMemo(() => hypothesisSummaryRows(results), [results]);
   const [expanded,setExpanded]=useState(false);
   const panelId=useId();
   const [exportBusy,setExportBusy]=useState<'table'|'complete'|'zip'|null>(null),[exportError,setExportError]=useState('');
@@ -75,6 +75,7 @@ export default function HypothesisResultsTable({results, runTag, plannedSkills, 
       <span className="hypothesis-comparison-count">{rows.length} rows</span><ChevronDown size={17} aria-hidden="true" style={{transform:expanded?'rotate(180deg)':undefined}}/>
     </button>
     <div id={panelId} hidden={!expanded} className="hypothesis-comparison-body">
+    {expanded && <>
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-paper-line p-3">
       <div><h3 className="font-semibold">Hypothesis comparison</h3><p className="text-xs text-ink-soft">Each row is one evaluation.</p></div>
       <div className="flex flex-wrap gap-2">{(['table','complete','zip'] as const).map(kind=><button key={kind} type="button" title={exportDescriptions[kind]} aria-description={exportDescriptions[kind]} disabled={!!exportBusy||!tags.length} onClick={()=>void download(kind)} className="flex items-center gap-2 rounded border border-paper-line px-3 py-2 text-sm font-semibold disabled:opacity-50"><Download size={15}/>{exportBusy===kind?(exportTransfer.phase==='downloading'?'Downloading…':exportTransfer.phase==='verifying'?'Checking file…':'Preparing export…'):kind==='table'?'Download table CSV':kind==='complete'?'Download complete evidence CSV':'Download linked results ZIP'}</button>)}</div>
@@ -99,6 +100,7 @@ export default function HypothesisResultsTable({results, runTag, plannedSkills, 
         <td className="p-2 tabular-nums">{row.falseNegative??'—'}</td><td className="p-2 tabular-nums">{row.truePositive??'—'}</td>
       </tr>)}</tbody></table></div>
     <p className="hypothesis-comparison-footnote">— means not recorded. CSV preserves full identifiers and numerical precision. Result rows link to Interpretation and Explanation by output ID arrays. Download the linked ZIP for original agent text in separate JSON files, including continued executions.</p>
+    </>}
     </div>
   </section><HypothesisMetricComparison results={results} runTag={runTag} plannedSkills={plannedSkills} skillTitles={skillTitles} onOpenResult={onOpenResult}/></>;
 }

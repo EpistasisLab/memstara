@@ -104,7 +104,7 @@ def pipeline_state(directory):
     return state
 
 
-def lookup(tag, *, preserve_output_versions=False):
+def lookup(tag, *, preserve_output_versions=False, include_reports=True):
     with _index_lock:
         _refresh_index()
         matches = list(_matches.get(tag, []))
@@ -124,6 +124,8 @@ def lookup(tag, *, preserve_output_versions=False):
                 for call in records:
                     if call.get("stage") == "report" and (call.get("started_at") or 0) >= report_time:
                         report_location, report_time = location, call.get("started_at") or 0
+        if not include_reports:
+            return {'config': config, 'calls': calls, 'pipeline': pipeline_state(directory)}
         report_status = read_json(report_location / "report_status.json")
         report = ""
         try:

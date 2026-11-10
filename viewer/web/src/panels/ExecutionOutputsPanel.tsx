@@ -11,7 +11,8 @@ import { useTelemetryTotals } from '../components/TelemetryTotals';
 import InterpretationOutput from '../components/InterpretationOutput';
 import ReportBody from '../components/ReportBody';
 import TelemetryPanel from './TelemetryPanel';
-import { executionTiles, tileComplete, tileStatus, testAuroc, outputViewNames, type ExecutionTile, type OutputView } from '../lib/executionTiles';
+import { executionTiles, tileComplete, tileStatus, testAuroc, outputViewNames, hasOutputText, type ExecutionTile, type OutputView } from '../lib/executionTiles';
+import {useOutputDetail} from '../lib/useOutputDetail';
 import { identityLabel } from '../lib/replicateIdentity';
 import { costLabel, usageDuration } from '../lib/loopUsage';
 import type { Result } from '../types';
@@ -53,7 +54,7 @@ function Tile({tile, view, target, onOpen}: {tile: ExecutionTile; view: OutputVi
     <span className="output-tile-heading"><span className="output-tile-identity"><strong>Pipeline {tile.pipeline_number ?? '—'}</strong><span>Replicate {tile.replicate_number ?? tile.loop}</span></span><span className="output-status" data-ready={status === 'Ready'} data-warning={tile.failed || status === 'Partial output'}>{status}</span></span>
     {tile.results.length ? <div className="output-tile-records">{tile.results.map(result => <div key={result.result_id}>{tile.results.length > 1 && <p className="output-analysis-label">Analysis {result.result_id}</p>}<ResultMetadata result={result} compact/></div>)}</div>
       : <dl className="output-record-meta"><div><dt>Target</dt><dd>{target || 'Not recorded'}</dd></div><div><dt>Predictors & model</dt><dd>Available when recorded</dd></div><div><dt>Test AUROC</dt><dd>Not reported</dd></div></dl>}
-    {view === 'report' && <p className="output-tile-note">{tile.explanations.filter(o => o.text).length} saved Explanation {tile.explanations.filter(o => o.text).length === 1 ? 'output' : 'outputs'}</p>}
+    {view === 'report' && <p className="output-tile-note">{tile.explanations.filter(hasOutputText).length} saved Explanation {tile.explanations.filter(hasOutputText).length === 1 ? 'output' : 'outputs'}</p>}
     {view === 'agents' && <dl className="output-usage-preview"><div><dt>Time</dt><dd>{usageDuration(metric?.seconds)}</dd></div><div><dt>Estimated cost</dt><dd>{costLabel(metric?.cost)}</dd></div><div><dt>Tokens</dt><dd>{!metric || metric.tokens_status === 'unavailable' ? 'Not recorded' : `${metric.tokens.toLocaleString()}${metric.tokens_status === 'partial' ? ' · partial' : ''}`}</dd></div></dl>}
     <span className="output-tile-link">View {outputViewNames[view].toLowerCase()}<ArrowRight size={16} aria-hidden="true"/></span>
   </button>;
@@ -76,8 +77,10 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
   const selected = usePipelines(s => s.selected);
   const context = useExecutionContext();
   const selectedOwner = items.find(item => item.id === selected);
-  const totals = useTelemetryTotals();
+  const totals = useTelemetryTotals(view === 'agents');
   const tag = snapshot?.run_tag ?? '';
+  const comparisonResults = useMemo(() => (snapshot?.results ?? []).map(result =>
+    ({...result, run_tag: result.run_tag ?? tag})), [snapshot?.results, tag]);
   const usage = (totals.data?.experiments ?? totals.data?.executions)?.find(e => e.run_tag === tag);
   const allTiles = useMemo(() => snapshot ? executionTiles(snapshot, usage) : [], [snapshot, usage]);
   const tiles = allTiles.filter(tile => tileComplete(tile, view));
@@ -85,7 +88,14 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
   const [chartError,setChartError]=useState('');
   const chartTile=view==='results'&&chartSelection?.tag===tag?allTiles.find(tile=>resultForObservation(tile.results.map(result=>({...result,run_tag:result.run_tag??tag})),chartSelection.observation)):undefined;
   const selection = useOutputNavigation(s => s.selection);
-  const active = selection?.tag === tag ? tiles.find(tile => tile.loop === selection.loop)??(chartTile?.loop===selection.loop?chartTile:undefined) : undefined;
+  const selectedTile = selection?.tag === tag ? tiles.find(tile => tile.loop === selection.loop)??(chartTile?.loop===selection.loop?chartTile:undefined) : undefined;
+  const detail = useOutputDetail(tag, selectedTile, view, snapshot?.scene_scope === 'outputs', snapshot?.output_revision);
+  const active = detail.tile;
+  const [paging, setPaging] = useState({key: '', page: 0});
+  const pageKey = `${tag}:${view}`;
+  const pageCount = Math.max(1, Math.ceil(tiles.length / 100));
+  const page = Math.min(paging.key === pageKey ? paging.page : 0, pageCount - 1);
+  const visibleTiles = tiles.slice(page * 100, (page + 1) * 100);
   const waiting = !!requested && requested !== tag;
   const unavailableEmpty = !!snapshot && !tiles.length &&
     (snapshot.stale || snapshot.health.memstara.up === false || !!error || (view === 'agents' && !!totals.error));
@@ -93,7 +103,7 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
   const comparison=useRef<HTMLDivElement>(null),selectedDocument=useRef<HTMLElement>(null);
   const noticeKeys = useMemo(() => snapshot && active && view !== 'results'
     ? outputNoticeKeys(snapshot, usage, view, active.loop) : [], [snapshot, active, usage, view]);
-  useOutputReadReceipt(root, noticeKeys, !!active && !waiting && !error && !snapshot?.stale
+  useOutputReadReceipt(root, noticeKeys, !!active && detail.ready && !waiting && !error && !snapshot?.stale
     && snapshot?.health.memstara.up !== false && (view !== 'agents' || !totals.error));
   const heading = useRef<HTMLHeadingElement>(null);
   const listKey = `${tag}:${view}`;
@@ -111,8 +121,8 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
     return () => cancelAnimationFrame(frame);
   }, [listKey, detailLoop]);
   useEffect(() => {
-    if (view === 'results' && active && !waiting && !error && !snapshot?.stale) useResultNotices.getState().acknowledge(active.results.map(result => ({...result, run_tag: result.run_tag ?? tag})));
-  }, [view, active, waiting, error, snapshot?.stale, tag]);
+    if (view === 'results' && active && detail.ready && !waiting && !error && !snapshot?.stale) useResultNotices.getState().acknowledge(active.results.map(result => ({...result, run_tag: result.run_tag ?? tag})));
+  }, [view, active, detail.ready, waiting, error, snapshot?.stale, tag]);
   const open = (tile: ExecutionTile) => {
     setChartSelection(null);setChartError('');
     positions.set(listKey, {top: root.current?.scrollTop ?? 0, loop: tile.loop});
@@ -153,7 +163,7 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
       </select></label>
     </header>
     <nav className="output-view-navigation" aria-label="Output views">{views.map(next => {const Icon = icons[next]; return <button type="button" key={next} aria-current={view === next ? 'page' : undefined} onClick={() => navigate(next)}><Icon size={17} aria-hidden="true"/>{outputViewNames[next]}</button>;})}</nav>
-    {view === 'results' && !waiting && !unavailableEmpty && <div ref={comparison} tabIndex={-1} className="result-comparison-anchor" aria-label="Hypothesis performance comparison"><HypothesisResultsTable key={tag} runTag={tag} results={(snapshot?.results ?? []).map(result => ({...result, run_tag: result.run_tag ?? tag}))} plannedSkills={snapshot?.run_configuration?.combination_plan?.skills?.hypothesis?.map(skill=>skill.id)}
+    {view === 'results' && !waiting && !unavailableEmpty && <div ref={comparison} tabIndex={-1} className="result-comparison-anchor" aria-label="Hypothesis performance comparison"><HypothesisResultsTable key={tag} runTag={tag} results={comparisonResults} plannedSkills={snapshot?.run_configuration?.combination_plan?.skills?.hypothesis?.map(skill=>skill.id)}
       skillTitles={Object.fromEntries((snapshot?.run_configuration?.combination_plan?.skills?.hypothesis??[]).filter(skill=>skill.title).map(skill=>[skill.id,skill.title!]))} onOpenResult={openChartResult}/>
       {chartError&&<p role="alert" className="output-notice">{chartError}</p>}
     </div>}
@@ -171,6 +181,8 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
         </button>)}</nav>
       </header>
       <details className="output-data-details"><summary>Model parameters, data columns & recorded metrics</summary>{active.results.length ? active.results.map(result => <section key={result.result_id}><h4>Analysis {result.result_id}</h4><ResultMetadata result={result}/></section>) : <p>No model or column record has been saved for this replicate yet.</p>}</details>
+      {(!detail.ready || detail.error) && <div className="output-notice" role={detail.error ? 'alert' : 'status'}>{detail.error ?? 'Loading the selected replicate’s saved output…'}{detail.error && <button type="button" onClick={detail.retry}>Retry details</button>}</div>}
+      {detail.ready && <>
       {view === 'results' && <div className="output-documents">{active.results.length ? active.results.map(result => {
         const observation=chartSelection?.tag===tag?chartSelection.observation:null;
         const selected=!!(observation&&resultForObservation([{...result,run_tag:result.run_tag??tag}],observation));
@@ -179,10 +191,17 @@ export default function ExecutionOutputsPanel({view}: {view: OutputView}) {
           <header className="output-document-header"><h4>Interpretation · Analysis {result.result_id}</h4></header><InterpretationOutput result={result} includeLimitations={false}/></article>;
       }) : <p className="output-empty">No Interpretation output has been saved for this replicate yet.</p>}</div>}
       {view === 'report' && <div className="output-documents">{active.explanations.length ? active.explanations.map((output, index) => <article key={`${output.result_id}:${index}`} aria-label={`Explanation output ${index + 1}`}><header className="output-document-header"><h4>Explanation output {index + 1}<span>{output.status}</span></h4><button type="button" disabled={!output.text} onClick={() => downloadOutput(output.text, `${tag}_pipeline-${active.pipeline_number}_replicate-${active.replicate_number}_explanation-${index + 1}.md`)}><Download size={15} aria-hidden="true"/>Download Markdown</button></header>{output.text ? <ReportBody verbatim text={output.text}/> : <p>No Explanation text has been saved for this output yet.</p>}</article>) : <p className="output-empty">No Explanation output has been saved for this replicate yet.</p>}</div>}
+      </>}
       {view === 'agents' && <TelemetryPanel key={`${tag}:${active.loop}:${active.record_run_tag}`} lockedLoop={active.loop} recordRunTag={active.record_run_tag}/>}
     </> : <>
       <div className="output-list-heading"><div><h3>{outputViewNames[view]}</h3><p>Completed {view === 'agents' ? 'replicates' : 'outputs'} only. Choose a tile to view details.</p></div><span>{pipelineCount} {pipelineCount === 1 ? 'pipeline' : 'pipelines'} · {tiles.length} {tiles.length === 1 ? 'replicate' : 'replicates'}</span></div>
-      <div className="execution-output-grid">{tiles.map(tile => <Tile key={`${tag}:${tile.loop}`} tile={tile} view={view} target={snapshot.run_configuration?.y_column} onOpen={() => open(tile)}/>)}</div>
+      {pageCount > 1 && <nav className="output-pagination" aria-label="Output pages">
+        <button type="button" disabled={page === 0} onClick={() => setPaging({key: pageKey, page: page - 1})}>Previous page</button>
+        <label>Page <select aria-label="Output page" value={page} onChange={e => setPaging({key: pageKey, page: Number(e.target.value)})}>{Array.from({length: pageCount}, (_, i) => <option key={i} value={i}>{i + 1}</option>)}</select> of {pageCount}</label>
+        <span>Showing {page * 100 + 1}–{Math.min((page + 1) * 100, tiles.length)} of {tiles.length}. Charts and downloads include all results.</span>
+        <button type="button" disabled={page + 1 === pageCount} onClick={() => setPaging({key: pageKey, page: page + 1})}>Next page</button>
+      </nav>}
+      <div className="execution-output-grid">{visibleTiles.map(tile => <Tile key={`${tag}:${tile.loop}`} tile={tile} view={view} target={snapshot.run_configuration?.y_column} onOpen={() => open(tile)}/>)}</div>
       {!tiles.length && <p className="output-empty">{view === 'agents' ? 'No completed replicates yet. Usage tiles appear when each replicate finishes.' : `No completed ${outputViewNames[view].toLowerCase()} yet. Tiles appear when the outputs are complete.`}</p>}
     </>}
   </div>;
