@@ -25,6 +25,7 @@ scripts/backlog_to_issues.py
 docs/
 daily_log/
 papers/
+photos/
 .DS_Store
 ~$*
 *.[hH][eE][iI][cC]
